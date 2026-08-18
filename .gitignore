@@ -1,0 +1,8 @@
+# Артефакты сборки
+*.rom
+*.o
+zcc_opt.def
+
+# Python
+__pycache__/
+*.pyc
