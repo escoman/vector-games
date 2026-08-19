@@ -57,10 +57,10 @@ static const struct {
     { 0u,  32u, "2 - SNARE" },
     { 0u,  48u, "3 - HAT CLOSED" },
     { 0u,  64u, "4 - HAT OPEN" },
-    { 96u, 16u, "5 - TOM" },
-    { 96u, 32u, "6 - CLAP" },
-    { 96u, 48u, "7 - RIM" },
-    { 96u, 64u, "ESC - EXIT" },
+    { 136u, 16u, "5 - TOM" },
+    { 136u, 32u, "6 - CLAP" },
+    { 136u, 48u, "7 - RIM" },
+    { 136u, 64u, "ESC - EXIT" },
 };
 
 static void show_menu(void)
