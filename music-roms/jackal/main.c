@@ -117,7 +117,7 @@ int main(void)
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
     graph_set_black_palette();
-    graph_rle_expand(title_bmp_screen_rle, V06_VRAM);
+    graph_rle_expand(title_bmp_screen_rle, 0u, 0u);
     show_menu();
     graph_set_palette(title_bmp_palette);
 

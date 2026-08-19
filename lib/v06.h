@@ -22,6 +22,8 @@
 #define V06_VI53_CH1    0x0A    /* ВИ53: канал 1                          */
 #define V06_VI53_CH0    0x0B    /* ВИ53: канал 0                          */
 #define V06_PALETTE     0x0C    /* запись байта палитры                   */
+#define V06_AY_SEL      0x14    /* AY-3-8910: выбор регистра              */
+#define V06_AY_DAT      0x15    /* AY-3-8910: запись данных               */
 
 /* Управляющие слова ПИА */
 #define V06_CW_NORMAL   0x88    /* PA вход, PB выход (обычный режим)      */
@@ -36,9 +38,13 @@ extern unsigned char v06_in(unsigned char port);
 
 #define V06_VRAM        ((unsigned char *)0x8000)
 
-/* RLE-поток bmp2inc.py: пары (количество, байт), терминатор — 0.
- * Распаковка по адресу dst (для полного экрана — V06_VRAM). */
-extern void graph_rle_expand(const unsigned char *src, unsigned char *dst);
+/* RLE-поток bmp2inc.py: прямоугольник картинки — заголовок (ширина
+ * в 8-пиксельных блоках, высота; 0 = 256), пары (количество, байт),
+ * терминатор — 0. Вывод в точку (x, y) — левый верхний угол картинки;
+ * x должно быть кратно 8, картинка должна помещаться в экран 256x256.
+ * Область вне картинки не меняется (для чистого экрана — graph_clear). */
+extern void graph_rle_expand(const unsigned char *src, unsigned char x,
+                             unsigned char y);
 
 /* Заливка экрана цветом 0-15 (плоскостная видеопамять). */
 extern void graph_clear(unsigned char color);
@@ -93,6 +99,25 @@ extern void music_stop(void);
 extern unsigned char music_is_playing(void);
 /* Один тик плеера — вызывается из кадрового прерывания (startup.asm). */
 extern void music_tick(void);
+
+/* ------------------------- Ударные (drums.asm) ----------------------- */
+
+/* Синтезатор ударных на AY-3-8910, только канал шума: канал C в режиме
+ * «tone off, noise on». Тоновые каналы не трогает: в R0-R5 не пишет,
+ * R7 пишет один раз (drum_init), звук управляется R6 (период шума) и
+ * R10 (громкость канала C, программная огибающая в drum_tick).
+ * Приоритеты: kick (3) > snare/tom/clap (2) > hat/rim (1); удар с не
+ * меньшим приоритетом перезапускает звучащий, с меньшим — игнорируется.
+ * Параметры инструментов — таблица в начале drums.asm. */
+extern void drum_init(void);            /* микшер и тишина             */
+extern void drum_kick(void);
+extern void drum_snare(void);
+extern void drum_hat_c(void);           /* закрытый хэт                */
+extern void drum_hat_o(void);           /* открытый хэт                */
+extern void drum_tom(void);
+extern void drum_clap(void);
+extern void drum_rim(void);
+extern void drum_tick(void);            /* раз в кадр, 50 Гц           */
 
 /* ----------------------------- Клавиатура ----------------------------- */
 

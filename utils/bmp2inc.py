@@ -21,12 +21,14 @@ bmp2inc.py — конвертация 16-цветного BMP в .inc для ROM
   - байт палитры (порт 0C): D0-D2 красный (веса 1,2,4),
     D3-D5 зелёный (1,2,4), D6-D7 синий (2,4) — 256 цветов из 512.
 
-Inc-файл содержит RLE-сжатый массив *_screen_rle, идущий в порядке адресов
-видеопамяти 0x8000-0xFFFF: пары (количество, байт), количество 1-255,
-конец потока — количество 0. Распаковывается последовательной записью
-по адресу 0x8000 простейшим циклом (8080-совместимым).
-Изображение помещается в левый верхний угол экрана (x=0, y=0),
-остальная область заполняется цветом 0.
+Inc-файл содержит RLE-сжатый массив *_screen_rle — прямоугольник
+картинки: заголовок из двух байт (ширина в 8-пиксельных блоках,
+высота; 0 означает 256) и пары (количество, байт), количество 1-255,
+конец потока — количество 0. Порядок байт: плоскости с весами цвета
+8, 4, 2, 1; в плоскости блоки слева направо; в блоке строки сверху
+вниз. Выводит graph_rle_expand(src, x, y) (lib/graphrle.asm):
+(x, y) — левый верхний угол, x кратно 8; область вне картинки
+не меняется. Ширина картинки дополняется до кратной 8 цветом 0.
 
 Палитровые индексы перераспределяются под содержимое картинки: пиксель
 с индексом i рисуется popcount(i) плоскостями, поэтому жадное назначение
@@ -110,25 +112,24 @@ def parse_bmp(path):
     return width, height, pixels, palette
 
 
-def build_screen(width, height, pixels):
-    """32 КБ в порядке адресов видеопамяти 0x8000-0xFFFF:
-    плоскости 3,2,1,0; в каждой — 32 блока по 256 байт (x/8, строки снизу-вверх)."""
-    screen = bytearray(0x8000)
-    for plane in range(4):          # 0 => блок по адресу 0x8000 => плоскость 3
-        bit = 3 - plane
-        base = plane * 0x2000
-        for xb in range(32):        # блок = 8 пикселей по X
-            for i in range(256):    # индекс байта в блоке
-                y = (256 - i) & 0xFF
+def build_rect(width, height, pixels):
+    """Поток прямоугольника width×height в порядке записи распаковщиком
+    (graphrle.asm): плоскости с весами цвета 8, 4, 2, 1; в плоскости —
+    блоки по 8 пикселей слева направо; в блоке — строки сверху вниз.
+    Ширина дополняется до кратной 8 цветом 0."""
+    w8 = (width + 7) // 8
+    out = bytearray()
+    for bit in (3, 2, 1, 0):
+        for xb in range(w8):
+            for y in range(height):
+                row = pixels[y]
                 byte = 0
-                if y < height:
-                    row = pixels[y]
-                    for b in range(8):
-                        x = xb * 8 + b
-                        if x < width and (row[x] & 0x0F) >> bit & 1:
-                            byte |= 0x80 >> b
-                screen[base + xb * 256 + i] = byte
-    return screen
+                for b in range(8):
+                    x = xb * 8 + b
+                    if x < width and (row[x] >> bit) & 1:
+                        byte |= 0x80 >> b
+                out.append(byte)
+    return out
 
 
 def rle_compress(data):
@@ -190,25 +191,35 @@ def color_groups(width, height, pixels, palette):
 
 def greedy_perm(grouped):
     """Жадное назначение: частым группам — малобитовые индексы.
-    Возвращает perm: perm[старый индекс] = новый индекс."""
+    Возвращает perm: perm[старый индекс] = новый индекс. Неиспользуемым
+    («мёртвым») старым индексам раздаются оставшиеся значения, чтобы
+    perm оставался перестановкой 0-15 (иначе обмены в поиске могут
+    слить два цвета в один)."""
     perm = [0] * 16
+    n_groups = 0
+    assigned = set()
     for (total, idxs, vb), new_idx in zip(grouped, INDEX_ORDER):
         for i in idxs:
             perm[i] = new_idx
+            assigned.add(i)
+        n_groups += 1
+    leftovers = INDEX_ORDER[n_groups:]
+    free = [i for i in range(16) if i not in assigned]
+    for i, v in zip(free, leftovers):
+        perm[i] = v
     return perm
 
 
 def make_masks(width, height, pixels):
-    """Битовые маски (int, 8 КБ) положений пикселей каждого старого
-    индекса: в байте экрана установлены биты пикселей с этим индексом."""
-    pat = [bytearray(0x2000) for _ in range(16)]
-    for xb in range(32):
-        for i in range(256):
-            y = (256 - i) & 0xFF
-            if y >= height:
-                continue
+    """Битовые маски (int, длина = блоков×высота) положений пикселей
+    каждого старого индекса в потоке прямоугольника: в байте потока
+    установлены биты пикселей с этим индексом."""
+    w8 = (width + 7) // 8
+    pat = [bytearray(w8 * height) for _ in range(16)]
+    for xb in range(w8):
+        for y in range(height):
             row = pixels[y]
-            off = xb * 256 + i
+            off = xb * height + y
             for b in range(8):
                 x = xb * 8 + b
                 if x < width:
@@ -216,11 +227,10 @@ def make_masks(width, height, pixels):
     return [int.from_bytes(p, "little") for p in pat]
 
 
-def rle_size_of_perm(perm, masks, cache={}):
-    """Размер RLE экрана 32 КБ при назначении perm[старый]=новый.
-    Плоскость = ИЛИ масок цветов с соответствующим битом индекса;
-    каждая плоскость занимает свои 8 КБ; одинаковые наборы цветов
-    кэшируются."""
+def rle_size_of_perm(perm, masks, plane_len, cache={}):
+    """Размер RLE прямоугольника (плюс 2 байта заголовка) при назначении
+    perm[старый]=новый. Плоскость = ИЛИ масок цветов с соответствующим
+    битом индекса; одинаковые наборы цветов кэшируются."""
     data = bytearray()
     for p in (3, 2, 1, 0):              # порядок в памяти: веса 8,4,2,1
         subset = tuple(i for i in range(16) if (perm[i] >> p) & 1)
@@ -230,16 +240,19 @@ def rle_size_of_perm(perm, masks, cache={}):
             for i in subset:
                 acc |= masks[i]
             cache[subset] = acc
-        data += acc.to_bytes(0x2000, "little")
-    return len(rle_compress(data))
+        data += acc.to_bytes(plane_len, "little")
+    return 2 + len(rle_compress(data))
 
 
-def local_search(perm, masks, same_class_only):
+def local_search(perm, masks, same_class_only, plane_len):
     """Покоординатный спуск парными перестановками индексов.
+    Обмениваются любые старые индексы 0-15: через «мёртвые» слоты
+    живые цвета могут получать любые из 16 новых индексов (perm —
+    перестановка, слияния цветов не происходит).
     same_class_only: переставлять только индексы с тем же числом битов
     (частые цвета остаются на однобитовых индексах и т.д.)."""
     perm = list(perm)
-    cur = rle_size_of_perm(perm, masks)
+    cur = rle_size_of_perm(perm, masks, plane_len)
     while True:
         best_pair, best_size = None, cur
         for a in range(16):
@@ -247,7 +260,7 @@ def local_search(perm, masks, same_class_only):
                 if same_class_only and popcount(perm[a]) != popcount(perm[b]):
                     continue
                 perm[a], perm[b] = perm[b], perm[a]
-                size = rle_size_of_perm(perm, masks)
+                size = rle_size_of_perm(perm, masks, plane_len)
                 perm[a], perm[b] = perm[b], perm[a]
                 if size < best_size:
                     best_size, best_pair = size, (a, b)
@@ -283,6 +296,8 @@ def main():
     width, height, pixels, palette = parse_bmp(bmp_path)
     grouped, old_pal_bytes = color_groups(width, height, pixels, palette)
     masks = make_masks(width, height, pixels)
+    plane_len = ((width + 7) // 8) * height
+    active = sorted({v for row in pixels for v in row})
 
     print(f"{bmp_path} ({width}x{height}) -> {inc_path}")
     print("  частоты цветов:")
@@ -300,7 +315,7 @@ def main():
     best_perm, best_size, best_name = None, None, None
     for name, seed, cls in candidates:
         print(f"  поиск: {name}")
-        perm, size = local_search(seed, masks, cls)
+        perm, size = local_search(seed, masks, cls, plane_len)
         if best_size is None or size < best_size:
             best_perm, best_size, best_name = perm, size, name
 
@@ -308,21 +323,24 @@ def main():
     print(f"  лучший вариант: {best_name}, RLE {best_size} байт")
 
     new_pal = [0] * 16
-    for old, new in enumerate(perm):
-        new_pal[new] = old_pal_bytes[old]
+    for old in active:
+        new_pal[perm[old]] = old_pal_bytes[old]
     new_pixels = [[perm[v] for v in row] for row in pixels]
-    screen = build_screen(width, height, new_pixels)
-    rle = rle_compress(screen)
+    rect = build_rect(width, height, new_pixels)
+    w8 = (width + 7) // 8
+    rle = bytes([w8 & 0xFF, height & 0xFF]) + rle_compress(rect)
 
     with open(inc_path, "w") as f:
         f.write(f"/* Автоматически сгенерировано bmp2inc.py из {os.path.basename(bmp_path)} */\n")
-        f.write(f"/* {width}x{height}, 16 цветов; изображение в левом верхнем углу экрана */\n\n")
+        f.write(f"/* {width}x{height}, 16 цветов; прямоугольник выводится "
+                f"graph_rle_expand(src, x, y), x кратно 8 */\n\n")
         f.write(f"#define {prefix}_width {width}\n")
         f.write(f"#define {prefix}_height {height}\n\n")
         f.write(f"/* 16 байт палитры для порта 0C (индексы оптимизированы под картинку) */\n")
         format_array(f, f"{prefix}_palette", new_pal)
-        f.write("\n/* RLE-поток экрана 32 КБ (адреса 0x8000-0xFFFF): "
-                "пары (количество, байт), конец — 0 */\n")
+        f.write("\n/* RLE-поток прямоугольника картинки: заголовок "
+                "(ширина в блоках, высота; 0 = 256), пары (количество, "
+                "байт), конец — 0 */\n")
         format_array(f, f"{prefix}_screen_rle", rle)
 
     counts = {}
@@ -335,7 +353,8 @@ def main():
         new = perm[idxs[0]]
         print(f"    точек {total:6d}: [{old}] -> индекс {new:2d} "
               f"(0x{new:X}, плоскостей: {popcount(new)}) цвет 0x{vb:02X}")
-    print(f"  экран: {len(screen)} байт -> RLE {len(rle)} байт")
+    print(f"  прямоугольник: {len(rect)} байт -> RLE {len(rle)} байт "
+          f"(с заголовком)")
     print(f"  палитра: {' '.join(f'{v:02X}' for v in new_pal)}")
 
 
