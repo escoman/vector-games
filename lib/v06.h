@@ -56,6 +56,14 @@ extern void graph_set_black_palette(void);
 extern void graph_set_scroll(unsigned char row);
 extern unsigned char graph_scroll_row;
 
+/* Текст шрифтом 8x8 (глифы " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().").
+ * Ячейка непрозрачная: пиксели глифа — цвет color (0-15), фон затирается.
+ * x должно быть кратно 8, y — верхняя строка ячейки. */
+extern void graph_put_char(unsigned char x, unsigned char y, char ch,
+                           unsigned char color);
+extern void graph_print(unsigned char x, unsigned char y, const char *s,
+                        unsigned char color);
+
 /* ------------------------------- Звук --------------------------------- */
 
 /* Один шаг мелодии: длительность в тиках 50 Гц и делители ВИ53
