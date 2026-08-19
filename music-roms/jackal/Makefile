@@ -3,7 +3,8 @@
 # make          — собрать jackal.rom (пересобирается при изменении
 #                 любого исходника из $(SRCS));
 # make clean    — убрать все артефакты сборки;
-# make deploy   — собрать и положить ROM в папку ROMS эмулятора PPSSPP.
+# make deploy   — собрать и положить ROM в папку ROMS эмулятора PPSSPP;
+# make full     — clean + сборка + deploy последовательно.
 #
 # Путь до z88dk можно переопределить: make Z88DK=...
 
@@ -22,9 +23,12 @@ SRCS     = $(LIB)/startup.asm main.c \
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB)
 
-.PHONY: all deploy clean
+.PHONY: all deploy clean full
 
 all: $(TARGET)
+
+full: clean
+	$(MAKE) deploy
 
 $(TARGET): $(SRCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
