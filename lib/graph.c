@@ -4,8 +4,8 @@
  * Видеопамять: 32 КБ по адресам 0x8000-0xFFFF, 4 битовые плоскости:
  *   0x8000 — плоскость веса 8, 0xA000 — веса 4,
  *   0xC000 — веса 2,           0xE000 — веса 1.
- * Экранная картинка хранится в ROM в RLE-виде (utils/bmp2inc.py):
- * пары (количество, байт) в порядке адресов видеопамяти, терминатор 0.
+ * Экранная картинка хранится в ROM в RLE-виде (utils/bmp2inc.py);
+ * распаковывает её graph_rle_expand на ассемблере (graphrle.asm).
  *
  * Палитра загружается ассемблерной v06_set_palette_asm (v06pal.asm):
  * запись слота идёт через бордюр в кадровый гасящий интервал, т.к.
@@ -20,22 +20,7 @@ extern void v06_set_palette_asm(const unsigned char *pal);
 /* Текущий регистр строки; keyboard.c восстанавливает его после опроса */
 unsigned char graph_scroll_row = 0;
 
-/* RLE-распаковка: src -> dst (для полного экрана dst = V06_VRAM) */
-void graph_rle_expand(const unsigned char *src, unsigned char *dst)
-{
-    unsigned char cnt;
-    unsigned char val;
-
-    for (;;) {
-        cnt = *src++;
-        if (cnt == 0u)
-            break;                          /* терминатор потока */
-        val = *src++;
-        do {
-            *dst++ = val;
-        } while (--cnt != 0u);
-    }
-}
+/* RLE-распаковка (graph_rle_expand) — на ассемблере в graphrle.asm. */
 
 /* Заливка экрана цветом 0-15: каждая плоскость получает 0x00 или 0xFF */
 void graph_clear(unsigned char color)

@@ -17,7 +17,7 @@ TARGET   = jackal.rom
 
 SRCS     = $(LIB)/startup.asm main.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
-           $(LIB)/graphpr.asm \
+           $(LIB)/graphpr.asm $(LIB)/graphrle.asm \
            $(LIB)/graph.c $(LIB)/sound.c $(LIB)/keyboard.c
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB)
