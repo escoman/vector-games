@@ -3,7 +3,8 @@
  *          воспроизведение на чистой КР580ВИ53.
  *
  * Всё железо — своими силами без clib z88dk (библиотека vector-games/lib):
- *   - графика:  RLE-заставка + палитра + текст 8x8 (graph.c, v06pal.asm);
+ *   - графика:  RLE-заставка + палитра (graph.c, v06pal.asm),
+ *               текст 8x8 на ассемблере (graphpr.asm);
  *   - звук:     ВИ53, плеер в кадровом прерывании (sound.c, lib/startup.asm);
  *   - клавиши:  опрос матрицы портами (keyboard.c).
  *
@@ -16,6 +17,12 @@
  *   1 — Intro (по окончании — тишина, без зацикливания);
  *   2 — Level 1 (по кругу);
  *   3 — Level 2 (по кругу);
+ *   4 — Level 3 (по кругу);
+ *   5 — Boss (по кругу);
+ *   6 — Final Boss (по кругу);
+ *   7 — Stage Clear (без зацикливания);
+ *   8 — Game Over (без зацикливания);
+ *   9 — Ending (без зацикливания);
  *   0 — полная остановка звука;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -34,6 +41,12 @@
 #include "rom_data/intro_music.inc" /* const music_step_t intro_music[]; ... */
 #include "rom_data/level1_music.inc" /* const music_step_t level1_music[]; ... */
 #include "rom_data/level2_music.inc" /* const music_step_t level2_music[]; ... */
+#include "rom_data/level3_music.inc" /* const music_step_t level3_music[]; ... */
+#include "rom_data/boss_music.inc"  /* const music_step_t boss_music[]; ... */
+#include "rom_data/final_boss_music.inc" /* const music_step_t final_boss_music[]; */
+#include "rom_data/stage_clear_music.inc" /* const music_step_t stage_clear_music[]; */
+#include "rom_data/game_over_music.inc" /* const music_step_t game_over_music[]; */
+#include "rom_data/ending_music.inc" /* const music_step_t ending_music[]; ... */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -67,7 +80,13 @@ static void show_menu(void)
     graph_print(24u, (unsigned char)(y + 8u), "1 - INTRO", 8u);
     graph_print(24u, (unsigned char)(y + 16u), "2 - LEVEL 1", 8u);
     graph_print(24u, (unsigned char)(y + 24u), "3 - LEVEL 2", 8u);
-    graph_print(24u, (unsigned char)(y + 32u), "0 - STOP MUSIC", 8u);
+    graph_print(24u, (unsigned char)(y + 32u), "4 - LEVEL 3", 8u);
+    graph_print(24u, (unsigned char)(y + 40u), "5 - BOSS", 8u);
+    graph_print(24u, (unsigned char)(y + 48u), "6 - FINAL BOSS", 8u);
+    graph_print(24u, (unsigned char)(y + 56u), "7 - STAGE CLEAR", 8u);
+    graph_print(24u, (unsigned char)(y + 64u), "8 - GAME OVER", 8u);
+    graph_print(24u, (unsigned char)(y + 72u), "9 - ENDING", 8u);
+    graph_print(24u, (unsigned char)(y + 80u), "0 - STOP MUSIC", 8u);
 }
 
 /* ------------------------------- main -------------------------------- */
@@ -104,6 +123,19 @@ int main(void)
                 play_song(level1_music, level1_music_len, 6u, 5u, 1u);
             } else if (key == '3') {
                 play_song(level2_music, level2_music_len, 6u, 5u, 1u);
+            } else if (key == '4') {
+                play_song(level3_music, level3_music_len, 6u, 5u, 1u);
+            } else if (key == '5') {
+                play_song(boss_music, boss_music_len, 6u, 5u, 1u);
+            } else if (key == '6') {
+                play_song(final_boss_music, final_boss_music_len, 6u, 5u, 1u);
+            } else if (key == '7') {
+                play_song(stage_clear_music, stage_clear_music_len,
+                          6u, 5u, 0u);
+            } else if (key == '8') {
+                play_song(game_over_music, game_over_music_len, 6u, 5u, 0u);
+            } else if (key == '9') {
+                play_song(ending_music, ending_music_len, 6u, 5u, 0u);
             } else if (key == '0') {
                 music_stop();
             } else if (key == 27) {     /* СТОП (ESC) */

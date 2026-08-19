@@ -3,6 +3,10 @@
 *.o
 zcc_opt.def
 
+# Промежуточные файлы компилятора (zcc -S)
+*.c.asm
+.scratch/
+
 # Python
 __pycache__/
 *.pyc

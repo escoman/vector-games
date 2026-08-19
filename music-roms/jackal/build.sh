@@ -13,6 +13,7 @@ echo "=== Building jackal.rom for Vector-06C ==="
 if ! zcc +vector06c --no-crt -I"$LIB" \
     "$LIB/startup.asm" main.c \
     "$LIB/v06io.asm" "$LIB/v06pal.asm" "$LIB/kbdscan.asm" "$LIB/vi53out.asm" \
+    "$LIB/graphpr.asm" \
     "$LIB/graph.c" "$LIB/sound.c" "$LIB/keyboard.c" \
     -o jackal.rom; then
     echo "*** BUILD FAILED ***"
