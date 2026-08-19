@@ -26,7 +26,7 @@
  *   0 — полная остановка звука;
  *   СТОП (ESC) — выход из ROM.
  *
- * Сборка: build.sh
+ * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP)
  *   zcc +vector06c --no-crt ../../lib/startup.asm main.c ../../lib/...
  *
  * Каталог nes_src — исходники из NES (jackal.nes, извлечённая музыка,
