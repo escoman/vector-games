@@ -74,7 +74,8 @@ extern void graph_print(unsigned char x, unsigned char y, const char *s,
 
 /* Один шаг мелодии: длительность в тиках 50 Гц и делители ВИ53
  * (частота = 1500000 / делитель; 0 = тишина), noise — ударные в
- * начале шага: 0 = нет, 1 = снейр/том (шум), 2 = бочка (низкий стук). */
+ * начале шага на канале шума AY-3-8910 (drums.asm):
+ * 0 = нет, 1 = снейр/том, 2 = бочка. */
 typedef struct {
     unsigned char duration;
     unsigned int  ch1;
@@ -106,8 +107,8 @@ extern void music_tick(void);
  * «tone off, noise on». Тоновые каналы не трогает: в R0-R5 не пишет,
  * R7 пишет один раз (drum_init), звук управляется R6 (период шума) и
  * R10 (громкость канала C, программная огибающая в drum_tick).
- * Приоритеты: kick (3) > snare/tom/clap (2) > hat/rim (1); удар с не
- * меньшим приоритетом перезапускает звучащий, с меньшим — игнорируется.
+ * noise в music_step_t — моментальное событие: каждый drum_*() всегда
+ * перезапускает звучащий удар, приоритеты ничего не блокируют.
  * Параметры инструментов — таблица в начале drums.asm. */
 extern void drum_init(void);            /* микшер и тишина             */
 extern void drum_kick(void);
@@ -118,6 +119,7 @@ extern void drum_tom(void);
 extern void drum_clap(void);
 extern void drum_rim(void);
 extern void drum_tick(void);            /* раз в кадр, 50 Гц           */
+extern void drum_mute(void);            /* оборвать звучащий удар      */
 
 /* ----------------------------- Клавиатура ----------------------------- */
 

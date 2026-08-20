@@ -5,13 +5,16 @@
  * Всё железо — своими силами без clib z88dk (библиотека vector-games/lib):
  *   - графика:  RLE-заставка + палитра (graph.c, v06pal.asm),
  *               текст 8x8 на ассемблере (graphpr.asm);
- *   - звук:     ВИ53, плеер в кадровом прерывании (sound.c, lib/startup.asm);
+ *   - звук:     мелодия — ВИ53 (3 тональных канала), ударные —
+ *               канал шума AY-3-8910 (drums.asm); оба тика — в
+ *               кадровом прерывании (sound.c, drums.asm, startup.asm);
  *   - клавиши:  опрос матрицы портами (keyboard.c).
  *
  * Данные мелодий пересчитаны из NES-формата движка Konami (Jackal)
- * скриптом utils/music2inc.py: один шаг = один тик движка NES.
- * Темп задаётся music_set_tempo(num, den): 1/1 — номинал, num < den —
- * медленнее. Intro подобрано на слух; для подстройки поменять два числа.
+ * скриптом utils/music2inc.py: ретайминг шкалы источника (60 Гц,
+ * Intro — 53.33 Гц) под кадровые 50 Гц Вектора, в .inc — целые тики.
+ * Темп везде 1/1: ровно один тик плеера на кадр, без дробных темпов,
+ * дающих дрожание ритма.
  *
  * Управление:
  *   1 — Intro (по окончании — тишина, без зацикливания);
@@ -56,6 +59,14 @@ static void wait_one_frame(void)
     start = frame_count;
     while (frame_count == start)
         intrinsic_halt();           /* лёгкий сон до прерывания */
+}
+
+/* Кадровое прерывание: тик плеера мелодии (ВИ53) и огибающие
+ * ударных (шум AY-3-8910). */
+static void on_frame(void)
+{
+    music_tick();
+    drum_tick();
 }
 
 /* Запуск мелодии: остановить текущую, подменить данные/темп, стартовать. */
@@ -111,8 +122,9 @@ int main(void)
     unsigned char key;
     unsigned char prev_key = 0;
 
-    frame_handler = music_tick;         /* тик плеера в кадровом прерывании */
+    frame_handler = on_frame;           /* мелодия + ударные в прерывании */
     sound_init();                       /* все каналы ВИ53 в тишину */
+    drum_init();                        /* миксер AY: шум канала C */
 
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
@@ -127,30 +139,25 @@ int main(void)
         key = kbd_scan();
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
             if (key == '1') {
-                /* Темп подобан по записи оригинала (jackal_intro.wav):
-                 * звуковая часть клипа = 261 тик занимает ~6.98 с, т.е.
-                 * движок NES делает ~37.4 тика/с; 3/4 от наших 50 Гц =
-                 * 37.5 тика/с. */
-                play_song(intro_music, intro_music_len, 3u, 4u, 0u);
+                /* данные уже ретаймнуты под 50 Гц конвертером */
+                play_song(intro_music, intro_music_len, 1u, 1u, 0u);
             } else if (key == '2') {
-                /* треки уровней: движок NES идёт 60 тиков/с, плеер 50 Гц,
-                 * поэтому темп 6/5. */
-                play_song(level1_music, level1_music_len, 6u, 5u, 1u);
+                play_song(level1_music, level1_music_len, 1u, 1u, 1u);
             } else if (key == '3') {
-                play_song(level2_music, level2_music_len, 6u, 5u, 1u);
+                play_song(level2_music, level2_music_len, 1u, 1u, 1u);
             } else if (key == '4') {
-                play_song(level3_music, level3_music_len, 6u, 5u, 1u);
+                play_song(level3_music, level3_music_len, 1u, 1u, 1u);
             } else if (key == '5') {
-                play_song(boss_music, boss_music_len, 6u, 5u, 1u);
+                play_song(boss_music, boss_music_len, 1u, 1u, 1u);
             } else if (key == '6') {
-                play_song(final_boss_music, final_boss_music_len, 6u, 5u, 1u);
+                play_song(final_boss_music, final_boss_music_len, 1u, 1u, 1u);
             } else if (key == '7') {
                 play_song(stage_clear_music, stage_clear_music_len,
-                          6u, 5u, 0u);
+                          1u, 1u, 0u);
             } else if (key == '8') {
-                play_song(game_over_music, game_over_music_len, 6u, 5u, 0u);
+                play_song(game_over_music, game_over_music_len, 1u, 1u, 0u);
             } else if (key == '9') {
-                play_song(ending_music, ending_music_len, 6u, 5u, 0u);
+                play_song(ending_music, ending_music_len, 1u, 1u, 0u);
             } else if (key == '0') {
                 music_stop();
             } else if (key == 27) {     /* СТОП (ESC) */

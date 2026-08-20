@@ -15,8 +15,11 @@
  * вызывается из кадрового прерывания (startup.asm, 50 Гц) и потребляет
  * g_tempo_num/g_tempo_den тика за кадр (аккумулятор Брешихэма):
  * 1/1 = один тик на кадр. Темп меняется через music_set_tempo().
- * Поле noise шага — ударные (короткий всплеск в начале шага):
- * 1 = снейр/том (шумовой треск), 2 = бочка (низкий стук).
+ * Поле noise шага — ударные на канале шума AY-3-8910 (drums.asm):
+ * 1 = снейр/том, 2 = бочка. Триггер вызывается один раз на входе в
+ * шаг; огибающую ведёт drum_tick() из того же прерывания. ВИ53 при
+ * этом не трогается — все три тональных канала остаются мелодии,
+ * бас на канале 2 звучит непрерывно.
  */
 
 #include "v06.h"
@@ -84,49 +87,6 @@ static unsigned char g_tempo_acc;       /* остаток в аккумулят�
 
 /* делители, записанные в каналы в данный момент (0 = выключен) */
 static unsigned int g_cur1, g_cur2, g_cur3;
-static unsigned char g_ch2_busy;        /* канал 2 перехвачен ударом    */
-
-/* простой ГПСЧ для программного шума */
-static unsigned int g_lfsr = 0xACE1u;
-
-static unsigned char noise_rand(void)
-{
-    /* бит 0 ^ бит 2 ^ бит 3 ^ бит 5 */
-    unsigned int bit = (g_lfsr ^ (g_lfsr >> 2) ^ (g_lfsr >> 3) ^ (g_lfsr >> 5)) & 1u;
-    g_lfsr = (g_lfsr >> 1) | (bit << 15);
-    return (unsigned char)(g_lfsr & 0x7Fu);
-}
-
-/* Снейр/том: серия случайных делителей в слышимом диапазоне
- * (примерно 2.4–6 кГц) — широкополосный треск. Басовый канал на
- * время всплеска «перехватывается» шумом. */
-static void play_snare(void)
-{
-    unsigned char i;
-    unsigned int d;
-
-    for (i = 0u; i < 6u; ++i) {
-        d = 240u + (unsigned int)noise_rand() * 3u;
-        v06_vi53_ctrl(0xB6);            /* режим 3, два байта, канал 2 */
-        v06_vi53_ch2((unsigned char)(d & 0xFFu));
-        v06_vi53_ch2((unsigned char)(d >> 8));
-    }
-}
-
-/* Бочка: короткий низкий «стук» с падением тона по тикам всплеска. */
-static void play_kick(void)
-{
-    static unsigned char kick_phase;
-    unsigned int d;
-
-    if (!g_ch2_busy)
-        kick_phase = 0u;
-    d = (kick_phase == 0u) ? 8000u : 16000u;   /* 187 Гц -> 94 Гц */
-    kick_phase ^= 1u;
-    v06_vi53_ctrl(0xB6);
-    v06_vi53_ch2((unsigned char)(d & 0xFFu));
-    v06_vi53_ch2((unsigned char)(d >> 8));
-}
 
 void music_set_data(const music_step_t *steps, unsigned int len)
 {
@@ -153,7 +113,6 @@ void music_start(void)
 {
     g_pos = 0u;
     g_left = 0u;
-    g_lfsr = 0xACE1u;
     g_tempo_acc = 0u;
     g_playing = 1u;
 }
@@ -161,11 +120,11 @@ void music_start(void)
 void music_stop(void)
 {
     g_playing = 0u;
-    g_ch2_busy = 0u;
     vi53_set_channel(0, 0);
     vi53_set_channel(1, 0);
     vi53_set_channel(2, 0);
     g_cur1 = g_cur2 = g_cur3 = 0u;
+    drum_mute();
 }
 
 unsigned char music_is_playing(void)
@@ -196,11 +155,6 @@ static void music_advance(void)
     const music_step_t *s;
 
     if (g_left == 0u) {
-        if (g_ch2_busy) {
-            /* закончился шаг с ударом — вернуть бас (или тишину) */
-            g_ch2_busy = 0u;
-            vi53_set_channel(2, g_cur3);
-        }
         if (g_pos >= g_len) {
             if (!g_loop) {
                 /* мелодия отзвучала: тишина и остановка */
@@ -223,26 +177,21 @@ static void music_advance(void)
             g_cur2 = s->ch2;
             vi53_set_channel(1, g_cur2);
         }
-        if (s->noise == 0u) {
-            if (s->ch3 != g_cur3) {
-                g_cur3 = s->ch3;
-                vi53_set_channel(2, g_cur3);
-            }
-        } else {
-            g_cur3 = s->ch3;            /* бас запомнен, вернётся после */
-            g_ch2_busy = 1u;
+        if (s->ch3 != g_cur3) {
+            g_cur3 = s->ch3;
+            vi53_set_channel(2, g_cur3);
         }
+        /* ударные — на канал шума AY-3-8910 (drums.asm), один
+         * триггер на вход в шаг; ВИ53 не трогается */
+        if (s->noise == 1u)
+            drum_snare();
+        else if (s->noise == 2u)
+            drum_kick();
 
         g_left = s->duration;
         ++g_pos;
     }
     --g_left;
-
-    s = &g_steps[(g_pos == 0u) ? (g_len - 1u) : (g_pos - 1u)];
-    if (s->noise == 1u)
-        play_snare();
-    else if (s->noise == 2u)
-        play_kick();
 }
 
 /* Полная остановка звука (включая незавершённый шум) */

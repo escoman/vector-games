@@ -55,6 +55,7 @@
         PUBLIC  _drum_clap
         PUBLIC  _drum_rim
         PUBLIC  _drum_tick
+        PUBLIC  _drum_mute
 
 AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
 AY_DAT  equ     0x14            ; AY: запись данных (чётный порт)
@@ -83,13 +84,13 @@ drum_pos:       defb    0       ; тиков с момента удара
 drum_div:       defb    0       ; счётчик делителя спада
 
 ; Таблицы инструментов: prio, R6, vol0, dur, decay, clap
-tab_kick:       defb    3, 31, 15, 25, 2, 0
-tab_snare:      defb    2, 10, 15, 10, 1, 0
-tab_hat_c:      defb    1,  4, 12,  4, 1, 0
-tab_hat_o:      defb    1,  4, 12, 16, 1, 0
-tab_tom:        defb    2, 18, 15, 14, 1, 0
+tab_kick:       defb    3, 31, 15,  7, 1, 0
+tab_snare:      defb    2, 10, 15,  5, 1, 0
+tab_hat_c:      defb    1,  4, 12,  2, 1, 0
+tab_hat_o:      defb    1,  4, 12,  6, 1, 0
+tab_tom:        defb    2, 18, 15,  5, 1, 0
 tab_clap:       defb    2, 12, 12, 22, 1, 1
-tab_rim:        defb    1,  2, 10,  2, 1, 0
+tab_rim:        defb    1,  2, 10,  1, 1, 0
 
 ; ------------------------------ запуск ---------------------------------
 
@@ -99,6 +100,14 @@ _drum_init:
         ld      a, 7            ; микшер: тоны A/B/C выкл, шум A/B выкл,
         ld      e, 0xDF         ; шум C вкл (бит 5 = 0)
         call    ay_write
+        ld      a, 10           ; громкость канала C: тишина
+        ld      e, 0
+        call    ay_write
+        ret
+
+_drum_mute:
+        xor     a
+        ld      (drum_active), a        ; сбросить звучащий удар
         ld      a, 10           ; громкость канала C: тишина
         ld      e, 0
         call    ay_write
@@ -126,16 +135,11 @@ _drum_rim:
         ld      hl, tab_rim
         ; jp drum_trig: следующая инструкция и есть drum_trig
 
-; HL = запись таблицы инструмента. Новый удар звучит, если никто не
-; звучит либо его приоритет не ниже приоритета звучащего.
+; HL = запись таблицы инструмента. Новый удар ВСЕГДА перезапускает
+; звучащий (music_step_t.noise — моментальное событие, каждый триггер
+; обязан дать слышимую атаку); приоритет сохраняется лишь как
+; информационное поле.
 drum_trig:
-        ld      a, (drum_active)
-        or      a
-        jp      z, drum_go
-        ld      a, (drum_prio)
-        cp      (hl)            ; текущий приоритет - новый
-        jp      c, drum_go      ; новый выше — перезапуск
-        ret     nz              ; новый ниже — удар игнорируется
 drum_go:
         xor     a               ; на время настройки drum_tick не мешает
         ld      (drum_active), a
