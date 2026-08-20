@@ -87,6 +87,54 @@ typedef struct {
 extern void sound_init(void);               /* все каналы в тишину      */
 extern void sound_silence(void);            /* тишина + сброс состояния */
 
+/* Плееры мелодий — два взаимоисключающих варианта, символы music_*
+ * общие: собирайте ROM либо с sound.c (шаговая мелодия), либо с
+ * music.c (партитурный синтезатор, -DMUSIC_ONLY). */
+#ifdef MUSIC_ONLY
+
+/* music.c — партитурный синтезатор: 3 тона ВИ53 + шумовые ударные
+ * AY-3-8910 (сэмлы .smp, drums.asm). Данные — music_song_t, их
+ * компилирует utils/mus2inc.py из .mus/.smp в .inc: четыре потока
+ * байткода (3 тона + ударные) и таблица сэмплов; все длительности
+ * предвычислены в кадрах 50 Гц, в прерывании нет деления времени.
+ * Байткод (общие константы с mus2inc.py):
+ *   0x00        конец потока;
+ *   0x01..0x5F  нота, абсолютный номер = байт - 1 (октава*12 +
+ *               полутон; ля 4-й октавы = 57, делитель ВИ53 3409);
+ *   0x60        пауза на текущую длительность;
+ *   0xE1, len   текущая длительность в тиках сетки PPQ = 32
+ *               (четверть = 32 тика, L_n = 128/n; темп применяется
+ *               в runtime: tempo_num/tempo_den тика за кадр). */
+#define MUS_END         0x00
+#define MUS_REST        0x60
+#define MUS_CMD_LEN     0xE1
+
+typedef struct {
+    unsigned int tempo_num;             /* тиков clock на кадр: num/den */
+    unsigned int tempo_den;             /* (4T/375, ТЗ — четвертей/мин) */
+    unsigned int  length;               /* длина композиции в тиках     */
+    /* Потоки байткода (sdcc не умеет инициализировать массивы внутри
+     * структур — отдельные поля): s0-s2 — тона, dr — ударные. */
+    const unsigned char *s0;
+    const unsigned char *s1;
+    const unsigned char *s2;
+    const unsigned char *dr;
+    const unsigned char * const *samples; /* таблица <имя>_samples[10] */
+} music_song_t;
+
+extern void music_set_data(const music_song_t *song);
+extern void music_start(void);
+extern void music_pause(void);
+extern void music_resume(void);
+extern void music_stop(void);
+extern unsigned char music_is_playing(void);
+extern void music_set_loop(unsigned char loop);
+/* Один шаг music clock — из кадрового прерывания (startup.asm);
+ * рядом должен вызываться drum_tick() (огибающие сэмплов). */
+extern void music_tick(void);
+
+#else /* обычная сборка: плеер sound.c */
+
 extern void music_set_data(const music_step_t *steps, unsigned int len);
 /* Темп = num/den тика плеера на кадровое прерывание 50 Гц.
  * 1/1 — номинал (длительности шагов как есть); num < den — медленнее,
@@ -100,6 +148,8 @@ extern void music_stop(void);
 extern unsigned char music_is_playing(void);
 /* Один тик плеера — вызывается из кадрового прерывания (startup.asm). */
 extern void music_tick(void);
+
+#endif /* MUSIC_ONLY */
 
 /* ------------------------- Ударные (drums.asm) ----------------------- */
 
@@ -120,6 +170,11 @@ extern void drum_clap(void);
 extern void drum_rim(void);
 extern void drum_tick(void);            /* раз в кадр, 50 Гц           */
 extern void drum_mute(void);            /* оборвать звучащий удар      */
+/* Проиграть семпл .smp (mus2inc.py): байт N — число кадров, затем
+ * N пар (R6, R10) по одному кадру в тик 50 Гц; первый кадр сразу.
+ * Нулевой указатель и N = 0 — тишина. Звучащий семпл вытесняет
+ * табличный удар и наоборот; ведёт его drum_tick(). */
+extern void drum_sample_play(const unsigned char *smp);
 
 /* ----------------------------- Клавиатура ----------------------------- */
 

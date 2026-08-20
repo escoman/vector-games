@@ -10,3 +10,7 @@ zcc_opt.def
 # Python
 __pycache__/
 *.pyc
+
+# Генерируемые mus2inc.py партитуры (источники — music/*.mus)
+music-roms/synth/rom_data/*.inc
+music-roms/jackal/rom_data/*_music.inc

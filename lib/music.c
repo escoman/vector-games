@@ -1,0 +1,292 @@
+/*
+ * music.c — партитурный синтезатор Вектора-06Ц (music_song_t).
+ *
+ * Собирается с -DMUSIC_ONLY ВМЕСТО sound.c (символы music_* общие —
+ * в одном ROM два плеера не линкуются; sound.c не изменяется).
+ *
+ * Архитектура (ТЗ «один music clock»): четыре потока байткода —
+ * три тональных партитуры и ударные — идут относительно единого
+ * музыкального времени. music_tick() вызывается из кадрового
+ * прерывания 50 Гц и потребляет tempo_num/tempo_den тика за кадр
+ * (аккумулятор Брешихэма); каждый тик все четыре потока продвигаются
+ * синхронно, у каждого — своя позиция в своей партитуре.
+ *
+ * Тона — КР580ВИ53 (карта портов и режимы как в sound.c), ударные —
+ * канал шума AY-3-8910 через проигрыватель семплов drums.asm
+ * (drum_sample_play + drum_tick, вызывать рядом с music_tick).
+ *
+ * Байткод потока (константы MUS_* в v06.h, эмитит mus2inc.py):
+ *   0x00        конец потока;
+ *   0x01..0x5F  нота: абсолютный номер = байт - 1 (октава*12 +
+ *               полутон), делитель ВИ53 берётся из таблицы;
+ *   0x60        пауза на текущую длительность;
+ *   0xE1, len   текущая длительность в тиках сетки PPQ = 32
+ *               (четверть = 32 тика, L_n = 128/n — целые без
+ *               округлений, дрейф исключён; темп = tempo_num/tempo_den
+ *               тика за кадр). Все высоты предвычислены mus2inc.py
+ *               (ТЗ §26): в прерывании нет разбора строк и плавающей
+ *               точки.
+ */
+
+#include "v06.h"
+
+/* Прямые записи в порты ВИ53 (vi53out.asm): без самомодификации байта
+ * порта и без di/ei, поэтому безопасны и в кадровом прерывании. */
+extern void v06_vi53_ctrl(unsigned char v);
+extern void v06_vi53_ch0(unsigned char v);
+extern void v06_vi53_ch1(unsigned char v);
+extern void v06_vi53_ch2(unsigned char v);
+
+/* ------------------------------ ВИ53 ---------------------------------- */
+
+/* Режим 3, чтение/запись 2 байта: каналы 0/1/2 */
+static const unsigned char vi53_m3[3] = { 0x36, 0x76, 0xB6 };
+/* Режим 0 (OUT = 0, тишина): каналы 0/1/2 */
+static const unsigned char vi53_m0[3] = { 0x30, 0x70, 0xB0 };
+
+static void vi53_data(unsigned char channel, unsigned char v)
+{
+    if (channel == 0u)
+        v06_vi53_ch0(v);
+    else if (channel == 1u)
+        v06_vi53_ch1(v);
+    else
+        v06_vi53_ch2(v);
+}
+
+/* Установка делителя канала (0 = выключить, режим 0 -> тишина) */
+static void vi53_set_channel(unsigned char channel, unsigned int divisor)
+{
+    if (divisor == 0u) {
+        v06_vi53_ctrl(vi53_m0[channel]);
+        vi53_data(channel, 0x00);
+        vi53_data(channel, 0x00);
+        return;
+    }
+    v06_vi53_ctrl(vi53_m3[channel]);
+    vi53_data(channel, (unsigned char)(divisor & 0xFFu));
+    vi53_data(channel, (unsigned char)(divisor >> 8));
+}
+
+/* Делители ВИ53 по абсолютному номеру ноты (октава*12 + полутон):
+ * делитель = 1500000 / частота, ля 4-й октавы (57) = 440 Гц = 3409.
+ * Номера 0..11 ниже рабочей зоны — тишина (делитель > 65535). */
+static const unsigned int div_tab[95] = {
+        0u,     0u,     0u,     0u,     0u,     0u,     0u,     0u,
+        0u,     0u,     0u,     0u, 45867u, 43293u, 40863u, 38569u,
+    36405u, 34361u, 32433u, 30613u, 28894u, 27273u, 25742u, 24297u,
+    22934u, 21646u, 20431u, 19285u, 18202u, 17181u, 16216u, 15306u,
+    14447u, 13636u, 12871u, 12149u, 11467u, 10823u, 10216u,  9642u,
+     9101u,  8590u,  8108u,  7653u,  7224u,  6818u,  6436u,  6074u,
+     5733u,  5412u,  5108u,  4821u,  4551u,  4295u,  4054u,  3827u,
+     3612u,  3409u,  3218u,  3037u,  2867u,  2706u,  2554u,  2411u,
+     2275u,  2148u,  2027u,  1913u,  1806u,  1705u,  1609u,  1519u,
+     1433u,  1353u,  1277u,  1205u,  1138u,  1074u,  1014u,   957u,
+      903u,   852u,   804u,   759u,   717u,   676u,   638u,   603u,
+      569u,   537u,   507u,   478u,   451u,   426u,   402u
+};
+
+/* --------------------------- Состояние -------------------------------- */
+
+/* Один поток партитуры: позиция в байткоде и текущая длительность */
+typedef struct {
+    const unsigned char *pc;    /* 0 = поток закончился               */
+    const unsigned char *start; /* начало — для перезапуска (loop)    */
+    unsigned char cnt;          /* тиков до конца текущего события    */
+    unsigned char len;          /* текущая длительность (MUS_CMD_LEN) */
+} mus_ch_t;
+
+static const music_song_t *g_song;
+static mus_ch_t g_ch[3];        /* тоновые партитуры                  */
+static mus_ch_t g_dr;           /* партитура ударных                  */
+
+static unsigned char g_playing;
+static unsigned char g_paused;
+static unsigned char g_loop;
+static unsigned int g_acc;      /* остаток в аккумуляторе темпа       */
+
+/* ------------------------------ Помощники ----------------------------- */
+
+static void silence_tones(void)
+{
+    vi53_set_channel(0, 0);
+    vi53_set_channel(1, 0);
+    vi53_set_channel(2, 0);
+}
+
+static void reset_stream(mus_ch_t *c, const unsigned char *pc)
+{
+    c->pc = pc;
+    c->start = pc;
+    c->cnt = 0u;
+    c->len = 32u;               /* до первого MUS_CMD_LEN — L4 (32 тика) */
+}
+
+/* ------------------------------- API ---------------------------------- */
+
+void music_set_data(const music_song_t *song)
+{
+    g_song = song;
+    music_stop();
+}
+
+void music_start(void)
+{
+    if (g_song == 0)
+        return;
+    reset_stream(&g_ch[0], g_song->s0);
+    reset_stream(&g_ch[1], g_song->s1);
+    reset_stream(&g_ch[2], g_song->s2);
+    reset_stream(&g_dr, g_song->dr);
+    g_acc = 0u;
+    g_paused = 0u;
+    g_playing = 1u;
+    silence_tones();
+    drum_mute();                /* старт всех потоков с позиции 0 */
+}
+
+void music_pause(void)
+{
+    if (!g_playing)
+        return;
+    g_paused = 1u;
+    silence_tones();            /* позиции и clock сохранены */
+}
+
+void music_resume(void)
+{
+    if (g_playing)
+        g_paused = 0u;
+}
+
+void music_stop(void)
+{
+    g_playing = 0u;
+    g_paused = 0u;
+    g_acc = 0u;
+    g_ch[0].pc = g_ch[1].pc = g_ch[2].pc = 0;
+    g_dr.pc = 0;
+    silence_tones();
+    drum_mute();
+}
+
+unsigned char music_is_playing(void)
+{
+    return g_playing;
+}
+
+void music_set_loop(unsigned char loop)
+{
+    g_loop = loop;
+}
+
+/* ------------------------------ Рантайм ------------------------------- */
+
+/* Тоновый поток: события читаются до ноты/паузы/конца (управляющие
+ * команды исполняются на месте). Запись в ВИ53 — только на событии. */
+static void tone_event(unsigned char ch)
+{
+    mus_ch_t *c = &g_ch[ch];
+    unsigned char b;
+
+    for (;;) {
+        b = *c->pc++;
+        if (b == MUS_END) {
+            c->pc = 0;                  /* поток закончился */
+            vi53_set_channel(ch, 0u);
+            return;
+        }
+        if (b == MUS_REST) {
+            vi53_set_channel(ch, 0u);
+            c->cnt = c->len;
+            return;
+        }
+        if (b >= 0xE0u) {               /* MUS_CMD_LEN: операнд — байт */
+            c->len = *c->pc++;
+            continue;
+        }
+        vi53_set_channel(ch, div_tab[b - 1u]);
+        c->cnt = c->len;
+        return;
+    }
+}
+
+/* Поток ударных: нота (байт 1..10) запускает семпл 0..9 с таблицы
+ * песни; пауза новые атаки не даёт, звучащий семпл не обрывает. */
+static void drum_event(void)
+{
+    unsigned char b;
+
+    for (;;) {
+        b = *g_dr.pc++;
+        if (b == MUS_END) {
+            g_dr.pc = 0;
+            return;
+        }
+        if (b == MUS_REST) {
+            g_dr.cnt = g_dr.len;
+            return;
+        }
+        if (b >= 0xE0u) {
+            g_dr.len = *g_dr.pc++;
+            continue;
+        }
+        if (b <= 10u)                   /* новый удар — перезапуск */
+            drum_sample_play(g_song->samples[b - 1u]);
+        g_dr.cnt = g_dr.len;
+        return;
+    }
+}
+
+/* Один тик music clock: продвижение всех четырёх потоков */
+static void clock_tick(void)
+{
+    unsigned char i;
+
+    if (g_ch[0].pc == 0 && g_ch[1].pc == 0 &&
+        g_ch[2].pc == 0 && g_dr.pc == 0) {
+        /* композиция отзвучала */
+        if (!g_loop) {
+            g_playing = 0u;
+            silence_tones();
+            return;
+        }
+        for (i = 0u; i < 3u; ++i) {
+            g_ch[i].pc = g_ch[i].start;
+            g_ch[i].cnt = 0u;
+        }
+        g_dr.pc = g_dr.start;
+        g_dr.cnt = 0u;
+    }
+
+    for (i = 0u; i < 3u; ++i) {
+        if (g_ch[i].pc == 0)
+            continue;
+        if (g_ch[i].cnt > 0u)
+            --g_ch[i].cnt;
+        else
+            tone_event(i);
+    }
+    if (g_dr.pc != 0) {
+        if (g_dr.cnt > 0u)
+            --g_dr.cnt;
+        else
+            drum_event();
+    }
+}
+
+/* Вызов из кадрового прерывания: потребляет num/den тика clock.
+ * drum_tick() вызывается рядом (огибающие семплов — каждый кадр). */
+void music_tick(void)
+{
+    unsigned char n;
+
+    if (!g_playing || g_paused || g_song == 0)
+        return;
+
+    g_acc += g_song->tempo_num;
+    n = (unsigned char)(g_acc / g_song->tempo_den);
+    g_acc %= g_song->tempo_den;
+    while (n-- > 0u)
+        clock_tick();
+}

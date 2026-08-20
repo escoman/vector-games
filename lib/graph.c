@@ -7,6 +7,8 @@
  * Экранная картинка хранится в ROM в RLE-виде (utils/bmp2inc.py);
  * распаковывает её graph_rle_expand на ассемблере (graphrle.asm).
  *
+ * Заливка экрана graph_clear — тоже на ассемблере (graphclr.asm).
+ *
  * Палитра загружается ассемблерной v06_set_palette_asm (v06pal.asm):
  * запись слота идёт через бордюр в кадровый гасящий интервал, т.к.
  * порт 0C пишет в регистр цвета, отображаемого в момент записи.
@@ -20,25 +22,8 @@ extern void v06_set_palette_asm(const unsigned char *pal);
 /* Текущий регистр строки; keyboard.c восстанавливает его после опроса */
 unsigned char graph_scroll_row = 0;
 
-/* RLE-распаковка (graph_rle_expand) — на ассемблере в graphrle.asm. */
-
-/* Заливка экрана цветом 0-15: каждая плоскость получает 0x00 или 0xFF */
-void graph_clear(unsigned char color)
-{
-    static const unsigned int plane_step = 0x2000;
-    unsigned char *plane = V06_VRAM;
-    unsigned char weight;
-    unsigned char fill;
-    unsigned int i;
-    unsigned char p;
-
-    for (p = 0, weight = 8; p < 4u; ++p, weight >>= 1) {
-        fill = (color & weight) ? 0xFFu : 0x00u;
-        for (i = 0; i < 0x2000u; ++i)
-            plane[i] = fill;
-        plane += plane_step;
-    }
-}
+/* RLE-распаковка (graph_rle_expand) — на ассемблере в graphrle.asm.
+ * Заливка экрана (graph_clear) — на ассемблере в graphclr.asm. */
 
 /* Загрузка 16 цветов палитры (формат байта 0bBBGGGRRR) */
 void graph_set_palette(const unsigned char *pal)

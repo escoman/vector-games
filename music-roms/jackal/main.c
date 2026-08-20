@@ -6,17 +6,22 @@
  *   - графика:  RLE-заставка + палитра (graph.c, v06pal.asm),
  *               текст 8x8 на ассемблере (graphpr.asm);
  *   - звук:     мелодия — ВИ53 (3 тональных канала), ударные —
- *               канал шума AY-3-8910 (drums.asm); оба тика — в
- *               кадровом прерывании (sound.c, drums.asm, startup.asm);
+ *               канал шума AY-3-8910 (drums.asm); всё от единого
+ *               музыкального времени в кадровом прерывании
+ *               (music.c, drums.asm, startup.asm);
  *   - клавиши:  опрос матрицы портами (keyboard.c).
  *
- * Данные мелодий пересчитаны из NES-формата движка Konami (Jackal)
- * скриптом utils/music2inc.py: ретайминг шкалы источника (60 Гц,
- * Intro — 53.33 Гц) под кадровые 50 Гц Вектора, в .inc — целые тики.
- * Темп везде 1/1: ровно один тик плеера на кадр, без дробных темпов,
- * дающих дрожание ритма.
+ * Данные мелодий: дорожки NES-движка Konami (Jackal) конвертированы
+ * скриптом utils/music2mus.py в партитуры music/*.mus, те скомпилиро-
+ * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t). Время
+ * перенесено на сетку PPQ = 32 без округлений: 1 кадр движка = 2 тика,
+ * темп T225 (60 Гц) / T200 (Intro, 53.33 Гц) воспроизводит кадр
+ * источника точно. Партитуры разной длины (каналы NES-движка идут
+ * независимо) — отмечены '!' в .mus. 
  *
  * Управление:
+ *   ВРЕМЕННО: собрана только мелодия Intro (остальные партитуры
+ *   не помещаются в память до видеоОЗУ) — работает только клавиша 1.
  *   1 — Intro (по окончании — тишина, без зацикливания);
  *   2 — Level 1 (по кругу);
  *   3 — Level 2 (по кругу);
@@ -41,15 +46,10 @@
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
 
 #include "rom_data/title_bmp.inc"   /* title_bmp_screen_rle, title_bmp_palette */
-#include "rom_data/intro_music.inc" /* const music_step_t intro_music[]; ... */
-#include "rom_data/level1_music.inc" /* const music_step_t level1_music[]; ... */
-#include "rom_data/level2_music.inc" /* const music_step_t level2_music[]; ... */
-#include "rom_data/level3_music.inc" /* const music_step_t level3_music[]; ... */
-#include "rom_data/boss_music.inc"  /* const music_step_t boss_music[]; ... */
-#include "rom_data/final_boss_music.inc" /* const music_step_t final_boss_music[]; */
-#include "rom_data/stage_clear_music.inc" /* const music_step_t stage_clear_music[]; */
-#include "rom_data/game_over_music.inc" /* const music_step_t game_over_music[]; */
-#include "rom_data/ending_music.inc" /* const music_step_t ending_music[]; ... */
+/* ВРЕМЕННО: загружается только Intro — все 9 мелодий не помещаются
+ * до видеоОЗУ (ROM с 0100h, видеоОЗУ с 8000h); остальные .mus
+ * скомпилированы и ждут возврата в сборку. */
+#include "rom_data/intro_music.inc" /* music_song_t intro_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -69,14 +69,10 @@ static void on_frame(void)
     drum_tick();
 }
 
-/* Запуск мелодии: остановить текущую, подменить данные/темп, стартовать. */
-static void play_song(const music_step_t *steps, unsigned int len,
-                      unsigned char tempo_num, unsigned char tempo_den,
-                      unsigned char loop)
+/* Запуск мелодии: остановить текущую, подменить данные, стартовать. */
+static void play_song(const music_song_t *song, unsigned char loop)
 {
-    music_stop();
-    music_set_data(steps, len);
-    music_set_tempo(tempo_num, tempo_den);
+    music_set_data(song);           /* внутри — остановка текущей */
     music_set_loop(loop);
     music_start();
 }
@@ -123,12 +119,12 @@ int main(void)
     unsigned char prev_key = 0;
 
     frame_handler = on_frame;           /* мелодия + ударные в прерывании */
-    sound_init();                       /* все каналы ВИ53 в тишину */
     drum_init();                        /* миксер AY: шум канала C */
 
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
     graph_set_black_palette();
+    graph_clear(0);
     graph_rle_expand(title_bmp_screen_rle, 0u, 0u);
     show_menu();
     graph_set_palette(title_bmp_palette);
@@ -139,25 +135,7 @@ int main(void)
         key = kbd_scan();
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
             if (key == '1') {
-                /* данные уже ретаймнуты под 50 Гц конвертером */
-                play_song(intro_music, intro_music_len, 1u, 1u, 0u);
-            } else if (key == '2') {
-                play_song(level1_music, level1_music_len, 1u, 1u, 1u);
-            } else if (key == '3') {
-                play_song(level2_music, level2_music_len, 1u, 1u, 1u);
-            } else if (key == '4') {
-                play_song(level3_music, level3_music_len, 1u, 1u, 1u);
-            } else if (key == '5') {
-                play_song(boss_music, boss_music_len, 1u, 1u, 1u);
-            } else if (key == '6') {
-                play_song(final_boss_music, final_boss_music_len, 1u, 1u, 1u);
-            } else if (key == '7') {
-                play_song(stage_clear_music, stage_clear_music_len,
-                          1u, 1u, 0u);
-            } else if (key == '8') {
-                play_song(game_over_music, game_over_music_len, 1u, 1u, 0u);
-            } else if (key == '9') {
-                play_song(ending_music, ending_music_len, 1u, 1u, 0u);
+                play_song(&intro_music_song, 0u);
             } else if (key == '0') {
                 music_stop();
             } else if (key == 27) {     /* СТОП (ESC) */

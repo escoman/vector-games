@@ -1,0 +1,11 @@
+; Тест 4 — сложный ритм (ТЗ §24): смесь L4/L8/L16 и пауз в мелодии,
+; ударные вдвое чаще (L8). 960 тиков у обеих партитур.
+sample 0: samples/kick.smp
+sample 1: samples/snare.smp
+sample 2: samples/hihat.smp
+
+score 0:
+T120 O4 L4 C C P C L8 E E G G L16 C C C C L8 G P
+
+drums:
+T120 L8 0 P 1 P 2 P 1 0 P 1 P 2 P 0 1 P

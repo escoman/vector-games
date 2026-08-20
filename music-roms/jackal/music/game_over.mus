@@ -1,0 +1,20 @@
+; game_over.mus — автоматически сгенерировано music2mus.py
+; источник: 08_game_over (движок Konami, 60 Гц); сетка PPQ=32, 1 кадр = 2 тика — длительности точные
+; sample 0 — бочка (DMC hi<8), sample 1 — снейр/том (hi>=8)
+sample 0: samples/kick.smp
+sample 1: samples/snare.smp
+score 0:
+T225 L16 O5 C O4 B O5 C L4 O4 B L16 B L4 G L16 G L8 D L16 D G F E C L4 D
+L16 D L4 B L16 B A+ F A+ O5 C O4 G O5 C L1 D L4 D L8 D L4 P L16 P O4 D D
+D L4 D L16 D D !
+score 1:
+T225 L16 A G A L4 G L16 G L4 D L16 D L8 O3 B L16 B O4 D D C O3 A L4 B
+L16 B L4 O4 G L16 G F C F G E G L1 A L4 A L8 A L4 P L16 P O3 F+ F+ F+ L4
+F+ L16 F+ F+
+score 2:
+T225 P L16 P L4 O2 G L16 G L4 G L16 G L8 G L16 G G O3 C C C L4 O2 G L16
+G L4 G L16 G L8 A+ L16 A+ A+ O3 C C C L2 D L4 D L8 D L16 D P L32 P L16 D
+F+ A D L8 P L16 P D D D L4 D L16 D
+drums:
+T225 P L16 P 1 0 0 L64 P L32 0 0 L64 P L16 0 0 0 1 0 0 1 0 L64 P L32 0 0
+L64 P L16 0 0 0 L8 0 L16 P L64 P L32 0 0 L64 P L16 0 0 0 L4 0 L16 P

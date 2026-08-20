@@ -1,0 +1,7 @@
+; Тест 3 — ударные (ТЗ §24): только партитура ударных,
+; бочка (0) и снейр (1) четвертями.
+sample 0: samples/kick.smp
+sample 1: samples/snare.smp
+
+drums:
+T120 L4 0 1 0 1

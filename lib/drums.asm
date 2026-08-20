@@ -19,7 +19,9 @@
 ;   drum_init()  — настройка микшера и тишина;
 ;   drum_kick() drum_snare() drum_hat_c() drum_hat_o()
 ;   drum_tom()  drum_clap()  drum_rim()  — запустить удар;
-;   drum_tick()  — вызывается из кадрового прерывания 50 Гц.
+;   drum_tick()  — вызывается из кадрового прерывания 50 Гц;
+;   drum_mute()  — оборвать звучащий удар;
+;   drum_sample_play(ptr) — запустить семпл .smp (формат в v06.h);
 ;
 ; Параметры инструментов:
 ;   R6    — период шума (больше значение — ниже шум);
@@ -56,6 +58,7 @@
         PUBLIC  _drum_rim
         PUBLIC  _drum_tick
         PUBLIC  _drum_mute
+        PUBLIC  _drum_sample_play
 
 AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
 AY_DAT  equ     0x14            ; AY: запись данных (чётный порт)
@@ -83,6 +86,11 @@ drum_clap:      defb    0       ; 1 = режим вспышек clap
 drum_pos:       defb    0       ; тиков с момента удара
 drum_div:       defb    0       ; счётчик делителя спада
 
+; Проигрыватель семплов .smp (music.c, mus2inc.py):
+smp_ptr:        defw    0       ; адрес семпла (0 = семпл не звучит)
+smp_left:       defb    0       ; осталось кадров семпла
+smp_pos:        defb    0       ; смещение текущего кадра (пара байт)
+
 ; Таблицы инструментов: prio, R6, vol0, dur, decay, clap
 tab_kick:       defb    3, 31, 15,  7, 1, 0
 tab_snare:      defb    2, 10, 15,  5, 1, 0
@@ -108,6 +116,9 @@ _drum_init:
 _drum_mute:
         xor     a
         ld      (drum_active), a        ; сбросить звучащий удар
+        ld      (smp_ptr), a            ; оборвать и семпл .smp
+        ld      (smp_ptr + 1), a
+        ld      (smp_left), a
         ld      a, 10           ; громкость канала C: тишина
         ld      e, 0
         call    ay_write
@@ -143,6 +154,9 @@ drum_trig:
 drum_go:
         xor     a               ; на время настройки drum_tick не мешает
         ld      (drum_active), a
+        ld      (smp_ptr), a    ; табличный удар обрывает семпл .smp
+        ld      (smp_ptr + 1), a
+        ld      (smp_left), a
         ld      a, (hl)
         ld      (drum_prio), a
         inc     hl
@@ -173,6 +187,10 @@ drum_cp:
 ; ------------------------------ drum_tick ------------------------------
 
 _drum_tick:
+        ld      a, (smp_ptr)    ; звучит семпл .smp — ведём его
+        ld      hl, smp_ptr + 1
+        or      (hl)
+        jp      nz, tick_smp
         ld      a, (drum_active)
         or      a
         ret     z
@@ -209,6 +227,75 @@ drum_live:
         ld      e, a
         ld      a, 10
         jp      ay_write        ; R10 = новая громкость
+
+; Семпл .smp важнее табличной огибающей: пока звучат кадры семпла,
+; каждый тик пишет его пару (R6, R10), табличный спад заморожен.
+tick_smp:
+        ld      hl, smp_pos     ; смещение кадра: пара байт
+        ld      e, (hl)
+        inc     (hl)
+        inc     (hl)
+        ld      d, 0
+        ld      hl, smp_ptr
+        ld      a, (hl)
+        inc     hl
+        ld      h, (hl)
+        ld      l, a
+        inc     hl              ; пропустить байт-счётчик кадров
+        add     hl, de
+        ld      a, (hl)         ; R6 кадра
+        ld      e, a
+        push    hl
+        ld      a, 6
+        call    ay_write
+        pop     hl
+        inc     hl
+        ld      a, (hl)         ; R10 кадра
+        ld      e, a
+        ld      a, 10
+        call    ay_write
+        ld      hl, smp_left
+        dec     (hl)
+        ret     nz
+        xor     a               ; кадры кончились: тишина
+        ld      (smp_ptr), a
+        ld      (smp_ptr + 1), a
+        ld      e, a
+        ld      a, 10
+        jp      ay_write
+
+; Запустить семпл .smp (cdecl: указатель в стеке, SP+2).
+; Формат: байт N — число кадров, затем N пар (R6, R10); 0 = ничего.
+; Первый кадр выводится сразу — атака слышна в тот же тик.
+_drum_sample_play:
+        ld      hl, 2
+        add     hl, sp
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        ld      a, d
+        or      e
+        ret     z               ; нулевой указатель — тишина
+        ex      de, hl
+        ld      a, (hl)         ; N — число кадров
+        or      a
+        ret     z
+        xor     a               ; семпл вытесняет табличный удар
+        ld      (drum_active), a
+        ld      (smp_pos), a
+        ld      a, (hl)
+        ld      (smp_left), a
+        ld      (smp_ptr), hl
+        inc     hl
+        ld      a, (hl)         ; R6 первого кадра
+        ld      e, a
+        ld      a, 6
+        call    ay_write
+        inc     hl
+        ld      a, (hl)         ; R10 первого кадра
+        ld      e, a
+        ld      a, 10
+        jp      ay_write
 
 tick_clap:
         ; вспышки: pos 1-3 вкл, 4-5 выкл, 6-8 вкл, 9-10 выкл,
