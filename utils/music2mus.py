@@ -350,6 +350,7 @@ def convert_song(song_dir, tick_hz, name):
              f" {tick_hz:g} Гц); сетка PPQ=32, 1 кадр = {TICKS_PER_FRAME}"
              f" тика — длительности точные",
              "; sample 0 — бочка (DMC hi<8), sample 1 — снейр/том (hi>=8)",
+             f"Tempo: T{tempo}",
              "sample 0: samples/kick.smp",
              "sample 1: samples/snare.smp"]
     sections = [("score 0:", writers[0]), ("score 1:", writers[1]),
@@ -358,7 +359,7 @@ def convert_song(song_dir, tick_hz, name):
     for header, w in sections:
         if not w.toks:
             continue
-        body = [f"T{tempo}"] + w.toks
+        body = list(w.toks)     # темп — общий (Tempo: в шапке файла)
         if mismatch and not first_emitted:
             body.append("!")     # разная длина партитур разрешена
         lines.append(header)

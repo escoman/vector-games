@@ -39,10 +39,13 @@ extern void v06_vi53_ch2(unsigned char v);
 
 /* ------------------------------ ВИ53 ---------------------------------- */
 
-/* Режим 3, чтение/запись 2 байта: каналы 0/1/2 */
+/* Режим 3, чтение/запись 2 байта: каналы 0/1/2. Им же и выключаем:
+ * только управляющее слово, счётчик не загружается (VECTOR.MD
+ * §5.5.7, «самый распространённый способ в играх»). Проверено на
+ * слух: режим 0 со счётом 0 даёт треск после остановки, режим 3 с
+ * делителем 0xFFFF — постоянный фоновый гул; без загрузки счётчика
+ * эмуляция молчит чисто (тест vi53sil.rom, методы 1/2/3). */
 static const unsigned char vi53_m3[3] = { 0x36, 0x76, 0xB6 };
-/* Режим 0 (OUT = 0, тишина): каналы 0/1/2 */
-static const unsigned char vi53_m0[3] = { 0x30, 0x70, 0xB0 };
 
 static void vi53_data(unsigned char channel, unsigned char v)
 {
@@ -54,16 +57,13 @@ static void vi53_data(unsigned char channel, unsigned char v)
         v06_vi53_ch2(v);
 }
 
-/* Установка делителя канала (0 = выключить, режим 0 -> тишина) */
+/* Установка делителя канала (0 = выключить: управляющее слово
+ * режима 3 без загрузки счётчика) */
 static void vi53_set_channel(unsigned char channel, unsigned int divisor)
 {
-    if (divisor == 0u) {
-        v06_vi53_ctrl(vi53_m0[channel]);
-        vi53_data(channel, 0x00);
-        vi53_data(channel, 0x00);
-        return;
-    }
     v06_vi53_ctrl(vi53_m3[channel]);
+    if (divisor == 0u)
+        return;
     vi53_data(channel, (unsigned char)(divisor & 0xFFu));
     vi53_data(channel, (unsigned char)(divisor >> 8));
 }

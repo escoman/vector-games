@@ -3,13 +3,18 @@
 # mus2inc.py — компилятор партитур Вектора-06Ц: .mus + .smp -> .inc.
 #
 # Формат .mus (текст, комментарии от ';' до конца строки):
+#   Tempo: T<n>                — общий темп композиции (ударных в
+#             минуту): один на все партитуры, можно указать вместо
+#             T<n> в каждой партитуре; T<n> внутри партитуры обязан
+#             ему соответствовать;
 #   sample N: путь/к/файлу.smp   — объявление семпла ударных (N = 0..9);
 #   score N: ...                 — партитура тонального канала (N = 0..2);
 #   drums: ...                   — партитура ударных.
 #
 # Команды в партитурах (как в BASIC PLAY Вектора):
 #   T<n>      темп, ударных в минуту (параметр композиции; один на все
-#             партитуры, только до первого события); по умолчанию T120;
+#             партитуры, только до первого события; при заявленном
+#             Tempo: может отсутствовать); по умолчанию T120;
 #   O<n>      октава 1..7 (по умолчанию O4);
 #   L<n>      длительность: 1,2,4,8,16,32,64,128 (по умолчанию L4);
 #   P         пауза на текущую длительность;
@@ -221,26 +226,43 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
 
 
 HEADER_RE = re.compile(
-    r'^\s*(?:score\s+([0-2])|drums|sample\s+([0-9]))\s*:(.*)$', re.I)
+    r'^\s*(?:score\s+([0-2])|drums|sample\s+([0-9])|(tempo))\s*:(.*)$',
+    re.I)
 
 
 def split_sections(text, fname):
-    """Разбить .mus на секции. Возвращает (sections, samples):
-    sections — список ('score0'|'drums', текст), samples — {N: путь}."""
+    """Разбить .mus на секции. Возвращает (sections, samples, tempo):
+    sections — список ('score0'|'drums', текст), samples — {N: путь},
+    tempo — общий темп из строки «Tempo: T<n>» или None."""
     text = re.sub(r';[^\n]*', '', text)
     sections = []
     samples = {}
+    tempo = None
     cur = None
     for line in text.split('\n'):
         m = HEADER_RE.match(line)
         if m:
+            if m.group(3) is not None:      # Tempo: T<n> — общий темп
+                tm = re.match(r'\s*T?(\d+)\s*$', m.group(4))
+                if not tm:
+                    raise MusError(f'{fname}: Tempo: не распознано:'
+                                   f' «{m.group(4).strip()}»')
+                t = int(tm.group(1))
+                if not 32 <= t <= 255:
+                    raise MusError(f'{fname}: Tempo: T{t} вне диапазона'
+                                   ' 32..255')
+                if tempo is not None and tempo != t:
+                    raise MusError(f'{fname}: Tempo: объявлен дважды'
+                                   f' с разными значениями ({tempo}, {t})')
+                tempo = t
+                continue
             if m.group(1) is not None:
                 cur = ('score' + m.group(1), [])
                 sections.append(cur)
-                rest = m.group(3)
+                rest = m.group(4)
             elif m.group(2) is not None:
                 idx = int(m.group(2))
-                path = m.group(3).strip()
+                path = m.group(4).strip()
                 if not path:
                     raise MusError(f'{fname}: sample {idx}: не указан файл')
                 if idx in samples:
@@ -251,14 +273,14 @@ def split_sections(text, fname):
             else:
                 cur = ('drums', [])
                 sections.append(cur)
-                rest = m.group(3)
+                rest = m.group(4)
             if rest.strip():
                 cur[1].append(rest)
         elif cur is not None:
             cur[1].append(line)
         elif line.strip():
             raise MusError(f'{fname}: данные вне секции: «{line.strip()}»')
-    return sections, samples
+    return sections, samples, tempo
 
 
 def main():
@@ -281,7 +303,7 @@ def main():
     try:
         with open(fname, encoding='utf-8') as f:
             text = f.read()
-        sections, sample_paths = split_sections(text, fname)
+        sections, sample_paths, global_tempo = split_sections(text, fname)
 
         streams = {'score0': Stream('score 0'),
                    'score1': Stream('score 1'),
@@ -294,8 +316,8 @@ def main():
                 st = streams['drums']
             toks = tokenize('\n'.join(lines), fname, st.drums)
             st._toks = getattr(st, '_toks', []) + toks
-        # темп — параметр композиции: собираем T по всем секциям
-        tempo_ref = [None]
+        # темп — параметр композиции: общий Tempo: либо T в партитурах
+        tempo_ref = [global_tempo]
         allow_flag = []
         for sec_name in ('score0', 'score1', 'score2', 'drums'):
             st = streams[sec_name]
