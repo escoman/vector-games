@@ -11,10 +11,12 @@
  *     уменьшается на 2 за такт, поэтому множителя 2 в формуле нет);
  *   - «канал выключен»: режим 0 (OUT=0, тишина), управляющие 0x30/0x70/0xB0.
  *
- * Плеер: данные music_step_t задаются music_set_data(); music_tick()
+ * Плеер: данные sound_step_t задаются sound_set_data(); sound_tick()
  * вызывается из кадрового прерывания (startup.asm, 50 Гц) и потребляет
  * g_tempo_num/g_tempo_den тика за кадр (аккумулятор Брешихэма):
- * 1/1 = один тик на кадр. Темп меняется через music_set_tempo().
+ * 1/1 = один тик на кадр. Темп меняется через sound_set_tempo().
+ * Символы sound_* не конфликтуют с партитурным плеером music.c
+ * (music_*) — в одном ROM допустимо линковать оба.
  * Поле noise шага — ударные на канале шума AY-3-8910 (drums.asm):
  * 1 = снейр/том, 2 = бочка. Триггер вызывается один раз на входе в
  * шаг; огибающую ведёт drum_tick() из того же прерывания. ВИ53 при
@@ -72,7 +74,7 @@ void sound_init(void)
 
 /* ------------------------------ Плеер --------------------------------- */
 
-static const music_step_t *g_steps;     /* таблица мелодии              */
+static const sound_step_t *g_steps;     /* таблица мелодии              */
 static unsigned int g_len;              /* её длина в шагах             */
 
 static unsigned int g_pos;              /* текущий шаг мелодии          */
@@ -88,7 +90,7 @@ static unsigned char g_tempo_acc;       /* остаток в аккумулят�
 /* делители, записанные в каналы в данный момент (0 = выключен) */
 static unsigned int g_cur1, g_cur2, g_cur3;
 
-void music_set_data(const music_step_t *steps, unsigned int len)
+void sound_set_data(const sound_step_t *steps, unsigned int len)
 {
     g_steps = steps;
     g_len = len;
@@ -96,7 +98,7 @@ void music_set_data(const music_step_t *steps, unsigned int len)
 
 /* Темп = num/den тика на кадровое прерывание (1/1 — номинал 50 Гц).
  * num > den — быстрее, num < den — медленнее. */
-void music_set_tempo(unsigned char num, unsigned char den)
+void sound_set_tempo(unsigned char num, unsigned char den)
 {
     if (num != 0u && den != 0u) {
         g_tempo_num = num;
@@ -104,12 +106,12 @@ void music_set_tempo(unsigned char num, unsigned char den)
     }
 }
 
-void music_set_loop(unsigned char loop)
+void sound_set_loop(unsigned char loop)
 {
     g_loop = loop;
 }
 
-void music_start(void)
+void sound_start(void)
 {
     g_pos = 0u;
     g_left = 0u;
@@ -117,7 +119,7 @@ void music_start(void)
     g_playing = 1u;
 }
 
-void music_stop(void)
+void sound_stop(void)
 {
     g_playing = 0u;
     vi53_set_channel(0, 0);
@@ -127,15 +129,15 @@ void music_stop(void)
     drum_mute();
 }
 
-unsigned char music_is_playing(void)
+unsigned char sound_is_playing(void)
 {
     return g_playing;
 }
 
-static void music_advance(void);
+static void sound_advance(void);
 
 /* Вызов из кадрового прерывания: потребляет num/den тика плеера */
-void music_tick(void)
+void sound_tick(void)
 {
     unsigned char n;
 
@@ -146,13 +148,13 @@ void music_tick(void)
     n = (unsigned char)(g_tempo_acc / g_tempo_den);
     g_tempo_acc %= g_tempo_den;
     while (n-- > 0u)
-        music_advance();
+        sound_advance();
 }
 
 /* Продвижение на один тик плеера */
-static void music_advance(void)
+static void sound_advance(void)
 {
-    const music_step_t *s;
+    const sound_step_t *s;
 
     if (g_left == 0u) {
         if (g_pos >= g_len) {
@@ -197,5 +199,5 @@ static void music_advance(void)
 /* Полная остановка звука (включая незавершённый шум) */
 void sound_silence(void)
 {
-    music_stop();
+    sound_stop();
 }

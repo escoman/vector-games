@@ -31,7 +31,8 @@ SRCS     = $(LIB)/startup.asm main.c \
            $(LIB)/drums.asm \
            $(LIB)/graph.c $(LIB)/music.c $(LIB)/keyboard.c
 
-# music.c линкуется ВМЕСТО sound.c (общие символы music_*)
+# music.c вместо sound.c (символы music_*/sound_* не конфликтуют,
+# но в одном ROM — один плеер)
 ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
 
 .PHONY: all deploy clean full

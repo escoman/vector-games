@@ -25,7 +25,7 @@ SONGS    = scale voices drums01 rhythm sync
 INCS     = $(addprefix rom_data/,$(addsuffix .inc,$(SONGS)))
 SAMPLES  = $(wildcard music/samples/*.smp)
 
-# music.c вместо sound.c (символы music_* общие, см. v06.h)
+# music.c вместо sound.c (символы music_*/sound_*, см. v06.h)
 SRCS     = $(LIB)/startup.asm main.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
            $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \

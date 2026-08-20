@@ -72,9 +72,9 @@ extern void graph_print(unsigned char x, unsigned char y, const char *s,
 
 /* ------------------------------- Звук --------------------------------- */
 
-/* Один шаг мелодии: длительность в тиках 50 Гц и делители ВИ53
- * (частота = 1500000 / делитель; 0 = тишина), noise — ударные в
- * начале шага на канале шума AY-3-8910 (drums.asm):
+/* Один шаг мелодии плеера sound.c: длительность в тиках 50 Гц и
+ * делители ВИ53 (частота = 1500000 / делитель; 0 = тишина),
+ * noise — ударные в начале шага на канале шума AY-3-8910 (drums.asm):
  * 0 = нет, 1 = снейр/том, 2 = бочка. */
 typedef struct {
     unsigned char duration;
@@ -82,14 +82,15 @@ typedef struct {
     unsigned int  ch2;
     unsigned int  ch3;
     unsigned char noise;
-} music_step_t;
+} sound_step_t;
 
 extern void sound_init(void);               /* все каналы в тишину      */
 extern void sound_silence(void);            /* тишина + сброс состояния */
 
-/* Плееры мелодий — два взаимоисключающих варианта, символы music_*
- * общие: собирайте ROM либо с sound.c (шаговая мелодия), либо с
- * music.c (партитурный синтезатор, -DMUSIC_ONLY). */
+/* Плееры мелодий: sound.c (шаговая мелодия, символы sound_*) и
+ * music.c (партитурный синтезатор, -DMUSIC_ONLY, символы music_*).
+ * Префиксы разные — символы не конфликтуют; в одном ROM всё равно
+ * собирайте один плеер: оба пишут в одни каналы ВИ53. */
 #ifdef MUSIC_ONLY
 
 /* music.c — партитурный синтезатор: 3 тона ВИ53 + шумовые ударные
@@ -135,19 +136,19 @@ extern void music_tick(void);
 
 #else /* обычная сборка: плеер sound.c */
 
-extern void music_set_data(const music_step_t *steps, unsigned int len);
+extern void sound_set_data(const sound_step_t *steps, unsigned int len);
 /* Темп = num/den тика плеера на кадровое прерывание 50 Гц.
  * 1/1 — номинал (длительности шагов как есть); num < den — медленнее,
- * num > den — быстрее. Например, music_set_tempo(4, 5) — темп 80%. */
-extern void music_set_tempo(unsigned char num, unsigned char den);
+ * num > den — быстрее. Например, sound_set_tempo(4, 5) — темп 80%. */
+extern void sound_set_tempo(unsigned char num, unsigned char den);
 /* Зацикливание: 0 (по умолчанию) — по окончании мелодии тишина и
  * остановка; 1 — играть по кругу. */
-extern void music_set_loop(unsigned char loop);
-extern void music_start(void);
-extern void music_stop(void);
-extern unsigned char music_is_playing(void);
+extern void sound_set_loop(unsigned char loop);
+extern void sound_start(void);
+extern void sound_stop(void);
+extern unsigned char sound_is_playing(void);
 /* Один тик плеера — вызывается из кадрового прерывания (startup.asm). */
-extern void music_tick(void);
+extern void sound_tick(void);
 
 #endif /* MUSIC_ONLY */
 
@@ -157,7 +158,7 @@ extern void music_tick(void);
  * «tone off, noise on». Тоновые каналы не трогает: в R0-R5 не пишет,
  * R7 пишет один раз (drum_init), звук управляется R6 (период шума) и
  * R10 (громкость канала C, программная огибающая в drum_tick).
- * noise в music_step_t — моментальное событие: каждый drum_*() всегда
+ * noise в sound_step_t — моментальное событие: каждый drum_*() всегда
  * перезапускает звучащий удар, приоритеты ничего не блокируют.
  * Параметры инструментов — таблица в начале drums.asm. */
 extern void drum_init(void);            /* микшер и тишина             */
