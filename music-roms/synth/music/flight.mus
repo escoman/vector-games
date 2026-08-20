@@ -1,0 +1,25 @@
+; Полёт шмеля — Н. А. Римский-Корсаков
+; Упрощённая одноголосная версия начала
+; Без ударных
+;
+; Хроматическое движение вниз.
+; Диез обозначается символом +.
+;
+score 0:
+T180 O5 L16
+E D+ D C+ D C+ C B C B A+ A G+ G F+ F
+E D+ D C+ D C+ C B E D+ D C+ D C+ C B
+E D+ D C+ D C+ C B E D+ D C+ C B A+ A
+E D+ D C+ D C+ C C+ D D+ E D+ D C+ C B
+C C+ D D+ E F F+ G G+ A A+ B O6 C
+B A+ G+ G F+ F E D+ D C+ C B A+ A G+ G
+F+ F E D+ E D+ C+ C B A+ B C+ D+ E F+
+G A+ B O6 C B A+ G+ G F+ F E D+ D C+ C
+B A+ G+ F+ F E D+ D C+ C B A+ A G+ G
+F+ F E D+ D C+ C B A+ A G+ G F+ F E
+D+ D C+ C B A+ A G+ G F+ F E D+ D C+
+C B A+ A G+ G F+ F E D+ D C+ C B A+
+A G+ G F+ F E D+ D C+ C B A+ A G+ G
+F+ F E D+ D C+ C B A+ A G+ G F+ F E
+D+ D C+ C B A+ A G+ G F+ F E D+ D C+
+C B A+ A G+ G F+ F E D+ D C+ C B A+

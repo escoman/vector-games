@@ -21,7 +21,7 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 
 TARGET   = synth.rom
 
-SONGS    = scale voices drums01 rhythm sync
+SONGS    = scale voices drums01 rhythm sync flight
 INCS     = $(addprefix rom_data/,$(addsuffix .inc,$(SONGS)))
 SAMPLES  = $(wildcard music/samples/*.smp)
 

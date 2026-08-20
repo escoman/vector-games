@@ -1,7 +1,7 @@
 ; intro.mus — автоматически сгенерировано music2mus.py
 ; источник: 01_intro (движок Konami, 53.3333 Гц); сетка PPQ=32, 1 кадр = 2 тика — длительности точные
 ; sample 0 — бочка (DMC hi<8), sample 1 — снейр/том (hi>=8)
-Tempo: T200
+Tempo: T120
 sample 0: samples/kick.smp
 sample 1: samples/snare.smp
 score 0:

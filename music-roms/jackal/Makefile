@@ -18,9 +18,10 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 TARGET   = jackal.rom
 
 # Партитуры: music/*.mus (+ samples/*.smp) -> rom_data/*_music.inc
-# ВРЕМЕННО: только intro — все 9 мелодий не влезают до видеоОЗУ
-# (ROM грузится с 0100h, видеоОЗУ с 8000h)
-SONGS    = intro
+# ВРЕМЕННО: не все мелодии — каждый следующий добавляется по мере
+# надобности, ROM не должен доходить до видеоОЗУ (ROM с 0100h,
+# видеоОЗУ с 8000h)
+SONGS    = intro level1 ending
 MUS2INC  = ../../utils/mus2inc.py
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))

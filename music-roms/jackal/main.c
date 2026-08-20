@@ -20,8 +20,8 @@
  * независимо) — отмечены '!' в .mus. 
  *
  * Управление:
- *   ВРЕМЕННО: собрана только мелодия Intro (остальные партитуры
- *   не помещаются в память до видеоОЗУ) — работает только клавиша 1.
+ *   ВРЕМЕННО: собраны не все мелодии (остальные партитуры
+ *   не помещаются в память до видеоОЗУ) — работают клавиши 1, 2 и 9.
  *   1 — Intro (по окончании — тишина, без зацикливания);
  *   2 — Level 1 (по кругу);
  *   3 — Level 2 (по кругу);
@@ -46,10 +46,12 @@
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
 
 #include "rom_data/title_bmp.inc"   /* title_bmp_screen_rle, title_bmp_palette */
-/* ВРЕМЕННО: загружается только Intro — все 9 мелодий не помещаются
- * до видеоОЗУ (ROM с 0100h, видеоОЗУ с 8000h); остальные .mus
- * скомпилированы и ждут возврата в сборку. */
+/* ВРЕМЕННО: собраны не все мелодии — остальные партитуры не
+ * помещаются до видеоОЗУ (ROM с 0100h, видеоОЗУ с 8000h); прочие
+ * .mus скомпилированы и ждут возврата в сборку. */
 #include "rom_data/intro_music.inc" /* music_song_t intro_music_song */
+#include "rom_data/level1_music.inc" /* music_song_t level1_music_song */
+#include "rom_data/ending_music.inc" /* music_song_t ending_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -136,6 +138,10 @@ int main(void)
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
             if (key == '1') {
                 play_song(&intro_music_song, 0u);
+            } else if (key == '2') {
+                play_song(&level1_music_song, 1u);
+            } else if (key == '9') {
+                play_song(&ending_music_song, 0u);
             } else if (key == '0') {
                 music_stop();
             } else if (key == 27) {     /* СТОП (ESC) */

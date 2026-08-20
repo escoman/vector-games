@@ -95,6 +95,8 @@ typedef struct {
     const unsigned char *start; /* начало — для перезапуска (loop)    */
     unsigned char cnt;          /* тиков до конца текущего события    */
     unsigned char len;          /* текущая длительность (MUS_CMD_LEN) */
+    unsigned char gate;         /* тиков тишины до вступления ноты    */
+    unsigned int div;           /* делитель отложенной ноты           */
 } mus_ch_t;
 
 static const music_song_t *g_song;
@@ -120,6 +122,7 @@ static void reset_stream(mus_ch_t *c, const unsigned char *pc)
     c->pc = pc;
     c->start = pc;
     c->cnt = 0u;
+    c->gate = 0u;
     c->len = 32u;               /* до первого MUS_CMD_LEN — L4 (32 тика) */
 }
 
@@ -184,7 +187,8 @@ void music_set_loop(unsigned char loop)
 /* ------------------------------ Рантайм ------------------------------- */
 
 /* Тоновый поток: события читаются до ноты/паузы/конца (управляющие
- * команды исполняются на месте). Запись в ВИ53 — только на событии. */
+ * команды исполняются на месте). Запись в ВИ53 — на событии и в
+ * clock_tick() по истечении гейта. */
 static void tone_event(unsigned char ch)
 {
     mus_ch_t *c = &g_ch[ch];
@@ -206,8 +210,18 @@ static void tone_event(unsigned char ch)
             c->len = *c->pc++;
             continue;
         }
-        vi53_set_channel(ch, div_tab[b - 1u]);
-        c->cnt = c->len;
+        /* Гейт: первый тик ноты — тишина (разделяет повторы той же
+         * ноты — ВИ53 иначе тянет звук без разрыва; даёт каждой ноте
+         * атаку). Гейт внутри длительности: событие длится ровно len
+         * тиков, дрейфа нет. Делитель отложен, запись в ВИ53 — в
+         * clock_tick(). */
+        vi53_set_channel(ch, 0u);
+        c->gate = 1u;
+        c->div = div_tab[b - 1u];
+        if (c->len > 1u)
+            c->cnt = c->len - 1u;   /* 1 тик съеден гейтом */
+        else
+            c->cnt = 0u;            /* L128: нота звучит на след. тик */
         return;
     }
 }
@@ -263,10 +277,15 @@ static void clock_tick(void)
     for (i = 0u; i < 3u; ++i) {
         if (g_ch[i].pc == 0)
             continue;
-        if (g_ch[i].cnt > 0u)
+        if (g_ch[i].gate > 0u) {
+            --g_ch[i].gate;
+            if (g_ch[i].gate == 0u)     /* гейт отзвучал — нота */
+                vi53_set_channel(i, g_ch[i].div);
+        } else if (g_ch[i].cnt > 0u) {
             --g_ch[i].cnt;
-        else
+        } else {
             tone_event(i);
+        }
     }
     if (g_dr.pc != 0) {
         if (g_dr.cnt > 0u)

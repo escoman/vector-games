@@ -7,10 +7,11 @@
  *   2 - VOICES     три одновременных голоса;
  *   3 - DRUMS      только ударные (семплы .smp);
  *   4 - RHYTHM     смесь L4/L8/L16 + паузы, ударные вдвое чаще;
- *   5 - SYNC       удар точно на начало каждой ноты.
+ *   5 - SYNC       удар точно на начало каждой ноты;
+ *   6 - FLIGHT     «Полёт шмеля» (Римский-Корсаков), одноголосая.
  *
  * Управление:
- *   1..5    — выбрать тест и запустить (music_start, с начала);
+ *   1..6    — выбрать тест и запустить (music_start, с начала);
  *   ВК/ПРБЛ — пауза / продолжить (music_pause / music_resume);
  *   0       — остановить (music_stop);
  *   СТОП    — выход из ROM.
@@ -29,6 +30,7 @@
 #include "rom_data/drums01.inc"
 #include "rom_data/rhythm.inc"
 #include "rom_data/sync.inc"
+#include "rom_data/flight.inc"
 
 static const unsigned char synth_pal[16] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -44,6 +46,7 @@ static const struct {
     { "DRUMS",  &drums01_song },
     { "RHYTHM", &rhythm_song },
     { "SYNC",   &sync_song },
+    { "FLIGHT", &flight_song },
 };
 
 /* Оба потребителя кадрового прерывания: единый music clock и
@@ -91,9 +94,10 @@ int main(void)
     graph_print(16u, 72u, "3 - DRUMS (SMP)", 8u);
     graph_print(16u, 88u, "4 - RHYTHM (L4-L16)", 8u);
     graph_print(16u, 104u, "5 - SYNC (DRUM + NOTE)", 8u);
-    graph_print(16u, 136u, "VK/PBL - PAUSE/RESUME", 8u);
-    graph_print(16u, 152u, "0 - STOP", 8u);
-    graph_print(16u, 168u, "ESC - EXIT", 8u);
+    graph_print(16u, 120u, "6 - FLIGHT (BUMBLEBEE)", 8u);
+    graph_print(16u, 152u, "VK/PBL - PAUSE/RESUME", 8u);
+    graph_print(16u, 168u, "0 - STOP", 8u);
+    graph_print(16u, 184u, "ESC - EXIT", 8u);
     show_status("STOPPED", "-");
     graph_set_palette(synth_pal);
 
@@ -102,7 +106,7 @@ int main(void)
 
         key = kbd_scan();
         if (key != prev_key) {
-            if (key >= '1' && key <= '5') {
+            if (key >= '1' && key <= '6') {
                 cur = (unsigned char)(key - '1');
                 music_set_data(songs[cur].song);
                 music_start();
