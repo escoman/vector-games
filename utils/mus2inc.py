@@ -15,7 +15,7 @@
 #   T<n>      темп, ударных в минуту (параметр композиции; один на все
 #             партитуры, только до первого события; при заявленном
 #             Tempo: может отсутствовать); по умолчанию T120;
-#   O<n>      октава 1..7 (по умолчанию O4);
+#   O<n>      октава 0..7 (по умолчанию O4);
 #   L<n>      длительность: 1,2,4,8,16,32,64,128 (по умолчанию L4);
 #   P         пауза на текущую длительность;
 #   C..B      ноты; '#' или '+' — диез, '-' — бемоль; цифра после ноты
@@ -35,7 +35,12 @@
 #   0x00        конец потока;
 #   0x01..0x5F  нота, абсолютный номер = байт - 1 (октава*12 + полутон);
 #   0x60        пауза на текущую длительность;
-#   0xE1, len   текущая длительность в тиках сетки (четверть = 32).
+#   0xE0..0xE7  длительность L1..L128: L = 1 << (байт - 0xE0), в тиках
+#               сетки 128/L (четверть = 32). Команда состояния время не
+#               продвигает; начальная длительность потока без команд —
+#               L4. Октава O — только compile-time состояние: нота сразу
+#               уходит в байткод абсолютным номером, команды октавы в
+#               потоке нет (диапазон 0xD0..0xD7 свободен).
 #
 # Формат .smp (бинарный): байт N — число кадров, затем N пар
 # (R6, R10) — период шума и громкость канала C AY-3-8910, по одному
@@ -43,6 +48,7 @@
 #
 # Использование:
 #   python3 utils/mus2inc.py music/song.mus -o rom_data/song.inc --name song
+#   python3 utils/mus2inc.py --self-test   # проверка кодирования L/O
 
 import argparse
 import math
@@ -52,7 +58,8 @@ import sys
 
 MUS_END = 0x00
 MUS_REST = 0x60
-MUS_CMD_LEN = 0xE1
+MUS_LEN_BASE = 0xE0   # E0..E7 = L1..L128 (однобайтовая команда состояния)
+L_INDEX = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 NOTE_BASE = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
 VALID_L = (1, 2, 4, 8, 16, 32, 64, 128)
@@ -76,7 +83,9 @@ class Stream:
         self.l_val = 4
         self.tempo = None       # T заявлен в этой партитуре
         self.len_locked = False # длительности уже считаются
-        self.bytes = [MUS_CMD_LEN, 32]  # начальная длительность: L4 = 32
+        # Байткод пуст: длительность по умолчанию (L4) совпадает
+        # с начальным состоянием рантайма — команда не нужна.
+        self.bytes = []
         self.ticks = 0
         self.events = 0
 
@@ -84,8 +93,9 @@ class Stream:
         return len_ticks(self.l_val)
 
     def set_len(self, l_val):
+        """Однобайтовая команда E0..E7 (E0 = L1, E7 = L128)."""
         self.l_val = l_val
-        self.bytes += [MUS_CMD_LEN, self.cur_len()]
+        self.bytes.append(MUS_LEN_BASE + L_INDEX[l_val])
 
     def emit_event(self, code, l_override=None):
         """Событие (нота/пауза/атака) с текущей или явной длительностью."""
@@ -185,8 +195,11 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
                                f' совпадает с T{song_tempo_ref[0]}')
             continue
         if kind == 'O':
-            if not 1 <= tok[1] <= 7:
-                raise MusError(f'{fname}: O{tok[1]} вне диапазона 1..7')
+            if not 0 <= tok[1] <= 7:
+                raise MusError(f'{fname}: O{tok[1]} вне диапазона 0..7')
+            # Октава — compile-time состояние: команды в байткоде нет,
+            # нота уйдёт абсолютным номером (октава*12 + полутон).
+            st.len_locked = True
             st.oct = tok[1]
             continue
         if kind == 'L':
@@ -210,12 +223,13 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
                 raise MusError(f'{fname}: нота с L{l_ov} — недопустимая'
                                ' длительность')
             abs_note = st.oct * 12 + semi
-            if abs_note < 12:
-                raise MusError(f'{fname}: нота в «{st.name}» ниже рабочей'
-                               f' зоны ВИ53 (октава {st.oct})')
             if abs_note > 94:
                 raise MusError(f'{fname}: нота в «{st.name}» выше байткода'
                                ' (максимум — октава 7, ре)')
+            if abs_note < 12:
+                print(f'ВНИМАНИЕ: {fname}: нота в «{st.name}» ниже рабочей'
+                      f' зоны ВИ53 (октава {st.oct}) — тишина',
+                      file=sys.stderr)
             st.emit_event(abs_note + 1, l_ov)
             continue
         if kind == 'D':
@@ -283,9 +297,58 @@ def split_sections(text, fname):
     return sections, samples, tempo
 
 
+def self_test():
+    """Проверка однобайтового кодирования L (E0..E7) и compile-time
+    октавы O — случаи из ТЗ. Нота C в O4 = абсолютный номер 48,
+    байт 0x31; команды октавы в байткоде нет."""
+    def comp(text, drums=False):
+        st = Stream('selftest', drums=drums)
+        toks = tokenize(text, '<selftest>', drums)
+        compile_stream(st, toks, '<selftest>', [None], [])
+        return bytes(st.bytes)
+
+    def hx(bs):
+        return ' '.join(f'{b:02X}' for b in bs)
+
+    cases = [
+        # Тест 1 — все длительности: L1..L128 -> E0..E7
+        ('все L',
+         'L1 C L2 C L4 C L8 C L16 C L32 C L64 C L128 C', False,
+         'E0 31 E1 31 E2 31 E3 31 E4 31 E5 31 E6 31 E7 31 00'),
+        # Тест 2 — все октавы: команды O в байткоде нет, октава видна
+        # в абсолютном номере ноты (C = октава*12 + 1)
+        ('все O',
+         'O0 C O1 C O2 C O3 C O4 C O5 C O6 C O7 C', False,
+         '01 0D 19 25 31 3D 49 55 00'),
+        # Тест 3 — частая смена длительности: каждая L — один байт
+        ('смена L',
+         'L64 C L32 C L64 C L32 C L64 C L32 C', False,
+         'E6 31 E5 31 E6 31 E5 31 E6 31 E5 31 00'),
+        # Тест 4 — смена октавы во время воспроизведения
+        # (C = 0, D = 2, E = 4 полутона: O4 C = 48 -> 0x31 и т.д.)
+        ('смена O',
+         'O4 C D E O5 C D E O6 C D E O4 C', False,
+         '31 33 35 3D 3F 41 49 4B 4D 31 00'),
+    ]
+    failed = 0
+    for name, text, drums, want in cases:
+        exp = bytes(int(x, 16) for x in want.split())
+        got = comp(text, drums)
+        if got != exp:
+            failed += 1
+            print(f'САМОТЕСТ [{name}]: ОШИБКА')
+            print(f'  ожидалось: {want}')
+            print(f'  получено:  {hx(got)}')
+        else:
+            print(f'САМОТЕСТ [{name}]: OK ({len(got)} байт)')
+    if failed:
+        sys.exit(f'mus2inc --self-test: провалено {failed} из {len(cases)}')
+    print(f'mus2inc --self-test: все {len(cases)} тестов пройдены')
+
+
 def main():
     ap = argparse.ArgumentParser(description='.mus/.smp -> .inc для music.c')
-    ap.add_argument('mus', help='файл партитуры .mus')
+    ap.add_argument('mus', nargs='?', help='файл партитуры .mus')
     ap.add_argument('-o', '--output', help='выходной .inc (по умолчанию'
                     ' имя .mus с расширением .inc)')
     ap.add_argument('--name', help='префикс символов C (по умолчанию —'
@@ -293,7 +356,16 @@ def main():
     ap.add_argument('--allow-len-mismatch', action='store_true',
                     help='предупреждение вместо ошибки при разной длине'
                     ' партитур (то же, что «!» в .mus)')
+    ap.add_argument('--self-test', action='store_true',
+                    help='проверить однобайтовое кодирование L и октавы,'
+                    ' выйти')
     args = ap.parse_args()
+
+    if args.self_test:
+        self_test()
+        return
+    if args.mus is None:
+        ap.error('не указан файл партитуры .mus')
 
     fname = args.mus
     out = args.output or os.path.splitext(fname)[0] + '.inc'
