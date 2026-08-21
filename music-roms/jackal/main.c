@@ -20,8 +20,6 @@
  * независимо) — отмечены '!' в .mus. 
  *
  * Управление:
- *   ВРЕМЕННО: собраны не все мелодии (остальные партитуры
- *   не помещаются в память до видеоОЗУ) — работают клавиши 1, 2 и 9.
  *   1 — Intro (по окончании — тишина, без зацикливания);
  *   2 — Level 1 (по кругу);
  *   3 — Level 2 (по кругу);
@@ -45,13 +43,16 @@
 
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
 
-#include "rom_data/title_bmp.inc"   /* title_bmp_screen_rle, title_bmp_palette */
-/* ВРЕМЕННО: собраны не все мелодии — остальные партитуры не
- * помещаются до видеоОЗУ (ROM с 0100h, видеоОЗУ с 8000h); прочие
- * .mus скомпилированы и ждут возврата в сборку. */
-#include "rom_data/intro_music.inc" /* music_song_t intro_music_song */
-#include "rom_data/level1_music.inc" /* music_song_t level1_music_song */
-#include "rom_data/ending_music.inc" /* music_song_t ending_music_song */
+#include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
+#include "rom_data/intro_music.inc"       /* music_song_t intro_music_song */
+#include "rom_data/level1_music.inc"      /* music_song_t level1_music_song */
+#include "rom_data/level2_music.inc"      /* music_song_t level2_music_song */
+#include "rom_data/level3_music.inc"      /* music_song_t level3_music_song */
+#include "rom_data/boss_music.inc"        /* music_song_t boss_music_song */
+#include "rom_data/final_boss_music.inc"  /* music_song_t final_boss_music_song */
+#include "rom_data/stage_clear_music.inc" /* music_song_t stage_clear_music_song */
+#include "rom_data/game_over_music.inc"   /* music_song_t game_over_music_song */
+#include "rom_data/ending_music.inc"      /* music_song_t ending_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -140,6 +141,18 @@ int main(void)
                 play_song(&intro_music_song, 0u);
             } else if (key == '2') {
                 play_song(&level1_music_song, 1u);
+            } else if (key == '3') {
+                play_song(&level2_music_song, 1u);
+            } else if (key == '4') {
+                play_song(&level3_music_song, 1u);
+            } else if (key == '5') {
+                play_song(&boss_music_song, 1u);
+            } else if (key == '6') {
+                play_song(&final_boss_music_song, 1u);
+            } else if (key == '7') {
+                play_song(&stage_clear_music_song, 0u);
+            } else if (key == '8') {
+                play_song(&game_over_music_song, 0u);
             } else if (key == '9') {
                 play_song(&ending_music_song, 0u);
             } else if (key == '0') {

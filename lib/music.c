@@ -24,7 +24,12 @@
  *   0xE0..0xE7  длительность L1..L128 сетки PPQ = 32 — команда
  *               состояния: L = 1 << (байт - 0xE0), в тиках 128/L
  *               (четверть = 32 тика, без округлений и дрейфа; темп =
- *               tempo_num/tempo_den тика за кадр). Команда состояния
+ *               tempo_num/tempo_den тика за кадр);
+ *   0xE8        «[» — начало повторяемой секции: база повтора =
+ *               следующий байт, счётчик проходов = 0;
+ *   0xE9 n      «]n» — конец секции: счётчик + 1; пока счётчик < n,
+ *               исполнение возвращается к базе (секция звучит ровно
+ *               n раз, как $FB/$FE n движка Konami). Команда состояния
  *               ноту не запускает и время не продвигает; начальная
  *               длительность потока без команд — L4. Октава —
  *               compile-time состояние mus2inc.py, в байткоде команды
@@ -97,6 +102,8 @@ static const unsigned int div_tab[95] = {
 typedef struct {
     const unsigned char *pc;    /* 0 = поток закончился               */
     const unsigned char *start; /* начало — для перезапуска (loop)    */
+    const unsigned char *loop_pc;  /* база повтора (MUS_LPSTART)      */
+    unsigned char loop_cnt;     /* пройдено раз в текущей секции      */
     unsigned char cnt;          /* тиков до конца текущего события    */
     unsigned char len;          /* текущая длительность (MUS_LEN)     */
     unsigned char gate;         /* тиков тишины до вступления ноты    */
@@ -125,6 +132,8 @@ static void reset_stream(mus_ch_t *c, const unsigned char *pc)
 {
     c->pc = pc;
     c->start = pc;
+    c->loop_pc = pc;
+    c->loop_cnt = 0u;
     c->cnt = 0u;
     c->gate = 0u;
     c->len = 32u;               /* до первой команды MUS_LEN — L4     */
@@ -196,7 +205,7 @@ void music_set_loop(unsigned char loop)
 static void tone_event(unsigned char ch)
 {
     mus_ch_t *c = &g_ch[ch];
-    unsigned char b;
+    unsigned char b, n;
 
     for (;;) {
         b = *c->pc++;
@@ -212,6 +221,17 @@ static void tone_event(unsigned char ch)
         }
         if (b >= MUS_LEN && b <= MUS_LEN + 7u) {  /* E0..E7: длит-ть */
             c->len = (unsigned char)(0x80u >> (b - MUS_LEN));
+            continue;
+        }
+        if (b == MUS_LPSTART) {         /* «[»: база повтора */
+            c->loop_pc = c->pc;
+            c->loop_cnt = 0u;
+            continue;
+        }
+        if (b == MUS_LPEND) {           /* «]n»: n проходов секции */
+            n = *c->pc++;
+            if (++c->loop_cnt < n)
+                c->pc = c->loop_pc;
             continue;
         }
         /* Гейт: первый тик ноты — тишина (разделяет повторы той же
@@ -234,7 +254,7 @@ static void tone_event(unsigned char ch)
  * песни; пауза новые атаки не даёт, звучащий семпл не обрывает. */
 static void drum_event(void)
 {
-    unsigned char b;
+    unsigned char b, n;
 
     for (;;) {
         b = *g_dr.pc++;
@@ -248,6 +268,17 @@ static void drum_event(void)
         }
         if (b >= MUS_LEN && b <= MUS_LEN + 7u) {
             g_dr.len = (unsigned char)(0x80u >> (b - MUS_LEN));
+            continue;
+        }
+        if (b == MUS_LPSTART) {         /* «[»: база повтора */
+            g_dr.loop_pc = g_dr.pc;
+            g_dr.loop_cnt = 0u;
+            continue;
+        }
+        if (b == MUS_LPEND) {           /* «]n»: n проходов секции */
+            n = *g_dr.pc++;
+            if (++g_dr.loop_cnt < n)
+                g_dr.pc = g_dr.loop_pc;
             continue;
         }
         if (b <= 10u)                   /* новый удар — перезапуск */

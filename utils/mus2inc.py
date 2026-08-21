@@ -7,6 +7,10 @@
 #             минуту): один на все партитуры, можно указать вместо
 #             T<n> в каждой партитуре; T<n> внутри партитуры обязан
 #             ему соответствовать;
+#   Enabled: 0 1 2 D           — необязательный: какие каналы играть
+#             (0..2 — тоновые партитуры, D — ударные); не указанные
+#             каналы в .inc не попадают (указатель 0 в music_song_t,
+#             рантайм поток пропускает). По умолчанию все включены;
 #   sample N: путь/к/файлу.smp   — объявление семпла ударных (N = 0..9);
 #   score N: ...                 — партитура тонального канала (N = 0..2);
 #   drums: ...                   — партитура ударных.
@@ -19,7 +23,12 @@
 #   L<n>      длительность: 1,2,4,8,16,32,64,128 (по умолчанию L4);
 #   P         пауза на текущую длительность;
 #   C..B      ноты; '#' или '+' — диез, '-' — бемоль; цифра после ноты
-#             или паузы — явная длительность этой ноты (C8, P16).
+#             или паузы — явная длительность этой ноты (C8, P16);
+#   [ ... ]n  повтор секции: содержимое между '[' и ']n' звучит ровно
+#             n раз (аналог $FB/$FE n движка Konami; секция хранится
+#             в байткоде один раз, рантайм прыгает назад). Вложенные
+#             маркеры: внутренний '[' перекрывает базу внешнего.
+#             ']n' без '[' повторяет поток от начала.
 # Партитура ударных: цифры 0..9 — атака семпла с объявленным номером,
 # P — пауза (звучащий семпл не обрывает), L/T как выше.
 # '!' в любом месте файла — явно разрешить разную длину партитур.
@@ -41,6 +50,11 @@
 #               L4. Октава O — только compile-time состояние: нота сразу
 #               уходит в байткод абсолютным номером, команды октавы в
 #               потоке нет (диапазон 0xD0..0xD7 свободен).
+#   0xE8        '[' — начало повторяемой секции: запоминает адрес
+#               возврата (следующий байт), счётчик повторов = 0;
+#   0xE9 n      ']n' — конец секции: счётчик + 1; пока счётчик < n,
+#               исполнение возвращается к адресу возврата (секция
+#               звучит ровно n раз). Время не продвигает.
 #
 # Формат .smp (бинарный): байт N — число кадров, затем N пар
 # (R6, R10) — период шума и громкость канала C AY-3-8910, по одному
@@ -59,6 +73,8 @@ import sys
 MUS_END = 0x00
 MUS_REST = 0x60
 MUS_LEN_BASE = 0xE0   # E0..E7 = L1..L128 (однобайтовая команда состояния)
+MUS_LPSTART = 0xE8    # '[' — начало повторяемой секции
+MUS_LPEND = 0xE9      # ']n' + байт n: секция звучит n раз
 L_INDEX = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 NOTE_BASE = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
@@ -86,6 +102,7 @@ class Stream:
         # Байткод пуст: длительность по умолчанию (L4) совпадает
         # с начальным состоянием рантайма — команда не нужна.
         self.bytes = []
+        self.mark_ticks = []    # время на входе в открытые секции '['
         self.ticks = 0
         self.events = 0
 
@@ -114,7 +131,7 @@ class Stream:
 def tokenize(body, fname, drums):
     """Разобрать тело партитуры на события. Возвращает список кортежей
     (kind, value): ('T', n), ('O', n), ('L', n), ('P', l|None),
-    ('N', abs_note, l|None), ('D', sample_id), ('!',)."""
+    ('N', abs_note, l|None), ('D', sample_id), ('[',), (']', n), ('!',)."""
     toks = []
     pos = 0
     body = body.strip()
@@ -127,6 +144,15 @@ def tokenize(body, fname, drums):
         if c == '!':
             toks.append(('!',))
             pos += 1
+            continue
+        if c == '[':
+            toks.append(('[',))
+            pos += 1
+            continue
+        m = re.match(r'\](\d+)', body[pos:])
+        if m:
+            toks.append((']', int(m.group(1))))
+            pos += m.end()
             continue
         if drums and c.isdigit():
             toks.append(('D', int(c)))
@@ -179,6 +205,24 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
         kind = tok[0]
         if kind == '!':
             allow_flag.append(1)
+            continue
+        if kind == '[':
+            st.bytes.append(MUS_LPSTART)
+            st.mark_ticks.append(st.ticks)
+            continue
+        if kind == ']':
+            n = tok[1]
+            if not 2 <= n <= 255:
+                raise MusError(f'{fname}: ]{n} — повторов должно быть 2..255')
+            if st.mark_ticks:
+                section = st.ticks - st.mark_ticks.pop()
+            else:
+                # ']n' без '[' — повтор от начала потока (база повтора
+                # рантайма по умолчанию = начало потока)
+                section = st.ticks
+            st.ticks += section * (n - 1)   # рантайм играет n проходов
+            st.bytes.append(MUS_LPEND)
+            st.bytes.append(n)
             continue
         if kind == 'T':
             t = tok[1]
@@ -237,30 +281,36 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
             st.emit_event(tok[1] + 1)
             continue
     st.bytes.append(MUS_END)
+    if st.mark_ticks:
+        raise MusError(f'{fname}: незакрытая секция «[» в «{st.name}»')
 
 
 HEADER_RE = re.compile(
-    r'^\s*(?:score\s+([0-2])|drums|sample\s+([0-9])|(tempo))\s*:(.*)$',
+    r'^\s*(?:score\s+([0-2])|drums|sample\s+([0-9])|(tempo)|(enabled))\s*:'
+    r'(.*)$',
     re.I)
 
 
 def split_sections(text, fname):
-    """Разбить .mus на секции. Возвращает (sections, samples, tempo):
-    sections — список ('score0'|'drums', текст), samples — {N: путь},
-    tempo — общий темп из строки «Tempo: T<n>» или None."""
+    """Разбить .mus на секции. Возвращает (sections, samples, tempo,
+    enabled): sections — список ('score0'|'drums', текст), samples —
+    {N: путь}, tempo — общий темп из строки «Tempo: T<n>» или None,
+    enabled — множество включённых каналов ('score0'..'drums') из
+    «Enabled: ...» или None (параметр не заявлен — все включены)."""
     text = re.sub(r';[^\n]*', '', text)
     sections = []
     samples = {}
     tempo = None
+    enabled = None
     cur = None
     for line in text.split('\n'):
         m = HEADER_RE.match(line)
         if m:
             if m.group(3) is not None:      # Tempo: T<n> — общий темп
-                tm = re.match(r'\s*T?(\d+)\s*$', m.group(4))
+                tm = re.match(r'\s*T?(\d+)\s*$', m.group(5))
                 if not tm:
                     raise MusError(f'{fname}: Tempo: не распознано:'
-                                   f' «{m.group(4).strip()}»')
+                                   f' «{m.group(5).strip()}»')
                 t = int(tm.group(1))
                 if not 32 <= t <= 255:
                     raise MusError(f'{fname}: Tempo: T{t} вне диапазона'
@@ -270,13 +320,35 @@ def split_sections(text, fname):
                                    f' с разными значениями ({tempo}, {t})')
                 tempo = t
                 continue
+            if m.group(4) is not None:      # Enabled: 0 1 2 D
+                if enabled is not None:
+                    raise MusError(f'{fname}: Enabled: объявлен дважды')
+                en = set()
+                for tok in m.group(5).split():
+                    u = tok.upper()
+                    if u == 'D':
+                        key = 'drums'
+                    elif u in ('0', '1', '2'):
+                        key = 'score' + u
+                    else:
+                        raise MusError(f'{fname}: Enabled: непонятный канал'
+                                       f' «{tok}» (допустимы 0, 1, 2, D)')
+                    if key in en:
+                        raise MusError(f'{fname}: Enabled: канал'
+                                       f' «{tok}» указан дважды')
+                    en.add(key)
+                if not en:
+                    raise MusError(f'{fname}: Enabled: не указан ни один'
+                                   ' канал')
+                enabled = en
+                continue
             if m.group(1) is not None:
                 cur = ('score' + m.group(1), [])
                 sections.append(cur)
-                rest = m.group(4)
+                rest = m.group(5)
             elif m.group(2) is not None:
                 idx = int(m.group(2))
-                path = m.group(4).strip()
+                path = m.group(5).strip()
                 if not path:
                     raise MusError(f'{fname}: sample {idx}: не указан файл')
                 if idx in samples:
@@ -287,20 +359,20 @@ def split_sections(text, fname):
             else:
                 cur = ('drums', [])
                 sections.append(cur)
-                rest = m.group(4)
+                rest = m.group(5)
             if rest.strip():
                 cur[1].append(rest)
         elif cur is not None:
             cur[1].append(line)
         elif line.strip():
             raise MusError(f'{fname}: данные вне секции: «{line.strip()}»')
-    return sections, samples, tempo
+    return sections, samples, tempo, enabled
 
 
 def self_test():
-    """Проверка однобайтового кодирования L (E0..E7) и compile-time
-    октавы O — случаи из ТЗ. Нота C в O4 = абсолютный номер 48,
-    байт 0x31; команды октавы в байткоде нет."""
+    """Проверка однобайтового кодирования L (E0..E7), compile-time
+    октавы O и повторов секций (E8/E9 n) — случаи из ТЗ. Нота C в O4 =
+    абсолютный номер 48, байт 0x31; команды октавы в байткоде нет."""
     def comp(text, drums=False):
         st = Stream('selftest', drums=drums)
         toks = tokenize(text, '<selftest>', drums)
@@ -329,6 +401,14 @@ def self_test():
         ('смена O',
          'O4 C D E O5 C D E O6 C D E O4 C', False,
          '31 33 35 3D 3F 41 49 4B 4D 31 00'),
+        # Тест 5 — повтор секции: [ ... ]3 -> E8 ... E9 03
+        ('повтор',
+         '[ C C ]3', False,
+         'E8 31 31 E9 03 00'),
+        # Тест 6 — вложенные маркеры: внутренний '[' переопределяет базу
+        ('вложенный повтор',
+         '[ C [ D ]2 E ]2', False,
+         'E8 31 E8 33 E9 02 35 E9 02 00'),
     ]
     failed = 0
     for name, text, drums, want in cases:
@@ -341,9 +421,33 @@ def self_test():
             print(f'  получено:  {hx(got)}')
         else:
             print(f'САМОТЕСТ [{name}]: OK ({len(got)} байт)')
+    # Время секции умножается на n: '[ C8 C ]3' = 3 * (16+32) = 144 тика
+    st = Stream('selftest')
+    compile_stream(st, tokenize('[ C8 C ]3', '<selftest>', False),
+                   '<selftest>', [None], [])
+    if st.ticks != 144:
+        failed += 1
+        print(f'САМОТЕСТ [время повтора]: ОШИБКА, {st.ticks} тиков != 144')
+    else:
+        print('САМОТЕСТ [время повтора]: OK (144 тика)')
+    # «Enabled:» — список каналов (0..2, D); регистр не важен
+    _secs, _smp, _tmp, en = split_sections(
+        'Enabled: 0 2 d\nscore 0:\nC\n', '<selftest>')
+    if en != {'score0', 'score2', 'drums'}:
+        failed += 1
+        print(f'САМОТЕСТ [Enabled]: ОШИБКА, каналы {en}')
+    else:
+        print('САМОТЕСТ [Enabled]: OK (0 2 d -> score0 score2 drums)')
+    _secs, _smp, _tmp, en = split_sections('score 0:\nC\n', '<selftest>')
+    if en is not None:
+        failed += 1
+        print(f'САМОТЕСТ [Enabled по умолчанию]: ОШИБКА, {en}')
+    else:
+        print('САМОТЕСТ [Enabled по умолчанию]: OK (не заявлен -> None)')
     if failed:
-        sys.exit(f'mus2inc --self-test: провалено {failed} из {len(cases)}')
-    print(f'mus2inc --self-test: все {len(cases)} тестов пройдены')
+        sys.exit(f'mus2inc --self-test: провалено {failed} из'
+                 f' {len(cases) + 3}')
+    print(f'mus2inc --self-test: все {len(cases) + 3} тестов пройдены')
 
 
 def main():
@@ -375,7 +479,11 @@ def main():
     try:
         with open(fname, encoding='utf-8') as f:
             text = f.read()
-        sections, sample_paths, global_tempo = split_sections(text, fname)
+        sections, sample_paths, global_tempo, enabled = \
+            split_sections(text, fname)
+        all_ch = ('score0', 'score1', 'score2', 'drums')
+        if enabled is None:
+            enabled = set(all_ch)     # параметр не заявлен — все включены
 
         streams = {'score0': Stream('score 0'),
                    'score1': Stream('score 1'),
@@ -397,7 +505,8 @@ def main():
                            tempo_ref, allow_flag)
         tempo = tempo_ref[0] or 120
 
-        lengths = {k: st.ticks for k, st in streams.items() if st.events}
+        lengths = {k: st.ticks for k, st in streams.items()
+                   if st.events and k in enabled}
         if len(set(lengths.values())) > 1:
             msg = ('; '.join(f'{k}: {v} тиков'
                              for k, v in sorted(lengths.items())))
@@ -409,35 +518,37 @@ def main():
                                '; выровняйте длительности или поставьте «!»')
         song_len = max(lengths.values()) if lengths else 0
 
-        # семплы
+        # семплы (нужны только при включённых ударных)
         sample_arrays = {}
-        for idx, path in sorted(sample_paths.items()):
-            smp_path = path if os.path.isabs(path) \
-                else os.path.join(base_dir, path)
-            with open(smp_path, 'rb') as f:
-                data = f.read()
-            if len(data) < 1:
-                raise MusError(f'{fname}: {path}: пустой .smp')
-            n = data[0]
-            if len(data) != 1 + 2 * n:
-                raise MusError(f'{fname}: {path}: заявлено кадров {n},'
-                               f' байт {len(data)} (нужно {1 + 2 * n})')
-            for i in range(n):
-                r6, r10 = data[1 + 2 * i], data[2 + 2 * i]
-                if r6 > 31 or r10 > 15:
-                    raise MusError(f'{fname}: {path}: кадр {i}:'
-                                   ' R6 должно быть 0..31, R10 0..15')
-            sample_arrays[idx] = data
+        if 'drums' in enabled:
+            for idx, path in sorted(sample_paths.items()):
+                smp_path = path if os.path.isabs(path) \
+                    else os.path.join(base_dir, path)
+                with open(smp_path, 'rb') as f:
+                    data = f.read()
+                if len(data) < 1:
+                    raise MusError(f'{fname}: {path}: пустой .smp')
+                n = data[0]
+                if len(data) != 1 + 2 * n:
+                    raise MusError(f'{fname}: {path}: заявлено кадров {n},'
+                                   f' байт {len(data)} (нужно {1 + 2 * n})')
+                for i in range(n):
+                    r6, r10 = data[1 + 2 * i], data[2 + 2 * i]
+                    if r6 > 31 or r10 > 15:
+                        raise MusError(f'{fname}: {path}: кадр {i}:'
+                                       ' R6 должно быть 0..31, R10 0..15')
+                sample_arrays[idx] = data
 
-        # номера семплов в партитуре ударных обязаны быть объявлены
-        used = set()
-        for tok in getattr(streams['drums'], '_toks', []):
-            if tok[0] == 'D':
-                used.add(tok[1])
-        for idx in sorted(used):
-            if idx not in sample_paths:
-                raise MusError(f'{fname}: семпл {idx} используется,'
-                               ' но не объявлен (sample ' + str(idx) + ':)')
+            # номера семплов в партитуре ударных обязаны быть объявлены
+            used = set()
+            for tok in getattr(streams['drums'], '_toks', []):
+                if tok[0] == 'D':
+                    used.add(tok[1])
+            for idx in sorted(used):
+                if idx not in sample_paths:
+                    raise MusError(f'{fname}: семпл {idx} используется,'
+                                   ' но не объявлен (sample ' + str(idx)
+                                   + ':)')
 
     except MusError as e:
         print(f'mus2inc: {e}', file=sys.stderr)
@@ -461,17 +572,25 @@ def main():
              f' {os.path.basename(fname)}; не редактировать. */\n']
     for idx in sorted(sample_arrays):
         parts.append(cbytes(f'{name}_smp{idx}', sample_arrays[idx]))
-    for key, suffix in (('score0', 's0'), ('score1', 's1'),
-                        ('score2', 's2'), ('drums', 'dr')):
-        parts.append(cbytes(f'{name}_{suffix}', streams[key].bytes))
-    table = ', '.join(f'{name}_smp{i}' if i in sample_arrays else '0'
-                      for i in range(10))
-    parts.append(f'static const unsigned char * const {name}_samples[10]'
-                 f' = {{\n    {table}\n}};')
+    ch_names = (('score0', 's0'), ('score1', 's1'),
+                ('score2', 's2'), ('drums', 'dr'))
+    for key, suffix in ch_names:
+        if key in enabled:            # выключенные каналы в .inc не идут
+            parts.append(cbytes(f'{name}_{suffix}', streams[key].bytes))
+    if 'drums' in enabled:
+        table = ', '.join(f'{name}_smp{i}' if i in sample_arrays else '0'
+                          for i in range(10))
+        parts.append(f'static const unsigned char * const'
+                     f' {name}_samples[10] = {{\n    {table}\n}};')
+        samples_field = f'{name}_samples'
+    else:
+        samples_field = '0'
     parts.append(f'static const music_song_t {name}_song = {{')
     parts.append(f'    {tempo_num}u, {tempo_den}u, {song_len}u,')
-    parts.append(f'    {name}_s0, {name}_s1, {name}_s2, {name}_dr,')
-    parts.append(f'    {name}_samples')
+    parts.append('    ' + ', '.join(f'{name}_{sfx}' if key in enabled
+                                     else '0' for key, sfx in ch_names)
+                 + ',')
+    parts.append(f'    {samples_field}')
     parts.append('};')
 
     with open(out, 'w', encoding='utf-8') as f:
@@ -481,8 +600,9 @@ def main():
           f' ({tempo_num}/{tempo_den} тика/кадр), длина {song_len} тиков')
     for key in ('score0', 'score1', 'score2', 'drums'):
         st = streams[key]
+        off = '' if key in enabled else '  (выключен)'
         print(f'  {key:7s}: событий {st.events:3d}, байткод'
-              f' {len(st.bytes):4d} байт')
+              f' {len(st.bytes):4d} байт{off}')
     print(f'  семплы: {", ".join(str(i) for i in sorted(sample_arrays)) or "нет"}')
     print(f'  -> {out}')
 

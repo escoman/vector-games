@@ -31,11 +31,15 @@ triangle/dmc.bin) создаёт <имя>.mus:
     пауза/удар — паузы P (звучащий семпл не обрывается).
 
 Модель звукового движка Konami и байтовый парсер перенесены из
-удалённого music2inc.py (см. его историю): байты $FB/$FC/$FE/$FF —
-петли/конец, $E0-$E7 — октава, $Dn — база длительности, $Cn — пауза,
-остальные < $C0 — ноты (hi-тетрада = индекс в TABLE3, lo * base =
-длительность; .bin уже содержат повторные участки «в строке», поэтому
-$FE просто пропускается).
+удалённого music2inc.py (см. его историю) и уточнены по дизассемблеру
+Bank0.ASM: байты $FB/$FC — маркер начала повторяемой секции (база =
+байт сразу за маркером), $FE n — повтор секции от базы: при каждом
+проходе счётчик канала растёт, при счёте n исполнение продолжается
+за $FE n (счётчик сбрасывается); $FE $FF — конец потока; $Dn — база
+длительности, $Cn — пауза, остальные < $C0 — ноты (hi-тетрада =
+индекс в TABLE3, lo * base = длительность). Повторы в .mus уходят
+синтаксисом «[ ... ]n» (mus2inc.py компилирует их в опкоды повтора
+E8/E9 — секция хранится один раз, рантайм прыгает назад, как NES).
 
 Высоты: NES-период -> частота -> ближайший полутон (абсолютный номер
 октава*12 + полутон, ля 4-й октавы = 57). Частоты triangle считаются
@@ -95,6 +99,7 @@ class Channel:
         self.dur_base = 0 if kind == "dmc" else 1
         self.octave = 1 if kind == "triangle" else 0
         self.loop_base = 0          # позиция после $FB
+        self.fe_count = 0           # счётчик повторов $FE n (один на канал)
         self.finished = False
         self.last_hit = 0           # hi-тетрада последнего удара (dmc)
         self.last_event = None      # словарь последнего события
@@ -104,7 +109,12 @@ class Channel:
         движка. Заполняет self.last_event: kind ('note'|'rest'|'hit'),
         byte, dur."""
         d = self.d
+        budget = 1 << 16            # защита от бесконечного цикла в данных
         while self.pc < len(d) and not self.finished:
+            budget -= 1
+            if budget <= 0:
+                raise RuntimeError(f"{self.name}: поток зациклился"
+                                   f" на ${self.pc:04X}")
             b = d[self.pc]
             hi, lo = b >> 4, b & 0x0F
 
@@ -112,7 +122,9 @@ class Channel:
                 if b in (0xFB, 0xFC):
                     self.pc += 1
                     self.loop_base = self.pc
-                    continue
+                    # маркер уходит в .mus как «[» (нулевое время)
+                    self.last_event = {"kind": "mark", "byte": b, "dur": 0}
+                    return 0
                 if b == 0xFD:
                     raise RuntimeError("$FD не поддерживается")
                 if b == 0xFE:
@@ -121,10 +133,21 @@ class Channel:
                         self.finished = True
                         self.last_event = None
                         return 0
-                    # .bin уже содержит повторный участок внутри блока,
-                    # поэтому просто пропускаем $FE n
-                    self.pc += 2 + n
-                    continue
+                    # $FE n — повтор секции от последнего $FB: счётчик
+                    # канала (Bank0.ASM Process_FE_Command, $0158,X)
+                    # растёт на каждом проходе; при счёте n исполнение
+                    # идёт за $FE n, счётчик сбрасывается. Секция
+                    # звучит ровно n раз.
+                    self.fe_count += 1
+                    if self.fe_count < n:
+                        self.pc = self.loop_base
+                    else:
+                        self.fe_count = 0
+                        self.pc += 2
+                    # конец секции уходит в .mus как «]n» (нулевое время)
+                    self.last_event = {"kind": "rep", "byte": b,
+                                       "dur": 0, "n": n}
+                    return 0
                 if b == 0xFF:
                     self.finished = True
                     self.last_event = None
@@ -196,7 +219,7 @@ def read_channel(song_dir, fname, kind, name=""):
 
 def chan_events(ch):
     """Событийная шкала одного канала: [(start, dur, ev)], start/dur —
-    в кадрах движка. Повторяет модель времени music2inc.py."""
+    в кадрах движка. Маркеры повтора (dur = 0) идут в общем порядке."""
     out = []
     t = 0
     while True:
@@ -208,8 +231,58 @@ def chan_events(ch):
             ev["freq"] = ch.freq()
         out.append((t, dur, ev))
         t += dur
-        if ch.finished:
-            break
+    return out
+
+
+def collapse_repeats(evs):
+    """Сжать проходы повторяемых секций: между '[' и ']n' оставить
+    только первый проход (проходы байт-идентичны — поток NES заново
+    исполняет те же байты). Общее время не меняется: полные проходы
+    считаются вызывающим кодом по маркерам, а mus2inc.py умножает
+    время секции на n при компиляции."""
+    out = []
+    stack = []     # {"n", "seen", "emitting", "mark_idx"}
+    for ev in evs:
+        _s, _d, e = ev
+        kind = e["kind"]
+        top = stack[-1] if stack else None
+        discarding = top is not None and not top["emitting"]
+        if kind == "mark":
+            if discarding:
+                stack.append({"n": None, "seen": 0,
+                              "emitting": False, "mark_idx": -1})
+            else:
+                out.append(ev)
+                stack.append({"n": None, "seen": 0,
+                              "emitting": True, "mark_idx": len(out) - 1})
+            continue
+        if kind == "rep":
+            if not stack:
+                # $FE до первого $FB: база повтора — начало потока,
+                # маркер «[» не нужен (рантайм по умолчанию и так
+                # считает базой начало потока)
+                stack.append({"n": None, "seen": 0,
+                              "emitting": True, "mark_idx": -1})
+            f = stack[-1]
+            f["seen"] += 1
+            f["n"] = e["n"]
+            if f["seen"] == 1:
+                if e["n"] == 1:        # секция звучит раз — без маркеров
+                    if f["emitting"] and f["mark_idx"] >= 0:
+                        del out[f["mark_idx"]]
+                elif f["emitting"]:
+                    out.append(ev)     # одно «]n» после первого прохода
+                    f["emitting"] = False   # проходы 2..n проглатываются
+            if f["seen"] == f["n"]:
+                stack.pop()
+            continue
+        if not discarding:
+            out.append(ev)
+    # $FB без единого $FE: маркер не использован — «[» убрать
+    for idx in sorted((f["mark_idx"] for f in stack
+                       if f["emitting"] and f["mark_idx"] >= 0),
+                      reverse=True):
+        del out[idx]
     return out
 
 
@@ -285,6 +358,12 @@ class Writer:
             self._set_len(p)
             self.toks.append("P")
 
+    def mark(self):
+        self.toks.append("[")       # $FB: начало повторяемой секции
+
+    def rep(self, n):
+        self.toks.append(f"]{n}")   # $FE n: секция звучит n раз
+
     def hit(self, sample_id, ticks):
         parts = decompose(ticks)
         self._set_len(parts[0])
@@ -320,7 +399,13 @@ def convert_song(song_dir, tick_hz, name):
         evs = chan_events(ch)
         totals.append(sum(d for _, d, _ in evs))
         w = writers[i]
-        for _start, dur, ev in evs:
+        for _start, dur, ev in collapse_repeats(evs):
+            if ev["kind"] == "mark":
+                w.mark()
+                continue
+            if ev["kind"] == "rep":
+                w.rep(ev["n"])
+                continue
             ticks = dur * TICKS_PER_FRAME
             if ticks == 0:
                 warnings.append(f"{name}/{ch.name}: событие"
@@ -388,25 +473,84 @@ def self_test():
         return evs
 
     # 1) DMC: порядок и длительности событий, пауза не даёт удара
-    #    (dur = lo * base, lo = 0 -> base; база задаётся $Dn)
+    #    (dur = lo * base, lo = 0 -> base; база задаётся $Dn);
+    #    $FB уходит маркером нулевого времени
     ch = Channel(bytes([0xFB, 0xD3, 0x31, 0x32, 0xC2, 0xB1, 0xFF]), "dmc")
     evs = sim(ch)
-    check([e["kind"] for _, _, e in evs] == ["hit", "hit", "rest", "hit"],
+    check([e["kind"] for _, _, e in evs] ==
+          ["mark", "hit", "hit", "rest", "hit"],
           "DMC порядок: %s" % [e["kind"] for _, _, e in evs])
-    check([d for _, d, _ in evs] == [3, 6, 6, 3],
+    check([d for _, d, _ in evs] == [0, 3, 6, 6, 3],
           "DMC длительности: %s" % [d for _, d, _ in evs])
-    check([s for s, _, _ in evs] == [0, 3, 9, 15],
+    check([s for s, _, _ in evs] == [0, 0, 3, 9, 15],
           "DMC старты: %s" % [s for s, _, _ in evs])
-    check(evs[0][2]["hit"] == 0 and evs[3][2]["hit"] == 1,
+    hits = [e for _, _, e in evs if e["kind"] == "hit"]
+    check(hits[0]["hit"] == 0 and hits[-1]["hit"] == 1,
           "DMC типы ударов")
+
+    def hits_of(evs):
+        return [(s, d) for s, d, e in evs if e["kind"] == "hit"]
+
+    # 1b) $FE n: секция от $FB повторяется ровно n раз (счётчик канала);
+    #     маркеры «[» и «]n» идут в событийный поток нулевой длительностью,
+    #     «]n» эмитится на каждом проходе, включая последний
+    ch = Channel(bytes([0xFB, 0xD2, 0x31, 0xFE, 0x03, 0xFF]), "dmc")
+    evs = sim(ch)
+    check([e["kind"] for _, _, e in evs] ==
+          ["mark", "hit", "rep", "hit", "rep", "hit", "rep"],
+          "FE-счёт порядок: %s" % [e["kind"] for _, _, e in evs])
+    check(hits_of(evs) == [(0, 2), (2, 2), (4, 2)],
+          "FE-счёт удары: %s" % hits_of(evs))
+    check([e["n"] for _, _, e in evs if e["kind"] == "rep"] == [3, 3, 3],
+          "FE-счёт n в маркерах")
+
+    # 1c) подряд идущие секции со своими $FB/$FE: счётчик сбрасывается
+    ch = Channel(bytes([0xFB, 0xD2, 0x31, 0xFE, 0x02,
+                        0xFB, 0x31, 0xFE, 0x02, 0xFF]), "dmc")
+    evs = sim(ch)
+    hs = hits_of(evs)
+    check(len(hs) == 4 and [d for _, d in hs] == [2, 2, 2, 2],
+          "FE две секции: %s" % hs)
+    check([e["kind"] for _, _, e in evs].count("mark") == 2,
+          "FE две секции маркеры")
+
+    # 1d) collapse_repeats: остаётся первый проход, вложенные секции
+    def mev(kind, dur=0, n=0):
+        e = {"kind": kind}
+        if kind == "rep":
+            e["n"] = n
+        return (0, dur, e)
+
+    one_pass = [mev("N", 2), mev("mark"), mev("N", 2), mev("rep", n=2),
+                mev("N", 2), mev("rep", n=2), mev("N", 2), mev("rep", n=3)]
+    full = [mev("mark")] + one_pass * 3      # внешняя секция ]3
+    got = [e["kind"] for _, _, e in collapse_repeats(full)]
+    check(got == ["mark", "N", "mark", "N", "rep", "N", "rep"],
+          "collapse вложенные секции: %s" % got)
+    check([e["n"] for _, _, e in collapse_repeats(full)
+           if e["kind"] == "rep"] == [2, 3],
+          "collapse n маркеров")
+    check([d for _, d, _ in collapse_repeats(full)] == [0, 2, 0, 2, 0, 2, 0],
+          "collapse длительности")
+    # $FE до первого $FB: база — начало потока, «[» не эмитится
+    got = collapse_repeats([mev("N", 2), mev("rep", n=2),
+                            mev("N", 2), mev("rep", n=2)])
+    check([e["kind"] for _, _, e in got] == ["N", "rep"],
+          "collapse ]n без [: %s" % [e["kind"] for _, _, e in got])
+    # $FB без $FE: лишний «[» убирается
+    got = collapse_repeats([mev("mark"), mev("N", 2)])
+    check([e["kind"] for _, _, e in got] == ["N"],
+          "collapse неиспользованный [: %s"
+          % [e["kind"] for _, _, e in got])
 
     # 2) pulse: $D3 берёт 3 операнда; нота -> нота -> пауза, dur = base
     ch = Channel(bytes([0xFB, 0xD3, 0, 0, 0, 0x30, 0x40, 0xC0, 0xFF]),
                  "pulse")
     evs = sim(ch)
-    check([e["kind"] for _, _, e in evs] == ["note", "note", "rest"],
+    check([e["kind"] for _, _, e in evs] ==
+          ["mark", "note", "note", "rest"],
           "pulse порядок: %s" % [e["kind"] for _, _, e in evs])
-    check([d for _, d, _ in evs] == [3, 3, 3],
+    check([d for _, d, _ in evs] == [0, 3, 3, 3],
           "pulse длительности: %s" % [d for _, d, _ in evs])
 
     # 3) расклад длительностей: точность сумм
@@ -430,13 +574,17 @@ def self_test():
           "triangle C-ниже рабочей зоны без транспозиции")
 
     # 6) Writer: старт с L4; первая нота на текущую длину, разлад
-    #    длительности даёт L + повтор ноты
+    #    длительности даёт L + повтор ноты; маркеры повтора «[»/«]n»
     w = Writer()
     w.note(57, 32)
     check(w.toks == ["A"], "Writer первая нота на L4: %s" % w.toks)
     w.note(59, 48)              # 48 = 32 + 16 -> L8 + повтор
     check(w.toks == ["A", "B", "L8", "B"],
           "Writer повтор: %s" % w.toks)
+    w.mark()
+    w.rep(3)
+    check(w.toks[-2:] == ["[", "]3"],
+          "Writer маркеры повтора: %s" % w.toks)
 
     if fails:
         print("SELF-TEST: %d ошибок" % len(fails))
