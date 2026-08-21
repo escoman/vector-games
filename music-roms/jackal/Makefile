@@ -18,18 +18,14 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 TARGET   = jackal.rom
 
 # Партитуры: music/*.mus (+ samples/*.smp) -> rom_data/*_music.inc
-# Все мелодии вернулись в сборку после перехода на однобайтовые
-# команды длительности E0..E7 (партитуры похудели на треть).
-SONGS    = intro
+# Имена совпадают с исходниками: track_N.mus -> track_N_music.inc.
+SONGS    = track_0 track_1 track_2 track_3 track_4 \
+           track_5 track_6 track_7
 MUS2INC  = ../../utils/mus2inc.py
 TXT2MUS  = ../../utils/music2mus.py
 TXT2SMP  = ../../utils/txt2smp.py
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
-# Маппинг track_N.txt -> song.mus (final_boss в NSF отсутствует,
-# его .mus остаётся старым NES-бинарным; правится вручную).
-TRACK_MAP = intro:0 level1:1 level2:2 level3:3 boss:4 \
-            stage_clear:5 game_over:6 ending:7
 
 SRCS     = $(LIB)/startup.asm main.c debug_sound.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
@@ -49,9 +45,9 @@ all: $(TARGET)
 # Не входит в `all`: .mus и .smp правятся вручную, эти таргеты —
 # только для первичной генерации из исходного NSF-экспорта.
 mus:
-	@for pair in $(TRACK_MAP); do \
-	  s=$${pair%:*}; n=$${pair#*:}; \
-	  python3 $(TXT2MUS) music_txt/track_$$n.txt -o music/$$s.mus; \
+	@for f in music_txt/*.txt; do \
+	  base=$$(basename "$$f" .txt); \
+	  python3 $(TXT2MUS) "$$f" -o music/$$base.mus; \
 	done
 samples:
 	python3 $(TXT2SMP) music_txt -o music/samples

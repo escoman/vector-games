@@ -15,7 +15,8 @@
  * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t).
  *
  * Управление:
- *   1 — Intro (по окончании — тишина, без зацикливания);
+ *   1 — Track 1 (по кругу);
+ *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
  * Диагностика: debug_sound.c / debug_sound.h — счётчики рассинхронизации
@@ -29,7 +30,7 @@
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
 
 #include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
-#include "rom_data/intro_music.inc"       /* music_song_t intro_music_song */
+#include "rom_data/track_1_music.inc"     /* music_song_t track_1_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -65,15 +66,20 @@ static const struct {
     unsigned char dy;           /* смещение по вертикали от верха меню */
     const char *text;
 } menu_lines[] = {
-    { 16u,  0u, "JACKAL (NES) SOUNDTRACKS:" },
-    { 0u,  16u, "1 - INTRO" },
-    { 0u,  40u, "ESC - EXIT" },
+    { 32u,  0u, "JACKAL (NES) SOUNDTRACKS:" },
+    
+    { 0u,  16u, "1 - TRACK 1" },
+    { 0u,  26u, "0 - STOP MUSIC" },
+
+    { 0u,  60u, "KONAMI,1988" },
+    { 112u, 60u, "SARMIN ALEXEY,2026" },
+    { 112u, 70u, "    FOR VECTOR-06C" }
 };
 
 static void show_menu(void)
 {
-    unsigned char x0 = 16u;
-    unsigned char y0 = (unsigned char)(title_bmp_height + 6u);
+    unsigned char x0 = 0u;
+    unsigned char y0 = (unsigned char)(title_bmp_height + 16u);
     unsigned char i;
 
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
@@ -106,8 +112,10 @@ int main(void)
 
         key = kbd_scan();
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
-            if (key == '1') {
-                play_song(&intro_music_song, 0u);
+            if (key == '0') {
+                music_stop();
+            } else if (key == '1') {
+                play_song(&track_1_music_song, 1u);
             } else if (key == 27) {     /* СТОП (ESC) */
                 break;
             }

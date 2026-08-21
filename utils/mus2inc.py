@@ -524,8 +524,14 @@ def main():
             for idx, path in sorted(sample_paths.items()):
                 smp_path = path if os.path.isabs(path) \
                     else os.path.join(base_dir, path)
-                with open(smp_path, 'rb') as f:
-                    data = f.read()
+                try:
+                    with open(smp_path, 'rb') as f:
+                        data = f.read()
+                except FileNotFoundError:
+                    print(f'ВНИМАНИЕ: {fname}: файл {path} не найден'
+                          f' — семпл {idx} заменён паузами',
+                          file=sys.stderr)
+                    continue
                 if len(data) < 1:
                     raise MusError(f'{fname}: {path}: пустой .smp')
                 n = data[0]
@@ -539,16 +545,25 @@ def main():
                                        ' R6 должно быть 0..31, R10 0..15')
                 sample_arrays[idx] = data
 
-            # номера семплов в партитуре ударных обязаны быть объявлены
+            # номера семплов в партитуре ударных: без данных (файл
+            # не найден или не объявлен) — предупреждение и замена
+            # на паузы (время сохраняется)
             used = set()
             for tok in getattr(streams['drums'], '_toks', []):
                 if tok[0] == 'D':
                     used.add(tok[1])
-            for idx in sorted(used):
-                if idx not in sample_paths:
-                    raise MusError(f'{fname}: семпл {idx} используется,'
-                                   ' но не объявлен (sample ' + str(idx)
-                                   + ':)')
+            missing = sorted(idx for idx in used
+                             if idx not in sample_arrays)
+            for idx in missing:
+                print(f'ВНИМАНИЕ: {fname}: семпл {idx} используется,'
+                      f' но данных нет — заменяю паузами',
+                      file=sys.stderr)
+            if missing:
+                dr_bytes = streams['drums'].bytes
+                for i in range(len(dr_bytes)):
+                    sid = dr_bytes[i] - 1
+                    if 0 <= sid <= 9 and sid in missing:
+                        dr_bytes[i] = MUS_REST
 
     except MusError as e:
         print(f'mus2inc: {e}', file=sys.stderr)
