@@ -143,6 +143,25 @@ extern void music_set_loop(unsigned char loop);
  * рядом должен вызываться drum_tick() (огибающие сэмплов). */
 extern void music_tick(void);
 
+/* Диагностика (ТЗ §4-12): счётчики для определения рассинхронизации
+ * тональных каналов и ударных. Только наблюдение, не влияют на звук. */
+extern volatile unsigned long diag_irq_count;
+extern volatile unsigned long diag_music_tick_count;
+extern volatile unsigned long diag_score0_steps;
+extern volatile unsigned long diag_drums_steps;
+extern volatile unsigned long diag_music_time;
+extern volatile unsigned long diag_score0_time;
+extern volatile unsigned long diag_drums_time;
+extern volatile unsigned long diag_score0_finish_irq;
+extern volatile unsigned long diag_drums_finish_irq;
+extern volatile unsigned long diag_score0_finish_time;
+extern volatile unsigned long diag_drums_finish_time;
+extern volatile unsigned long diag_score0_finish_steps;
+extern volatile unsigned long diag_drums_finish_steps;
+extern volatile unsigned char diag_score0_finished;
+extern volatile unsigned char diag_drums_finished;
+extern void diag_reset(void);
+
 #else /* обычная сборка: плеер sound.c */
 
 extern void sound_set_data(const sound_step_t *steps, unsigned int len);

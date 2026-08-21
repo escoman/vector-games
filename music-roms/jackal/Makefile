@@ -20,13 +20,18 @@ TARGET   = jackal.rom
 # Партитуры: music/*.mus (+ samples/*.smp) -> rom_data/*_music.inc
 # Все мелодии вернулись в сборку после перехода на однобайтовые
 # команды длительности E0..E7 (партитуры похудели на треть).
-SONGS    = intro level1 level2 level3 boss final_boss \
-           stage_clear game_over ending
+SONGS    = intro
 MUS2INC  = ../../utils/mus2inc.py
+TXT2MUS  = ../../utils/music2mus.py
+TXT2SMP  = ../../utils/txt2smp.py
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
+# Маппинг track_N.txt -> song.mus (final_boss в NSF отсутствует,
+# его .mus остаётся старым NES-бинарным; правится вручную).
+TRACK_MAP = intro:0 level1:1 level2:2 level3:3 boss:4 \
+            stage_clear:5 game_over:6 ending:7
 
-SRCS     = $(LIB)/startup.asm main.c \
+SRCS     = $(LIB)/startup.asm main.c debug_sound.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
            $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
            $(LIB)/drums.asm \
@@ -36,9 +41,20 @@ SRCS     = $(LIB)/startup.asm main.c \
 # но в одном ROM — один плеер)
 ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
 
-.PHONY: all deploy clean full
+.PHONY: all deploy clean full mus samples
 
 all: $(TARGET)
+
+# Регенерация партитур из TXT и семплов из параметров шума NES.
+# Не входит в `all`: .mus и .smp правятся вручную, эти таргеты —
+# только для первичной генерации из исходного NSF-экспорта.
+mus:
+	@for pair in $(TRACK_MAP); do \
+	  s=$${pair%:*}; n=$${pair#*:}; \
+	  python3 $(TXT2MUS) music_txt/track_$$n.txt -o music/$$s.mus; \
+	done
+samples:
+	python3 $(TXT2SMP) music_txt -o music/samples
 
 full: clean
 	$(MAKE) deploy

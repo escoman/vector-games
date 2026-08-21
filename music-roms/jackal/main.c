@@ -1,6 +1,5 @@
 /*
- * main.c — music-ROM для Вектор-06Ц: саундтреки из NES-игры Jackal,
- *          воспроизведение на чистой КР580ВИ53.
+ * main.c — music-ROM для Вектор-06Ц: саундтреки из NES-игры Jackal.
  *
  * Всё железо — своими силами без clib z88dk (библиотека vector-games/lib):
  *   - графика:  RLE-заставка + палитра (graph.c, v06pal.asm),
@@ -13,30 +12,16 @@
  *
  * Данные мелодий: дорожки NES-движка Konami (Jackal) конвертированы
  * скриптом utils/music2mus.py в партитуры music/*.mus, те скомпилиро-
- * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t). Время
- * перенесено на сетку PPQ = 32 без округлений: 1 кадр движка = 2 тика,
- * темп T225 (60 Гц) / T200 (Intro, 53.33 Гц) воспроизводит кадр
- * источника точно. Партитуры разной длины (каналы NES-движка идут
- * независимо) — отмечены '!' в .mus. 
+ * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t).
  *
  * Управление:
  *   1 — Intro (по окончании — тишина, без зацикливания);
- *   2 — Level 1 (по кругу);
- *   3 — Level 2 (по кругу);
- *   4 — Level 3 (по кругу);
- *   5 — Boss (по кругу);
- *   6 — Final Boss (по кругу);
- *   7 — Stage Clear (без зацикливания);
- *   8 — Game Over (без зацикливания);
- *   9 — Ending (без зацикливания);
- *   0 — полная остановка звука;
  *   СТОП (ESC) — выход из ROM.
  *
- * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP)
- *   zcc +vector06c --no-crt ../../lib/startup.asm main.c ../../lib/...
+ * Диагностика: debug_sound.c / debug_sound.h — счётчики рассинхронизации
+ * тональных каналов и ударных (подключаются при необходимости).
  *
- * Каталог nes_src — исходники из NES (jackal.nes, извлечённая музыка,
- * скрипты извлечения); rom_data — данные для ROM (заставка, мелодия).
+ * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP).
  */
 
 #include <intrinsic.h>
@@ -45,14 +30,6 @@
 
 #include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
 #include "rom_data/intro_music.inc"       /* music_song_t intro_music_song */
-#include "rom_data/level1_music.inc"      /* music_song_t level1_music_song */
-#include "rom_data/level2_music.inc"      /* music_song_t level2_music_song */
-#include "rom_data/level3_music.inc"      /* music_song_t level3_music_song */
-#include "rom_data/boss_music.inc"        /* music_song_t boss_music_song */
-#include "rom_data/final_boss_music.inc"  /* music_song_t final_boss_music_song */
-#include "rom_data/stage_clear_music.inc" /* music_song_t stage_clear_music_song */
-#include "rom_data/game_over_music.inc"   /* music_song_t game_over_music_song */
-#include "rom_data/ending_music.inc"      /* music_song_t ending_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -90,15 +67,7 @@ static const struct {
 } menu_lines[] = {
     { 16u,  0u, "JACKAL (NES) SOUNDTRACKS:" },
     { 0u,  16u, "1 - INTRO" },
-    { 0u, 32u, "2 - LEVEL 1" },
-    { 0u, 48u, "3 - LEVEL 2" },
-    { 0u, 64u, "4 - LEVEL 3" },
-    { 0u, 80u, "5 - BOSS" },
-    { 112u, 16u, "6 - FINAL BOSS" },
-    { 112u, 32u, "7 - STAGE CLEAR" },
-    { 112u, 48u, "8 - GAME OVER" },
-    { 112u, 64u, "9 - ENDING" },
-    { 112u, 80u, "0 - STOP MUSIC" },
+    { 0u,  40u, "ESC - EXIT" },
 };
 
 static void show_menu(void)
@@ -122,7 +91,7 @@ int main(void)
     unsigned char prev_key = 0;
 
     frame_handler = on_frame;           /* мелодия + ударные в прерывании */
-    drum_init();                        /* миксер AY: шум канала C */
+    drum_init();                        /* микшер AY: шум канала C */
 
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
@@ -139,24 +108,6 @@ int main(void)
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
             if (key == '1') {
                 play_song(&intro_music_song, 0u);
-            } else if (key == '2') {
-                play_song(&level1_music_song, 1u);
-            } else if (key == '3') {
-                play_song(&level2_music_song, 1u);
-            } else if (key == '4') {
-                play_song(&level3_music_song, 1u);
-            } else if (key == '5') {
-                play_song(&boss_music_song, 1u);
-            } else if (key == '6') {
-                play_song(&final_boss_music_song, 1u);
-            } else if (key == '7') {
-                play_song(&stage_clear_music_song, 0u);
-            } else if (key == '8') {
-                play_song(&game_over_music_song, 0u);
-            } else if (key == '9') {
-                play_song(&ending_music_song, 0u);
-            } else if (key == '0') {
-                music_stop();
             } else if (key == 27) {     /* СТОП (ESC) */
                 break;
             }

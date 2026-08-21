@@ -580,7 +580,7 @@ def main():
     if 'drums' in enabled:
         table = ', '.join(f'{name}_smp{i}' if i in sample_arrays else '0'
                           for i in range(10))
-        parts.append(f'static const unsigned char * const'
+        parts.append(f'const unsigned char * const'
                      f' {name}_samples[10] = {{\n    {table}\n}};')
         samples_field = f'{name}_samples'
     else:
