@@ -62,9 +62,9 @@ NOTE_BASE = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
 NOTE_NAMES = ['C', 'C+', 'D', 'D+', 'E', 'F',
               'F+', 'G', 'G+', 'A', 'A+', 'B']
 # секция TXT -> (имя секции .mus, тип канала)
+# DPCM игнорируется: на Векторе-06Ц нет аналога, используем только Noise
 CHANNELS = (('Square1', 'score0', 'tone'), ('Square2', 'score1', 'tone'),
-            ('Triangle', 'score2', 'tone'), ('Noise', 'drums', 'drum'),
-            ('DPCM', 'drums', 'dpcm'))
+            ('Triangle', 'score2', 'tone'), ('Noise', 'drums', 'drum'))
 EPS = 1e-9
 
 
@@ -93,13 +93,20 @@ def parse_txt(text, fname):
             continue
         m = re.match(r'(Square1|Square2|Triangle|Noise|DPCM)\((\d+)\)', line)
         if m:
-            key = dict((s[0], (s[1], s[2])) for s in CHANNELS)[m.group(1)]
-            cur = key
+            section = m.group(1)
+            # DPCM игнорируем: на Векторе нет DMC, используем только Noise
+            if section == 'DPCM':
+                cur = ('skip', None)  # маркер пропуска секции
+            else:
+                key = dict((s[0], (s[1], s[2])) for s in CHANNELS)[section]
+                cur = key
             continue
         if line.startswith('time '):       # заголовок колонок секции
             continue
         if cur is None:
             raise ConvError(f'{fname}: данные вне секции: «{line}»')
+        if cur[0] == 'skip':
+            continue  # пропускаем DPCM-секцию
         parts = line.split()
         key, kind = cur
         # --- маркеры циклов ---
@@ -121,20 +128,12 @@ def parse_txt(text, fname):
                                 f' «{line}»')
             chans[key].append({'start': start, 'dur': dur,
                                'note': parse_note_name(parts[2], fname)})
-        else:                               # Noise / DPCM
-            if kind == 'drum':
-                if len(parts) < 5:
-                    raise ConvError(f'{fname}: строка Noise без имени'
-                                    f' ударника: «{line}»')
-                name = parts[4]
-            else:                           # DPCM: реальные DMC-сэмлы NES:
-                # C4 = dmc0_kick, C#4 = dmc1_snare (Bank7.ASM, DMC 0/1)
-                a = (parse_note_name(parts[2], fname)
-                     if len(parts) >= 3 else 48)
-                name = {48: 'kick', 49: 'snare'}.get(a,
-                       'dpcm_' + parts[2].lower())
+        else:                               # Noise (ударные)
+            if len(parts) < 5:
+                raise ConvError(f'{fname}: строка Noise без имени'
+                                f' ударника: «{line}»')
             chans['drums'].append({'start': start, 'dur': dur,
-                                   'name': name})
+                                   'name': parts[4]})
     if framerate is None:
         raise ConvError(f'{fname}: нет заголовка «... framerate=...»')
     for key in chans:
@@ -325,7 +324,9 @@ def convert(txt, fname, tempo, label=None):
 def _extract_cycles(events):
     """Извлекает пары циклов из списка событий канала.
     Возвращает (cycles, regular_events), где cycles — список
-    {'begin': float, 'end': float}, regular_events — без маркеров."""
+    {'begin': float, 'end': float}, regular_events — без маркеров.
+    Дубликаты циклов (Noise+DPCM дают одинаковые маркеры в drums)
+    объединяются."""
     cycles = []
     regular = []
     begins = []
@@ -334,7 +335,11 @@ def _extract_cycles(events):
             begins.append(e['start'])
         elif e.get('type') == 'end':
             if begins:
-                cycles.append({'begin': begins.pop(0), 'end': e['start']})
+                cb, ce = begins.pop(0), e['start']
+                # дедупликация: если такой цикл уже есть — пропускаем
+                if not any(abs(c['begin'] - cb) < EPS and
+                           abs(c['end'] - ce) < EPS for c in cycles):
+                    cycles.append({'begin': cb, 'end': ce})
         else:
             regular.append(e)
     return cycles, regular
@@ -400,6 +405,10 @@ def _process_tone(events, tps):
             w.note(e['note'], ticks)
             cur = max(s, cur) + ticks
             ei += 1
+
+        # выравнивающая пауза: если канал закончил раньше cyc_dur
+        if cur < cyc_dur:
+            w.rest(cyc_dur - cur)
 
         # END
         w.toks.append('END')
@@ -496,6 +505,10 @@ def _process_drums(events, tps, idx_of):
             w.hit(idx_of[e['name']], ticks)
             cur = max(s, cur) + ticks
             ei += 1
+
+        # выравнивающая пауза: если канал закончил раньше cyc_dur
+        if cur < cyc_dur:
+            w.rest(cyc_dur - cur)
 
         # END
         w.toks.append('END')

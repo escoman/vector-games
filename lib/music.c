@@ -122,11 +122,6 @@ static unsigned char g_paused;
 static unsigned char g_loop;
 static unsigned int g_acc;      /* остаток в аккумуляторе темпа       */
 
-/* Диагностика: переменные и diag_reset() определены в debug_sound.c;
- * инкременты счётчиков остались здесь (tone_event, drum_event,
- * clock_tick, music_tick). */
-extern void diag_reset(void);
-
 /* ------------------------------ Помощники ----------------------------- */
 
 static void silence_tones(void)
@@ -166,7 +161,6 @@ void music_start(void)
     g_acc = 0u;
     g_paused = 0u;
     g_playing = 1u;
-    diag_reset();
     silence_tones();
     drum_mute();                /* старт всех потоков с позиции 0 */
 }
@@ -221,16 +215,6 @@ static void tone_event(unsigned char ch)
         if (b == MUS_END) {
             c->pc = 0;                  /* поток закончился */
             vi53_set_channel(ch, 0u);
-            if (ch == 0u) {
-                diag_score0_steps++;
-                diag_score0_time = diag_music_time;
-                if (!diag_score0_finished) {
-                    diag_score0_finished = 1;
-                    diag_score0_finish_irq = diag_irq_count;
-                    diag_score0_finish_time = diag_music_time;
-                    diag_score0_finish_steps = diag_score0_steps;
-                }
-            }
             return;
         }
         if (b == MUS_REST) {
@@ -241,10 +225,6 @@ static void tone_event(unsigned char ch)
                 c->cnt = c->len - 1u;
             else
                 c->cnt = 0u;
-            if (ch == 0u) {
-                diag_score0_steps++;
-                diag_score0_time = diag_music_time;
-            }
             return;
         }
         if (b >= MUS_LEN && b <= MUS_LEN + 7u) {  /* E0..E7: длит-ть */
@@ -282,10 +262,6 @@ static void tone_event(unsigned char ch)
             c->cnt = c->len - 2u;   /* 1 тик — текущий, 1 тик — гейт */
         else
             c->cnt = 0u;            /* L1: только текущий тик (гейт) */
-        if (ch == 0u) {
-            diag_score0_steps++;
-            diag_score0_time = diag_music_time;
-        }
         return;
     }
 }
@@ -311,20 +287,10 @@ static void drum_event(void)
         b = *g_dr.pc++;
         if (b == MUS_END) {
             g_dr.pc = 0;
-            diag_drums_steps++;
-            diag_drums_time = diag_music_time;
-            if (!diag_drums_finished) {
-                diag_drums_finished = 1;
-                diag_drums_finish_irq = diag_irq_count;
-                diag_drums_finish_time = diag_music_time;
-                diag_drums_finish_steps = diag_drums_steps;
-            }
             return;
         }
         if (b == MUS_REST) {
             drum_set_counter();
-            diag_drums_steps++;
-            diag_drums_time = diag_music_time;
             return;
         }
         if (b >= MUS_LEN && b <= MUS_LEN + 7u) {
@@ -352,8 +318,6 @@ static void drum_event(void)
         if (b <= 10u)                   /* новый удар — перезапуск */
             drum_sample_play(g_song->samples[b - 1u]);
         drum_set_counter();
-        diag_drums_steps++;
-        diag_drums_time = diag_music_time;
         return;
     }
 }
@@ -362,8 +326,6 @@ static void drum_event(void)
 static void clock_tick(void)
 {
     unsigned char i;
-
-    diag_music_time++;
 
     if (g_ch[0].pc == 0 && g_ch[1].pc == 0 &&
         g_ch[2].pc == 0 && g_dr.pc == 0) {
@@ -410,8 +372,6 @@ void music_tick(void)
 
     if (!g_playing || g_paused || g_song == 0)
         return;
-
-    diag_music_tick_count++;
 
     g_acc += g_song->tempo_num;
     n = (unsigned char)(g_acc / g_song->tempo_den);

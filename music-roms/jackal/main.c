@@ -19,9 +19,6 @@
  *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
- * Диагностика: debug_sound.c / debug_sound.h — счётчики рассинхронизации
- * тональных каналов и ударных (подключаются при необходимости).
- *
  * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP).
  */
 
@@ -115,6 +112,7 @@ int main(void)
             if (key == '0') {
                 music_stop();
             } else if (key == '1') {
+                graph_clear(0);         /* очистить экран перед диагностикой */
                 play_song(&track_1_music_song, 1u);
             } else if (key == 27) {     /* СТОП (ESC) */
                 break;
