@@ -22,7 +22,7 @@ TARGET   = jackal.rom
 SONGS    = track_0 track_1 track_2 track_3 track_4 \
            track_5 track_6 track_7
 MUS2INC  = ../../utils/mus2inc.py
-TXT2MUS  = ../../utils/music2mus.py
+TXT2MUS  = ../../utils/txt2mus.py
 TXT2SMP  = ../../utils/txt2smp.py
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
@@ -56,7 +56,7 @@ full: clean
 	$(MAKE) deploy
 
 rom_data/%_music.inc: music/%.mus $(SAMPLES) $(MUS2INC)
-	python3 $(MUS2INC) $< -o $@ --name $*_music
+	python3 $(MUS2INC) $< -o $@ --name $*_music --allow-len-mismatch
 
 $(TARGET): $(SRCS) $(INCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \

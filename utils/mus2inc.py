@@ -75,6 +75,7 @@ MUS_REST = 0x60
 MUS_LEN_BASE = 0xE0   # E0..E7 = L1..L128 (однобайтовая команда состояния)
 MUS_LPSTART = 0xE8    # '[' — начало повторяемой секции
 MUS_LPEND = 0xE9      # ']n' + байт n: секция звучит n раз
+MUS_JMP = 0xEA        # END -> JMP: 0xEA <lo> <hi> — возврат назад
 L_INDEX = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 NOTE_BASE = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
@@ -103,6 +104,7 @@ class Stream:
         # с начальным состоянием рантайма — команда не нужна.
         self.bytes = []
         self.mark_ticks = []    # время на входе в открытые секции '['
+        self.loop_pos = None    # позиция байткода после BEGIN (для END)
         self.ticks = 0
         self.events = 0
 
@@ -144,6 +146,16 @@ def tokenize(body, fname, drums):
         if c == '!':
             toks.append(('!',))
             pos += 1
+            continue
+        m = re.match(r'BEGIN\b', body[pos:], re.I)
+        if m:
+            toks.append(('BEGIN',))
+            pos += m.end()
+            continue
+        m = re.match(r'END\b', body[pos:], re.I)
+        if m:
+            toks.append(('END',))
+            pos += m.end()
             continue
         if c == '[':
             toks.append(('[',))
@@ -205,6 +217,24 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
         kind = tok[0]
         if kind == '!':
             allow_flag.append(1)
+            continue
+        # BEGIN — маркер начала бесконечного цикла (intro + loop)
+        if kind == 'BEGIN':
+            if st.loop_pos is not None:
+                raise MusError(f'{fname}: вложенный BEGIN в «{st.name}»')
+            st.loop_pos = len(st.bytes)
+            continue
+        # END — безусловный JMP на байткод сразу после BEGIN
+        if kind == 'END':
+            if st.loop_pos is None:
+                raise MusError(f'{fname}: END без BEGIN в «{st.name}»')
+            target = st.loop_pos
+            current = len(st.bytes) + 3  # позиция после 0xEA + 2 байт
+            back = current - target
+            st.bytes.append(MUS_JMP)
+            st.bytes.append(back & 0xFF)
+            st.bytes.append((back >> 8) & 0xFF)
+            st.loop_pos = None
             continue
         if kind == '[':
             st.bytes.append(MUS_LPSTART)
@@ -283,6 +313,8 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
     st.bytes.append(MUS_END)
     if st.mark_ticks:
         raise MusError(f'{fname}: незакрытая секция «[» в «{st.name}»')
+    if st.loop_pos is not None:
+        raise MusError(f'{fname}: незакрытый BEGIN в «{st.name}»')
 
 
 HEADER_RE = re.compile(
@@ -409,6 +441,14 @@ def self_test():
         ('вложенный повтор',
          '[ C [ D ]2 E ]2', False,
          'E8 31 E8 33 E9 02 35 E9 02 00'),
+        # Тест 7 — BEGIN/END: бесконечный цикл (intro + loop)
+        ('BEGIN/END',
+         'BEGIN C D END', False,
+         '31 33 EA 05 00 00'),
+        # Тест 8 — BEGIN/END с O/L: JMP указывает на первый байт после BEGIN
+        ('BEGIN/END с O/L',
+         'O4 C BEGIN D E END', False,
+         '31 33 35 EA 05 00 00'),
     ]
     failed = 0
     for name, text, drums, want in cases:
@@ -444,10 +484,24 @@ def self_test():
         print(f'САМОТЕСТ [Enabled по умолчанию]: ОШИБКА, {en}')
     else:
         print('САМОТЕСТ [Enabled по умолчанию]: OK (не заявлен -> None)')
+    # END без BEGIN — ошибка
+    try:
+        comp('C END', False)
+        failed += 1
+        print('САМОТЕСТ [END без BEGIN]: не выдал ошибку')
+    except MusError:
+        print('САМОТЕСТ [END без BEGIN]: OK (ошибка)')
+    # Незакрытый BEGIN — ошибка
+    try:
+        comp('BEGIN C', False)
+        failed += 1
+        print('САМОТЕСТ [незакрытый BEGIN]: не выдал ошибку')
+    except MusError:
+        print('САМОТЕСТ [незакрытый BEGIN]: OK (ошибка)')
     if failed:
         sys.exit(f'mus2inc --self-test: провалено {failed} из'
-                 f' {len(cases) + 3}')
-    print(f'mus2inc --self-test: все {len(cases) + 3} тестов пройдены')
+                 f' {len(cases) + 5}')
+    print(f'mus2inc --self-test: все {len(cases) + 5} тестов пройдены')
 
 
 def main():

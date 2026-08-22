@@ -16,7 +16,7 @@ ZCCCFG  := $(Z88DK)/lib/config
 LIB      = ../../lib
 BMP2INC  = ../../utils/bmp2inc.py
 MUS2INC  = ../../utils/mus2inc.py
-TXT2MUS  = ../../utils/music2mus.py
+TXT2MUS  = ../../utils/txt2mus.py
 TXT2SMP  = ../../utils/txt2smp.py
 PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
@@ -58,7 +58,7 @@ rom_data/title_bmp.inc: rom_data/title.bmp $(BMP2INC)
 	python3 $(BMP2INC) $<
 
 rom_data/%_music.inc: music/%.mus $(SAMPLES) $(MUS2INC)
-	python3 $(MUS2INC) $< -o $@ --name $*_music
+	python3 $(MUS2INC) $< -o $@ --name $*_music --allow-len-mismatch
 
 $(TARGET): $(SRCS) rom_data/title_bmp.inc $(INCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \

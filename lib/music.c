@@ -36,6 +36,9 @@
  *               нет (диапазон 0xD0..0xD7 свободен). Все высоты
  *               предвычислены mus2inc.py (ТЗ §26): в прерывании нет
  *               разбора строк и плавающей точки.
+ *   0xEA <lo> <hi> — JMP назад на (lo | hi<<8) байт: бесконечный
+ *               цикл основной части мелодии (intro + loop). Выход
+ *               только из game code (music_stop()).
  */
 
 #include "v06.h"
@@ -259,6 +262,13 @@ static void tone_event(unsigned char ch)
                 c->pc = c->loop_pc;
             continue;
         }
+        if (b == MUS_JMP) {             /* <lo> <hi>: JMP назад */
+            unsigned int back = (unsigned int)c->pc[0] |
+                                ((unsigned int)c->pc[1] << 8);
+            c->pc += 2;
+            c->pc -= back;
+            continue;
+        }
         /* Гейт: первый тик ноты — тишина (разделяет повторы той же
          * ноты — ВИ53 иначе тянет звук без разрыва; даёт каждой ноте
          * атаку). Гейт И текущий тик — оба внутри длительности:
@@ -330,6 +340,13 @@ static void drum_event(void)
             n = *g_dr.pc++;
             if (++g_dr.loop_cnt < n)
                 g_dr.pc = g_dr.loop_pc;
+            continue;
+        }
+        if (b == MUS_JMP) {             /* <lo> <hi>: JMP назад */
+            unsigned int back = (unsigned int)g_dr.pc[0] |
+                                ((unsigned int)g_dr.pc[1] << 8);
+            g_dr.pc += 2;
+            g_dr.pc -= back;
             continue;
         }
         if (b <= 10u)                   /* новый удар — перезапуск */

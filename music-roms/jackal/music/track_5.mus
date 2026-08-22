@@ -1,4 +1,4 @@
-; track_5.mus — сгенерировано music2mus.py из track_5.txt
+; track_5.mus — сгенерировано txt2mus.py из track_5.txt
 ; сетка PPQ=32; тик = 1.875/T с; framerate 60
 Tempo: T225
 sample 0: samples/dpcm_c5.smp

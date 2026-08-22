@@ -110,6 +110,8 @@ extern void sound_silence(void);            /* тишина + сброс сос�
  *               возврата, счётчик повторов = 0;
  *   0xE9 n      конец секции «]n»: пока счётчик < n, исполнение
  *               возвращается к адресу возврата (секция звучит n раз).
+ *   0xEA <lo> <hi> — JMP назад на (lo | hi<<8) байт: бесконечный
+ *               цикл основной части мелодии (intro + loop).
  * Команды состояния (0xE0-0xE9) время не продвигают; начальная
  * длительность потока без команд — L4. Октава — compile-time состояние
  * mus2inc.py, в байткоде команды нет (диапазон 0xD0..0xD7 свободен). */
@@ -118,6 +120,7 @@ extern void sound_silence(void);            /* тишина + сброс сос�
 #define MUS_LEN         0xE0    /* ..0xE7: тики = 0x80 >> (байт-MUS_LEN) */
 #define MUS_LPSTART     0xE8    /* «[»: база повтора = следующий байт   */
 #define MUS_LPEND       0xE9    /* «]n»: операнд n — всего n проходов   */
+#define MUS_JMP         0xEA    /* <lo> <hi>: JMP назад на (lo|hi<<8)  */
 
 typedef struct {
     unsigned int tempo_num;             /* тиков clock на кадр: num/den */
