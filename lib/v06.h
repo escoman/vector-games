@@ -132,7 +132,7 @@ typedef struct {
     const unsigned char *s1;
     const unsigned char *s2;
     const unsigned char *dr;
-    const unsigned char * const *samples; /* таблица <имя>_samples[10] */
+    const unsigned char * const *samples; /* таблица <имя>_samples[16] */
 } music_song_t;
 
 extern void music_set_data(const music_song_t *song);

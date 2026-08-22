@@ -1,0 +1,715 @@
+Jackal.nsf track=0 framerate=60
+Square1(56)
+time dur note vol
+0.083 0.800 G2 10
+0.883 0.067 C3 8
+0.950 0.067 B2 8
+1.017 0.067 C3 8
+1.083 0.067 D3 8
+1.150 0.067 D#3 8
+1.217 0.067 F3 8
+1.283 0.067 G3 8
+1.350 0.067 A3 8
+1.417 0.067 A#3 8
+1.483 0.600 D#4 8
+2.083 0.600 F4 8
+2.683 2.400 G4 7
+5.083 0.600 C3 14
+5.683 0.600 G2 14
+6.283 0.600 C3 14
+6.883 0.200 G2 14
+7.083 0.200 C3 14
+7.283 0.200 D3 14
+7.483 0.600 D#3 14
+8.083 0.600 A#2 14
+8.683 0.600 D#3 14
+9.283 0.200 D#2 14
+9.483 0.200 A#2 14
+9.683 0.200 D#3 14
+9.883 0.600 F3 14
+10.483 0.200 F2 14
+10.683 0.200 C3 14
+10.883 0.200 F3 14
+11.083 0.600 G3 14
+11.683 0.200 G2 14
+11.883 0.200 D3 14
+12.083 0.200 G3 14
+12.283 0.600 G#3 14
+12.883 0.200 G#2 14
+13.083 0.200 G2 14
+13.283 0.200 G#2 14
+13.483 0.200 A#2 14
+13.683 0.200 A2 14
+13.883 0.200 A#2 14
+14.083 0.200 D3 14
+14.283 0.200 F3 14
+14.483 0.200 A#3 14
+14.683 0.200 C4 14
+14.883 0.200 B3 14
+15.083 0.200 C4 14
+15.283 0.200 G3 14
+15.483 0.200 F#3 14
+15.683 0.200 G3 14
+15.883 0.200 D#3 14
+16.083 0.200 D3 14
+16.283 0.200 D#3 14
+16.483 0.200 C3 14
+16.683 0.200 G2 14
+16.883 0.200 D#2 14
+17.083 1.200 C2 14
+Square2(24)
+time dur note vol
+0.083 0.800 C2 11
+0.883 0.067 G3 15
+0.950 0.067 F#3 8
+1.017 0.067 G3 8
+1.083 0.067 A3 8
+1.150 0.067 A#3 8
+1.217 0.067 C4 8
+1.283 0.067 D4 8
+1.350 0.067 D#4 8
+1.417 0.067 F4 8
+1.483 0.600 G4 9
+2.083 0.600 A4 9
+2.683 0.900 C5 8
+3.600 0.100 C5 1
+3.700 0.100 D5 8
+3.800 0.100 C5 8
+3.900 1.200 B4 8
+5.100 2.400 C2 12
+7.500 2.400 D#2 12
+9.900 1.200 F2 12
+11.100 1.200 G2 12
+12.300 1.200 G#2 12
+13.500 1.200 A#2 12
+14.700 3.700 C2 12
+Triangle(73)
+time dur note vol
+0.083 1.300 C4 15
+1.483 0.133 D#3 15
+1.683 0.133 A#3 15
+1.883 0.133 D#4 15
+2.083 0.133 F3 15
+2.283 0.150 C4 15
+2.483 0.150 F4 15
+2.683 0.150 G3 15
+2.883 0.133 F#3 15
+3.083 0.133 G3 15
+3.283 0.133 D4 15
+3.483 0.133 C#4 15
+3.683 0.133 D4 15
+3.883 0.400 G4 15
+4.483 0.400 G3 15
+5.083 0.033 A3 15
+5.117 0.033 A#3 15
+5.150 0.033 B3 15
+5.183 0.500 C4 15
+5.683 0.600 G3 15
+6.283 0.600 C4 15
+6.883 0.150 G3 15
+7.083 0.150 C4 15
+7.283 0.150 D4 15
+7.483 0.033 C4 15
+7.517 0.033 C#4 15
+7.550 0.033 D4 15
+7.583 0.500 D#4 15
+8.083 0.600 A#3 15
+8.683 0.600 D#4 15
+9.283 0.150 D#3 15
+9.483 0.150 A#3 15
+9.683 0.150 D#4 15
+9.883 0.033 D4 15
+9.917 0.033 D#4 15
+9.950 0.033 E4 15
+9.983 0.500 F4 15
+10.483 0.150 F3 15
+10.683 0.150 C4 15
+10.883 0.150 F4 15
+11.083 0.033 E4 15
+11.117 0.033 F4 15
+11.150 0.033 F#4 15
+11.183 0.500 G4 15
+11.683 0.150 G3 15
+11.883 0.150 D4 15
+12.083 0.150 G4 15
+12.283 0.033 F4 15
+12.317 0.033 F#4 15
+12.350 0.033 G4 15
+12.383 0.500 G#4 15
+12.883 0.150 G#3 15
+13.083 0.150 G3 15
+13.283 0.150 G#3 15
+13.483 0.150 A#3 15
+13.683 0.150 A3 15
+13.883 0.150 A#3 15
+14.083 0.150 D4 15
+14.283 0.150 F4 15
+14.483 0.150 A#4 15
+14.683 0.150 C5 15
+14.883 0.150 B4 15
+15.083 0.150 C5 15
+15.283 0.150 G4 15
+15.483 0.150 F#4 15
+15.683 0.150 G4 15
+15.883 0.150 D#4 15
+16.083 0.150 D4 15
+16.283 0.150 D#4 15
+16.483 0.150 C4 15
+16.683 0.150 G3 15
+16.883 0.150 D#3 15
+17.083 1.300 C3 15
+Noise(551)
+time dur noise vol drum
+0.000 0.017 0 12 hihat_closed
+0.017 0.017 8 5 tom_low
+0.050 0.017 0 12 hihat_closed
+0.067 0.017 8 5 tom_low
+0.100 0.017 0 12 hihat_closed
+0.117 0.017 8 5 tom_low
+0.133 0.017 10 1 kick_heavy
+0.150 0.033 11 2 kick_tight
+0.183 0.017 12 15 rumble_sub
+0.200 0.017 14 15 subbass_drop
+0.500 0.017 0 12 hihat_closed
+0.517 0.017 8 5 tom_low
+0.533 0.017 10 1 kick_heavy
+0.550 0.033 11 2 kick_tight
+0.583 0.017 12 15 rumble_sub
+0.600 0.017 14 15 subbass_drop
+0.900 0.017 0 12 hihat_closed
+0.917 0.017 8 5 tom_low
+0.933 0.017 10 1 kick_heavy
+0.967 0.017 0 12 hihat_closed
+0.983 0.017 8 5 tom_low
+1.000 0.017 10 1 kick_heavy
+1.033 0.017 0 12 hihat_closed
+1.050 0.017 8 5 tom_low
+1.067 0.017 10 1 kick_heavy
+1.100 0.017 0 12 hihat_closed
+1.117 0.017 8 5 tom_low
+1.133 0.017 10 1 kick_heavy
+1.167 0.017 0 12 hihat_closed
+1.183 0.017 8 5 tom_low
+1.200 0.017 10 1 kick_heavy
+1.233 0.017 0 12 hihat_closed
+1.250 0.017 8 5 tom_low
+1.267 0.017 10 1 kick_heavy
+1.300 0.017 0 12 hihat_closed
+1.317 0.017 8 5 tom_low
+1.333 0.017 10 1 kick_heavy
+1.367 0.017 0 12 hihat_closed
+1.383 0.017 8 5 tom_low
+1.400 0.017 10 1 kick_heavy
+1.433 0.017 0 12 hihat_closed
+1.450 0.017 8 5 tom_low
+1.467 0.017 10 1 kick_heavy
+1.500 0.017 0 12 hihat_closed
+1.517 0.017 8 5 tom_low
+1.533 0.017 10 1 kick_heavy
+1.550 0.033 11 2 kick_tight
+1.583 0.017 12 15 rumble_sub
+1.600 0.017 14 15 subbass_drop
+1.700 0.017 0 12 hihat_closed
+1.717 0.017 8 5 tom_low
+1.733 0.017 10 1 kick_heavy
+1.750 0.033 11 2 kick_tight
+1.783 0.017 12 15 rumble_sub
+1.800 0.017 14 15 subbass_drop
+1.900 0.017 0 12 hihat_closed
+1.917 0.017 8 5 tom_low
+1.933 0.017 10 1 kick_heavy
+1.950 0.033 11 2 kick_tight
+1.983 0.017 12 15 rumble_sub
+2.000 0.017 14 15 subbass_drop
+2.100 0.017 0 12 hihat_closed
+2.117 0.017 8 5 tom_low
+2.133 0.017 10 1 kick_heavy
+2.150 0.033 11 2 kick_tight
+2.183 0.017 12 15 rumble_sub
+2.200 0.017 14 15 subbass_drop
+2.300 0.017 0 12 hihat_closed
+2.317 0.017 8 5 tom_low
+2.333 0.017 10 1 kick_heavy
+2.350 0.033 11 2 kick_tight
+2.383 0.017 12 15 rumble_sub
+2.400 0.017 14 15 subbass_drop
+2.500 0.017 0 12 hihat_closed
+2.517 0.017 8 5 tom_low
+2.550 0.017 0 12 hihat_closed
+2.567 0.017 8 5 tom_low
+2.600 0.017 0 12 hihat_closed
+2.617 0.017 8 5 tom_low
+2.650 0.017 0 12 hihat_closed
+2.667 0.017 8 5 tom_low
+2.700 0.017 0 12 hihat_closed
+2.717 0.017 8 5 tom_low
+2.733 0.017 10 1 kick_heavy
+2.750 0.033 11 2 kick_tight
+2.783 0.017 12 15 rumble_sub
+2.800 0.017 14 15 subbass_drop
+2.900 0.017 0 12 hihat_closed
+2.917 0.017 8 5 tom_low
+2.933 0.017 10 1 kick_heavy
+2.950 0.033 11 2 kick_tight
+2.983 0.017 12 15 rumble_sub
+3.000 0.017 14 15 subbass_drop
+3.100 0.017 0 12 hihat_closed
+3.117 0.017 8 5 tom_low
+3.133 0.017 10 1 kick_heavy
+3.150 0.033 11 2 kick_tight
+3.183 0.017 12 15 rumble_sub
+3.200 0.017 14 15 subbass_drop
+3.300 0.017 0 12 hihat_closed
+3.317 0.017 8 5 tom_low
+3.333 0.017 10 1 kick_heavy
+3.350 0.033 11 2 kick_tight
+3.383 0.017 12 15 rumble_sub
+3.400 0.017 14 15 subbass_drop
+3.500 0.017 0 12 hihat_closed
+3.517 0.017 8 5 tom_low
+3.533 0.017 10 1 kick_heavy
+3.550 0.033 11 2 kick_tight
+3.583 0.017 12 15 rumble_sub
+3.600 0.017 14 15 subbass_drop
+3.700 0.017 0 12 hihat_closed
+3.717 0.017 8 5 tom_low
+3.733 0.017 10 1 kick_heavy
+3.750 0.033 11 2 kick_tight
+3.783 0.017 12 15 rumble_sub
+3.800 0.017 14 15 subbass_drop
+3.900 0.017 0 12 hihat_closed
+3.917 0.017 8 5 tom_low
+3.950 0.017 0 12 hihat_closed
+3.967 0.017 8 5 tom_low
+4.000 0.017 0 12 hihat_closed
+4.017 0.017 8 5 tom_low
+4.050 0.017 0 12 hihat_closed
+4.067 0.017 8 5 tom_low
+4.100 0.017 0 12 hihat_closed
+4.117 0.017 8 5 tom_low
+4.150 0.017 0 12 hihat_closed
+4.167 0.017 8 5 tom_low
+4.200 0.017 0 12 hihat_closed
+4.217 0.017 8 5 tom_low
+4.250 0.017 0 12 hihat_closed
+4.267 0.017 8 5 tom_low
+4.300 0.017 0 12 hihat_closed
+4.317 0.017 8 5 tom_low
+4.350 0.017 0 12 hihat_closed
+4.367 0.017 8 5 tom_low
+4.400 0.017 0 12 hihat_closed
+4.417 0.017 8 5 tom_low
+4.450 0.017 0 12 hihat_closed
+4.467 0.017 8 5 tom_low
+4.500 0.017 0 12 hihat_closed
+4.517 0.017 8 5 tom_low
+4.550 0.017 0 12 hihat_closed
+4.567 0.017 8 5 tom_low
+4.600 0.017 0 12 hihat_closed
+4.617 0.017 8 5 tom_low
+4.650 0.017 0 12 hihat_closed
+4.667 0.017 8 5 tom_low
+4.700 0.017 0 12 hihat_closed
+4.717 0.017 8 5 tom_low
+4.750 0.017 0 12 hihat_closed
+4.767 0.017 8 5 tom_low
+4.800 0.017 0 12 hihat_closed
+4.817 0.017 8 5 tom_low
+4.850 0.017 0 12 hihat_closed
+4.867 0.017 8 5 tom_low
+4.900 0.017 0 12 hihat_closed
+4.917 0.017 8 5 tom_low
+4.950 0.017 0 12 hihat_closed
+4.967 0.017 8 5 tom_low
+5.000 0.017 0 12 hihat_closed
+5.017 0.017 8 5 tom_low
+5.033 0.017 10 1 kick_heavy
+5.050 0.033 11 2 kick_tight
+5.100 0.017 0 12 hihat_closed
+5.117 0.017 8 5 tom_low
+5.133 0.017 10 1 kick_heavy
+5.150 0.033 11 2 kick_tight
+5.183 0.017 12 15 rumble_sub
+5.200 0.017 14 15 subbass_drop
+5.500 0.017 0 12 hihat_closed
+5.517 0.017 8 5 tom_low
+5.533 0.017 10 1 kick_heavy
+5.550 0.033 11 2 kick_tight
+5.583 0.017 12 15 rumble_sub
+5.600 0.017 14 15 subbass_drop
+5.700 0.017 0 12 hihat_closed
+5.717 0.017 8 5 tom_low
+5.733 0.017 10 1 kick_heavy
+5.750 0.033 11 2 kick_tight
+5.783 0.017 12 15 rumble_sub
+5.800 0.017 14 15 subbass_drop
+5.900 0.017 0 12 hihat_closed
+5.917 0.017 8 5 tom_low
+5.933 0.017 10 1 kick_heavy
+5.950 0.033 11 2 kick_tight
+5.983 0.017 12 15 rumble_sub
+6.000 0.017 14 15 subbass_drop
+6.100 0.017 0 12 hihat_closed
+6.117 0.017 8 5 tom_low
+6.133 0.017 10 1 kick_heavy
+6.167 0.017 0 12 hihat_closed
+6.183 0.017 8 5 tom_low
+6.200 0.017 10 1 kick_heavy
+6.233 0.017 0 12 hihat_closed
+6.250 0.017 8 5 tom_low
+6.267 0.017 10 1 kick_heavy
+6.300 0.017 0 12 hihat_closed
+6.317 0.017 8 5 tom_low
+6.333 0.017 10 1 kick_heavy
+6.350 0.033 11 2 kick_tight
+6.383 0.017 12 15 rumble_sub
+6.400 0.017 14 15 subbass_drop
+6.500 0.017 0 12 hihat_closed
+6.517 0.017 8 5 tom_low
+6.533 0.017 10 1 kick_heavy
+6.550 0.033 11 2 kick_tight
+6.583 0.017 12 15 rumble_sub
+6.600 0.017 14 15 subbass_drop
+6.700 0.017 0 12 hihat_closed
+6.717 0.017 8 5 tom_low
+6.733 0.017 10 1 kick_heavy
+6.750 0.033 11 2 kick_tight
+6.783 0.017 12 15 rumble_sub
+6.800 0.017 14 15 subbass_drop
+6.900 0.017 0 12 hihat_closed
+6.917 0.017 8 5 tom_low
+6.933 0.017 10 1 kick_heavy
+6.950 0.033 11 2 kick_tight
+6.983 0.017 12 15 rumble_sub
+7.000 0.017 14 15 subbass_drop
+7.300 0.017 0 12 hihat_closed
+7.317 0.017 8 5 tom_low
+7.350 0.017 0 12 hihat_closed
+7.367 0.017 8 5 tom_low
+7.400 0.017 0 12 hihat_closed
+7.417 0.017 8 5 tom_low
+7.450 0.017 0 12 hihat_closed
+7.467 0.017 8 5 tom_low
+7.500 0.017 0 12 hihat_closed
+7.517 0.017 8 5 tom_low
+7.533 0.017 10 1 kick_heavy
+7.550 0.033 11 2 kick_tight
+7.583 0.017 12 15 rumble_sub
+7.600 0.017 14 15 subbass_drop
+7.900 0.017 0 12 hihat_closed
+7.917 0.017 8 5 tom_low
+7.933 0.017 10 1 kick_heavy
+7.950 0.033 11 2 kick_tight
+7.983 0.017 12 15 rumble_sub
+8.000 0.017 14 15 subbass_drop
+8.100 0.017 0 12 hihat_closed
+8.117 0.017 8 5 tom_low
+8.133 0.017 10 1 kick_heavy
+8.150 0.033 11 2 kick_tight
+8.183 0.017 12 15 rumble_sub
+8.200 0.017 14 15 subbass_drop
+8.300 0.017 0 12 hihat_closed
+8.317 0.017 8 5 tom_low
+8.333 0.017 10 1 kick_heavy
+8.350 0.033 11 2 kick_tight
+8.383 0.017 12 15 rumble_sub
+8.400 0.017 14 15 subbass_drop
+8.500 0.017 0 12 hihat_closed
+8.517 0.017 8 5 tom_low
+8.533 0.017 10 1 kick_heavy
+8.567 0.017 0 12 hihat_closed
+8.583 0.017 8 5 tom_low
+8.600 0.017 10 1 kick_heavy
+8.633 0.017 0 12 hihat_closed
+8.650 0.017 8 5 tom_low
+8.667 0.017 10 1 kick_heavy
+8.700 0.017 0 12 hihat_closed
+8.717 0.017 8 5 tom_low
+8.733 0.017 10 1 kick_heavy
+8.750 0.033 11 2 kick_tight
+8.783 0.017 12 15 rumble_sub
+8.800 0.017 14 15 subbass_drop
+8.900 0.017 0 12 hihat_closed
+8.917 0.017 8 5 tom_low
+8.933 0.017 10 1 kick_heavy
+8.950 0.033 11 2 kick_tight
+8.983 0.017 12 15 rumble_sub
+9.000 0.017 14 15 subbass_drop
+9.100 0.017 0 12 hihat_closed
+9.117 0.017 8 5 tom_low
+9.133 0.017 10 1 kick_heavy
+9.150 0.033 11 2 kick_tight
+9.183 0.017 12 15 rumble_sub
+9.200 0.017 14 15 subbass_drop
+9.300 0.017 0 12 hihat_closed
+9.317 0.017 8 5 tom_low
+9.333 0.017 10 1 kick_heavy
+9.350 0.033 11 2 kick_tight
+9.383 0.017 12 15 rumble_sub
+9.400 0.017 14 15 subbass_drop
+9.700 0.017 0 12 hihat_closed
+9.717 0.017 8 5 tom_low
+9.750 0.017 0 12 hihat_closed
+9.767 0.017 8 5 tom_low
+9.800 0.017 0 12 hihat_closed
+9.817 0.017 8 5 tom_low
+9.850 0.017 0 12 hihat_closed
+9.867 0.017 8 5 tom_low
+9.900 0.017 0 12 hihat_closed
+9.917 0.017 8 5 tom_low
+9.933 0.017 10 1 kick_heavy
+9.950 0.033 11 2 kick_tight
+9.983 0.017 12 15 rumble_sub
+10.000 0.017 14 15 subbass_drop
+10.300 0.017 0 12 hihat_closed
+10.317 0.017 8 5 tom_low
+10.333 0.017 10 1 kick_heavy
+10.350 0.033 11 2 kick_tight
+10.383 0.017 12 15 rumble_sub
+10.400 0.017 14 15 subbass_drop
+10.500 0.017 0 12 hihat_closed
+10.517 0.017 8 5 tom_low
+10.533 0.017 10 1 kick_heavy
+10.550 0.033 11 2 kick_tight
+10.583 0.017 12 15 rumble_sub
+10.600 0.017 14 15 subbass_drop
+10.700 0.017 0 12 hihat_closed
+10.717 0.017 8 5 tom_low
+10.733 0.017 10 1 kick_heavy
+10.750 0.033 11 2 kick_tight
+10.783 0.017 12 15 rumble_sub
+10.800 0.017 14 15 subbass_drop
+10.900 0.017 0 12 hihat_closed
+10.917 0.017 8 5 tom_low
+10.933 0.017 10 1 kick_heavy
+10.967 0.017 0 12 hihat_closed
+10.983 0.017 8 5 tom_low
+11.000 0.017 10 1 kick_heavy
+11.033 0.017 0 12 hihat_closed
+11.050 0.017 8 5 tom_low
+11.067 0.017 10 1 kick_heavy
+11.100 0.017 0 12 hihat_closed
+11.117 0.017 8 5 tom_low
+11.133 0.017 10 1 kick_heavy
+11.150 0.033 11 2 kick_tight
+11.183 0.017 12 15 rumble_sub
+11.200 0.017 14 15 subbass_drop
+11.500 0.017 0 12 hihat_closed
+11.517 0.017 8 5 tom_low
+11.533 0.017 10 1 kick_heavy
+11.550 0.033 11 2 kick_tight
+11.583 0.017 12 15 rumble_sub
+11.600 0.017 14 15 subbass_drop
+11.700 0.017 0 12 hihat_closed
+11.717 0.017 8 5 tom_low
+11.733 0.017 10 1 kick_heavy
+11.750 0.033 11 2 kick_tight
+11.783 0.017 12 15 rumble_sub
+11.800 0.017 14 15 subbass_drop
+11.900 0.017 0 12 hihat_closed
+11.917 0.017 8 5 tom_low
+11.933 0.017 10 1 kick_heavy
+11.950 0.033 11 2 kick_tight
+11.983 0.017 12 15 rumble_sub
+12.000 0.017 14 15 subbass_drop
+12.100 0.017 0 12 hihat_closed
+12.117 0.017 8 5 tom_low
+12.133 0.017 10 1 kick_heavy
+12.167 0.017 0 12 hihat_closed
+12.183 0.017 8 5 tom_low
+12.200 0.017 10 1 kick_heavy
+12.233 0.017 0 12 hihat_closed
+12.250 0.017 8 5 tom_low
+12.267 0.017 10 1 kick_heavy
+12.300 0.017 0 12 hihat_closed
+12.317 0.017 8 5 tom_low
+12.333 0.017 10 1 kick_heavy
+12.350 0.033 11 2 kick_tight
+12.383 0.017 12 15 rumble_sub
+12.400 0.017 14 15 subbass_drop
+12.700 0.017 0 12 hihat_closed
+12.717 0.017 8 5 tom_low
+12.733 0.017 10 1 kick_heavy
+12.750 0.033 11 2 kick_tight
+12.783 0.017 12 15 rumble_sub
+12.800 0.017 14 15 subbass_drop
+12.900 0.017 0 12 hihat_closed
+12.917 0.017 8 5 tom_low
+12.933 0.017 10 1 kick_heavy
+12.950 0.033 11 2 kick_tight
+12.983 0.017 12 15 rumble_sub
+13.000 0.017 14 15 subbass_drop
+13.100 0.017 0 12 hihat_closed
+13.117 0.017 8 5 tom_low
+13.133 0.017 10 1 kick_heavy
+13.150 0.033 11 2 kick_tight
+13.183 0.017 12 15 rumble_sub
+13.200 0.017 14 15 subbass_drop
+13.300 0.017 0 12 hihat_closed
+13.317 0.017 8 5 tom_low
+13.333 0.017 10 1 kick_heavy
+13.367 0.017 0 12 hihat_closed
+13.383 0.017 8 5 tom_low
+13.400 0.017 10 1 kick_heavy
+13.433 0.017 0 12 hihat_closed
+13.450 0.017 8 5 tom_low
+13.467 0.017 10 1 kick_heavy
+13.500 0.017 0 12 hihat_closed
+13.517 0.017 8 5 tom_low
+13.533 0.017 10 1 kick_heavy
+13.550 0.033 11 2 kick_tight
+13.583 0.017 12 15 rumble_sub
+13.600 0.017 14 15 subbass_drop
+13.700 0.017 0 12 hihat_closed
+13.717 0.017 8 5 tom_low
+13.733 0.017 10 1 kick_heavy
+13.750 0.033 11 2 kick_tight
+13.783 0.017 12 15 rumble_sub
+13.800 0.017 14 15 subbass_drop
+13.900 0.017 0 12 hihat_closed
+13.917 0.017 8 5 tom_low
+13.933 0.017 10 1 kick_heavy
+13.950 0.033 11 2 kick_tight
+13.983 0.017 12 15 rumble_sub
+14.000 0.017 14 15 subbass_drop
+14.100 0.017 0 12 hihat_closed
+14.117 0.017 8 5 tom_low
+14.133 0.017 10 1 kick_heavy
+14.150 0.033 11 2 kick_tight
+14.183 0.017 12 15 rumble_sub
+14.200 0.017 14 15 subbass_drop
+14.300 0.017 0 12 hihat_closed
+14.317 0.017 8 5 tom_low
+14.333 0.017 10 1 kick_heavy
+14.350 0.033 11 2 kick_tight
+14.383 0.017 12 15 rumble_sub
+14.400 0.017 14 15 subbass_drop
+14.500 0.017 0 12 hihat_closed
+14.517 0.017 8 5 tom_low
+14.550 0.017 0 12 hihat_closed
+14.567 0.017 8 5 tom_low
+14.600 0.017 0 12 hihat_closed
+14.617 0.017 8 5 tom_low
+14.650 0.017 0 12 hihat_closed
+14.667 0.017 8 5 tom_low
+14.700 0.017 0 12 hihat_closed
+14.717 0.017 8 5 tom_low
+14.733 0.017 10 1 kick_heavy
+14.750 0.033 11 2 kick_tight
+14.783 0.017 12 15 rumble_sub
+14.800 0.017 14 15 subbass_drop
+15.100 0.017 0 12 hihat_closed
+15.117 0.017 8 5 tom_low
+15.133 0.017 10 1 kick_heavy
+15.150 0.033 11 2 kick_tight
+15.183 0.017 12 15 rumble_sub
+15.200 0.017 14 15 subbass_drop
+15.300 0.017 0 12 hihat_closed
+15.317 0.017 8 5 tom_low
+15.333 0.017 10 1 kick_heavy
+15.350 0.033 11 2 kick_tight
+15.383 0.017 12 15 rumble_sub
+15.400 0.017 14 15 subbass_drop
+15.500 0.017 0 12 hihat_closed
+15.517 0.017 8 5 tom_low
+15.533 0.017 10 1 kick_heavy
+15.550 0.033 11 2 kick_tight
+15.583 0.017 12 15 rumble_sub
+15.600 0.017 14 15 subbass_drop
+15.700 0.017 0 12 hihat_closed
+15.717 0.017 8 5 tom_low
+15.733 0.017 10 1 kick_heavy
+15.767 0.017 0 12 hihat_closed
+15.783 0.017 8 5 tom_low
+15.800 0.017 10 1 kick_heavy
+15.833 0.017 0 12 hihat_closed
+15.850 0.017 8 5 tom_low
+15.867 0.017 10 1 kick_heavy
+15.900 0.017 0 12 hihat_closed
+15.917 0.017 8 5 tom_low
+15.933 0.017 10 1 kick_heavy
+15.950 0.033 11 2 kick_tight
+15.983 0.017 12 15 rumble_sub
+16.000 0.017 14 15 subbass_drop
+16.100 0.017 0 12 hihat_closed
+16.117 0.017 8 5 tom_low
+16.133 0.017 10 1 kick_heavy
+16.150 0.033 11 2 kick_tight
+16.183 0.017 12 15 rumble_sub
+16.200 0.017 14 15 subbass_drop
+16.300 0.017 0 12 hihat_closed
+16.317 0.017 8 5 tom_low
+16.333 0.017 10 1 kick_heavy
+16.350 0.033 11 2 kick_tight
+16.383 0.017 12 15 rumble_sub
+16.400 0.017 14 15 subbass_drop
+16.500 0.017 0 12 hihat_closed
+16.517 0.017 8 5 tom_low
+16.533 0.017 10 1 kick_heavy
+16.550 0.033 11 2 kick_tight
+16.583 0.017 12 15 rumble_sub
+16.600 0.017 14 15 subbass_drop
+16.900 0.017 0 12 hihat_closed
+16.917 0.017 8 5 tom_low
+16.933 0.017 10 1 kick_heavy
+16.950 0.033 11 2 kick_tight
+16.983 0.017 12 15 rumble_sub
+17.000 0.017 14 15 subbass_drop
+17.100 0.017 0 12 hihat_closed
+17.117 0.017 8 5 tom_low
+17.150 0.017 0 12 hihat_closed
+17.167 0.017 8 5 tom_low
+17.200 0.017 0 12 hihat_closed
+17.217 0.017 8 5 tom_low
+17.250 0.017 0 12 hihat_closed
+17.267 0.017 8 5 tom_low
+17.300 0.017 0 12 hihat_closed
+17.317 0.017 8 5 tom_low
+17.350 0.017 0 12 hihat_closed
+17.367 0.017 8 5 tom_low
+17.400 0.017 0 12 hihat_closed
+17.417 0.017 8 5 tom_low
+17.450 0.017 0 12 hihat_closed
+17.467 0.017 8 5 tom_low
+17.500 0.017 0 12 hihat_closed
+17.517 0.017 8 5 tom_low
+17.550 0.017 0 12 hihat_closed
+17.567 0.017 8 5 tom_low
+17.600 0.017 0 12 hihat_closed
+17.617 0.017 8 5 tom_low
+17.650 0.017 0 12 hihat_closed
+17.667 0.017 8 5 tom_low
+17.700 0.017 0 12 hihat_closed
+17.717 0.017 8 5 tom_low
+17.750 0.017 0 12 hihat_closed
+17.767 0.017 8 5 tom_low
+17.800 0.017 0 12 hihat_closed
+17.817 0.017 8 5 tom_low
+17.850 0.017 0 12 hihat_closed
+17.867 0.017 8 5 tom_low
+17.900 0.017 0 12 hihat_closed
+17.917 0.017 8 5 tom_low
+17.950 0.017 0 12 hihat_closed
+17.967 0.017 8 5 tom_low
+18.000 0.017 0 12 hihat_closed
+18.017 0.017 8 5 tom_low
+18.050 0.017 0 12 hihat_closed
+18.067 0.017 8 5 tom_low
+18.100 0.017 0 12 hihat_closed
+18.117 0.017 8 5 tom_low
+18.150 0.017 0 12 hihat_closed
+18.167 0.017 8 5 tom_low
+18.200 0.017 0 12 hihat_closed
+18.217 0.017 8 5 tom_low
+18.250 0.017 0 12 hihat_closed
+18.267 0.017 8 5 tom_low
+18.283 0.017 10 1 kick_heavy
+18.300 0.033 11 2 kick_tight
+18.350 0.017 0 12 hihat_closed
+18.367 0.017 8 5 tom_low
+18.383 0.017 10 1 kick_heavy
+18.400 0.033 11 2 kick_tight
+18.433 0.017 12 15 rumble_sub
+18.450 0.017 14 15 subbass_drop
+DPCM(0)
+time dur note vol

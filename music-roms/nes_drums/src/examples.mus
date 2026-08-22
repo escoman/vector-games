@@ -1,0 +1,62 @@
+; nes_drums.mus — тестовая композиция: все 16 шумовых инструментов
+; NES noise $0..$F на AY-3-8910 (Вектор-06Ц).
+;
+; Секция 1: демонстрация всех 16 звуков по порядку.
+; Секция 2: ритмические паттерны для оценки на слух.
+
+Tempo: T80
+
+sample 0:  samples/00_hihat_closed.smp
+sample 1:  samples/01_hihat_open.smp
+sample 2:  samples/02_snare_attack.smp
+sample 3:  samples/03_snare_body.smp
+sample 4:  samples/04_snare_standard.smp
+sample 5:  samples/05_cymbal_crash.smp
+sample 6:  samples/06_snare_low.smp
+sample 7:  samples/07_explosion_distant.smp
+sample 8:  samples/08_tom_low.smp
+sample 9:  samples/09_tom_rumble.smp
+sample 10: samples/0A_kick_heavy.smp
+sample 11: samples/0B_kick_tight.smp
+sample 12: samples/0C_rumble_sub.smp
+sample 13: samples/0D_roar_ultra_low.smp
+sample 14: samples/0E_subbass_drop.smp
+sample 15: samples/0F_crackle.smp
+
+drums:
+
+; --- Демонстрация: все 16 звуков ---
+L8 0 P 1 P 2 P 3 P
+L8 4 P 5 P 6 P 7 P
+L8 8 P 9 P 10 P 11 P
+L8 12 P 13 P 14 P 15 P
+
+; --- Ритмический паттерн: базовый бит ---
+L4 1 P 1 P 1 P 1 P
+L4 1 P 2 P 1 P 2 P
+L4 9 P 1 P 9 P 1 P
+L4 1 P 2 P 1 P 2 P
+
+; --- Вариант с хэви-киком ---
+L4 10 P 1 P 10 P 1 P
+L4 1 P 3 P 1 P 3 P
+L4 11 P 1 P 11 P 1 P
+L4 1 P 2 P 1 P 2 P
+
+; --- Суб-бас секция ---
+L4 12 P 1 P 12 P 1 P
+L4 9 P 2 P 9 P 2 P
+L4 13 P 1 P 13 P 1 P
+L4 14 P 2 P 14 P 2 P
+
+; --- Быстрый хэт с киком ---
+L8 0 P 9 P 0 P 2 P
+L8 0 P 9 P 0 P 2 P
+L8 1 P 9 P 1 P 3 P
+L8 0 P 9 P 0 P 2 P
+
+; --- Финал: все кики ---
+L4 9 P 10 P 11 P 8 P
+L2 12 P 13 P
+L2 14 P 15 P
+!

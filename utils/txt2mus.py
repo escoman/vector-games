@@ -133,7 +133,8 @@ def parse_txt(text, fname):
                 raise ConvError(f'{fname}: строка Noise без имени'
                                 f' ударника: «{line}»')
             chans['drums'].append({'start': start, 'dur': dur,
-                                   'name': parts[4]})
+                                   'name': parts[4],
+                                   'noise_idx': int(parts[2])})
     if framerate is None:
         raise ConvError(f'{fname}: нет заголовка «... framerate=...»')
     for key in chans:
@@ -270,16 +271,12 @@ def convert(txt, fname, tempo, label=None):
     tps = tempo / 1.875         # тиков в секунду
     chans = txt['channels']
 
-    # --- индексы ударных ---
+    # --- индексы ударных: используем noise_idx из TXT напрямую ---
     all_drums = [e for e in chans['drums'] if 'type' not in e]
-    names = []                  # стабильные индексы: порядок появления
-    for e in all_drums:
-        if e['name'] not in names:
-            names.append(e['name'])
-    if len(names) > 10:
+    names = sorted(set(e['name'] for e in all_drums))
+    if len(names) > 16:
         raise ConvError(f'{fname}: {len(names)} типов ударных —'
-                        f' максимум 10: {", ".join(names)}')
-    idx_of = {n: i for i, n in enumerate(names)}
+                        f' максимум 16: {", ".join(names)}')
 
     # --- обработка каналов с учётом циклов ---
     writers = {}
@@ -289,7 +286,7 @@ def convert(txt, fname, tempo, label=None):
         writers[key] = w
         lengths[key] = t
 
-    w, t = _process_drums(chans['drums'], tps, idx_of)
+    w, t = _process_drums(chans['drums'], tps)
     writers['drums'] = w
     lengths['drums'] = t
 
@@ -301,8 +298,6 @@ def convert(txt, fname, tempo, label=None):
              f'; сетка PPQ=32; тик = 1.875/T с; framerate'
              f' {txt["framerate"]:g}',
              f'Tempo: T{tempo}']
-    for i, n in enumerate(names):
-        lines.append(f'sample {i}: samples/{n}.smp')
     headers = (('score0', 'score 0:'), ('score1', 'score 1:'),
                ('score2', 'score 2:'), ('drums', 'drums:'))
     first = True
@@ -430,8 +425,9 @@ def _process_tone(events, tps):
     return w, cur
 
 
-def _process_drums(events, tps, idx_of):
-    """Обработка канала ударных с поддержкой циклов."""
+def _process_drums(events, tps):
+    """Обработка канала ударных с поддержкой циклов.
+    Использует noise_idx из TXT напрямую как индекс семпла."""
     cycles, regular = _extract_cycles(events)
     w = Writer()
     cur = 0
@@ -448,7 +444,7 @@ def _process_drums(events, tps, idx_of):
             end = nxt if nxt is not None else \
                 quant_ticks(e['start'] + e['dur'], tps)
             ticks = max(end - max(s, cur), 1)
-            w.hit(idx_of[e['name']], ticks)
+            w.hit(e['noise_idx'], ticks)
             cur = max(s, cur) + ticks
         return w, cur
 
@@ -475,7 +471,7 @@ def _process_drums(events, tps, idx_of):
             end = nxt if nxt is not None else \
                 quant_ticks(e['start'] + e['dur'], tps) + offset
             ticks = max(end - max(s, cur), 1)
-            w.hit(idx_of[e['name']], ticks)
+            w.hit(e['noise_idx'], ticks)
             cur = max(s, cur) + ticks
             ei += 1
 
@@ -502,7 +498,7 @@ def _process_drums(events, tps, idx_of):
                 quant_ticks(e['start'] + e['dur'], tps) - cb_tick
             end = min(end, cyc_dur)
             ticks = max(end - max(s, cur), 1)
-            w.hit(idx_of[e['name']], ticks)
+            w.hit(e['noise_idx'], ticks)
             cur = max(s, cur) + ticks
             ei += 1
 
@@ -529,7 +525,7 @@ def _process_drums(events, tps, idx_of):
         end = nxt if nxt is not None else \
             quant_ticks(e['start'] + e['dur'], tps) + offset
         ticks = max(end - max(s, cur), 1)
-        w.hit(idx_of[e['name']], ticks)
+        w.hit(e['noise_idx'], ticks)
         cur = max(s, cur) + ticks
         ei += 1
     return w, cur
@@ -545,7 +541,7 @@ def parse_mus_events(text):
     text = re.sub(r';[^\n]*', '', text)
     tempo = None
     chans = {'score0': [], 'score1': [], 'score2': [], 'drums': []}
-    header = re.compile(r'^\s*(?:score\s+([0-2])|drums|sample\s+[0-9]'
+    header = re.compile(r'^\s*(?:score\s+([0-2])|drums|sample\s+(?:[0-9]|1[0-5])'
                         r'|tempo|enabled)\s*:(.*)$', re.I)
     bodies = {}                 # ключ секции -> список строк
     order = []
@@ -601,12 +597,13 @@ def parse_mus_events(text):
                 pos += mm.end()
                 continue
             if drums and c.isdigit():
+                dm = re.match(r'\d+', body[pos:])
                 d = l_ticks
                 chans[key].append({'start': t * tick_s,
                                    'end': (t + d) * tick_s,
-                                   'drum': int(c)})
+                                   'drum': int(dm.group())})
                 t += d
-                pos += 1
+                pos += dm.end()
                 continue
             mm = re.match(r'P(\d+)?', body[pos:], re.I)
             if mm:
@@ -765,16 +762,17 @@ def self_test():
     check(w.toks[-2:] == ['O2', 'L16'],
           'force_state после смены: %s' % w.toks)
 
-    # 6) больше 10 типов ударных — ошибка
+    # 6) больше 16 типов ударных — ошибка
     txt = {'framerate': 60.0,
            'channels': {k: [] for k in
                         ('score0', 'score1', 'score2')}}
     txt['channels']['drums'] = [
-        {'start': i * 0.1, 'dur': 0.05, 'name': f'd{i}'}
-        for i in range(11)]
+        {'start': i * 0.1, 'dur': 0.05, 'name': f'd{i}',
+         'noise_idx': i}
+        for i in range(17)]
     try:
         convert(txt, '<t>', 225)
-        fails.append('11 типов ударных не дали ошибку')
+        fails.append('17 типов ударных не дали ошибку')
     except ConvError:
         pass
 
@@ -786,12 +784,14 @@ def self_test():
                    {'start': 0.8, 'dur': 0.2, 'note': 52}],
         'score1': [],
         'score2': [{'start': 0.0, 'dur': 1.0, 'note': 38}],
-        'drums': [{'start': 0.0, 'dur': 0.05, 'name': 'kick'},
-                  {'start': 0.5, 'dur': 0.05, 'name': 'snare_deep'}]}}
+        'drums': [{'start': 0.0, 'dur': 0.05, 'name': 'kick',
+                   'noise_idx': 0},
+                  {'start': 0.5, 'dur': 0.05, 'name': 'snare_deep',
+                   'noise_idx': 1}]}}
     mus, names = convert(txt, 'selftest.txt', 225)
     check(names == ['kick', 'snare_deep'],
           'индексы ударных: %s' % names)
-    check('sample 0: samples/kick.smp' in mus, 'sample 0 не объявлен')
+    check('sample' not in mus, 'объявления sample в .mus')
     tempo, got = parse_mus_events(mus)
     check(tempo == 225, 'темп .mus: %s' % tempo)
     check(len(got['score0']) == 2 and got['score0'][0]['note'] == 50

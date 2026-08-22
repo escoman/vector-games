@@ -315,7 +315,7 @@ static void drum_event(void)
             g_dr.pc -= back;
             continue;
         }
-        if (b <= 10u)                   /* новый удар — перезапуск */
+        if (b <= 16u)                   /* новый удар — перезапуск */
             drum_sample_play(g_song->samples[b - 1u]);
         drum_set_counter();
         return;

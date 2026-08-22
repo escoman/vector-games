@@ -167,8 +167,9 @@ def tokenize(body, fname, drums):
             pos += m.end()
             continue
         if drums and c.isdigit():
-            toks.append(('D', int(c)))
-            pos += 1
+            m = re.match(r'\d+', body[pos:])
+            toks.append(('D', int(m.group())))
+            pos += m.end()
             continue
         m = re.match(r'T(\d+)', body[pos:], re.I)
         if m:
@@ -318,7 +319,7 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
 
 
 HEADER_RE = re.compile(
-    r'^\s*(?:score\s+([0-2])|drums|sample\s+([0-9])|(tempo)|(enabled))\s*:'
+    r'^\s*(?:score\s+([0-2])|drums|sample\s+([0-9]|1[0-5])|(tempo)|(enabled))\s*:'
     r'(.*)$',
     re.I)
 
@@ -514,6 +515,12 @@ def main():
     ap.add_argument('--allow-len-mismatch', action='store_true',
                     help='предупреждение вместо ошибки при разной длине'
                     ' партитур (то же, что «!» в .mus)')
+    ap.add_argument('--shared-lib', action='store_true',
+                    help='генерировать общую библиотеку: .h (extern) +'
+                    ' _data.c (определения) вместо .inc')
+    ap.add_argument('--use-shared', metavar='NAME',
+                    help='использовать семплы из внешней библиотеки NAME'
+                    ' (включает NAME.h, без локальных семплов)')
     ap.add_argument('--self-test', action='store_true',
                     help='проверить однобайтовое кодирование L и октавы,'
                     ' выйти')
@@ -524,6 +531,8 @@ def main():
         return
     if args.mus is None:
         ap.error('не указан файл партитуры .mus')
+    if args.shared_lib and args.use_shared:
+        ap.error('--shared-lib и --use-shared несовместимы')
 
     fname = args.mus
     out = args.output or os.path.splitext(fname)[0] + '.inc'
@@ -572,9 +581,15 @@ def main():
                                '; выровняйте длительности или поставьте «!»')
         song_len = max(lengths.values()) if lengths else 0
 
-        # семплы (нужны только при включённых ударных)
+        if args.use_shared and sample_paths:
+            print(f'ВНИМАНИЕ: {fname}: --use-shared {args.use_shared}:'
+                  f' локальные sample объявления игнорируются',
+                  file=sys.stderr)
+
+        # семплы (обрабатываются всегда, если есть объявления)
         sample_arrays = {}
-        if 'drums' in enabled:
+        samples_field = '0'
+        if sample_paths and not args.use_shared:
             for idx, path in sorted(sample_paths.items()):
                 smp_path = path if os.path.isabs(path) \
                     else os.path.join(base_dir, path)
@@ -616,7 +631,7 @@ def main():
                 dr_bytes = streams['drums'].bytes
                 for i in range(len(dr_bytes)):
                     sid = dr_bytes[i] - 1
-                    if 0 <= sid <= 9 and sid in missing:
+                    if 0 <= sid <= 15 and sid in missing:
                         dr_bytes[i] = MUS_REST
 
     except MusError as e:
@@ -629,41 +644,85 @@ def main():
     g = math.gcd(4 * tempo, 375)
     tempo_num, tempo_den = 4 * tempo // g, 375 // g
 
-    def cbytes(prefix, data):
-        lines = [f'static const unsigned char {prefix}[] = {{']
+    def cbytes(prefix, data, st=True):
+        kw = 'static const' if st else 'const'
+        lines = [f'{kw} unsigned char {prefix}[] = {{']
         for i in range(0, len(data), 12):
             chunk = ', '.join(f'0x{b:02X}' for b in data[i:i + 12])
             lines.append('    ' + chunk + ',')
         lines.append('};')
         return '\n'.join(lines)
 
+    is_shared_lib = args.shared_lib
+    is_use_shared = bool(args.use_shared)
     parts = [f'/* {os.path.basename(out)} — сгенерирован mus2inc.py из'
              f' {os.path.basename(fname)}; не редактировать. */\n']
+    if is_use_shared:
+        parts.insert(0, f'#include "{args.use_shared}.h"\n')
     for idx in sorted(sample_arrays):
-        parts.append(cbytes(f'{name}_smp{idx}', sample_arrays[idx]))
+        parts.append(cbytes(f'{name}_smp{idx}', sample_arrays[idx],
+                            st=not is_shared_lib))
     ch_names = (('score0', 's0'), ('score1', 's1'),
                 ('score2', 's2'), ('drums', 'dr'))
     for key, suffix in ch_names:
-        if key in enabled:            # выключенные каналы в .inc не идут
-            parts.append(cbytes(f'{name}_{suffix}', streams[key].bytes))
-    if 'drums' in enabled:
+        if key in enabled and not is_shared_lib:
+            parts.append(cbytes(f'{name}_{suffix}', streams[key].bytes,
+                                st=not is_shared_lib))
+    if sample_arrays:
         table = ', '.join(f'{name}_smp{i}' if i in sample_arrays else '0'
-                          for i in range(10))
-        parts.append(f'const unsigned char * const'
-                     f' {name}_samples[10] = {{\n    {table}\n}};')
+                          for i in range(16))
+        stbl_kw = 'const' if is_shared_lib else 'static const'
+        parts.append(f'{stbl_kw} unsigned char * const'
+                     f' {name}_samples[16] = {{\n    {table}\n}};')
         samples_field = f'{name}_samples'
+    elif is_use_shared:
+        samples_field = f'{args.use_shared}_samples'
     else:
         samples_field = '0'
-    parts.append(f'static const music_song_t {name}_song = {{')
+    if is_shared_lib:
+        ch_vals = '0, 0, 0, 0'
+    else:
+        ch_vals = ', '.join(f'{name}_{sfx}' if key in enabled
+                            else '0' for key, sfx in ch_names)
+    song_kw = 'const' if is_shared_lib else 'static const'
+    parts.append(f'{song_kw} music_song_t {name}_song = {{')
     parts.append(f'    {tempo_num}u, {tempo_den}u, {song_len}u,')
-    parts.append('    ' + ', '.join(f'{name}_{sfx}' if key in enabled
-                                     else '0' for key, sfx in ch_names)
-                 + ',')
+    parts.append(f'    {ch_vals},')
     parts.append(f'    {samples_field}')
     parts.append('};')
 
-    with open(out, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(parts) + '\n')
+    if is_shared_lib:
+        guard = re.sub(r'[^A-Z0-9]', '_',
+                       os.path.basename(out).upper().replace('.INC', '.H'))
+        h_path = re.sub(r'\.inc$', '.h', out, flags=re.I)
+        c_path = re.sub(r'\.inc$', '_data.c', out, flags=re.I)
+        h_parts = [f'/* {os.path.basename(h_path)} — extern declarations'
+                   f' для {name}; не редактировать. */\n',
+                   f'#ifndef {guard}\n',
+                   f'#define {guard}\n',
+                   '#include "v06.h"\n']
+        for idx in sorted(sample_arrays):
+            h_parts.append(
+                f'extern const unsigned char {name}_smp{idx}[];')
+        if sample_arrays:
+            h_parts.append(
+                f'extern const unsigned char * const'
+                f' {name}_samples[16];')
+        h_parts.append(f'extern const music_song_t {name}_song;')
+        h_parts.append('#endif')
+        c_parts = [f'/* {os.path.basename(c_path)} — определения данных'
+                   f' для {name}; не редактировать. */\n',
+                   f'#include "{os.path.basename(h_path)}"\n']
+        c_parts.extend(parts)
+        with open(h_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(h_parts) + '\n')
+        with open(c_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(c_parts) + '\n')
+        print(f'  -> {h_path} + {c_path}')
+    else:
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(parts) + '\n')
+        print(f'  -> {out}')
 
     print(f'{os.path.basename(fname)}: темп T{tempo}'
           f' ({tempo_num}/{tempo_den} тика/кадр), длина {song_len} тиков')
@@ -673,7 +732,6 @@ def main():
         print(f'  {key:7s}: событий {st.events:3d}, байткод'
               f' {len(st.bytes):4d} байт{off}')
     print(f'  семплы: {", ".join(str(i) for i in sorted(sample_arrays)) or "нет"}')
-    print(f'  -> {out}')
 
 
 if __name__ == '__main__':
