@@ -27,7 +27,7 @@ TXT2SMP  = ../../utils/txt2smp.py
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
-SRCS     = $(LIB)/startup.asm main.c \
+SRCS     = $(LIB)/startup.asm main.c nes_drums_data.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
            $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
            $(LIB)/drums.asm \
@@ -35,7 +35,7 @@ SRCS     = $(LIB)/startup.asm main.c \
 
 # music.c вместо sound.c (символы music_*/sound_* не конфликтуют,
 # но в одном ROM — один плеер)
-ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
+ZFLAGS   = +vector06c --no-crt -I. -I$(LIB) -DMUSIC_ONLY
 
 .PHONY: all deploy clean full mus samples
 
@@ -55,8 +55,8 @@ samples:
 full: clean
 	$(MAKE) deploy
 
-rom_data/%_music.inc: music/%.mus $(SAMPLES) $(MUS2INC)
-	python3 $(MUS2INC) $< -o $@ --name $*_music --allow-len-mismatch
+rom_data/%_music.inc: music/%.mus nes_drums.h $(MUS2INC)
+	python3 $(MUS2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch
 
 $(TARGET): $(SRCS) $(INCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \

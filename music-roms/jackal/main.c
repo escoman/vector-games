@@ -25,6 +25,7 @@
 #include <intrinsic.h>
 
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
+#include "nes_drums.h"              /* общая библиотека ударных NES */
 
 #include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
 #include "rom_data/track_0_music.inc"     /* music_song_t track_0_music_song */
@@ -115,6 +116,9 @@ int main(void)
     graph_rle_expand(title_bmp_screen_rle, 32u, 16u);
     show_menu(100);
     graph_set_palette(title_bmp_palette);
+
+    /* Загрузка библиотеки семплов NES в память. */
+    play_song(&nes_drums_song, 0);
 
     unsigned char track;
 

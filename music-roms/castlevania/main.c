@@ -15,8 +15,8 @@
  * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t).
  *
  * Управление:
- *   1 — Intro (по кругу);
- *   2 — Stage Clear;
+ *   1 — Intro;
+ *   2 — Level 1;
  *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -26,6 +26,7 @@
 #include <intrinsic.h>
 
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
+#include "nes_drums.h"              /* общая библиотека ударных NES */
 
 #include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
 #include "rom_data/track_0_music.inc"  /* music_song_t track_0_music_song */
@@ -65,18 +66,18 @@ static const struct {
     unsigned char dy;           /* смещение по вертикали от верха меню */
     const char *text;
 } menu_lines[] = {
-    { 8u,  0u, "CASTLEVANIA (NES) SOUNDTRACKS:" },
+    { 8u,  0u,      "CASTLEVANIA (NES) SOUNDTRACKS:" },
 
-    { 0u,  16u, "1 - INTRO" },
-    { 0u,  24u, "2 - STAGE CLEAR" },
-    { 0u,  34u, "0 - STOP MUSIC" },
+    { 0u,  16u,     "1 - INTRO" },
+    { 128u,  24u,   "2 - LEVEL 1" },
+    { 0u,  34u,     "0 - STOP MUSIC" },
 
-    { 0u,  60u, "KONAMI,1987" },
-    { 112u, 60u, "SARMIN ALEXEY,2026" },
-    { 112u, 70u, "    FOR VECTOR-06C" }
+    { 0u,  60u,     "KONAMI,1987" },
+    { 112u, 60u,    "SARMIN ALEXEY,2026" },
+    { 112u, 70u,    "    FOR VECTOR-06C" }
 };
 
-static void show_menu(void)
+static void show_menu(unsigned char selected)
 {
     unsigned char x0 = 0u;
     unsigned char y0 = (unsigned char)(title_bmp_height + 16u);
@@ -85,7 +86,7 @@ static void show_menu(void)
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
         graph_print((unsigned char)(x0 + menu_lines[i].dx),
                     (unsigned char)(y0 + menu_lines[i].dy),
-                    menu_lines[i].text, 8u);
+                    menu_lines[i].text, selected == i ? 8u : 4u);
     }
 }
 
@@ -104,8 +105,13 @@ int main(void)
     graph_set_black_palette();
     graph_clear(0);
     graph_rle_expand(title_bmp_screen_rle, 0u, 0u);
-    show_menu();
+    show_menu(100);
     graph_set_palette(title_bmp_palette);
+
+    /* Загрузка библиотеки семплов NES в память. */
+    play_song(&nes_drums_song, 0);
+
+    unsigned char track;
 
     for (;;) {
         wait_one_frame();
@@ -114,10 +120,14 @@ int main(void)
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
             if (key == '0') {
                 music_stop();
-            } else if (key == '1') {
-                play_song(&track_0_music_song, 0);
-            } else if (key == '2') {
-                play_song(&track_1_music_song, 0);
+                show_menu(100);
+            } else if (key >= '1' && key <= '2') {
+                track = key - '1';
+                const music_song_t *songs[] = {
+                    &track_0_music_song, &track_1_music_song
+                };
+                play_song(songs[track], 0);
+                show_menu(track+1);
             } else if (key == 27) {     /* СТОП (ESC) */
                 break;
             }

@@ -28,13 +28,13 @@ SONGS    = track_0 track_1
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
-SRCS     = $(LIB)/startup.asm main.c \
+SRCS     = $(LIB)/startup.asm main.c nes_drums_data.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
            $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
            $(LIB)/drums.asm \
            $(LIB)/graph.c $(LIB)/music.c $(LIB)/keyboard.c
 
-ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
+ZFLAGS   = +vector06c --no-crt -I. -I$(LIB) -DMUSIC_ONLY
 
 .PHONY: all deploy clean full mus samples
 
@@ -57,8 +57,8 @@ full: clean
 rom_data/title_bmp.inc: rom_data/title.bmp $(BMP2INC)
 	python3 $(BMP2INC) $<
 
-rom_data/%_music.inc: music/%.mus $(SAMPLES) $(MUS2INC)
-	python3 $(MUS2INC) $< -o $@ --name $*_music --allow-len-mismatch
+rom_data/%_music.inc: music/%.mus nes_drums.h $(MUS2INC)
+	python3 $(MUS2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch
 
 $(TARGET): $(SRCS) rom_data/title_bmp.inc $(INCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \

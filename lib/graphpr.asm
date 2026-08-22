@@ -104,6 +104,7 @@ glyph_found:
         ld      c, a                    ; C = цвет (жив до конца)
         ld      b, 8                    ; маска плоскости веса 8
 plane_loop:
+        push    hl
         ld      a, (tmp_glyph)          ; указатель глифа для плоскости
         ld      e, a
         ld      a, (tmp_glyph + 1)
@@ -141,7 +142,7 @@ plane_loop:
         inc     de
         ld      a, (de)                 ; строка 7
         ld      (hl), a
-        dec     hl
+        pop     hl
         jp      plane_next
 plane_clear:
         xor     a
@@ -160,9 +161,10 @@ plane_clear:
         ld      (hl), a
         dec     hl
         ld      (hl), a
+        pop     hl
 plane_next:
         ld      a, l                    ; HL = база следующей плоскости:
-        add     a, 8                    ; HL уже сдвинут на -8, добавляем
+        ;add     a, 8                    ; HL уже сдвинут на -8, добавляем
         ld      l, a                    ; +0x2008
         ld      a, h
         adc     a, 0x20
