@@ -141,6 +141,7 @@ plane_loop:
         inc     de
         ld      a, (de)                 ; строка 7
         ld      (hl), a
+        dec     hl
         jp      plane_next
 plane_clear:
         xor     a

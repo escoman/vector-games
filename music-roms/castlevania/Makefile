@@ -24,7 +24,7 @@ TARGET   = castlevania.rom
 
 # Партитуры: music/*.mus (+ samples/*.smp) -> rom_data/*_music.inc
 # Имена совпадают с исходниками: track_N.mus -> track_N_music.inc.
-SONGS    = track_0
+SONGS    = track_0 track_1
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 

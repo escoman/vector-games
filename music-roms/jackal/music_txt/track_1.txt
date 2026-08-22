@@ -1,4 +1,4 @@
-Jackal.nsf track=1 framerate=60
+jackal.nsf track=1 framerate=60
 Square1(161)
 time dur note vol
 0.000 0.117 D5 9

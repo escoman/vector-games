@@ -15,7 +15,7 @@
  * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t).
  *
  * Управление:
- *   1 — Track 1 (по кругу);
+ *   1..7 — Track 0..6 (по кругу);
  *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -27,7 +27,13 @@
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
 
 #include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
+#include "rom_data/track_0_music.inc"     /* music_song_t track_0_music_song */
 #include "rom_data/track_1_music.inc"     /* music_song_t track_1_music_song */
+#include "rom_data/track_2_music.inc"     /* music_song_t track_2_music_song */
+#include "rom_data/track_3_music.inc"     /* music_song_t track_3_music_song */
+#include "rom_data/track_4_music.inc"     /* music_song_t track_4_music_song */
+#include "rom_data/track_5_music.inc"     /* music_song_t track_5_music_song */
+#include "rom_data/track_6_music.inc"     /* music_song_t track_6_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -65,24 +71,30 @@ static const struct {
 } menu_lines[] = {
     { 32u,  0u, "JACKAL (NES) SOUNDTRACKS:" },
     
-    { 0u,  16u, "1 - TRACK 1" },
-    { 0u,  26u, "0 - STOP MUSIC" },
+    { 0u,   16u, "1 - INTRO" },
+    { 0u,   24u, "2 - LEVEL 1" },
+    { 0u,   32u, "3 - LEVEL 2" },
+    { 0u,   40u, "4 - LEVEL 3" },
+    { 128u, 16u, "5 - BOSS" },
+    { 128u, 24u, "6 - STAGE CLEAR" },
+    { 128u, 32u, "7 - GAME OVER" },
+    { 0u,   52u, "0 - STOP MUSIC" },
 
-    { 0u,  60u, "KONAMI,1988" },
-    { 112u, 60u, "SARMIN ALEXEY,2026" },
-    { 112u, 70u, "    FOR VECTOR-06C" }
+    { 0u,   80u, "KONAMI,1988" },
+    { 112u, 80u, "SARMIN ALEXEY,2026" },
+    { 112u, 90u, "    FOR VECTOR-06C" }
 };
 
-static void show_menu(void)
+static void show_menu(unsigned char selected)
 {
     unsigned char x0 = 0u;
-    unsigned char y0 = (unsigned char)(title_bmp_height + 16u);
+    unsigned char y0 = (unsigned char)(title_bmp_height + 32u);
     unsigned char i;
 
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
         graph_print((unsigned char)(x0 + menu_lines[i].dx),
                     (unsigned char)(y0 + menu_lines[i].dy),
-                    menu_lines[i].text, 8u);
+                    menu_lines[i].text, selected == i ? 1u : 8u);
     }
 }
 
@@ -100,9 +112,11 @@ int main(void)
      * по завершении — рабочая палитра картинки и текст меню */
     graph_set_black_palette();
     graph_clear(0);
-    graph_rle_expand(title_bmp_screen_rle, 0u, 0u);
-    show_menu();
+    graph_rle_expand(title_bmp_screen_rle, 32u, 16u);
+    show_menu(100);
     graph_set_palette(title_bmp_palette);
+
+    unsigned char track;
 
     for (;;) {
         wait_one_frame();
@@ -111,9 +125,17 @@ int main(void)
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */
             if (key == '0') {
                 music_stop();
-            } else if (key == '1') {
-                graph_clear(0);         /* очистить экран перед диагностикой */
-                play_song(&track_1_music_song, 1u);
+                show_menu(100);
+            } else if (key >= '1' && key <= '7') {
+                track = key - '1';
+                const music_song_t *songs[] = {
+                    &track_0_music_song, &track_1_music_song,
+                    &track_2_music_song, &track_3_music_song,
+                    &track_4_music_song, &track_5_music_song,
+                    &track_6_music_song
+                };
+                play_song(songs[track], 0);
+                show_menu(track+1);
             } else if (key == 27) {     /* СТОП (ESC) */
                 break;
             }

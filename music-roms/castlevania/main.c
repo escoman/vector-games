@@ -16,6 +16,7 @@
  *
  * Управление:
  *   1 — Intro (по кругу);
+ *   2 — Stage Clear;
  *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -28,6 +29,7 @@
 
 #include "rom_data/title_bmp.inc"      /* title_bmp_screen_rle, title_bmp_palette */
 #include "rom_data/track_0_music.inc"  /* music_song_t track_0_music_song */
+#include "rom_data/track_1_music.inc"  /* music_song_t track_1_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -66,7 +68,8 @@ static const struct {
     { 8u,  0u, "CASTLEVANIA (NES) SOUNDTRACKS:" },
 
     { 0u,  16u, "1 - INTRO" },
-    { 0u,  26u, "0 - STOP MUSIC" },
+    { 0u,  24u, "2 - STAGE CLEAR" },
+    { 0u,  34u, "0 - STOP MUSIC" },
 
     { 0u,  60u, "KONAMI,1987" },
     { 112u, 60u, "SARMIN ALEXEY,2026" },
@@ -113,6 +116,8 @@ int main(void)
                 music_stop();
             } else if (key == '1') {
                 play_song(&track_0_music_song, 0);
+            } else if (key == '2') {
+                play_song(&track_1_music_song, 0);
             } else if (key == 27) {     /* СТОП (ESC) */
                 break;
             }
