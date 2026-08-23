@@ -347,7 +347,9 @@ def _process_tone(events, tps):
     merged = merge_tone(regular)
     w = Writer()
     cur = 0
-    offset = 0                # выход = вход + offset (вне циклов)
+    # abs_base — абсолютная позиция «выхода» после всех завершённых
+    # циклов (для outro).  Внутри цикла время считается относительно 0.
+    abs_base = 0
 
     if not cycles:
         # --- обычный путь (без циклов) — идентичен старому коду ---
@@ -370,55 +372,85 @@ def _process_tone(events, tps):
         ce_tick = quant_ticks(ce, tps)
         cyc_dur = max(ce_tick - cb_tick, 1)
 
-        # intro: события до начала цикла
+        # intro: события, начавшиеся до BEGIN.
+        # Ноты, пересекающие границу, обрезаются по cb — хвост не
+        # должен «заезжать» за BEGIN (иначе каналы рассинхронизируются,
+        # а внутри цикла cur/длительности схлопываются в 1 тик).
         while ei < len(merged) and merged[ei]['start'] < cb - EPS:
             e = merged[ei]
-            s = quant_ticks(e['start'], tps) + offset
+            s = quant_ticks(e['start'], tps)
             if s > cur:
                 w.rest(s - cur)
-            end = quant_ticks(e['end'], tps) + offset
-            ticks = max(end - max(s, cur), 1)
-            w.note(e['note'], ticks)
-            cur = max(s, cur) + ticks
+            end = min(quant_ticks(e['end'], tps), cb_tick)
+            if end > max(s, cur):
+                ticks = end - max(s, cur)
+                w.note(e['note'], ticks)
+                cur = max(s, cur) + ticks
             ei += 1
 
-        # BEGIN + принудительный сброс O/L
-        w.toks.append('BEGIN')
-        w.force_state()
-        cur = 0                   # сброс позиции: внутри цикла время с 0
+        # Добиваем intro паузами ровно до cb_tick (единая граница
+        # для всех каналов).
+        if cur < cb_tick:
+            w.rest(cb_tick - cur)
+            cur = cb_tick
+        elif cur > cb_tick:
+            # Не должно случаться после клипа; подстрахуемся.
+            cur = cb_tick
 
-        # события внутри цикла (относительное время)
-        cycle_start = ei
+        # BEGIN: сбрасываем O/L, чтобы первая нота/пауза цикла
+        # заново выставила состояние.  Старое force_state() тащило
+        # L/O из intro (часто короткий хвост L32/L64) — при повторе
+        # цикла это давало неверный старт.
+        w.toks.append('BEGIN')
+        w.oct = None
+        w.l_ticks = None
+        cur = 0
+
+        # События внутри цикла (относительное время от cb).
+        # Ноты, начавшиеся до cb, уже обработаны в intro (обрезаны);
+        # здесь только start ∈ [cb, ce).
         while ei < len(merged) and merged[ei]['start'] < ce - EPS:
             e = merged[ei]
+            # start мог быть < cb из-за float — пропускаем хвосты intro
+            if e['start'] < cb - EPS:
+                ei += 1
+                continue
             s = quant_ticks(e['start'], tps) - cb_tick
             s = max(s, 0)
             if s > cur:
                 w.rest(s - cur)
+                cur = s
             end = quant_ticks(e['end'], tps) - cb_tick
-            end = min(end, cyc_dur)       # клип по границе цикла
-            ticks = max(end - max(s, cur), 1)
-            w.note(e['note'], ticks)
-            cur = max(s, cur) + ticks
+            end = min(end, cyc_dur)
+            if end > cur:
+                ticks = end - cur
+                w.note(e['note'], ticks)
+                cur = end
             ei += 1
 
-        # выравнивающая пауза: если канал закончил раньше cyc_dur
+        # Выравнивающая пауза до конца цикла.
         if cur < cyc_dur:
             w.rest(cyc_dur - cur)
+            cur = cyc_dur
 
-        # END
         w.toks.append('END')
-        cur = cyc_dur
-        # накопление смещения: выход = вход + offset (вне циклов)
-        offset += cyc_dur - (ce_tick - cb_tick)
+        # Абсолютная позиция после прохода intro+cycle (один раз в
+        # линейном потоке токенов).  Outro считает паузы отсюда.
+        abs_base = cb_tick + cyc_dur
+        cur = abs_base
 
     # outro: события после последнего цикла
     while ei < len(merged):
         e = merged[ei]
-        s = quant_ticks(e['start'], tps) + offset
+        s = quant_ticks(e['start'], tps)
+        # ноты, начавшиеся внутри цикла, но обрезанные по ce —
+        # не повторяем в outro
+        if e['start'] < cycles[-1]['end'] - EPS:
+            ei += 1
+            continue
         if s > cur:
             w.rest(s - cur)
-        end = quant_ticks(e['end'], tps) + offset
+        end = quant_ticks(e['end'], tps)
         ticks = max(end - max(s, cur), 1)
         w.note(e['note'], ticks)
         cur = max(s, cur) + ticks
@@ -432,7 +464,6 @@ def _process_drums(events, tps):
     cycles, regular = _extract_cycles(events)
     w = Writer()
     cur = 0
-    offset = 0
 
     if not cycles:
         # --- обычный путь (без циклов) ---
@@ -458,37 +489,46 @@ def _process_drums(events, tps):
         ce_tick = quant_ticks(ce, tps)
         cyc_dur = max(ce_tick - cb_tick, 1)
 
-        # intro
+        # intro: удары до BEGIN; длительность клипуем по cb
         while ei < len(regular) and regular[ei]['start'] < cb - EPS:
             e = regular[ei]
-            s = quant_ticks(e['start'], tps) + offset
+            s = quant_ticks(e['start'], tps)
             if s > cur:
                 w.rest(s - cur)
             nxt_idx = ei + 1
             if nxt_idx < len(regular) and regular[nxt_idx]['start'] < cb - EPS:
-                nxt = quant_ticks(regular[nxt_idx]['start'], tps) + offset
+                nxt = quant_ticks(regular[nxt_idx]['start'], tps)
             else:
-                nxt = None
-            end = nxt if nxt is not None else \
-                quant_ticks(e['start'] + e['dur'], tps) + offset
-            ticks = max(end - max(s, cur), 1)
-            w.hit(e['noise_idx'], ticks)
-            cur = max(s, cur) + ticks
+                nxt = cb_tick
+            end = min(nxt if nxt is not None else
+                      quant_ticks(e['start'] + e['dur'], tps), cb_tick)
+            if end > max(s, cur):
+                ticks = end - max(s, cur)
+                w.hit(e['noise_idx'], ticks)
+                cur = max(s, cur) + ticks
             ei += 1
 
-        # BEGIN + принудительный сброс L (октава для ударных не нужна)
-        w.toks.append('BEGIN')
-        w.force_state(with_octave=False)
-        cur = 0                   # сброс позиции: внутри цикла время с 0
+        if cur < cb_tick:
+            w.rest(cb_tick - cur)
+            cur = cb_tick
+        elif cur > cb_tick:
+            cur = cb_tick
 
-        # события внутри цикла
-        cycle_ei_start = ei
+        # BEGIN: сброс L, чтобы первый удар/пауза цикла выставил длительность
+        w.toks.append('BEGIN')
+        w.l_ticks = None
+        cur = 0
+
         while ei < len(regular) and regular[ei]['start'] < ce - EPS:
             e = regular[ei]
+            if e['start'] < cb - EPS:
+                ei += 1
+                continue
             s = quant_ticks(e['start'], tps) - cb_tick
             s = max(s, 0)
             if s > cur:
                 w.rest(s - cur)
+                cur = s
             nxt_idx = ei + 1
             if nxt_idx < len(regular) and \
                     regular[nxt_idx]['start'] < ce - EPS:
@@ -498,33 +538,35 @@ def _process_drums(events, tps):
             end = nxt if nxt is not None else \
                 quant_ticks(e['start'] + e['dur'], tps) - cb_tick
             end = min(end, cyc_dur)
-            ticks = max(end - max(s, cur), 1)
-            w.hit(e['noise_idx'], ticks)
-            cur = max(s, cur) + ticks
+            if end > cur:
+                ticks = end - cur
+                w.hit(e['noise_idx'], ticks)
+                cur = end
             ei += 1
 
-        # выравнивающая пауза: если канал закончил раньше cyc_dur
         if cur < cyc_dur:
             w.rest(cyc_dur - cur)
+            cur = cyc_dur
 
-        # END
         w.toks.append('END')
-        cur = cyc_dur
-        offset += cyc_dur - (ce_tick - cb_tick)
+        cur = cb_tick + cyc_dur
 
     # outro
     while ei < len(regular):
         e = regular[ei]
-        s = quant_ticks(e['start'], tps) + offset
+        if e['start'] < cycles[-1]['end'] - EPS:
+            ei += 1
+            continue
+        s = quant_ticks(e['start'], tps)
         if s > cur:
             w.rest(s - cur)
         nxt_idx = ei + 1
         if nxt_idx < len(regular):
-            nxt = quant_ticks(regular[nxt_idx]['start'], tps) + offset
+            nxt = quant_ticks(regular[nxt_idx]['start'], tps)
         else:
             nxt = None
         end = nxt if nxt is not None else \
-            quant_ticks(e['start'] + e['dur'], tps) + offset
+            quant_ticks(e['start'] + e['dur'], tps)
         ticks = max(end - max(s, cur), 1)
         w.hit(e['noise_idx'], ticks)
         cur = max(s, cur) + ticks

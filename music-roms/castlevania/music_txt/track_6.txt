@@ -1,5 +1,5 @@
 Castlevania.nsf track=6 framerate=60
-Square1(92)
+Square1(93)
 time dur note vol
 1.600 0.167 C3 8
 1.800 0.167 C#3 8
@@ -26,8 +26,8 @@ time dur note vol
 6.000 0.200 C3 13
 6.200 0.200 C#3 13
 6.400 0.350 C#4 6
-6.800 BEGIN_CYCLE
 7.000 1.550 G3 6
+9.600 BEGIN_CYCLE
 9.600 0.517 F#3 4
 10.200 0.517 G3 4
 10.800 0.517 C#4 4
@@ -94,8 +94,9 @@ time dur note vol
 41.200 0.150 B3 4
 41.400 0.150 A#3 4
 41.600 0.350 C#4 6
-42.000 END_CYCLE
-Square2(75)
+42.200 1.550 G3 6
+44.800 END_CYCLE
+Square2(76)
 time dur note vol
 3.200 0.150 C4 5
 3.400 0.150 C#4 5
@@ -114,8 +115,8 @@ time dur note vol
 6.000 0.183 C4 8
 6.200 0.183 C#4 8
 6.400 0.350 E4 6
-6.800 BEGIN_CYCLE
 7.000 1.550 C#4 6
+9.600 BEGIN_CYCLE
 9.600 0.533 C4 5
 10.200 0.533 C#4 5
 10.800 0.533 E4 5
@@ -173,8 +174,9 @@ time dur note vol
 41.200 0.183 D#4 7
 41.400 0.183 D4 7
 41.600 0.350 E4 6
-42.000 END_CYCLE
-Triangle(195)
+42.200 1.550 C#4 6
+44.800 END_CYCLE
+Triangle(202)
 time dur note vol
 0.000 0.117 C4 15
 0.200 0.117 C#4 15
@@ -209,7 +211,6 @@ time dur note vol
 6.000 0.117 C4 15
 6.200 0.117 C#4 15
 6.400 0.233 C4 15
-6.800 BEGIN_CYCLE
 6.800 0.233 C#4 15
 7.200 0.233 C4 15
 7.600 0.233 C#4 15
@@ -217,6 +218,7 @@ time dur note vol
 8.400 0.233 C#4 15
 8.800 0.233 C4 15
 9.200 0.233 C#4 15
+9.600 BEGIN_CYCLE
 9.600 0.233 C4 15
 10.000 0.233 C#4 15
 10.400 0.233 C4 15
@@ -372,8 +374,15 @@ time dur note vol
 40.000 0.083 G#3 15
 40.100 0.083 G#3 15
 41.600 0.233 C4 15
-42.000 END_CYCLE
-Noise(438)
+42.000 0.233 C#4 15
+42.400 0.233 C4 15
+42.800 0.233 C#4 15
+43.200 0.233 C4 15
+43.600 0.233 C#4 15
+44.000 0.233 C4 15
+44.400 0.233 C#4 15
+44.800 END_CYCLE
+Noise(465)
 time dur noise vol drum
 0.000 0.017 11 8 kick_tight
 0.017 0.033 13 3 roar_ultra_low
@@ -445,7 +454,6 @@ time dur noise vol drum
 6.417 0.033 13 3 roar_ultra_low
 6.600 0.017 11 8 kick_tight
 6.617 0.033 13 3 roar_ultra_low
-6.800 BEGIN_CYCLE
 6.800 0.017 11 8 kick_tight
 6.817 0.033 13 3 roar_ultra_low
 7.000 0.017 11 8 kick_tight
@@ -473,6 +481,7 @@ time dur noise vol drum
 9.200 0.017 11 8 kick_tight
 9.217 0.033 13 3 roar_ultra_low
 9.400 0.200 8 6 tom_low
+9.600 BEGIN_CYCLE
 9.600 0.050 13 1 roar_ultra_low
 9.800 0.017 11 8 kick_tight
 9.817 0.033 13 3 roar_ultra_low
@@ -814,8 +823,35 @@ time dur noise vol drum
 41.600 0.050 13 1 roar_ultra_low
 41.800 0.017 11 8 kick_tight
 41.817 0.033 13 3 roar_ultra_low
-42.000 END_CYCLE
+42.000 0.017 11 8 kick_tight
+42.017 0.033 13 3 roar_ultra_low
+42.200 0.017 11 8 kick_tight
+42.217 0.033 13 3 roar_ultra_low
+42.400 0.017 11 8 kick_tight
+42.417 0.033 13 3 roar_ultra_low
+42.600 0.017 11 8 kick_tight
+42.617 0.033 13 3 roar_ultra_low
+42.800 0.017 11 8 kick_tight
+42.817 0.033 13 3 roar_ultra_low
+43.000 0.017 11 8 kick_tight
+43.017 0.033 13 3 roar_ultra_low
+43.200 0.017 11 8 kick_tight
+43.217 0.033 13 3 roar_ultra_low
+43.400 0.017 11 8 kick_tight
+43.417 0.033 13 3 roar_ultra_low
+43.600 0.017 11 8 kick_tight
+43.617 0.033 13 3 roar_ultra_low
+43.800 0.017 11 8 kick_tight
+43.817 0.033 13 3 roar_ultra_low
+44.000 0.017 11 8 kick_tight
+44.017 0.033 13 3 roar_ultra_low
+44.200 0.017 11 8 kick_tight
+44.217 0.033 13 3 roar_ultra_low
+44.400 0.017 11 8 kick_tight
+44.417 0.033 13 3 roar_ultra_low
+44.600 0.200 8 6 tom_low
+44.800 END_CYCLE
 DPCM(0)
 time dur note vol
-6.800 BEGIN_CYCLE
-42.000 END_CYCLE
+9.600 BEGIN_CYCLE
+44.800 END_CYCLE
