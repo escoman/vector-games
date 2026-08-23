@@ -15,7 +15,7 @@
  * ваны utils/mus2inc.py в rom_data/*_music.inc (music_song_t).
  *
  * Управление:
- *   1..7 — Track 0..6 (по кругу);
+ *   1..8 — Track 0..7 (по кругу);
  *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -35,6 +35,7 @@
 #include "rom_data/track_4_music.inc"     /* music_song_t track_4_music_song */
 #include "rom_data/track_5_music.inc"     /* music_song_t track_5_music_song */
 #include "rom_data/track_6_music.inc"     /* music_song_t track_6_music_song */
+#include "rom_data/track_7_music.inc"     /* music_song_t track_7_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -79,6 +80,7 @@ static const struct {
     { 128u, 16u, "5 - BOSS" },
     { 128u, 24u, "6 - STAGE CLEAR" },
     { 128u, 32u, "7 - GAME OVER" },
+    { 128u, 40u, "8 - CREDITS" },
     { 0u,   52u, "0 - STOP MUSIC" },
 
     { 0u,   80u, "KONAMI,1988" },
@@ -130,13 +132,13 @@ int main(void)
             if (key == '0') {
                 music_stop();
                 show_menu(100);
-            } else if (key >= '1' && key <= '7') {
+            } else if (key >= '1' && key <= '8') {
                 track = key - '1';
                 const music_song_t *songs[] = {
                     &track_0_music_song, &track_1_music_song,
                     &track_2_music_song, &track_3_music_song,
                     &track_4_music_song, &track_5_music_song,
-                    &track_6_music_song
+                    &track_6_music_song, &track_7_music_song
                 };
                 play_song(songs[track], 0);
                 show_menu(track+1);

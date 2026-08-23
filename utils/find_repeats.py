@@ -16,10 +16,20 @@
 на выходе паттерна ≠ входу и паттерн сам не выставляет его ведущим
 модификатором), сбросы добавляются *внутрь* [ ... ]n — они
 выполняются на каждой итерации. Найденный повтор оборачивается в
-[ ... ]n. Процесс повторяется, пока находятся новые повторы.
+[ ... ]n.
 
 Существующие BEGIN/END и уже расставленные скобки сохраняются
 (поиск только на глубине 0).
+
+Оптимизации скорости:
+  * префиксные полиномиальные хеши — сравнение подстрок за O(1)
+    вместо O(length), суммарно O(n²) на проход;
+  * токены кодируются плотными id (int), без повторного сравнения
+    строк при проверке копий;
+  * за один проход собираются ВСЕ валидные кандидаты, затем жадно
+    применяются непересекающиеся замены с максимальной экономией.
+    Это даёт обычно 2–5 проходов вместо сотен (когда на каждый
+    повтор делался полный пересчёт → фактически O(n³)).
 """
 
 import sys
@@ -55,7 +65,8 @@ def parse_mus(text):
         if m:
             if cur_name is not None:
                 sections.append((cur_name, cur_toks))
-            cur_name = m.group(1).replace(' ', '')   # «score 0» → «score0»
+            # «score 0» → «score0»
+            cur_name = m.group(1).replace(' ', '')
             cur_toks = []
             continue
         if cur_name is not None:
@@ -69,22 +80,29 @@ def parse_mus(text):
 
 # ── Поиск повторов ─────────────────────────────────────────────────
 
-def _is_mod(t):
+def _is_mod_token(t):
     """True, если токен — модификатор O* или L*."""
-    return bool(re.match(r'^[OoLl]\d+$', t))
+    return (t[0] in 'OoLl') and t[1:].isdigit() if t else False
 
 
 def find_repeats(tokens):
     """Поиск повторов на уровне токенов с автосбросом состояния O/L.
 
-    Алгоритм перебирает ВСЕ (позиция, длина) и выбирает паттерн с
-    максимальной экономией: savings = (count-1)*length - 2 - len(resets).
+    Алгоритм за каждый проход:
+      1. Строит префиксные хеши и таблицы depth / oct_at / len_at / is_mod.
+      2. Перебирает все (длина, позиция), находит consecutive-run'ы
+         одинаковых блоков длины ≥ 2.
+      3. Для каждого кандидата считает savings =
+           (count-1)*length - 2 - len(resets) и список сбросов O/L.
+      4. Жадно применяет непересекающиеся кандидаты (по убыванию
+         savings, затем более длинные, затем более ранние).
 
     Граничные ограничения:
       • Паттерн НЕ начинается с ноты/P, если перед ней стоит L/O
         (модификатор остался бы снаружи, оторванный от ноты).
       • Паттерн НЕ заканчивается токеном L/O
         (модификатор оказался бы перед следующей нотой снаружи).
+      • Поиск только на глубине 0 (не внутри уже существующих [ ]n).
 
     Сбросы L/O (если нужны) кладутся *внутрь* [ ... ]n в начало секции,
     чтобы выполняться на каждой итерации цикла.  Сброс L нужен только
@@ -92,122 +110,187 @@ def find_repeats(tokens):
     аналогично для O.  Если ведущий модификатор уже есть — он сам
     выставит состояние на каждой итерации, сброс не требуется.
 
-    Без вложенности: только глубина 0.
+    Оптимизация strip: если сбросов нет и паттерн начинается с O/L,
+    совпадающего с enter *и* end, ведущий модификатор можно убрать
+    из тела [ ] — снаружи он уже действует.
+
+    Цикл проходов ограничен 32 итерациями; на практике сходится
+    за 2–5 из‑за multi-apply.
     """
+    tokens = list(tokens)
+    re_o = re.compile(r'^[Oo](\d+)$')
+    re_l = re.compile(r'^[Ll](\d+)$')
+    re_bracket_end = re.compile(r'^\]\d+$')
     MAX_REPEAT = 255
 
-    changed = True
-    while changed:
-        changed = False
-        best = None          # (savings, length, position, count, resets)
+    for _pass in range(32):
+        n = len(tokens)
+        if n < 4:
+            break
 
-        # Глубина скобок (для запрета вложенности)
-        depth = [0] * (len(tokens) + 1)
-        for idx, t in enumerate(tokens):
-            depth[idx + 1] = depth[idx]
+        # --- плотные id + префиксные хеши (сравнение подстрок O(1)) ---
+        id_map = {}
+        ids = [0] * n
+        for i, t in enumerate(tokens):
+            k = id_map.get(t)
+            if k is None:
+                k = len(id_map) + 1
+                id_map[t] = k
+            ids[i] = k
+
+        MOD = (1 << 61) - 1          # 2^61 - 1
+        BASE = 257
+        H = [0] * (n + 1)
+        Pw = [1] * (n + 1)
+        for i in range(n):
+            H[i + 1] = (H[i] * BASE + ids[i]) % MOD
+            Pw[i + 1] = (Pw[i] * BASE) % MOD
+
+        def subh(i, length):
+            """Хеш tokens[i : i+length]."""
+            return (H[i + length] - H[i] * Pw[length]) % MOD
+
+        def equal_ids(a, b, length):
+            """Точное сравнение по id (защита от коллизий хеша)."""
+            return ids[a:a + length] == ids[b:b + length]
+
+        # --- глубина скобок, is_mod, состояние O/L перед каждым токеном ---
+        depth = [0] * (n + 1)
+        is_mod = [False] * n
+        oct_at = [4] * (n + 1)       # default O4
+        len_at = [4] * (n + 1)       # default L4
+        for i, t in enumerate(tokens):
+            depth[i + 1] = depth[i]
+            oct_at[i + 1] = oct_at[i]
+            len_at[i + 1] = len_at[i]
             if t == '[':
-                depth[idx + 1] += 1
-            elif t.startswith(']') and t[1:].isdigit():
-                depth[idx + 1] -= 1
+                depth[i + 1] += 1
+            elif re_bracket_end.match(t):
+                depth[i + 1] -= 1
+            else:
+                mo = re_o.match(t)
+                if mo:
+                    oct_at[i + 1] = int(mo.group(1))
+                    is_mod[i] = True
+                    continue
+                ml = re_l.match(t)
+                if ml:
+                    len_at[i + 1] = int(ml.group(1))
+                    is_mod[i] = True
 
-        # Состояние O/L в каждой позиции (для определения сбросов)
-        # oct_at[i] / len_at[i] — состояние *перед* токеном tokens[i]
-        oct_at = [4] * (len(tokens) + 1)
-        len_at = [4] * (len(tokens) + 1)      # L4 = старт по умолчанию
-        for idx, t in enumerate(tokens):
-            oct_at[idx + 1] = oct_at[idx]
-            len_at[idx + 1] = len_at[idx]
-            m = re.match(r'[Oo](\d+)$', t)
-            if m:
-                oct_at[idx + 1] = int(m.group(1))
-                continue
-            m = re.match(r'[Ll](\d+)$', t)
-            if m:
-                len_at[idx + 1] = int(m.group(1))
-
-        # Перебор всех (длина, позиция)
-        max_len = len(tokens) // 2
+        # --- сбор кандидатов: (savings, length, pos, count, resets) ---
+        # Для каждой длины идём слева направо; после run'а перескакиваем
+        # на его конец — не плодим пересекающиеся кандидаты одной длины.
+        cands = []
+        max_len = n // 2
         for length in range(2, max_len + 1):
-            for i in range(len(tokens) - 2 * length + 1):
+            i = 0
+            limit = n - 2 * length
+            while i <= limit:
                 if depth[i] != 0:
+                    i += 1
                     continue
-                # Границы: паттерн не должен разрывать L/O с нотой
-                if i > 0 and _is_mod(tokens[i - 1]) and not _is_mod(tokens[i]):
-                    continue                # перед паттерном L/O — оторвётся
-                if _is_mod(tokens[i + length - 1]):
-                    continue                # паттерн кончается L/O
-                # Быстрая проверка: первая копия == вторая?
-                if tokens[i:i + length] != tokens[i + length:i + 2 * length]:
+                # Границы: не разрывать L/O с нотой
+                if i > 0 and is_mod[i - 1] and not is_mod[i]:
+                    i += 1
                     continue
-                # Считаем кол-во копий
+                if is_mod[i + length - 1]:
+                    i += 1
+                    continue
+
+                h0 = subh(i, length)
+                if h0 != subh(i + length, length):
+                    i += 1
+                    continue
+                if not equal_ids(i, i + length, length):
+                    i += 1
+                    continue
+
+                # Считаем число подряд идущих копий
                 count = 2
-                while (i + (count + 1) * length <= len(tokens) and
-                       tokens[i + count * length:
-                              i + (count + 1) * length] ==
-                       tokens[i:i + length]):
+                end_limit = n - length
+                while i + count * length <= end_limit:
+                    j = i + count * length
+                    if depth[j] != 0:
+                        break
+                    if h0 != subh(j, length) or not equal_ids(i, j, length):
+                        break
                     count += 1
 
-                # Есть ли ведущие модификаторы в паттерне (до первой ноты)?
-                has_leading_L = False
-                has_leading_O = False
-                for t in tokens[i:i + length]:
-                    if re.match(r'[Ll]\d+$', t):
-                        has_leading_L = True
-                        continue
-                    if re.match(r'[Oo]\d+$', t):
-                        has_leading_O = True
-                        continue
-                    break   # дошли до ноты / P / цифры / скобки
+                # Ведущие модификаторы в паттерне (до первой ноты / P / …)
+                has_L = has_O = False
+                for k in range(i, i + length):
+                    t = tokens[k]
+                    if is_mod[k]:
+                        if t[0] in 'Ll':
+                            has_L = True
+                            continue
+                        if t[0] in 'Oo':
+                            has_O = True
+                            continue
+                    break
 
-                enter_o = oct_at[i]
-                enter_l = len_at[i]
-                o_end = oct_at[i + length]
-                l_end = len_at[i + length]
-
-                # Сброс нужен только если модификатор НЕ выставляется
-                # внутри паттерна в начале и состояние на выходе другое.
-                # Сбросы пойдут *внутрь* [ ], поэтому сработают на каждой
-                # итерации.
+                # Сбросы внутрь [ ] — только если end ≠ enter и нет
+                # ведущего модификатора, который сам выставит состояние
                 resets = []
-                if not has_leading_L and l_end != enter_l:
-                    resets.append(f'L{enter_l}')
-                if not has_leading_O and o_end != enter_o:
-                    resets.append(f'O{enter_o}')
+                if not has_L and len_at[i + length] != len_at[i]:
+                    resets.append(f'L{len_at[i]}')
+                if not has_O and oct_at[i + length] != oct_at[i]:
+                    resets.append(f'O{oct_at[i]}')
 
-                savings = ((count - 1) * length - 2 - len(resets))
-                if best is None or savings > best[0]:
-                    best = (savings, length, i, count, resets)
+                savings = (count - 1) * length - 2 - len(resets)
+                if savings > 0:
+                    cands.append((savings, length, i, count, resets))
 
-        if best:
-            savings, length, pos, count, resets = best
-            n = min(count, MAX_REPEAT)
+                # Непересекающиеся run'ы одной длины
+                i += count * length
+
+        if not cands:
+            break
+
+        # --- жадно применить непересекающиеся (max savings first) ---
+        cands.sort(key=lambda c: (-c[0], -c[1], c[2]))
+        occupied = bytearray(n)
+        planned = []  # (pos, end, new_toks)
+
+        for savings, length, pos, count, resets in cands:
+            end = pos + count * length
+            if occupied[pos:end].find(1) != -1:
+                continue
+            occupied[pos:end] = b'\x01' * (end - pos)
+
             section = tokens[pos:pos + length]
-
-            # Оптимизация: если сбросов нет и паттерн начинается с
-            # модификатора, совпадающего с состоянием перед паттерном,
-            # *и* состояние этого параметра на выходе паттерна тоже
-            # равно enter (иначе после первой итерации «вынесенный»
-            # модификатор уже не действует, а end ≠ enter), то можно
-            # убрать ведущий модификатор из секции.  Заменяем всегда
-            # полный исходный диапазон n * orig_length.
-            orig_pos = pos
-            orig_length = length
+            # Strip ведущего O/L, если он совпадает с enter и end
             if not resets and length > 2:
                 t0 = tokens[pos]
-                m = re.match(r'[Oo](\d+)$', t0)
-                if (m and int(m.group(1)) == oct_at[pos]
+                mo = re_o.match(t0)
+                if (mo and int(mo.group(1)) == oct_at[pos]
                         and oct_at[pos + length] == oct_at[pos]):
                     section = tokens[pos + 1:pos + length]
                 else:
-                    m = re.match(r'[Ll](\d+)$', t0)
-                    if (m and int(m.group(1)) == len_at[pos]
+                    ml = re_l.match(t0)
+                    if (ml and int(ml.group(1)) == len_at[pos]
                             and len_at[pos + length] == len_at[pos]):
                         section = tokens[pos + 1:pos + length]
 
-            new_toks = ['['] + resets + section + [f']{n}']
-            # Всегда заменяем исходный полный span копий
-            tokens[orig_pos:orig_pos + n * orig_length] = new_toks
-            changed = True
+            nrep = count if count <= MAX_REPEAT else MAX_REPEAT
+            planned.append(
+                (pos, end, ['['] + resets + section + [f']{nrep}'])
+            )
+
+        if not planned:
+            break
+
+        # Сборка результата слева направо
+        planned.sort(key=lambda p: p[0])
+        out = []
+        cursor = 0
+        for pos, end, new_toks in planned:
+            out.extend(tokens[cursor:pos])
+            out.extend(new_toks)
+            cursor = end
+        out.extend(tokens[cursor:])
+        tokens = out
 
     return tokens
 
@@ -255,7 +338,6 @@ def main():
 
     total_before = 0
     total_after = 0
-
     out_lines = list(header)                  # копируем заголовок
 
     for name, tokens in sections:
