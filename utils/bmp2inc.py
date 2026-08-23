@@ -189,20 +189,48 @@ def color_groups(width, height, pixels, palette):
     return grouped, pal_bytes
 
 
-def greedy_perm(grouped):
+def greedy_perm(grouped, pin_index0=False):
     """Жадное назначение: частым группам — малобитовые индексы.
     Возвращает perm: perm[старый индекс] = новый индекс. Неиспользуемым
     («мёртвым») старым индексам раздаются оставшиеся значения, чтобы
     perm оставался перестановкой 0-15 (иначе обмены в поиске могут
-    слить два цвета в один)."""
+    слить два цвета в один).
+    pin_index0: если True, старый индекс 0 всегда получает новый 0."""
     perm = [0] * 16
     n_groups = 0
     assigned = set()
-    for (total, idxs, vb), new_idx in zip(grouped, INDEX_ORDER):
-        for i in idxs:
-            perm[i] = new_idx
-            assigned.add(i)
-        n_groups += 1
+
+    if pin_index0:
+        # Найти группу, содержащую старый индекс 0
+        for (total, idxs, vb), new_idx in zip(grouped, INDEX_ORDER):
+            if 0 in idxs:
+                for i in idxs:
+                    perm[i] = 0
+                    assigned.add(i)
+                n_groups += 1
+                break
+        # Остальные группы назначаем, пропуская уже занятые
+        order_idx = 1  # начинаем со второго элемента INDEX_ORDER
+        for (total, idxs, vb) in grouped:
+            if any(i in assigned for i in idxs):
+                continue
+            while order_idx < len(INDEX_ORDER) and INDEX_ORDER[order_idx] in assigned:
+                order_idx += 1
+            if order_idx >= len(INDEX_ORDER):
+                break
+            new_idx = INDEX_ORDER[order_idx]
+            for i in idxs:
+                perm[i] = new_idx
+                assigned.add(i)
+            n_groups += 1
+            order_idx += 1
+    else:
+        for (total, idxs, vb), new_idx in zip(grouped, INDEX_ORDER):
+            for i in idxs:
+                perm[i] = new_idx
+                assigned.add(i)
+            n_groups += 1
+
     leftovers = INDEX_ORDER[n_groups:]
     free = [i for i in range(16) if i not in assigned]
     for i, v in zip(free, leftovers):
@@ -244,19 +272,24 @@ def rle_size_of_perm(perm, masks, plane_len, cache={}):
     return 2 + len(rle_compress(data))
 
 
-def local_search(perm, masks, same_class_only, plane_len):
+def local_search(perm, masks, same_class_only, plane_len, pinned=frozenset()):
     """Покоординатный спуск парными перестановками индексов.
     Обмениваются любые старые индексы 0-15: через «мёртвые» слоты
     живые цвета могут получать любые из 16 новых индексов (perm —
     перестановка, слияния цветов не происходит).
     same_class_only: переставлять только индексы с тем же числом битов
-    (частые цвета остаются на однобитовых индексах и т.д.)."""
+    (частые цвета остаются на однобитовых индексах и т.д.).
+    pinned: множество старых индексов, которые нельзя переставлять."""
     perm = list(perm)
     cur = rle_size_of_perm(perm, masks, plane_len)
     while True:
         best_pair, best_size = None, cur
         for a in range(16):
+            if a in pinned:
+                continue
             for b in range(a + 1, 16):
+                if b in pinned:
+                    continue
                 if same_class_only and popcount(perm[a]) != popcount(perm[b]):
                     continue
                 perm[a], perm[b] = perm[b], perm[a]
@@ -281,11 +314,22 @@ def format_array(f, name, data, per_line=16):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print(f"Использование: {sys.argv[0]} <файл.bmp>", file=sys.stderr)
+    if len(sys.argv) < 2:
+        print(f"Использование: {sys.argv[0]} [--bg-black] <файл.bmp>",
+              file=sys.stderr)
         sys.exit(1)
 
-    bmp_path = sys.argv[1]
+    bg_black = False
+    args = [a for a in sys.argv[1:]]
+    if '--bg-black' in args:
+        bg_black = True
+        args.remove('--bg-black')
+    if len(args) != 1:
+        print(f"Использование: {sys.argv[0]} [--bg-black] <файл.bmp>",
+              file=sys.stderr)
+        sys.exit(1)
+
+    bmp_path = args[0]
     if not os.path.isfile(bmp_path):
         die(f"файл не найден: {bmp_path}")
 
@@ -306,7 +350,8 @@ def main():
         print(f"    точек {total:6d}: индексы [{old}], цвет 0x{vb:02X}")
 
     identity = list(range(16))
-    greedy = greedy_perm(grouped)
+    greedy = greedy_perm(grouped, pin_index0=bg_black)
+    pinned = frozenset({0}) if bg_black else frozenset()
     candidates = [
         ("палитра BMP как есть", identity, False),
         ("жадное по частоте, перестановки внутри классов", greedy, True),
@@ -315,7 +360,7 @@ def main():
     best_perm, best_size, best_name = None, None, None
     for name, seed, cls in candidates:
         print(f"  поиск: {name}")
-        perm, size = local_search(seed, masks, cls, plane_len)
+        perm, size = local_search(seed, masks, cls, plane_len, pinned=pinned)
         if best_size is None or size < best_size:
             best_perm, best_size, best_name = perm, size, name
 
@@ -325,6 +370,23 @@ def main():
     new_pal = [0] * 16
     for old in active:
         new_pal[perm[old]] = old_pal_bytes[old]
+
+    if bg_black and 0 in active:
+        # Сдвигаем палитру: цвет старого индекса 0 уходит на свободное
+        # место, а позиция 0 освобождается под чёрный фон.
+        saved_color = new_pal[perm[0]]
+        if saved_color != 0:
+            used_new = {perm[v] for v in active}
+            spare = next(i for i in range(16) if i not in used_new)
+            new_pal[spare] = saved_color
+            perm[0] = spare
+            # Если другие старые индексы указывали на позицию 0,
+            # перенаправляем их на spare тоже.
+            for old in range(16):
+                if old != 0 and perm[old] == 0:
+                    perm[old] = spare
+        new_pal[0] = 0  # позиция 0 — чёрный (фон)
+
     new_pixels = [[perm[v] for v in row] for row in pixels]
     rect = build_rect(width, height, new_pixels)
     w8 = (width + 7) // 8

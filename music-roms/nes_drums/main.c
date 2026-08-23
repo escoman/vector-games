@@ -11,22 +11,16 @@
  * Воспроизведение:
  *   - Библиотека nes_drums загружается при старте (семплы в памяти);
  *   - Ф1 — демозапись examples (все 16 звуков + ритмы);
- *   - Ф2 — Jackal track_0 (мелодия + ударные из общей библиотеки);
- *   - Ф3 — Jackal track_1;
- *   - Ф4 — track_1_rep (с повторами секций);
- *   - Ф5 — Jackal track_2;
- *   - G  — track_2_rep (с повторами секций);
+ *   - Ф2 — Jackal (из NSF-экспорта);
+ *   - Ф3 — Castlevania (из NSF-экспорта);
  *   - клавиши 0-9, A-F запускают соответствующий семпл.
  *
  * Управление:
  *   Ф1        — демозапись examples;
- *   Ф2        — Jackal track 0;
- *   Ф3        — Jackal track 1;
- *   Ф4        — track_1_rep (с повторами секций);
- *   Ф5        — Jackal track 2;
- *   G         — track_2_rep (с повторами секций);
- *   0..9, A-F — семпл $0..$F;
- *   СТОП (ESC) — выход из ROM.
+ *   Ф2        — Jackal;
+ *   Ф3        — Castlevania;
+ *   Ф4        — остановить музыку;
+ *   0..9, A-F — семпл $0..$F.
  *
  * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP).
  */
@@ -35,12 +29,10 @@
 
 #include "v06.h"                        /* общая библиотека Вектора-06Ц */
 #include "nes_drums.h"              /* nes_drums_song, nes_drums_samples */
+#include "rom_data/logo_bmp.inc"        /* logo_bmp_screen_rle, logo_bmp_palette */
 #include "rom_data/examples.inc"        /* examples_music_song (демо) */
-#include "rom_data/track_0.inc"         /* track_0_music_song (Jackal) */
-#include "rom_data/track_1.inc"         /* track_1_music_song (Jackal) */
-#include "rom_data/track_1_rep.inc"     /* track_1_rep_music_song (повторы) */
-#include "rom_data/track_2.inc"         /* track_2_music_song (Jackal) */
-#include "rom_data/track_2_rep.inc"     /* track_2_rep_music_song (повторы) */
+#include "rom_data/jackal.inc"          /* jackal_music_song */
+#include "rom_data/castlevania.inc"     /* castlevania_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -89,56 +81,51 @@ static unsigned char hex_to_idx(unsigned char ch)
     return 16u;
 }
 
-/* Палитра: цвет 0 — чёрный (фон), цвет 8 — белый (текст). */
-static const unsigned char nes_pal[16] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0x24, 0x12, 0x03, 0x00, 0x00, 0x00, 0x00
-};
+const unsigned char TEXT_COLOR = 10u;
+const unsigned char HIGHLIGHT_COLOR = 1u;   /* белый в палитре logo.bmp */
 
-/* Меню на экране (шрифт 8x8, цвет 8 — белый).
- * Экран 256×192, видимая область до ~192 по Y. */
+/* Меню: семплы $0..$F (две колонки) + управление.
+ * Каждая строка — смещение (dx, dy) от начала меню (x=0, y=logo_bmp_height+16). */
 static const struct {
+    unsigned char dx;
     unsigned char dy;
     const char *text;
 } menu_lines[] = {
-    {   0u, "NES DRUMS LIBRARY" },
-
-    {  16u, "0 - CLOSED HI-HAT" },
-    {  24u, "1 - OPEN HI-HAT" },
-    {  32u, "2 - SNARE ATTACK" },
-    {  40u, "3 - SNARE BODY" },
-    {  48u, "4 - SNARE STANDARD" },
-    {  56u, "5 - CYMBAL CRASH" },
-    {  64u, "6 - SNARE LOW" },
-    {  72u, "7 - DISTANT EXPLOS" },
-    {  80u, "8 - TOM LOW" },
-    {  88u, "9 - TOM RUMBLE" },
-    {  96u, "A - HEAVY KICK" },
-    { 104u, "B - TIGHT KICK" },
-    { 112u, "C - RUMBLE SUB" },
-    { 120u, "D - ULTRA-LOW ROAR" },
-    { 128u, "E - SUB-BASS DROP" },
-    { 136u, "F - CRACKLE" },
-
-    { 152u, "F1 - EXAMPLES DEMO" },
-    { 160u, "F2 - JACKAL TRACK 0" },
-    { 168u, "F3 - JACKAL TRACK 1" },
-    { 176u, "F4 - TRACK 1 REP" },
-    { 184u, "F5 - JACKAL TRACK 2" },
-    { 192u, "G - TRACK 2 REP" },
-    { 200u, "ESC - EXIT" },
+    /* семплы: левая колонка */
+    {   0u,   0u, "0-CLOSED HI-HAT" },
+    {   0u,   8u, "1-OPEN HI-HAT" },
+    {   0u,  16u, "2-SNARE ATTACK" },
+    {   0u,  24u, "3-SNARE BODY" },
+    {   0u,  32u, "4-SNARE STANDARD" },
+    {   0u,  40u, "5-CYMBAL CRASH" },
+    {   0u,  48u, "6-SNARE LOW" },
+    {   0u,  56u, "7-DISTANT EXPLOS" },
+    /* семплы: правая колонка */
+    { 142u,   0u, "8-TOM LOW" },
+    { 142u,   8u, "9-TOM RUMBLE" },
+    { 142u,  16u, "A-HEAVY KICK" },
+    { 142u,  24u, "B-TIGHT KICK" },
+    { 142u,  32u, "C-RUMBLE SUB" },
+    { 142u,  40u, "D-ULTRA-LO ROAR" },
+    { 142u,  48u, "E-SUB-BASS DROP" },
+    { 142u,  56u, "F-CRACKLE" },
+    /* управление */
+    {   0u,  72u, "F1-EXAMPLE DEMO" },
+    { 142u,  72u, "F2-JACKAL" },
+    {   0u,  80u, "F3-CASTLEVANIA" },
+    { 142u,  80u, "F4-STOP MUSIC" },
 };
 
-static void show_menu(void)
+static void show_menu(unsigned char selected)
 {
-    unsigned char x0 = 16u;
-    unsigned char y0 = 8u;
+    unsigned char y0 = (unsigned char)(logo_bmp_height + 16u);
     unsigned char i;
 
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
-        graph_print(x0,
+        graph_print(menu_lines[i].dx,
                     (unsigned char)(y0 + menu_lines[i].dy),
-                    menu_lines[i].text, 8u);
+                    menu_lines[i].text,
+                    i == selected ? HIGHLIGHT_COLOR : TEXT_COLOR);
     }
 }
 
@@ -152,11 +139,12 @@ int main(void)
     frame_handler = on_frame;           /* мелодия + ударные в прерывании */
     drum_init();                        /* микшер AY: шум канала C */
 
-    /* Экран: чёрный фон, текст меню. */
+    /* Экран: чёрный фон, логотип, текст меню. */
     graph_set_black_palette();
     graph_clear(0);
-    show_menu();
-    graph_set_palette(nes_pal);
+    graph_rle_expand(logo_bmp_screen_rle, 8u, 0u);
+    show_menu(255);
+    graph_set_palette(logo_bmp_palette);
 
     /* Загрузка библиотеки семплов в память (не играет, но семплы доступны). */
     play_song(&nes_drums_song, 0);
@@ -168,30 +156,29 @@ int main(void)
 
         key = kbd_scan();
         if (key != prev_key) {          /* реакция на нажатие */
+            unsigned char sel = 255u;
             if (key == 128) {           /* Ф1 — examples demo */
                 play_song(&examples_music_song, 0);
-            } else if (key == 129) {    /* Ф2 — Jackal track 0 */
-                play_song(&track_0_music_song, 0);
-            } else if (key == 130) {    /* Ф3 — Jackal track 1 */
-                play_song(&track_1_music_song, 0);
-            } else if (key == 131) {    /* Ф4 — track_1_rep */
-                play_song(&track_1_rep_music_song, 0);
-            } else if (key == 132) {    /* Ф5 — Jackal track 2 */
-                play_song(&track_2_music_song, 0);
-            } else if (key == 'g' || key == 'G') {  /* G — track_2_rep */
-                play_song(&track_2_rep_music_song, 0);
+                sel = 16u;
+            } else if (key == 129) {    /* Ф2 — Jackal */
+                play_song(&jackal_music_song, 0);
+                sel = 17u;
+            } else if (key == 130) {    /* Ф3 — Castlevania */
+                play_song(&castlevania_music_song, 0);
+                sel = 18u;
+            } else if (key == 131) {    /* Ф4 — stop music */
+                music_stop();
+                sel = 19u;
             } else if (key >= '0' && key <= '9') {
                 play_sample(hex_to_idx(key));
+                sel = hex_to_idx(key);
             } else if ((key >= 'a' && key <= 'f') ||
                        (key >= 'A' && key <= 'F')) {
                 play_sample(hex_to_idx(key));
-            } else if (key == 27) {     /* СТОП (ESC) */
-                break;
+                sel = hex_to_idx(key);
             }
+            show_menu(sel);
         }
         prev_key = key;
     }
-
-    music_stop();
-    return 0;
 }

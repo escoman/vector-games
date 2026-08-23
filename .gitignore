@@ -14,5 +14,11 @@ __pycache__/
 # Генерируемые mus2inc.py партитуры (источники — music/*.mus)
 music-roms/synth/rom_data/*.inc
 music-roms/jackal/rom_data/*_music.inc
+music-roms/jackal/nes_drums.h
+music-roms/jackal/nes_drums.c
 music-roms/nes_drums/rom_data/*.inc
+music-roms/nes_drums/nes_drums.h
+music-roms/nes_drums/nes_drums.c
 music-roms/castlevania/rom_data/*_music.inc
+music-roms/castlevania/nes_drums.h
+music-roms/castlevania/nes_drums.c
