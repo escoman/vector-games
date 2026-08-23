@@ -14,6 +14,8 @@
  *   - Ф2 — Jackal track_0 (мелодия + ударные из общей библиотеки);
  *   - Ф3 — Jackal track_1;
  *   - Ф4 — track_1_rep (с повторами секций);
+ *   - Ф5 — Jackal track_2;
+ *   - G  — track_2_rep (с повторами секций);
  *   - клавиши 0-9, A-F запускают соответствующий семпл.
  *
  * Управление:
@@ -21,6 +23,8 @@
  *   Ф2        — Jackal track 0;
  *   Ф3        — Jackal track 1;
  *   Ф4        — track_1_rep (с повторами секций);
+ *   Ф5        — Jackal track 2;
+ *   G         — track_2_rep (с повторами секций);
  *   0..9, A-F — семпл $0..$F;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -35,6 +39,8 @@
 #include "rom_data/track_0.inc"         /* track_0_music_song (Jackal) */
 #include "rom_data/track_1.inc"         /* track_1_music_song (Jackal) */
 #include "rom_data/track_1_rep.inc"     /* track_1_rep_music_song (повторы) */
+#include "rom_data/track_2.inc"         /* track_2_music_song (Jackal) */
+#include "rom_data/track_2_rep.inc"     /* track_2_rep_music_song (повторы) */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -118,7 +124,9 @@ static const struct {
     { 160u, "F2 - JACKAL TRACK 0" },
     { 168u, "F3 - JACKAL TRACK 1" },
     { 176u, "F4 - TRACK 1 REP" },
-    { 184u, "ESC - EXIT" },
+    { 184u, "F5 - JACKAL TRACK 2" },
+    { 192u, "G - TRACK 2 REP" },
+    { 200u, "ESC - EXIT" },
 };
 
 static void show_menu(void)
@@ -168,6 +176,10 @@ int main(void)
                 play_song(&track_1_music_song, 0);
             } else if (key == 131) {    /* Ф4 — track_1_rep */
                 play_song(&track_1_rep_music_song, 0);
+            } else if (key == 132) {    /* Ф5 — Jackal track 2 */
+                play_song(&track_2_music_song, 0);
+            } else if (key == 'g' || key == 'G') {  /* G — track_2_rep */
+                play_song(&track_2_rep_music_song, 0);
             } else if (key >= '0' && key <= '9') {
                 play_sample(hex_to_idx(key));
             } else if ((key >= 'a' && key <= 'f') ||

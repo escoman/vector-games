@@ -197,11 +197,11 @@ class Writer:
 
     def __init__(self):
         self.toks = []
-        self.l_ticks = PPQ      # mus2inc: старт L4
-        self.oct = 4
+        self.l_ticks = None     # первый _set_len всегда emit-ит L
+        self.oct = None         # первая note() всегда emit-ит O
 
     def _set_len(self, ticks):
-        if ticks != self.l_ticks:
+        if self.l_ticks is None or ticks != self.l_ticks:
             self.toks.append(f'L{128 // ticks}')
             self.l_ticks = ticks
 
@@ -212,7 +212,7 @@ class Writer:
 
     def note(self, a, ticks):
         o, semi = divmod(a, 12)
-        if o != self.oct:
+        if self.oct is None or o != self.oct:
             self.toks.append(f'O{o}')
             self.oct = o
         parts = decompose(ticks)
@@ -234,9 +234,10 @@ class Writer:
         """Принудительно выставить текущие O и L (для сброса после
         BEGIN — чтобы повтор цикла не унаследовал чужое состояние).
         with_octave=False — только L (для канала ударных)."""
-        if with_octave:
+        if with_octave and self.oct is not None:
             self.toks.append(f'O{self.oct}')
-        self.toks.append(f'L{128 // self.l_ticks}')
+        if self.l_ticks is not None:
+            self.toks.append(f'L{128 // self.l_ticks}')
 
 
 def wrap(toks, width=72):
@@ -738,10 +739,10 @@ def self_test():
     check(w.toks == ['L16', 'P', 'L32', 'P', 'L64', 'P'],
           'объединение пауз: %s' % w.toks)
     w = Writer()
-    w.note(50, 32)              # D4: стартовая октава O4 — команда не нужна
-    check(w.toks == ['D'], 'первая нота: %s' % w.toks)
+    w.note(50, 32)              # D4: O4 и L4 всегда явно на первом событии
+    check(w.toks == ['O4', 'L4', 'D'], 'первая нота: %s' % w.toks)
     w.note(50, 32)              # та же нота вплотную: повтор на той же L
-    check(w.toks.count('D') == 2 and 'L' not in ' '.join(w.toks),
+    check(w.toks == ['O4', 'L4', 'D', 'D'],
           'тянущийся тон без лишних L: %s' % w.toks)
     w = Writer()
     w.hit(3, 6)                 # удар: атака + паузы на остаток

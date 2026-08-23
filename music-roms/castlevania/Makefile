@@ -15,17 +15,14 @@ ZCC      = $(Z88DK)/bin/zcc
 ZCCCFG  := $(Z88DK)/lib/config
 LIB      = ../../lib
 BMP2INC  = ../../utils/bmp2inc.py
-MUS2INC  = ../../utils/mus2inc.py
-TXT2MUS  = ../../utils/txt2mus.py
-TXT2SMP  = ../../utils/txt2smp.py
+TXT2INC  = ../../utils/txt2inc.py
 PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET   = castlevania.rom
 
-# Партитуры: music/*.mus (+ samples/*.smp) -> rom_data/*_music.inc
-# Имена совпадают с исходниками: track_N.mus -> track_N_music.inc.
+# Партитуры: music_txt/*.txt -> rom_data/*_music.inc
+# Цепочка: txt2inc.py (txt → mus → повторы → inc).
 SONGS    = track_0 track_1
-SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
 SRCS     = $(LIB)/startup.asm main.c nes_drums.c \
@@ -36,20 +33,9 @@ SRCS     = $(LIB)/startup.asm main.c nes_drums.c \
 
 ZFLAGS   = +vector06c --no-crt -I. -I$(LIB) -DMUSIC_ONLY
 
-.PHONY: all deploy clean full mus samples
+.PHONY: all deploy clean full
 
 all: $(TARGET)
-
-# Регенерация партитур из TXT и семплов из параметров шума NES.
-# Не входит в `all`: .mus и .smp правятся вручную, эти таргеты —
-# только для первичной генерации из исходного NSF-экспорта.
-mus:
-	@for f in music_txt/*.txt; do \
-	  base=$$(basename "$$f" .txt); \
-	  python3 $(TXT2MUS) "$$f" -o music/$$base.mus; \
-	done
-samples:
-	python3 $(TXT2SMP) music_txt -o music/samples
 
 full: clean
 	$(MAKE) deploy
@@ -57,8 +43,8 @@ full: clean
 rom_data/title_bmp.inc: rom_data/title.bmp $(BMP2INC)
 	python3 $(BMP2INC) $<
 
-rom_data/%_music.inc: music/%.mus nes_drums.h $(MUS2INC)
-	python3 $(MUS2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch
+rom_data/%_music.inc: music_txt/%.txt nes_drums.h $(TXT2INC)
+	python3 $(TXT2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch
 
 $(TARGET): $(SRCS) rom_data/title_bmp.inc $(INCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \

@@ -19,7 +19,7 @@ TARGET   = nes_drums.rom
 
 INCS     = nes_drums.h nes_drums.c \
            rom_data/examples.inc rom_data/track_0.inc rom_data/track_1.inc \
-           rom_data/track_1_rep.inc
+           rom_data/track_1_rep.inc rom_data/track_2.inc rom_data/track_2_rep.inc
 SAMPLES  = $(wildcard src/samples/*.smp)
 
 SRCS     = $(LIB)/startup.asm main.c \
@@ -58,6 +58,12 @@ rom_data/track_1.inc: src/track_1.mus nes_drums.h
 rom_data/track_1_rep.inc: src/track_1_rep.mus nes_drums.h
 	$(MUS2INC) $< -o $@ --name track_1_rep_music --use-shared nes_drums --allow-len-mismatch
 
+rom_data/track_2.inc: src/track_2.mus nes_drums.h
+	$(MUS2INC) $< -o $@ --name track_2_music --use-shared nes_drums --allow-len-mismatch
+
+rom_data/track_2_rep.inc: src/track_2_rep.mus nes_drums.h
+	$(MUS2INC) $< -o $@ --name track_2_rep_music --use-shared nes_drums --allow-len-mismatch
+
 $(TARGET): $(INCS) $(SRCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) $(SRCS) -o $@
@@ -72,4 +78,4 @@ clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm \
 		 nes_drums.h nes_drums.c nes_drums.inc \
 		rom_data/examples.inc rom_data/track_0.inc rom_data/track_1.inc \
-		rom_data/track_1_rep.inc
+		rom_data/track_1_rep.inc rom_data/track_2.inc rom_data/track_2_rep.inc
