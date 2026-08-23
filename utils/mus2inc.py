@@ -517,7 +517,7 @@ def main():
                     ' партитур (то же, что «!» в .mus)')
     ap.add_argument('--shared-lib', action='store_true',
                     help='генерировать общую библиотеку: .h (extern) +'
-                    ' _data.c (определения) вместо .inc')
+                    ' .c (определения) вместо .inc')
     ap.add_argument('--use-shared', metavar='NAME',
                     help='использовать семплы из внешней библиотеки NAME'
                     ' (включает NAME.h, без локальных семплов)')
@@ -695,7 +695,7 @@ def main():
         guard = re.sub(r'[^A-Z0-9]', '_',
                        os.path.basename(out).upper().replace('.INC', '.H'))
         h_path = re.sub(r'\.inc$', '.h', out, flags=re.I)
-        c_path = re.sub(r'\.inc$', '_data.c', out, flags=re.I)
+        c_path = re.sub(r'\.inc$', '.c', out, flags=re.I)
         h_parts = [f'/* {os.path.basename(h_path)} — extern declarations'
                    f' для {name}; не редактировать. */\n',
                    f'#ifndef {guard}\n',

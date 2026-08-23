@@ -17,12 +17,13 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 
 TARGET   = nes_drums.rom
 
-INCS     = nes_drums.h nes_drums_data.c \
-           rom_data/examples.inc rom_data/track_0.inc
+INCS     = nes_drums.h nes_drums.c \
+           rom_data/examples.inc rom_data/track_0.inc rom_data/track_1.inc \
+           rom_data/track_1_rep.inc
 SAMPLES  = $(wildcard src/samples/*.smp)
 
 SRCS     = $(LIB)/startup.asm main.c \
-           nes_drums_data.c \
+           nes_drums.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
            $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
            $(LIB)/drums.asm \
@@ -42,7 +43,7 @@ full: clean
 samples:
 	python3 gen_samples.py
 
-nes_drums.h nes_drums_data.c: src/nes_drums.mus $(SAMPLES)
+nes_drums.h nes_drums.c: src/nes_drums.mus $(SAMPLES)
 	$(MUS2INC) $< -o nes_drums.inc --name nes_drums --shared-lib
 
 rom_data/examples.inc: src/examples.mus nes_drums.h
@@ -50,6 +51,12 @@ rom_data/examples.inc: src/examples.mus nes_drums.h
 
 rom_data/track_0.inc: src/track_0.mus nes_drums.h
 	$(MUS2INC) $< -o $@ --name track_0_music --use-shared nes_drums --allow-len-mismatch
+
+rom_data/track_1.inc: src/track_1.mus nes_drums.h
+	$(MUS2INC) $< -o $@ --name track_1_music --use-shared nes_drums --allow-len-mismatch
+
+rom_data/track_1_rep.inc: src/track_1_rep.mus nes_drums.h
+	$(MUS2INC) $< -o $@ --name track_1_rep_music --use-shared nes_drums --allow-len-mismatch
 
 $(TARGET): $(INCS) $(SRCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
@@ -63,5 +70,6 @@ deploy: $(TARGET)
 
 clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm \
-		 nes_drums.h nes_drums_data.c nes_drums.inc \
-		rom_data/examples.inc rom_data/track_0.inc
+		 nes_drums.h nes_drums.c nes_drums.inc \
+		rom_data/examples.inc rom_data/track_0.inc rom_data/track_1.inc \
+		rom_data/track_1_rep.inc

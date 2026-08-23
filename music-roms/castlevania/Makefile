@@ -28,7 +28,7 @@ SONGS    = track_0 track_1
 SAMPLES  = $(wildcard music/samples/*.smp)
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
-SRCS     = $(LIB)/startup.asm main.c nes_drums_data.c \
+SRCS     = $(LIB)/startup.asm main.c nes_drums.c \
            $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
            $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
            $(LIB)/drums.asm \

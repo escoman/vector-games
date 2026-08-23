@@ -12,11 +12,15 @@
  *   - Библиотека nes_drums загружается при старте (семплы в памяти);
  *   - Ф1 — демозапись examples (все 16 звуков + ритмы);
  *   - Ф2 — Jackal track_0 (мелодия + ударные из общей библиотеки);
+ *   - Ф3 — Jackal track_1;
+ *   - Ф4 — track_1_rep (с повторами секций);
  *   - клавиши 0-9, A-F запускают соответствующий семпл.
  *
  * Управление:
  *   Ф1        — демозапись examples;
  *   Ф2        — Jackal track 0;
+ *   Ф3        — Jackal track 1;
+ *   Ф4        — track_1_rep (с повторами секций);
  *   0..9, A-F — семпл $0..$F;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -29,6 +33,8 @@
 #include "nes_drums.h"              /* nes_drums_song, nes_drums_samples */
 #include "rom_data/examples.inc"        /* examples_music_song (демо) */
 #include "rom_data/track_0.inc"         /* track_0_music_song (Jackal) */
+#include "rom_data/track_1.inc"         /* track_1_music_song (Jackal) */
+#include "rom_data/track_1_rep.inc"     /* track_1_rep_music_song (повторы) */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -110,7 +116,9 @@ static const struct {
 
     { 152u, "F1 - EXAMPLES DEMO" },
     { 160u, "F2 - JACKAL TRACK 0" },
-    { 168u, "ESC - EXIT" },
+    { 168u, "F3 - JACKAL TRACK 1" },
+    { 176u, "F4 - TRACK 1 REP" },
+    { 184u, "ESC - EXIT" },
 };
 
 static void show_menu(void)
@@ -156,6 +164,10 @@ int main(void)
                 play_song(&examples_music_song, 0);
             } else if (key == 129) {    /* Ф2 — Jackal track 0 */
                 play_song(&track_0_music_song, 0);
+            } else if (key == 130) {    /* Ф3 — Jackal track 1 */
+                play_song(&track_1_music_song, 0);
+            } else if (key == 131) {    /* Ф4 — track_1_rep */
+                play_song(&track_1_rep_music_song, 0);
             } else if (key >= '0' && key <= '9') {
                 play_sample(hex_to_idx(key));
             } else if ((key >= 'a' && key <= 'f') ||
