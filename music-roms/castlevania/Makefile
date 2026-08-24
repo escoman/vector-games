@@ -22,7 +22,7 @@ TARGET   = castlevania.rom
 
 # Партитуры: music_txt/*.txt -> rom_data/*_music.inc
 # Цепочка: txt2inc.py (txt → mus → повторы → inc).
-SONGS    = track_0 track_1 track_2 track_3
+SONGS    = track_0 track_1 track_2 track_3 track_4 track_5 track_6 track_7 track_8
 INCS     = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
 SRCS     = $(LIB)/startup.asm main.c nes_drums.c \

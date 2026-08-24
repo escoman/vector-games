@@ -19,6 +19,11 @@
  *   2 — Level 1;
  *   3 — Level 2;
  *   4 — Level 3;
+ *   5 — Walking on Cross;
+ *   6 — Poison Mind;
+ *   7 — Stalker;
+ *   8 — Beginning;
+ *   9 — Game Over;
  *   0 — остановить музыку;
  *   СТОП (ESC) — выход из ROM.
  *
@@ -35,6 +40,11 @@
 #include "rom_data/track_1_music.inc"  /* music_song_t track_1_music_song */
 #include "rom_data/track_2_music.inc"  /* music_song_t track_2_music_song */
 #include "rom_data/track_3_music.inc"  /* music_song_t track_3_music_song */
+#include "rom_data/track_4_music.inc"  /* music_song_t track_4_music_song */
+#include "rom_data/track_5_music.inc"  /* music_song_t track_5_music_song */
+#include "rom_data/track_6_music.inc"  /* music_song_t track_6_music_song */
+#include "rom_data/track_7_music.inc"  /* music_song_t track_7_music_song */
+#include "rom_data/track_8_music.inc"  /* music_song_t track_8_music_song */
 
 /* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
 static void wait_one_frame(void)
@@ -72,15 +82,20 @@ static const struct {
 } menu_lines[] = {
     { 8u,  0u,      "CASTLEVANIA (NES) SOUNDTRACKS:" },
 
-    { 0u,  16u,     "1 - INTRO" },
-    { 128u,  16u,   "2 - LEVEL 1" },
-    { 0u,  26u,     "3 - LEVEL 2" },
-    { 128u, 26u,    "4 - LEVEL 3" },
-    { 0u,  36u,     "0 - STOP MUSIC" },
+    { 0u,  10u,     "1 - PROLOGUE" },
+    { 144u,  10u,   "2 - TRACK 1" },
+    { 0u,  20u,     "3 - TRACK 2" },
+    { 144u, 20u,    "4 - TRACK 3" },
+    { 0u,  30u,     "5 - TRACK 4" },
+    { 144u, 30u,    "6 - TRACK 5" },
+    { 0u,  40u,     "7 - TRACK 7" },
+    { 144u, 40u,    "8 - TRACK 8" },
+    { 0u,  50u,     "9 - BOSS" },
+    { 144u,  50u,   "0 - STOP MUSIC" },
 
-    { 0u,  60u,     "KONAMI,1987" },
-    { 112u, 60u,    "SARMIN ALEXEY,2026" },
-    { 112u, 70u,    "    FOR VECTOR-06C" }
+    { 0u,  70u,     "KONAMI,1987" },
+    { 112u, 70u,    "SARMIN ALEXEY,2026" },
+    { 112u, 80u,    "    FOR VECTOR-06C" }
 };
 
 static void show_menu(unsigned char selected)
@@ -127,11 +142,14 @@ int main(void)
             if (key == '0') {
                 music_stop();
                 show_menu(100);
-            } else if (key >= '1' && key <= '4') {
+            } else if (key >= '1' && key <= '9') {
                 track = key - '1';
                 const music_song_t *songs[] = {
                     &track_0_music_song, &track_1_music_song,
-                    &track_2_music_song, &track_3_music_song
+                    &track_2_music_song, &track_3_music_song,
+                    &track_4_music_song, &track_5_music_song,
+                    &track_6_music_song, &track_7_music_song,
+                    &track_8_music_song
                 };
                 play_song(songs[track], 0);
                 show_menu(track+1);

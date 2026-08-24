@@ -43,6 +43,7 @@ full: clean
 	$(MAKE) deploy
 
 rom_data/%.inc: music/%.mus $(SAMPLES)
+	@mkdir -p rom_data
 	$(MUS2INC) $< -o $@ --name $*
 
 $(TARGET): $(INCS) $(SRCS)

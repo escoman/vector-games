@@ -81,8 +81,8 @@ static unsigned char hex_to_idx(unsigned char ch)
     return 16u;
 }
 
-const unsigned char TEXT_COLOR = 10u;
-const unsigned char HIGHLIGHT_COLOR = 1u;   /* белый в палитре logo.bmp */
+const unsigned char TEXT_COLOR = 12u;           /* белый в палитре logo.bmp */
+const unsigned char HIGHLIGHT_COLOR = 9u;       /* красный в палитре logo.bmp */
 
 /* Меню: семплы $0..$F (две колонки) + управление.
  * Каждая строка — смещение (dx, dy) от начала меню (x=0, y=logo_bmp_height+16). */
