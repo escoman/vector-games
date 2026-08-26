@@ -1,14 +1,15 @@
-# Makefile — сборка castlevania.rom для Вектора-06Ц.
+# Makefile — сборка ducktales2.rom для Вектора-06Ц.
 #
 # Данные треков и конфигурация меню — в rom.json.
 # Общие правила сборки — в ../soundtracks/soundtrack.mk.
 #
-# make          — собрать castlevania.rom;
+# make          — собрать ducktales2.rom;
 # make clean    — убрать все артефакты (включая сгенерированный main.c);
 # make deploy   — собрать и положить ROM в папку ROMS эмулятора PPSSPP;
 # make full     — clean + deploy.
 
-TARGET = castlevania.rom
-SONGS  = track_0 track_1 track_2 track_3 track_4 track_5 track_6 track_7 track_8
+TARGET = ducktales2.rom
+SONGS  = track_0 track_1 track_2 track_3 track_4 track_5 track_6 \
+         track_7 track_8 track_9 track_10 track_16 track_19
 
 include ../soundtracks/soundtrack.mk

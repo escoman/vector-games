@@ -1,0 +1,33 @@
+{
+  "title": "DUCKTALES 2 (NES) SOUNDTRACKS:",
+  "title_dx": 8,
+  "tracks": [
+    {"key": "1", "name": "TRACK 0",  "file": "track_0"},
+    {"key": "2", "name": "TRACK 1",  "file": "track_1"},
+    {"key": "3", "name": "TRACK 2",  "file": "track_2"},
+    {"key": "4", "name": "TRACK 3",  "file": "track_3"},
+    {"key": "5", "name": "TRACK 4",  "file": "track_4"},
+    {"key": "6", "name": "TRACK 19",  "file": "track_19"}
+  ],
+  "layout": {
+    "cols": 2,
+    "y_start": 10,
+    "y_step": 10,
+    "x_left": 0,
+    "x_right": 144,
+    "stop_dy": 80,
+    "menu_y0": 8,
+    "rle_x": 0,
+    "rle_y": 0
+  },
+  "colors": {
+    "background": 0,
+    "normal": 1,
+    "highlight": 4
+  },
+  "credits": {
+    "y": 100,
+    "left": "CAPCOM,1993",
+    "right": ["SARMIN ALEXEY,2026", "    FOR VECTOR-06C"]
+  }
+}
