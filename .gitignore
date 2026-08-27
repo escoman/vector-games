@@ -2,6 +2,7 @@
 *.rom
 *.o
 zcc_opt.def
+release/*.rom
 
 # Промежуточные файлы компилятора (zcc -S)
 *.c.asm
@@ -22,3 +23,5 @@ music-roms/nes_drums/nes_drums.c
 music-roms/castlevania/rom_data/*_music.inc
 music-roms/castlevania/nes_drums.h
 music-roms/castlevania/nes_drums.c
+music-roms/ducktales2/rom_data/*_music.inc
+music-roms/ducktales2/rom_data/title_bmp.inc
