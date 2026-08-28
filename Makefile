@@ -9,6 +9,7 @@ PROJECTS = music-roms/castlevania \
            music-roms/ducktales2 \
            music-roms/jackal \
            music-roms/nes_drums \
+           music-roms/supermario \
            music-roms/synth
 
 RELEASE  = release
@@ -28,7 +29,6 @@ all:
 
 clean:
 	@for p in $(PROJECTS); do $(MAKE) -C $$p clean; done
-	rm -rf $(RELEASE)
 	@echo "=== All cleaned ==="
 
 full: clean all

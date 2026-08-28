@@ -1,0 +1,39 @@
+{
+  "title": "SUPER MARIO (NES) SOUNDTRACKS:",
+  "title_dx": 8,
+  "tracks": [
+    {"key": "1", "name": "TRACK 0",   "file": "track_0"},
+    {"key": "2", "name": "TRACK 1",   "file": "track_1"},
+    {"key": "3", "name": "TRACK 2",   "file": "track_2"},
+    {"key": "4", "name": "TRACK 3",   "file": "track_3"},
+    {"key": "5", "name": "TRACK 5",   "file": "track_5"},
+    {"key": "6", "name": "TRACK 6",   "file": "track_6"},
+    {"key": "7", "name": "TRACK 7",   "file": "track_7"},
+    {"key": "8", "name": "TRACK 8",   "file": "track_8"},
+    {"key": "9", "name": "TRACK 9",   "file": "track_9"},
+    {"key": "A", "name": "TRACK 10",  "file": "track_10"},
+    {"key": "B", "name": "TRACK 11",  "file": "track_11"},
+    {"key": "C", "name": "TRACK 13",  "file": "track_13"},
+    {"key": "D", "name": "TRACK 17",  "file": "track_17"}
+  ],
+  "layout": {
+    "cols": 3,
+    "y_start": 16,
+    "y_step": 8,
+    "x_left": 0,
+    "x_right": 88,
+    "stop_dy": 60,
+    "menu_y0": 4,
+    "rle_y": 0
+  },
+  "colors": {
+    "background": 0,
+    "normal": 5,
+    "highlight": 1
+  },
+  "credits": {
+    "y": 80,
+    "left": "NINTENDO,1985",
+    "right": ["SARMIN ALEXEY,2026", "    FOR VECTOR-06C"]
+  }
+}

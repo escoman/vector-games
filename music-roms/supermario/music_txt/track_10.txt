@@ -1,0 +1,43 @@
+supermario.nsf track=10 framerate=60
+
+Square1(7)
+time dur note vol
+0.017 0.117 F#4 8
+0.167 0.117 F#4 8
+0.467 0.117 F#4 8
+0.767 0.117 F#4 8
+0.917 0.117 F#4 8
+1.217 0.117 B4 8
+1.817 0.117 G4 8
+
+Square2(6)
+time dur note vol
+0.017 0.117 E5 8
+0.167 0.117 E5 8
+0.467 0.117 E5 8
+0.767 0.117 C5 8
+0.917 0.117 E5 8
+1.217 0.117 G5 8
+
+Triangle(7)
+time dur note vol
+0.000 0.133 D4 15
+0.150 0.133 D4 15
+0.450 0.133 D4 15
+0.750 0.133 D4 15
+0.900 0.133 D4 15
+1.200 0.133 G5 15
+1.800 0.133 G4 15
+
+Noise(10)
+time dur noise vol drum
+0.000 0.083 11 12 kick_tight
+0.300 0.017 11 15 kick_tight
+0.450 0.083 11 15 kick_tight
+0.750 0.017 11 15 kick_tight
+0.900 0.083 11 15 kick_tight
+1.200 0.083 11 15 kick_tight
+1.650 0.083 11 15 kick_tight
+1.950 0.017 11 15 kick_tight
+2.100 0.017 11 15 kick_tight
+2.250 0.017 11 15 kick_tight

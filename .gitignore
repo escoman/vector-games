@@ -25,3 +25,8 @@ music-roms/castlevania/nes_drums.h
 music-roms/castlevania/nes_drums.c
 music-roms/ducktales2/rom_data/*_music.inc
 music-roms/ducktales2/rom_data/title_bmp.inc
+music-roms/supermario/rom_data/*_music.inc
+music-roms/supermario/rom_data/title_bmp.inc
+
+# Генерируемые gen_main.py main.c
+music-roms/*/main.c

@@ -10,7 +10,19 @@
 
 import argparse
 import json
+import os
+import struct
 import sys
+
+
+def read_bmp_width(json_path):
+    """Читает ширину из BMP-файла заголовка (rom_data/title.bmp)."""
+    bmp = os.path.join(os.path.dirname(json_path), 'rom_data', 'title.bmp')
+    if not os.path.isfile(bmp):
+        return 256
+    with open(bmp, 'rb') as f:
+        f.seek(18)
+        return struct.unpack('<i', f.read(4))[0]
 
 
 def generate(cfg, out):
@@ -21,9 +33,17 @@ def generate(cfg, out):
     credits = cfg['credits']
     title_dx = cfg.get('title_dx', 0)
     menu_y0 = layout.get('menu_y0', 8)
-    rle_x = layout.get('rle_x', 0)
     rle_y = layout.get('rle_y', 0)
     stop_dy = layout.get('stop_dy')
+
+    # Авто-центрирование по X, если rle_x не задан явно
+    title_width = cfg.get('title_bmp_width', 256)
+    if 'rle_x' in layout:
+        rle_x = layout['rle_x']
+    elif title_width < 256:
+        rle_x = ((256 - title_width) // 16) * 8
+    else:
+        rle_x = 0
 
     n = len(tracks)
     y_start = layout['y_start']
@@ -91,9 +111,9 @@ static void play_song(const music_song_t *song, unsigned char loop)
     for i, t in enumerate(tracks):
         row = i // cols
         col = i % cols
-        dx = x_right if col else x_left
+        dx = (256 // cols) * col if col else x_left
         dy = y_start + row * y_step
-        w(f'    {{ {dx}u, {dy}u, "{t["key"]} - {t["name"]}" }},\n')
+        w(f'    {{ {dx}u, {dy}u, "{t["key"]}-{t["name"]}" }},\n')
 
     w(f'    {{ 0u,  {stop_dy}u, "0 - STOP MUSIC" }},\n')
     w('\n')
@@ -137,9 +157,9 @@ static void play_song(const music_song_t *song, unsigned char loop)
     else:
         # Цифровые 1-9 + буквенные A-F
         num_alpha = n - 9  # сколько буквенных клавиш нужно
-        max_alpha = chr(ord('A') + num_alpha - 1)
-        key_check = f"((key >= '1' && key <= '9') || (key >= 'A' && key <= '{max_alpha}'))"
-        track_calc = f"track = (key <= '9') ? (key - '1') : (key - 'A' + 9);"
+        max_alpha = chr(ord('a') + num_alpha - 1)
+        key_check = f"((key >= '1' && key <= '9') || (key >= 'a' && key <= '{max_alpha}'))"
+        track_calc = f"track = (key <= '9') ? (key - '1') : (key - 'a' + 9);"
 
     w(f'''/* ------------------------------- main -------------------------------- */
 
@@ -205,6 +225,10 @@ def main():
 
     with open(args.rom_json, 'r', encoding='utf-8') as f:
         cfg = json.load(f)
+
+    # Читает ширину BMP для авто-центрирования
+    if 'title_bmp_width' not in cfg:
+        cfg['title_bmp_width'] = read_bmp_width(args.rom_json)
 
     with open(args.output, 'w', encoding='utf-8') as f:
         generate(cfg, f)
