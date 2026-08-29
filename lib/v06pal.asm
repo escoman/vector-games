@@ -55,3 +55,46 @@ pal_loop:
         xor     a
         out     (0x02), a       ; бордюр обратно на цвет 0
         ret
+
+; ---------------------------------------------------------------
+; Загрузка 4 цветов палитры (режим 512x256, 2 цвета).
+; Слоты 0-3, запись слотов 4-15 не производится, чтобы
+; не переполнить палитру и не затереть экранную память.
+;
+;   void v06_set_palette4_asm(const unsigned char *pal);  /* 4 байта */
+;
+        PUBLIC  v06_set_palette4_asm
+        PUBLIC  _v06_set_palette4_asm
+
+v06_set_palette4_asm:
+_v06_set_palette4_asm:
+        pop     de              ; адрес возврата
+        pop     hl              ; pal
+        push    hl
+        push    de
+
+        ei
+        halt                    ; ждём кадровое прерывание
+
+        ld      de, 3
+        add     hl, de          ; hl = pal + 3 (обход с конца: 3..0)
+        ld      b, 4            ; 4 слота палитры
+pal4_loop:
+        ld      a, b
+        dec     a               ; индекс слота = 3..0
+        out     (0x02), a       ; бордюр = индекс записываемого слота
+        nop
+        nop
+        nop
+        nop
+        ld      a, (hl)
+        out     (0x0C), a       ; байт цвета -> палитра[бордюр]
+        nop
+        nop
+        dec     hl
+        dec     b
+        jp      nz, pal4_loop
+
+        xor     a
+        out     (0x02), a       ; бордюр обратно на цвет 0
+        ret

@@ -10,7 +10,7 @@
  *
  * Алгоритм 2 — «оптимизированный» (PUSH):
  *   SP = 0000h, PUSH HL (HL=0) заполняет 32 КБ (8000h-FFFFh) нулями.
- *   16384 PUSH × 2 байта = 32 КБ. DI/EI для безопасности.
+ *   64 × 32 × 8 = 16384 PUSH × 2 байта = 32 КБ.
  *
  * Управление: любая клавиша — запуск следующего теста, ESC — выход.
  */
@@ -18,10 +18,12 @@
 #include <intrinsic.h>
 #include "v06.h"
 
-/* Палитра: 0 — чёрный (фон), 1-15 — белые. */
+/* Палитра: 0 — чёрный, 1 — тёмно-серый, 3 — средне-серый,
+ * 7 — светло-серый, 15 — белый. Остальные — плавный градиент.
+ * Формат байта: 0bBB_GGG_RRR (D0-D2 R, D3-D5 G, D6-D7 B). */
 static const unsigned char default_palette[16] = {
-    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    0x00, 0x4A, 0x4A, 0x94, 0x94, 0xB6, 0xB6, 0xDE,
+    0xDE, 0xE7, 0xE7, 0xF0, 0xF0, 0xF8, 0xF8, 0xFF
 };
 
 /* ================================================================
@@ -178,7 +180,7 @@ cc_page:
 ;
 ; SP = 0000h: PUSH пишет от FFFFh вниз до 8000h (32 КБ).
 ; HL = 0 — содержимое PUSH (нули).
-; 64 × 256 = 16384 PUSH × 2 байта = 32 КБ.
+; 64 × 32 × 8 = 16384 PUSH × 2 байта = 32 КБ.
 ;
 ; Важно: PUSH-цикл затирает VRAM (8000h-FFFFh).
 ; Стек расположен ниже 8000h (startup.asm: SP = 8000h, растёт вниз),
@@ -194,13 +196,21 @@ _optimized_clear:
         ld      sp, 0x0000      ; SP = 0000h, PUSH пишет от FFFFh вниз до 8000h
         ld      hl, 0           ; HL = 0000h — содержимое PUSH
         ld      b, 0x40         ; B = 64 (внешний счётчик)
-        ld      c, 0            ; C = 0 (внутренний счётчик: 256)
+        ld      c, 0x20         ; C = 0 (внутренний счётчик: 32 по 8 push)
 opt_loop:
         push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
         dcr     c               ; C-- (Z=1 при переходе через 0)
-        jp      nz, opt_loop    ; 256 PUSH-ей
+        jp      nz, opt_loop    ; 32 × 8 = 256 PUSH-ей за проход
         dcr     b               ; B--
-        jp      nz, opt_loop    ; 64 прохода × 256 = 16384 PUSH = 32 КБ
+        ld      c, 0x20
+        jp      nz, opt_loop    ; 64 прохода × 32 × 8 = 16384 PUSH = 32 КБ
 
         ld      hl, (_saved_sp) ; восстановить SP вызывающего (7FFEh)
         ld      sp, hl
@@ -209,7 +219,9 @@ opt_loop:
 
 _saved_sp:
         defw    0
+
 #endasm
+
 
 /* Объявления ассемблерных функций для C. */
 extern void         garbage_fill(void);
@@ -315,8 +327,8 @@ int main(void)
     graph_print(8,  16, "------------------------",  7u);
     graph_print(8,  48, "CLASSIC: 4 PLANES",        11u);
     graph_print(8,  64, "  8 BYTES/ITER  32KB",     11u);
-    graph_print(8,  96, "OPTIMIZED: PUSH",         11u);
-    graph_print(8, 112, "  32KB FILL  SP=0",       11u);
+    graph_print(8,  96, "OPTIMIZED: PUSH",          11u);
+    graph_print(8, 112, "  8 PUSH/ITER  32KB",      11u);
     graph_print(8, 160, "PRESS ANY KEY",            14u);
     graph_print(8, 232, "ESC - EXIT",                7u);
 
@@ -343,9 +355,9 @@ int main(void)
     graph_set_black_palette();
     graph_clear(0);
     graph_set_palette(default_palette);
-    graph_print(8,  96, "TEST 1 DONE",          14u);
-    graph_print(8, 128, "PRESS ANY KEY",        14u);
-    graph_print(8, 160, "FOR TEST 2 (PUSH)",    11u);
+    graph_print(8,  80, "TEST 1 DONE",         14u);
+    graph_print(8, 128, "PRESS ANY KEY",       14u);
+    graph_print(8, 160, "FOR TEST 2 (PUSH)",   11u);
 
     wait_any_key();
 
