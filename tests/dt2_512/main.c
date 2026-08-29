@@ -13,7 +13,7 @@
  */
 
 #include "v06.h"
-#include "dt2_512_bmp.inc"
+#include "../assets/dt2_512_bmp.inc"
 
 /* Очистка графических плоскостей (A000h-BFFFh + E000h-FFFFh, 16 КБ) */
 static void graph_clear_512(void)
@@ -78,26 +78,15 @@ int main(void)
     v06_set_palette_asm(_pal16);
 
     /* Переключаем в 512x256 */
-    graph_scroll_row = 0xFF;       /* скролл: верхняя строка = FF */
     graph_set_mode_512();
 
     /* Очищаем графические плоскости */
-    graph_clear_512();
+    //graph_clear_512();
 
     /* Распаковываем картинку (плоскости A000h + E000h) */
     graph_rle_expand_512(dt2_512_bmp_screen_rle);
     
-    /* Ждём ESC */
-    {
-        unsigned int last_frame = frame_count;
-        for (;;) {
-            while (frame_count == last_frame)
-                ;
-            last_frame = frame_count;
-            if (kbd_scan() == 27)
-                break;
-        }
-    }
+    while(1);
 
     return 0;
 }
