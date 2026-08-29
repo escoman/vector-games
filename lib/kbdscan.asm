@@ -23,6 +23,8 @@
 
 kbd_scan_rows:
 _kbd_scan_rows:
+        in      a, (0x02)              ; сохранить PB (бордюр + режим)
+        push    af
         ld      a, 0x8A                 ; порт B — ввод столбцов
         out     (0x00), a
         ld      hl, _kbd_rows
@@ -43,6 +45,8 @@ row_loop:
         jp      nz, row_loop
         ld      a, 0x88                 ; вернуть обычное управляющее слово
         out     (0x00), a
+        pop     af
+        out     (0x02), a               ; восстановить PB (бордюр + режим)
         ld      a, (_graph_scroll_row)
         out     (0x03), a               ; вернуть регистр строки экрана
         ret

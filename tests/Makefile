@@ -18,7 +18,7 @@ BMP2INC  = ../utils/bmp2inc.py
 BMP2INC512 = ../utils/bmp2inc512.py
 PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
-TARGETS  = cls.rom dt2.rom dt2_512.rom
+TARGETS  = cls.rom dt2.rom dt2_512.rom 512x256.rom
 
 # Общие источники
 COMMON_SRCS = $(LIB)/startup.asm \
@@ -30,6 +30,7 @@ COMMON_SRCS = $(LIB)/startup.asm \
 SRCS_cls.rom       = $(COMMON_SRCS) cls.c
 SRCS_dt2.rom       = $(COMMON_SRCS) dt2.c $(LIB)/graphrle.asm
 SRCS_dt2_512.rom   = $(COMMON_SRCS) dt2_512.c $(LIB)/graphrle512.asm
+SRCS_512x256.rom   = $(LIB)/startup.asm 512x256.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB) -I.
 
