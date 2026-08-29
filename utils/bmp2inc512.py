@@ -120,7 +120,7 @@ def build_plane(width, height, pixels, plane):
     out = bytearray()
     
     for xb in range(w16):
-        for y in range(height - 1, -1, -1):  # сверху вниз: FF→00
+        for y in range(height):
             row = pixels[y]
             byte = 0
             for b in range(8):
