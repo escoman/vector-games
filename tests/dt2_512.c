@@ -63,6 +63,8 @@ static void graph_set_mode_512(void)
         di
         ld      a, 0x88
         out     (0x00), a           ; ПИА (сбрасывает PA/PB/PC в 0)
+        ld      a, 0xFF
+        out     (0x03), a           ; скролл = 0xFF (компенсация направления)
         ld      a, 0x10
         out     (0x02), a           ; Режим 512x256
         ei
@@ -76,6 +78,7 @@ int main(void)
     v06_set_palette_asm(_pal16);
 
     /* Переключаем в 512x256 */
+    graph_scroll_row = 0xFF;       /* скролл: верхняя строка = FF */
     graph_set_mode_512();
 
     /* Очищаем графические плоскости */
