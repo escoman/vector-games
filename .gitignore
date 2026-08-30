@@ -35,3 +35,4 @@ music-roms/*/main.c
 # Тесты: .inc от bmp2inc.py и bmp2inc512.py
 tests/dt2_bmp.inc
 tests/dt2_512_bmp.inc
+tests/assets/dt2_bmp.inc
