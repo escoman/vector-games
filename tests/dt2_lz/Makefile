@@ -17,7 +17,7 @@ TARGET = dt2_lz.rom
 # Источники
 SRCS = $(LIB)/startup.asm \
        $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
-       $(LIB)/graphpr.asm $(LIB)/graphclr.asm $(LIB)/graphlz.c \
+       $(LIB)/graphpr.asm $(LIB)/graphclr.asm $(LIB)/graphlz.asm \
        $(LIB)/graph.c $(LIB)/keyboard.c \
        main.c
 
