@@ -8,7 +8,7 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 
 TARGET = 512x256.rom
 
-SRCS = $(LIB)/startup.asm main.c
+SRCS = $(LIB)/startup.asm $(LIB)/graphpr512.asm $(LIB)/graphpr512t.asm $(LIB)/v06pal.asm main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
 
