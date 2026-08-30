@@ -1,6 +1,7 @@
 # Артефакты сборки
 *.rom
 *.o
+*.sym
 zcc_opt.def
 release/*.rom
 
