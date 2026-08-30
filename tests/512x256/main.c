@@ -27,9 +27,24 @@ static void set_palette(void)
     unsigned char bg = 0x00;
     unsigned char fg = 0xFF;
 
-    _pal16[0] = bg;
-    for (int i = 1; i < 16; i++)
-        _pal16[i] = fg;
+    _pal16[0x00] = bg;
+    _pal16[0x01] = fg;
+    _pal16[0x02] = fg;
+    _pal16[0x03] = fg;
+    _pal16[0x04] = fg;
+    _pal16[0x05] = fg;
+    _pal16[0x06] = fg;
+    _pal16[0x07] = fg;
+    _pal16[0x08] = fg;
+    _pal16[0x09] = fg;
+    _pal16[0x0A] = fg;
+    _pal16[0x0B] = fg;
+    _pal16[0x0C] = fg;
+    _pal16[0x0D] = fg;
+    _pal16[0x0E] = fg;
+    _pal16[0x0F] = fg;
+    /*for (int i = 1; i < 16; i++)
+        _pal16[i] = fg;*/
 
     v06_set_palette_asm(_pal16);
 }
@@ -51,11 +66,30 @@ static void graph_set_mode_512(void)
 #endasm
 }
 
-static void graph_clear_512(void)
+/* Заполнение 8 КБ плоскости по начальному адресу. */
+static void fill_plane(unsigned int addr, unsigned char fill)
 {
-    unsigned char *p;
-    for (p = (unsigned char *)0xA000; p != (unsigned char *)0; p++)
-        *p = 0;
+    unsigned char *p = (unsigned char *)addr;
+    unsigned int i;
+    for (i = 0; i < 0x2000; i++)
+        *p++ = fill;
+}
+
+/* Очистка плоскостей по маске.
+ * bit 0 (0x01) → E000h-FFFFh
+ * bit 1 (0x02) → A000h-BFFFh
+ * bit 2 (0x04) → C000h-DFFFh
+ * bit 3 (0x08) → 8000h-9FFFh
+ * 0x0F → все 4 плоскости. */
+static void graph_clear_512(unsigned char mask, unsigned char fill)
+{
+    unsigned int addr = 0xE000;
+    unsigned char m;
+    for (m = 0x01; m != 0x10; m <<= 1) {
+        if (mask & m)
+            fill_plane(addr, fill);
+        addr -= 0x2000;
+    }
 }
 
 /* Запись count байт: val по адресам addr, addr+step, addr+2*step, ... */
@@ -76,7 +110,12 @@ int main(void)
 
     /* Переключаем в 512x256 */
     graph_set_mode_512();
-    graph_clear_512();
+    graph_clear_512(0x0F, 0x00);
+    graph_clear_512(0x01, 0xFF);
+    graph_clear_512(0x04, 0xFF);
+    //graph_clear_512(0x02, 0xFF);
+
+    while(1);
 
     /* Левый столбец (X=0): E001h..E0FEh, бит 7 */
     fill_stride(0xE001, 0x80, 1, 254);
@@ -93,9 +132,9 @@ int main(void)
     fill_stride(0xE0FF, 0xFF, 0x100, 32);
 
     /* Вывод текста */
-    graph_print_512(1, 10, "VECTOR-06C", 1);
-    graph_print_512(1, 20, "512x256 MODE", 15);
-    graph_print_512t(1, 40, "THIN TEXT TEST", 15);
+    graph_print_512(1, 10, "VECTOR-06C", 0x1);
+    graph_print_512(1, 20, "512x256 MODE", 0xF);
+    graph_print_512t(1, 40, "THIN TEXT TEST", 0xF);
 
     while(1);
 
