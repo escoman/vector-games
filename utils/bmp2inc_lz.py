@@ -25,9 +25,13 @@ bmp2inc_lz.py — конвертация 16-цветного BMP в .inc для 
   4. LZ-сжатие потока индексов для каждой плоскости.
 
 Формат данных:
-  Заголовок: w8 (ширина в блоках), h (высота), n_tiles (кол-во тайлов).
+  Заголовок: tpp (тайлов на плоскость, 16 бит LE), ntiles (16 бит LE),
+             h_div8 (высота в тайлах, 1 байт).
   Словарь: n_tiles тайлов по 8 байт каждый.
   Для каждой из 4 плоскостей: LZ-поток.
+
+  Тайлы в потоке идут в порядке VRAM постолбцово:
+  сначала все тайлы столбца 0 (снизу вверх), затем столбца 1 и т.д.
 
 LZ-формат (на тайлах):
   - flag_byte: 8 бит, каждый бит = literal(1) или reference(0).
@@ -132,26 +136,26 @@ def build_rect(width, height, pixels):
     return out
 
 
-def extract_tiles(plane_data, height):
-    """Извлекает тайлы (по 8 байт) из данных плоскости.
-    plane_data разбита на блоки по height байт; из каждого блока
-    извлекаются тайлы по 8 байт."""
-    tiles = []
-    n_blocks = len(plane_data) // height
-    for block_idx in range(n_blocks):
-        block = plane_data[block_idx * height: (block_idx + 1) * height]
-        for i in range(0, len(block), 8):
-            tile = block[i:i+8]
+def extract_tiles(planes_data, height):
+    """Извлекает тайлы (по 8 байт) из данных плоскостей в порядке VRAM:
+    каждые 8 байт = один тайл, последовательно от начала плоскости."""
+    all_tiles = []
+    for plane in planes_data:
+        for i in range(0, len(plane), 8):
+            tile = plane[i:i+8]
             if len(tile) == 8:
-                tiles.append(bytes(tile))
-    return tiles
+                all_tiles.append(bytes(tile))
+    return all_tiles
 
 
 def lz_encode(indices, max_offset=4095, max_length=18):
     """LZ-сжатие потока индексов тайлов (список чисел 0-255).
     Возвращает (encoded_data, stats).
     encoded_data — список байт (flag_byte + данные).
-    stats — словарь со статистикой."""
+    stats — словарь со статистикой.
+
+    Важно: считаем cur (номер тайла) так же, как декодер,
+    чтобы остановиться на том же месте и не написать лишних байт."""
     # Позиции каждого значения индекса для быстрого поиска
     value_positions = {}
     for i, idx in enumerate(indices):
@@ -161,17 +165,19 @@ def lz_encode(indices, max_offset=4095, max_length=18):
 
     encoded = []
     i = 0
+    cur = 0          # номер текущего тайла (как в декодере)
+    n = len(indices)
     literals = 0
     references = 0
 
-    while i < len(indices):
+    while cur < n:
         flag_byte = 0
         group_data = []
 
         for bit in range(8):
-            if i >= len(indices):
-                # Фиктивный literal для заполнения неполной группы.
-                # Literal всегда занимает 2 байта.
+            if cur >= n:
+                # Декодер уже остановился. Пишем dummy literal,
+                # чтобы декодер мог прочитать полную группу.
                 flag_byte |= (1 << bit)
                 group_data.extend([0, 0])
                 continue
@@ -191,7 +197,7 @@ def lz_encode(indices, max_offset=4095, max_length=18):
 
                     # Считаем длину совпадения
                     length = 0
-                    while (i + length < len(indices) and
+                    while (i + length < n and
                            length < max_length and
                            indices[i + length] == indices[pos + length]):
                         length += 1
@@ -207,6 +213,7 @@ def lz_encode(indices, max_offset=4095, max_length=18):
                 offset_byte = best_offset & 0xFF
                 group_data.extend([length_byte, offset_byte])
                 i += best_length
+                cur += best_length
             else:
                 # Literal: 2 байта (индекс тайла)
                 literals += 1
@@ -215,6 +222,7 @@ def lz_encode(indices, max_offset=4095, max_length=18):
                 group_data.append((idx >> 8) & 0x01)  # старший бит
                 group_data.append(idx & 0xFF)          # младшие 8 бит
                 i += 1
+                cur += 1
 
         encoded.append(flag_byte)
         encoded.extend(group_data)
@@ -422,11 +430,8 @@ def main():
         plane = rect_data[p * plane_size: (p + 1) * plane_size]
         planes.append(plane)
 
-    # Извлечение тайлов из всех плоскостей
-    all_tiles = []
-    for plane in planes:
-        tiles = extract_tiles(plane, height)
-        all_tiles.extend(tiles)
+    # Извлечение тайлов из всех плоскостей (в порядке VRAM)
+    all_tiles = extract_tiles(planes, height)
 
     print(f"  всего тайлов: {len(all_tiles)}")
 
@@ -467,10 +472,13 @@ def main():
               f"({stats['literals']} literal, {stats['references']} ref)")
 
     # Сборка финальных данных
-    # Заголовок: w8, h (0=256), n_tiles (2 байта)
+    # Заголовок: tpp (2 байта LE), ntiles (2 байта LE), h_div8 (1 байт)
     n_tiles = len(tile_dict)
-    h_byte = height & 0xFF if height < 256 else 0
-    header = bytes([w8, h_byte, n_tiles & 0xFF, (n_tiles >> 8) & 0xFF])
+    tiles_per_plane = w8 * (height // 8)
+    h_div8 = height // 8
+    header = bytes([tiles_per_plane & 0xFF, (tiles_per_plane >> 8) & 0xFF,
+                    n_tiles & 0xFF, (n_tiles >> 8) & 0xFF,
+                    h_div8])
 
     # Словарь тайлов
     dict_data = bytearray()
@@ -485,7 +493,7 @@ def main():
         output.extend(stream)
 
     print(f"  итого: {len(output)} байт "
-          f"(заголовок 3 + словарь {len(dict_data)} + LZ {sum(len(s) for s in lz_streams)})")
+          f"(заголовок 5 + словарь {len(dict_data)} + LZ {sum(len(s) for s in lz_streams)})")
 
     # Запись .inc файла
     with open(inc_path, "w") as f:

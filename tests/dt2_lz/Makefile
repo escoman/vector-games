@@ -17,9 +17,8 @@ TARGET = dt2_lz.rom
 # Источники
 SRCS = $(LIB)/startup.asm \
        $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
-       $(LIB)/graphpr.asm $(LIB)/graphclr.asm \
+       $(LIB)/graphpr.asm $(LIB)/graphclr.asm $(LIB)/graphlz.c \
        $(LIB)/graph.c $(LIB)/keyboard.c \
-       $(LIB)/graphlz.asm \
        main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB) -I..
@@ -47,4 +46,4 @@ deploy: $(TARGET)
 	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
 
 clean:
-	rm -f $(TARGET) *.o zcc_opt.def *.c.asm ../assets/dt2_bmp.inc
+	rm -f $(TARGET) *.o *.lis zcc_opt.def *.c.asm ../assets/dt2_bmp.inc
