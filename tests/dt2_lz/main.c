@@ -13,7 +13,7 @@ extern void graph_lz_expand(const unsigned char *src);
 
 int main(void)
 {
-    graph_clear(0);
+    //graph_set_black_palette();
     graph_set_palette(dt2_bmp_palette);
     graph_lz_expand(dt2_bmp_screen_lz);
 

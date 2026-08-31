@@ -12,6 +12,8 @@
 ;
 ; x — позиция символа (0-31), y — строка (0-31).
 ; Цвет 0-3: bit0 -> E000h/A000h, bit1 -> C000h/8000h.
+; Цвет 1 — только первая плоскость, цвет 2 — только вторая,
+; цвет 3 — обе плоскости.
 ;
 ; Только 8080-инструкции: без jr/djnz и без префиксов CB/DD/ED/FD.
 ;
@@ -42,6 +44,7 @@ _graph_put_char_512:
 
 ; ---------------------------------------------------------------
 ; Внутренняя отрисовка одного символа 16x8.
+; Цвет 0-3: bit0 -> E000h/A000h, bit1 -> C000h/8000h.
 ; ---------------------------------------------------------------
 draw_char_512:
         ; --- поиск глифа: E = индекс; нет в таблице -> пробел ---
@@ -75,8 +78,7 @@ glyph_found_512:
         ld      a, h
         ld      (tmp_glyph + 1), a
 
-        ; --- стартовый адрес для чётных пикселей (E000h) ---
-        ; Адрес: 0xE000 + char_x * 0x100 + (255 - y)
+        ; --- стартовый адрес: 0xE000 + char_x * 0x100 + (255 - y) ---
         ld      a, (tmp_x)
         add     a, 0xE0                 ; A = 0xE0 + char_x
         ld      h, a                    ; H = 0xE0 + char_x
@@ -87,118 +89,127 @@ glyph_found_512:
         ld      l, a                    ; L = смещение строки
         ; HL = базовый адрес для чётных пикселей (E000h)
 
-        ; --- отрисовка 8 строк чётных пикселей в E000h ---
         ld      a, (tmp_color)
-        ld      c, a                    ; C = цвет
-        ld      a, c
-        and     1                       ; проверяем bit0 цвета
-        jp      z, skip_even            ; если bit0=0, пропускаем чётные
+        ld      c, a                    ; C = цвет (живёт до конца)
 
+        ; ====== bit0 -> E000h (чётные) ======
+        ld      a, c
+        and     1
+        jp      z, skip_b0_even
         push    hl
-        ld      a, (tmp_glyph)          ; указатель глифа
+        push    bc
+        ld      a, (tmp_glyph)
         ld      e, a
         ld      a, (tmp_glyph + 1)
         ld      d, a
-        ; --- рисуем 8 строк чётных пикселей (байты 0,2,4,6,8,10,12,14) ---
-        ld      a, (de)                 ; байт 0 (чётные, строка 0)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de                      ; пропускаем нечётный байт
-        ld      a, (de)                 ; байт 2 (чётные, строка 1)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 4 (чётные, строка 2)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 6 (чётные, строка 3)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 8 (чётные, строка 4)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 10 (чётные, строка 5)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 12 (чётные, строка 6)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 14 (чётные, строка 7)
-        ld      (hl), a
+        call    draw_8_even_bytes       ; HL=E000+row, DE=глиф
+        pop     bc
         pop     hl
+skip_b0_even:
 
-skip_even:
-        ; --- переход к нечётным пикселям (A000h) ---
-        ; Меняем H с 0xE0+char_x на 0xA0+char_x
+        ; ====== bit0 -> A000h (нечётные) ======
+        ld      a, c
+        and     1
+        jp      z, skip_b0_odd
+        push    hl
+        push    bc
         ld      a, h
-        sub     0x40                    ; 0xE0 - 0x40 = 0xA0
+        sub     0x40                    ; E000 -> A000
         ld      h, a
-        ; HL = базовый адрес для нечётных пикселей (A000h)
-
-        ; --- отрисовка 8 строк нечётных пикселей в A000h ---
-        ld      a, c
-        and     1                       ; проверяем bit0 цвета
-        jp      z, skip_odd             ; если bit0=0, пропускаем нечётные
-
-        push    hl
-        ld      a, (tmp_glyph)          ; указатель глифа
+        ld      a, (tmp_glyph)
         ld      e, a
         ld      a, (tmp_glyph + 1)
         ld      d, a
-        inc     de                      ; пропускаем чётный байт
-        ; --- рисуем 8 строк нечётных пикселей (байты 1,3,5,7,9,11,13,15) ---
-        ld      a, (de)                 ; байт 1 (нечётные, строка 0)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 3 (нечётные, строка 1)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 5 (нечётные, строка 2)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 7 (нечётные, строка 3)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 9 (нечётные, строка 4)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 11 (нечётные, строка 5)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 13 (нечётные, строка 6)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)                 ; байт 15 (нечётные, строка 7)
-        ld      (hl), a
+        inc     de                      ; пропуск чётного байта
+        call    draw_8_even_bytes
+        pop     bc
         pop     hl
+skip_b0_odd:
 
-skip_odd:
+        ; ====== bit1 -> C000h (чётные) ======
+        ld      a, c
+        and     2
+        jp      z, skip_b1_even
+        push    hl
+        push    bc
+        ld      a, h
+        add     a, 0x20                 ; E000 -> C000 (или A000 -> C000)
+        ld      h, a
+        ld      a, (tmp_glyph)
+        ld      e, a
+        ld      a, (tmp_glyph + 1)
+        ld      d, a
+        call    draw_8_even_bytes
+        pop     bc
+        pop     hl
+skip_b1_even:
+
+        ; ====== bit1 -> 8000h (нечётные) ======
+        ld      a, c
+        and     2
+        jp      z, skip_b1_odd
+        push    hl
+        push    bc
+        ld      a, h
+        add     a, 0x20                 ; -> C000
+        ld      h, a
+        ld      a, h
+        sub     0x40                    ; C000 -> 8000
+        ld      h, a
+        ld      a, (tmp_glyph)
+        ld      e, a
+        ld      a, (tmp_glyph + 1)
+        ld      d, a
+        inc     de                      ; пропуск чётного байта
+        call    draw_8_even_bytes
+        pop     bc
+        pop     hl
+skip_b1_odd:
+        ret
+
+; ---------------------------------------------------------------
+; Вспомогательная: 8 строк, HL = адрес экрана, DE = глиф.
+; Пишет байты 0,2,4,6,8,10,12,14 (чётные строки 16-байтного глифа).
+; ---------------------------------------------------------------
+draw_8_even_bytes:
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
+        inc     de
+        inc     de
+        ld      a, (de)
+        ld      (hl), a
+        dec     hl
         ret
 
 ; ---------------------------------------------------------------
@@ -258,11 +269,11 @@ tmp_glyph:      defw    0
 tmp_s:          defw    0
 
 ; ---------------------------------------------------------------
-; Шрифт font16x8: 46 глифов по 16 байт.
+; Шрифт font16x8: 55 глифов по 16 байт.
 ; Каждая строка: 2 байта (чётные пиксели E000h, нечётные пиксели A000h).
 ; ---------------------------------------------------------------
 font_chars_512:
-        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@"
+        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&#*+%"
         defb    0
 
 font16x8:
@@ -404,3 +415,30 @@ font16x8:
         ; '@'
         defb    0x00, 0x00, 0x3C, 0x3C, 0x42, 0x42, 0x5E, 0x5E
         defb    0x52, 0x52, 0x5E, 0x5E, 0x40, 0x40, 0x3C, 0x3C
+        ; '<'
+        defb    0x30, 0x30, 0x60, 0x60, 0xC0, 0xC0, 0xC0, 0xC0
+        defb    0x60, 0x60, 0x60, 0x60, 0x30, 0x30, 0x00, 0x00
+        ; '>'
+        defb    0xC0, 0xC0, 0x60, 0x60, 0x60, 0x60, 0x30, 0x30
+        defb    0x30, 0x30, 0x60, 0x60, 0xC0, 0xC0, 0x00, 0x00
+        ; '='
+        defb    0x00, 0x00, 0x00, 0x00, 0xFC, 0xFC, 0x00, 0x00
+        defb    0xFC, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ; '&'
+        defb    0x30, 0x30, 0x48, 0x48, 0x30, 0x30, 0x56, 0x56
+        defb    0x99, 0x99, 0x42, 0x42, 0x3C, 0x3C, 0x00, 0x00
+        ; '$'
+        defb    0x30, 0x30, 0x7C, 0x7C, 0xC0, 0xC0, 0x78, 0x78
+        defb    0x06, 0x06, 0xF8, 0xF8, 0x30, 0x30, 0x00, 0x00
+        ; '#'
+        defb    0x6C, 0x6C, 0x6C, 0x6C, 0xFE, 0xFE, 0x6C, 0x6C
+        defb    0xFE, 0xFE, 0x6C, 0x6C, 0x6C, 0x6C, 0x00, 0x00
+        ; '*'
+        defb    0x18, 0x18, 0x5A, 0x5A, 0x3C, 0x3C, 0xFF, 0xFF
+        defb    0x3C, 0x3C, 0x5A, 0x5A, 0x18, 0x18, 0x00, 0x00
+        ; '+'
+        defb    0x18, 0x18, 0x30, 0x30, 0x60, 0x60, 0x60, 0x60
+        defb    0x30, 0x30, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00
+        ; '%'
+        defb    0xC6, 0xC6, 0xC6, 0xC6, 0x0C, 0x0C, 0x18, 0x18
+        defb    0x30, 0x30, 0x66, 0x66, 0x66, 0x66, 0x00, 0x00

@@ -17,7 +17,8 @@ TESTS = tests/512x256 \
         tests/clrs \
         tests/dt2 \
         tests/dt2_512 \
-        tests/dt2_lz
+        tests/dt2_lz \
+        tests/scr_modes
 
 ALL = $(MUSIC_ROMS) $(TESTS)
 

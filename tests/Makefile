@@ -9,7 +9,8 @@ TESTS = 512x256 \
         clrs \
         dt2 \
         dt2_512 \
-        dt2_lz
+        dt2_lz \
+        scr_modes
 
 .PHONY: all clean full
 

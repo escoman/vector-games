@@ -20,12 +20,12 @@
 extern void v06_set_palette_asm(const unsigned char *pal);
 
 /* Текущий регистр строки; keyboard.c восстанавливает его после опроса */
-unsigned char graph_scroll_row = 0;
+unsigned char graph_scroll_row = 0xFF;
 
 /* RLE-распаковка (graph_rle_expand) — на ассемблере в graphrle.asm.
  * Заливка экрана (graph_clear) — на ассемблере в graphclr.asm. */
 
-/* Загрузка 16 цветов палитры (формат байта 0bBBGGGRRR) */
+/* Загрузка 16 цветов палитры (формат байта 0bRRRGGGBB) */
 void graph_set_palette(const unsigned char *pal)
 {
     v06_set_palette_asm(pal);

@@ -23,7 +23,7 @@
 #define V06_VI53_CH0    0x0B    /* ВИ53: канал 0                          */
 #define V06_PALETTE     0x0C    /* запись байта палитры                   */
 
-/* Формат байта палитры: BBGGGRRR (r=0-7, g=0-7, b=0-3). */
+/* Формат байта палитры: RRRGGGBB (D0-D2 красный, D3-D5 зелёный, D6-D7 синий). */
 #define V06_RGB(r, g, b)  (((b) << 6) | ((g) << 3) | (r))
 #define V06_AY_SEL      0x15    /* AY-3-8910: выбор регистра (нечётный)  */
 #define V06_AY_DAT      0x14    /* AY-3-8910: запись данных (чётный)     */
@@ -37,9 +37,36 @@
 extern void v06_out(unsigned char port, unsigned char val);
 extern unsigned char v06_in(unsigned char port);
 
-/* ------------------------------ Графика ------------------------------- */
+/* ------------------------------- Графика ------------------------------- */
 
 #define V06_VRAM        ((unsigned char *)0x8000)
+
+/* Видеорежимы */
+#define GFX_MODE_256_16  0   /* 256x256, 16 цветов, все плоскости      */
+#define GFX_MODE_256_2   1   /* 256x256, 2 цвета, плоскость 0xE000     */
+#define GFX_MODE_512_4   2   /* 512x256, 4 цвета                       */
+#define GFX_MODE_512_2   3   /* 512x256, 2 цвета, 0xE000+0xA000        */
+
+typedef struct {
+    unsigned char width_div8;   /* 32 (256) или 64 (512); >32 = 512    */
+    unsigned char plane_mask;   /* маска активных плоскостей            */
+    unsigned char num_colors;   /* 2, 4 или 16                          */
+} gfx_mode_t;
+
+extern const gfx_mode_t gfx_modes[];
+extern unsigned char gfx_current_mode;
+
+/* Переключение режима. 256x256 — аппаратный по умолчанию, не трогает
+ * ПИА. 512x256 — настраивает ПИА и скролл. */
+extern void gfx_set_mode(unsigned char mode);
+
+/* Очистка экрана цветом 0-15. Заполняет только активные плоскости
+ * текущего режима (через graph_fill_plane). */
+extern void gfx_clear(unsigned char color);
+
+/* Загрузка палитры из num_colors цветов. Автоматически расширяет
+ * до 16 слотов, маскируя неиспользуемые плоскости. */
+extern void gfx_set_palette(const unsigned char *colors);
 
 /* RLE-поток bmp2inc.py: прямоугольник картинки — заголовок (ширина
  * в 8-пиксельных блоках, высота; 0 = 256), пары (количество, байт),
@@ -52,7 +79,7 @@ extern void graph_rle_expand(const unsigned char *src, unsigned char x,
 /* Заливка экрана цветом 0-15 (плоскостная видеопамять). */
 extern void graph_clear(unsigned char color);
 
-/* Загрузка 16 цветов палитры. Формат байта: 0bBBGGGRRR.
+/* Загрузка 16 цветов палитры. Формат байта: 0bRRRGGGBB.
  * Палитра Вектора адресуется «цветом под лучом», поэтому запись идёт
  * в кадровый гасящий интервал через регистр бордюра (см. v06pal.asm). */
 extern void graph_set_palette(const unsigned char *pal);

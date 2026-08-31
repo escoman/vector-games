@@ -13,7 +13,7 @@
 ; (начало кадра), дальше ~40 строк обратного хода — сплошной бордюр,
 ; 16 записей успеваются с большим запасом.
 ;
-; Формат байта цвета: 0bBBGGGRRR (2 бита синего, 3 зелёного, 3 красного).
+; Формат байта цвета: 0bRRRGGGBB (D0-D2 красный, D3-D5 зелёный, D6-D7 синий).
 ;
 ;   void v06_set_palette_asm(const unsigned char *pal);  /* 16 байт */
 ;
@@ -52,49 +52,31 @@ pal_loop:
         dec     b
         jp      nz, pal_loop
 
-        xor     a
-        out     (0x02), a       ; бордюр обратно на цвет 0
+        in      a, (0x02)
+        and     0x10            ; сохранить бит режима (бит 4)
+        out     (0x02), a       ; бордюр = 0, бит режима сохранён
         ret
 
 ; ---------------------------------------------------------------
-; Загрузка 4 цветов палитры (режим 512x256, 2 цвета).
-; Слоты 0-3, запись слотов 4-15 не производится, чтобы
-; не переполнить палитру и не затереть экранную память.
+; Установка бита режима 512x256 с сохранением цвета бордюра.
 ;
-;   void v06_set_palette4_asm(const unsigned char *pal);  /* 4 байта */
+;   void v06_set_mode_bit(unsigned char val);
 ;
-        PUBLIC  v06_set_palette4_asm
-        PUBLIC  _v06_set_palette4_asm
+; val: бит 4 = режим 512x256 (0x10 вкл / 0x00 выкл).
+; Биты 0-3 порта 0x02 (бордюр) не меняются.
+;
+        PUBLIC  v06_set_mode_bit
+        PUBLIC  _v06_set_mode_bit
 
-v06_set_palette4_asm:
-_v06_set_palette4_asm:
-        pop     de              ; адрес возврата
-        pop     hl              ; pal
-        push    hl
+v06_set_mode_bit:
+_v06_set_mode_bit:
+        pop     hl              ; адрес возврата
+        pop     de              ; val -> e
         push    de
-
-        ei
-        halt                    ; ждём кадровое прерывание
-
-        ld      de, 3
-        add     hl, de          ; hl = pal + 3 (обход с конца: 3..0)
-        ld      b, 4            ; 4 слота палитры
-pal4_loop:
-        ld      a, b
-        dec     a               ; индекс слота = 3..0
-        out     (0x02), a       ; бордюр = индекс записываемого слота
-        nop
-        nop
-        nop
-        nop
-        ld      a, (hl)
-        out     (0x0C), a       ; байт цвета -> палитра[бордюр]
-        nop
-        nop
-        dec     hl
-        dec     b
-        jp      nz, pal4_loop
-
-        xor     a
-        out     (0x02), a       ; бордюр обратно на цвет 0
+        push    hl
+        in      a, (0x02)       ; текущее значение PB
+        and     0x0F            ; сохранить бордюр (биты 0-3)
+        or      e               ; установить бит режима
+        out     (0x02), a
         ret
+
