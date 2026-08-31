@@ -21,11 +21,11 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 ROM_JSON  ?= rom.json
 INCS       = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
-SRCS       = $(LIB)/startup.asm main.c $(SOUNDTRACKS)/nes_drums.c \
-             $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm $(LIB)/vi53out.asm \
-             $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
-             $(LIB)/drums.asm \
-             $(LIB)/graph.c $(LIB)/music.c $(LIB)/keyboard.c
+SRCS       = $(LIB)/sys/startup.asm main.c $(SOUNDTRACKS)/nes_drums.c \
+             $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm $(LIB)/snd/vi53out.asm \
+             $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
+             $(LIB)/snd/drums.asm \
+             $(LIB)/gfx/gfx.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS     = +vector06c --no-crt -I. -I$(LIB) -I$(SOUNDTRACKS) -DMUSIC_ONLY
 

@@ -8,10 +8,10 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 
 TARGET = cls.rom
 
-SRCS = $(LIB)/startup.asm \
-       $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
-       $(LIB)/graphpr.asm $(LIB)/graphclr.asm \
-       $(LIB)/graph.c $(LIB)/keyboard.c \
+SRCS = $(LIB)/sys/startup.asm \
+       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
+       $(LIB)/gfx/pr.asm $(LIB)/gfx/clr.asm \
+       $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
        main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)

@@ -26,12 +26,12 @@ INCS     = $(addprefix rom_data/,$(addsuffix .inc,$(SONGS)))
 SAMPLES  = $(wildcard music/samples/*.smp)
 
 # music.c вместо sound.c (символы music_*/sound_*, см. v06.h)
-SRCS     = $(LIB)/startup.asm main.c \
-           $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
-           $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
-           $(LIB)/drums.asm \
-           $(LIB)/vi53out.asm $(LIB)/music.c \
-           $(LIB)/graph.c $(LIB)/keyboard.c
+SRCS     = $(LIB)/sys/startup.asm main.c \
+           $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
+           $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
+           $(LIB)/snd/drums.asm \
+           $(LIB)/snd/vi53out.asm $(LIB)/snd/music.c \
+           $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
 

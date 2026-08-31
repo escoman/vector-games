@@ -9,11 +9,11 @@ PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR
 
 TARGET = dt2.rom
 
-SRCS = $(LIB)/startup.asm \
-       $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
-       $(LIB)/graphpr.asm $(LIB)/graphclr.asm \
-       $(LIB)/graph.c $(LIB)/keyboard.c \
-       $(LIB)/graphrle.asm \
+SRCS = $(LIB)/sys/startup.asm \
+       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
+       $(LIB)/gfx/pr.asm $(LIB)/gfx/clr.asm \
+       $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
+       $(LIB)/unpack/rle.asm \
        main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
@@ -30,12 +30,15 @@ $(TARGET): dt2_bmp.inc
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
-dt2_bmp.inc: ../assets/dt2.bmp $(BMP2INC)
+dt2_bmp.inc: dt2.bmp $(BMP2INC)
 	python3 $(BMP2INC) --bg-black $<
+
+dt2.bmp: ../assets/dt2.bmp
+	cp $< $@
 
 deploy: $(TARGET)
 	cp -f $(TARGET) $(PPSSPP_ROMS)/
 	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
 
 clean:
-	rm -f $(TARGET) *.o zcc_opt.def *.c.asm dt2_bmp.inc
+	rm -f $(TARGET) *.o zcc_opt.def *.c.asm dt2_bmp.inc dt2.bmp

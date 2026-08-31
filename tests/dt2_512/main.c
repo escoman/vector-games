@@ -13,7 +13,7 @@
  */
 
 #include "v06.h"
-#include "../assets/dt2_512_bmp.inc"
+#include "dt2_512_bmp.inc"
 
 /* Очистка графических плоскостей (A000h-BFFFh + E000h-FFFFh, 16 КБ) */
 static void graph_clear_512(void)

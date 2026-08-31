@@ -23,13 +23,13 @@ INCS     = nes_drums.h nes_drums.c rom_data/logo_bmp.inc \
            rom_data/examples.inc rom_data/jackal.inc rom_data/castlevania.inc
 SAMPLES  = $(wildcard src/samples/*.smp)
 
-SRCS     = $(LIB)/startup.asm main.c \
+SRCS     = $(LIB)/sys/startup.asm main.c \
            nes_drums.c \
-           $(LIB)/v06io.asm $(LIB)/v06pal.asm $(LIB)/kbdscan.asm \
-           $(LIB)/graphpr.asm $(LIB)/graphrle.asm $(LIB)/graphclr.asm \
-           $(LIB)/drums.asm \
-           $(LIB)/vi53out.asm $(LIB)/music.c \
-           $(LIB)/graph.c $(LIB)/keyboard.c
+           $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
+           $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
+           $(LIB)/snd/drums.asm \
+           $(LIB)/snd/vi53out.asm $(LIB)/snd/music.c \
+           $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 
 # music.c: партитурный синтезатор (-DMUSIC_ONLY)
 ZFLAGS   = +vector06c --no-crt -I. -I$(LIB) -DMUSIC_ONLY

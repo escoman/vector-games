@@ -7,7 +7,7 @@
  */
 
 #include "v06.h"
-#include "../assets/dt2_bmp.inc"
+#include "dt2_bmp.inc"
 
 int main(void)
 {
