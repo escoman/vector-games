@@ -88,7 +88,7 @@ void gfx_set_palette(const unsigned char *colors)
          *   full[0]=black, full[1]=white, full[2]=black, ... (чёт=0, нечёт=1)
          */
         for (i = 0; i < 16; i++)
-            full[i] = colors[i & m->plane_mask];
+            full[i] = colors[(i & m->plane_mask) % m->num_colors];
     }
 
     v06_set_palette_asm(full);

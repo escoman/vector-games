@@ -97,9 +97,9 @@ extern unsigned char graph_scroll_row;
  * Ячейка непрозрачная: пиксели глифа — цвет color (0-15), фон затирается.
  * x должно быть кратно 8, y — верхняя строка ячейки. */
 extern void graph_put_char(unsigned char x, unsigned char y, char ch,
-                           unsigned char color);
+                           unsigned char color) __z88dk_callee;
 extern void graph_print(unsigned char x, unsigned char y, const char *s,
-                        unsigned char color);
+                        unsigned char color) __z88dk_callee;
 
 /* ------------------------------- Звук --------------------------------- */
 

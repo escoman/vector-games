@@ -14,15 +14,15 @@
 
 /* --- Текст 256x256 (pr.asm) --- */
 extern void graph_print(unsigned char x, unsigned char y, const char *s,
-                        unsigned char color);
+                        unsigned char color) __z88dk_callee;
 
 /* --- Текст 512x256, шрифт 16x8 (pr512.asm) --- */
 extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
-                            unsigned char color);
+                            unsigned char color) __z88dk_callee;
 
 /* --- Текст 512x256, тонкий шрифт 4x8 (pr512t.asm) --- */
 extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
-                             unsigned char color);
+                             unsigned char color) __z88dk_callee;
 
 /* --- Палитра (mode.c: gfx_set_palette расширяет до 16 слотов) --- */
 /* extern void gfx_set_palette(const unsigned char *colors); -- уже в v06.h */
@@ -135,13 +135,14 @@ static void draw_swatches(void)
         graph_print(21 * 8, 0, "PALETTE", 0x0F);
     } else {
         /* 512x256: сетка 5×3, сдвиг вниз на 16 пикселей.
-         * Чётные столбцы — E000/C000, нечётные — A000/8000. */
+         * Чётные столбцы — E000/C000, нечётные — A000/8000.
+         * На плоскость 32 столбца (0-31), не 64. */
         for (c = 1; c < nc; c++) {
             col = (c - 1) % 5;
             row = (c - 1) / 5;
             {
-                unsigned char xb0 = 48 + col * 2;
-                unsigned char xb1 = xb0 + 1;
+                unsigned char xb0 = 12 + col * 4;   /* чётный столбец */
+                unsigned char xb1 = xb0 + 1;         /* нечётный столбец */
                 unsigned char y0 = row * 2 + 2;   /* +16 пикселей */
                 unsigned char i;
                 for (i = 0; i < 8; i++) {

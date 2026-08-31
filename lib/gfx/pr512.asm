@@ -18,262 +18,490 @@
 ; Только 8080-инструкции: без jr/djnz и без префиксов CB/DD/ED/FD.
 ;
 
+; ---------------------------------------------------------------
+; pr512.asm
+;
+; Вывод текста 16x8 в режиме 512x256.
+;
+; x    = номер символа, 0..31
+; y    = верхняя строка символа, 0..248
+; ch   = ASCII
+; color:
+;   bit 0 -> цветовая пара E000/A000
+;   bit 1 -> цветовая пара C000/8000
+;
+; __z88dk_callee
+;
+; Только Intel 8080.
+; ---------------------------------------------------------------
+
         SECTION code_clib
+
         PUBLIC  _graph_put_char_512
         PUBLIC  _graph_print_512
 
+
+; ===============================================================
+; graph_put_char_512(x, y, ch, color)
+;
+; __z88dk_callee
+;
+; При входе:
+;
+;   SP -> return
+;         color
+;         ch
+;         y
+;         x
+;
+; POP полностью снимает параметры.
+; После этого на стеке остаётся только return address.
+; ===============================================================
+
 _graph_put_char_512:
-        ; --- читаем аргументы со стека, не меняя SP ---
-        ld      hl, 2
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_color), a          ; цвет
-        ld      hl, 4
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_ch), a             ; символ
-        ld      hl, 6
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_y), a              ; y
-        ld      hl, 8
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_x), a              ; x
-        jp      draw_char_512
 
-; ---------------------------------------------------------------
-; Внутренняя отрисовка одного символа 16x8.
-; Цвет 0-3: bit0 -> E000h/A000h, bit1 -> C000h/8000h.
-; ---------------------------------------------------------------
-draw_char_512:
-        ; --- поиск глифа: E = индекс; нет в таблице -> пробел ---
-        ld      a, (tmp_ch)
-        ld      c, a                    ; C = искомый символ
-        ld      hl, font_chars_512
-        ld      e, 0
-find_loop_512:
-        ld      a, (hl)
-        or      a
-        jp      z, char_not_found_512   ; терминатор: символа нет
-        cp      c
-        jp      z, glyph_found_512
-        inc     hl
-        inc     e
-        jp      find_loop_512
-char_not_found_512:
-        ld      e, 0                    ; неизвестный символ -> пробел
-glyph_found_512:
-        ld      h, 0
-        ld      l, e
-        ; индекс * 16 (16 байт на глиф)
-        add     hl, hl                  ; *2
-        add     hl, hl                  ; *4
-        add     hl, hl                  ; *8
-        add     hl, hl                  ; *16
-        ld      de, font16x8
-        add     hl, de                  ; HL = указатель на 16 байт глифа
-        ld      a, l
-        ld      (tmp_glyph), a
-        ld      a, h
-        ld      (tmp_glyph + 1), a
+        pop     de              ; return address
 
-        ; --- стартовый адрес: 0xE000 + char_x * 0x100 + (255 - y) ---
-        ld      a, (tmp_x)
-        add     a, 0xE0                 ; A = 0xE0 + char_x
-        ld      h, a                    ; H = 0xE0 + char_x
-        ld      a, (tmp_y)
-        ld      e, a                    ; E = y
-        ld      a, 255
-        sub     e                       ; A = 255 - y
-        ld      l, a                    ; L = смещение строки
-        ; HL = базовый адрес для чётных пикселей (E000h)
+        pop     hl              ; color
+        mov     a, l
+        sta     tmp_color_512
 
-        ld      a, (tmp_color)
-        ld      c, a                    ; C = цвет (живёт до конца)
+        pop     hl              ; ch
+        mov     a, l
+        sta     tmp_ch_512
 
-        ; ====== bit0 -> E000h (чётные) ======
-        ld      a, c
-        and     1
-        jp      z, skip_b0_even
-        push    hl
-        push    bc
-        ld      a, (tmp_glyph)
-        ld      e, a
-        ld      a, (tmp_glyph + 1)
-        ld      d, a
-        call    draw_8_even_bytes       ; HL=E000+row, DE=глиф
-        pop     bc
-        pop     hl
-skip_b0_even:
+        pop     hl              ; y
+        mov     a, l
+        sta     tmp_y_512
 
-        ; ====== bit0 -> A000h (нечётные) ======
-        ld      a, c
-        and     1
-        jp      z, skip_b0_odd
-        push    hl
-        push    bc
-        ld      a, h
-        sub     0x40                    ; E000 -> A000
-        ld      h, a
-        ld      a, (tmp_glyph)
-        ld      e, a
-        ld      a, (tmp_glyph + 1)
-        ld      d, a
-        inc     de                      ; пропуск чётного байта
-        call    draw_8_even_bytes
-        pop     bc
-        pop     hl
-skip_b0_odd:
+        pop     hl              ; x
+        mov     a, l
+        sta     tmp_x_512
 
-        ; ====== bit1 -> C000h (чётные) ======
-        ld      a, c
-        and     2
-        jp      z, skip_b1_even
-        push    hl
-        push    bc
-        ld      a, h
-        add     a, 0x20                 ; E000 -> C000 (или A000 -> C000)
-        ld      h, a
-        ld      a, (tmp_glyph)
-        ld      e, a
-        ld      a, (tmp_glyph + 1)
-        ld      d, a
-        call    draw_8_even_bytes
-        pop     bc
-        pop     hl
-skip_b1_even:
+        push    de              ; return address
 
-        ; ====== bit1 -> 8000h (нечётные) ======
-        ld      a, c
-        and     2
-        jp      z, skip_b1_odd
-        push    hl
-        push    bc
-        ld      a, h
-        add     a, 0x20                 ; -> C000
-        ld      h, a
-        ld      a, h
-        sub     0x40                    ; C000 -> 8000
-        ld      h, a
-        ld      a, (tmp_glyph)
-        ld      e, a
-        ld      a, (tmp_glyph + 1)
-        ld      d, a
-        inc     de                      ; пропуск чётного байта
-        call    draw_8_even_bytes
-        pop     bc
-        pop     hl
-skip_b1_odd:
-        ret
-
-; ---------------------------------------------------------------
-; Вспомогательная: 8 строк, HL = адрес экрана, DE = глиф.
-; Пишет байты 0,2,4,6,8,10,12,14 (чётные строки 16-байтного глифа).
-; ---------------------------------------------------------------
-draw_8_even_bytes:
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        inc     de
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        ret
-
-; ---------------------------------------------------------------
-; void graph_print_512(x, y, s, color)
-; ---------------------------------------------------------------
-_graph_print_512:
-        ld      hl, 2
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_color), a          ; цвет
-        ld      hl, 4
-        add     hl, sp
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        ld      a, e                    ; DE = указатель строки
-        ld      (tmp_s), a
-        ld      a, d
-        ld      (tmp_s + 1), a
-        ld      hl, 6
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_y), a              ; y
-        ld      hl, 8
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_x), a              ; x
-print_loop_512:
-        ld      a, (de)
-        or      a
-        jp      z, print_done_512       ; конец строки
-        inc     de
-        ld      c, a                    ; символ
-        ld      a, e
-        ld      (tmp_s), a
-        ld      a, d
-        ld      (tmp_s + 1), a
-        ld      a, c
-        ld      (tmp_ch), a
         call    draw_char_512
-        ld      a, (tmp_x)
-        inc     a                       ; следующий символ: x += 1
-        ld      (tmp_x), a
-        ld      a, (tmp_s)
-        ld      e, a
-        ld      a, (tmp_s + 1)
-        ld      d, a
-        jp      print_loop_512
-print_done_512:
         ret
 
-tmp_x:          defb    0
-tmp_y:          defb    0
-tmp_ch:         defb    0
-tmp_color:      defb    0
-tmp_glyph:      defw    0
-tmp_s:          defw    0
+
+; ===============================================================
+; draw_char_512
+; ===============================================================
+
+draw_char_512:
+
+        ; -------------------------------------------------------
+        ; Ищем символ.
+        ; E = индекс глифа.
+        ; Не найден -> 0 = пробел.
+        ; -------------------------------------------------------
+
+        lda     tmp_ch_512
+        mov     c, a
+
+        lxi     h, font_chars_512
+        mvi     e, 0
+
+dc512_find:
+
+        mov     a, m
+        ora     a
+        jz      dc512_not_found
+
+        cmp     c
+        jz      dc512_found
+
+        inx     h
+        inr     e
+        jmp     dc512_find
+
+
+dc512_not_found:
+
+        mvi     e, 0
+
+
+dc512_found:
+
+        ; -------------------------------------------------------
+        ; HL = font16x8 + index * 16
+        ; -------------------------------------------------------
+
+        mvi     d, 0
+        mov     l, e
+        mvi     h, 0
+
+        dad     h              ; *2
+        dad     h              ; *4
+        dad     h              ; *8
+        dad     h              ; *16
+
+        lxi     d, font16x8
+        dad     d
+
+        shld    tmp_glyph_512
+
+
+        ; -------------------------------------------------------
+        ; Проверка координат.
+        ;
+        ; x должен быть 0..31
+        ; y должен быть 0..248
+        ;
+        ; Это одновременно защищает VRAM от выхода за границы.
+        ; -------------------------------------------------------
+
+        lda     tmp_x_512
+        cpi     32
+        jnc     dc512_done
+
+        lda     tmp_y_512
+        cpi     249
+        jnc     dc512_done
+
+
+        ; -------------------------------------------------------
+        ; Определяем половину экрана.
+        ;
+        ; x < 16:
+        ;   левая половина
+        ;
+        ; x >= 16:
+        ;   правая половина
+        ; -------------------------------------------------------
+
+        lda     tmp_x_512
+        cpi     16
+        jc      dc512_left
+
+
+        ; =======================================================
+        ; ПРАВАЯ ПОЛОВИНА
+        ;
+        ; local_x = x - 16
+        ;
+        ; bit0 -> A000
+        ; bit1 -> 8000
+        ; =======================================================
+
+        sui     16
+        adi     0A0h
+        mov     h, a
+
+        jmp     dc512_right_addr
+
+
+dc512_left:
+
+        ; =======================================================
+        ; ЛЕВАЯ ПОЛОВИНА
+        ;
+        ; H = E0 + x
+        ;
+        ; bit0 -> E000
+        ; bit1 -> C000
+        ; =======================================================
+
+        adi     0E0h
+        mov     h, a
+
+
+dc512_left_addr:
+dc512_right_addr:
+
+        ; -------------------------------------------------------
+        ; L = 255 - y
+        ; -------------------------------------------------------
+
+        lda     tmp_y_512
+        cma
+        mov     l, a
+
+        ; -------------------------------------------------------
+        ; Сохраняем базовый адрес.
+        ; -------------------------------------------------------
+
+        shld    tmp_vram_512
+
+        ; =======================================================
+        ; COLOR BIT 0
+        ; =======================================================
+
+        lda     tmp_color_512
+        ani     01h
+        jz      dc512_skip_bit0
+
+        ; -------------------------------------------------------
+        ; В зависимости от половины:
+        ;
+        ; left  -> E000
+        ; right -> A000
+        ;
+        ; Адрес уже подготовлен.
+        ; -------------------------------------------------------
+
+        lhld    tmp_vram_512
+
+        ; x >= 16 ?
+        lda     tmp_x_512
+        cpi     16
+        jc      dc512_bit0_left
+
+        ; right -> A000
+        lhld    tmp_glyph_512
+        xchg
+        lhld    tmp_vram_512
+        call    draw16_even
+        jmp     dc512_skip_bit0
+
+
+dc512_bit0_left:
+
+        ; left -> E000
+        lhld    tmp_glyph_512
+        xchg
+        lhld    tmp_vram_512
+        call    draw16_even
+
+
+dc512_skip_bit0:
+
+        ; =======================================================
+        ; COLOR BIT 1
+        ; =======================================================
+
+        lda     tmp_color_512
+        ani     02h
+        jz      dc512_done
+
+        ; -------------------------------------------------------
+        ; Повторно вычисляем базовый адрес.
+        ; -------------------------------------------------------
+
+        lda     tmp_x_512
+        cpi     16
+        jc      dc512_bit1_left
+
+        ; right:
+        ; A000 -> 8000
+        sui     16
+        adi     0A0h
+        mov     h, a
+        jmp     dc512_bit1_addr
+
+
+dc512_bit1_left:
+
+        ; left:
+        ; E000 -> C000
+        lda     tmp_x_512
+        adi     0E0h
+        mov     h, a
+
+
+dc512_bit1_addr:
+
+        lda     tmp_y_512
+        cma
+        mov     l, a
+
+        lhld    tmp_glyph_512
+        xchg
+        ; HL = VRAM
+        lhld    tmp_vram_512
+
+        ; Исправляем H для bit1.
+        lda     tmp_x_512
+        cpi     16
+        jc      dc512_bit1_left_c
+
+        ; right A000 -> 8000
+        mov     a, h
+        sui     20h
+        mov     h, a
+        jmp     dc512_bit1_draw
+
+
+dc512_bit1_left_c:
+
+        ; left E000 -> C000
+        mov     a, h
+        adi     20h
+        mov     h, a
+
+
+dc512_bit1_draw:
+
+        call    draw16_odd
+
+
+dc512_done:
+        ret
+
+
+; ===============================================================
+; draw16_even
+;
+; HL = VRAM address
+; DE = начало глифа
+;
+; Используются байты:
+;
+;   0, 2, 4, 6, 8, 10, 12, 14
+;
+; После каждой строки:
+;
+;   VRAM--
+;   glyph += 2
+; ===============================================================
+
+draw16_even:
+
+        mvi     b, 8
+
+d16_even_loop:
+
+        ldax    d
+        mov     m, a
+
+        dcx     h
+
+        inx     d
+        inx     d
+
+        dcr     b
+        jnz     d16_even_loop
+
+        ret
+
+
+; ===============================================================
+; draw16_odd
+;
+; HL = VRAM
+; DE = начало глифа
+;
+; Используются байты:
+;
+;   1, 3, 5, 7, 9, 11, 13, 15
+; ===============================================================
+
+draw16_odd:
+
+        inx     d
+
+        mvi     b, 8
+
+d16_odd_loop:
+
+        ldax    d
+        mov     m, a
+
+        dcx     h
+
+        inx     d
+        inx     d
+
+        dcr     b
+        jnz     d16_odd_loop
+
+        ret
+
+
+; ===============================================================
+; graph_print_512(x, y, s, color)
+;
+; __z88dk_callee
+;
+; x += 1 после каждого символа.
+;
+; Если x достигает 32 — прекращаем вывод.
+; ===============================================================
+
+_graph_print_512:
+
+        pop     de              ; return
+        pop     hl              ; color
+        mov     a, l
+        sta     tmp_color_512
+
+        pop     hl              ; string
+        shld    tmp_s_512
+
+        pop     hl              ; y
+        mov     a, l
+        sta     tmp_y_512
+
+        pop     hl              ; x
+        mov     a, l
+        sta     tmp_x_512
+
+        push    de              ; return
+
+
+gp512_loop:
+
+        ; x >= 32 -> конец строки экрана
+        lda     tmp_x_512
+        cpi     32
+        jnc     gp512_done
+
+        ; s
+        lhld    tmp_s_512
+
+        mov     a, m
+        ora     a
+        jz      gp512_done
+
+        sta     tmp_ch_512
+
+        inx     h
+        shld    tmp_s_512
+
+        call    draw_char_512
+
+        lda     tmp_x_512
+        inr     a
+        sta     tmp_x_512
+
+        jmp     gp512_loop
+
+
+gp512_done:
+        ret
+
+
+; ---------------------------------------------------------------
+; Рабочие переменные
+; ---------------------------------------------------------------
+
+tmp_x_512:
+        defb    0
+
+tmp_y_512:
+        defb    0
+
+tmp_ch_512:
+        defb    0
+
+tmp_color_512:
+        defb    0
+
+tmp_glyph_512:
+        defw    0
+
+tmp_vram_512:
+        defw    0
+
+tmp_s_512:
+        defw    0
 
 ; ---------------------------------------------------------------
 ; Шрифт font16x8: 55 глифов по 16 байт.
 ; Каждая строка: 2 байта (чётные пиксели E000h, нечётные пиксели A000h).
 ; ---------------------------------------------------------------
 font_chars_512:
-        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&#*+%"
+        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&$#*+%"
         defb    0
 
 font16x8:

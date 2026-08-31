@@ -23,306 +23,550 @@
 ; Только 8080-инструкции: без jr/djnz и без префиксов CB/DD/ED/FD.
 ;
 
+; ---------------------------------------------------------------
+; pr512t.asm
+;
+; Тонкий шрифт 4x8 в режиме 512x256.
+;
+; x    = tetrad-column 0..63
+; y    = верхняя строка 0..248
+; ch   = ASCII
+; color:
+;   bit 0 -> E000/A000
+;   bit 1 -> C000/8000
+;
+; Два символа занимают один байт:
+;
+;   even x -> high nibble
+;   odd  x -> low nibble
+;
+; __z88dk_callee
+;
+; Только Intel 8080.
+; ---------------------------------------------------------------
+
         SECTION code_clib
+
+        PUBLIC  _graph_put_char_512t
         PUBLIC  _graph_print_512t
 
-; ---------------------------------------------------------------
-; void graph_print_512t(x, y, s, color)
-; ---------------------------------------------------------------
-_graph_print_512t:
-        ld      hl, 2
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_color), a          ; цвет
-        ld      hl, 4
-        add     hl, sp
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        ld      a, e
-        ld      (tmp_s), a
-        ld      a, d
-        ld      (tmp_s + 1), a
-        ld      hl, 6
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_y), a              ; y
-        ld      hl, 8
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_x), a              ; x
-        ld      a, 0                    ; счётчик символов
-        ld      (tmp_parity), a
-print_loop_512t:
-        ld      a, (de)
-        or      a
-        jp      z, print_done_512t      ; конец строки
-        inc     de
-        ld      c, a                    ; символ
-        ld      a, e
-        ld      (tmp_s), a
-        ld      a, d
-        ld      (tmp_s + 1), a
-        ld      a, c
-        ld      (tmp_ch), a
+
+; ===============================================================
+; graph_put_char_512t(x,y,ch,color)
+; ===============================================================
+
+_graph_put_char_512t:
+
+        pop     de              ; return
+
+        pop     hl              ; color
+        mov     a, l
+        sta     tmp_color_512t
+
+        pop     hl              ; ch
+        mov     a, l
+        sta     tmp_ch_512t
+
+        pop     hl              ; y
+        mov     a, l
+        sta     tmp_y_512t
+
+        pop     hl              ; x
+        mov     a, l
+        sta     tmp_x_512t
+
+        push    de
+
         call    draw_char_512t
-        ; если индекс символа нечётный — сдвигаем колонку
-        ld      a, (tmp_parity)
-        and     1
-        jp      z, no_col_advance
-        ld      a, (tmp_x)
-        inc     a                       ; x += 1 (новая колонка)
-        ld      (tmp_x), a
-no_col_advance:
-        ld      a, (tmp_parity)
-        inc     a
-        ld      (tmp_parity), a
-        ld      a, (tmp_s)
-        ld      e, a
-        ld      a, (tmp_s + 1)
-        ld      d, a
-        jp      print_loop_512t
-print_done_512t:
         ret
 
-; ---------------------------------------------------------------
-; Внутренняя отрисовка одного тонкого символа 4x8.
-; ---------------------------------------------------------------
+
+; ===============================================================
+; draw_char_512t
+; ===============================================================
+
 draw_char_512t:
-        ; --- поиск глифа: E = индекс; нет в таблице -> пробел ---
-        ld      a, (tmp_ch)
-        ld      c, a                    ; C = искомый символ
-        ld      hl, font_chars_512t
-        ld      e, 0
-find_loop_512t:
-        ld      a, (hl)
-        or      a
-        jp      z, char_not_found_512t
-        cp      c
-        jp      z, glyph_found_512t
-        inc     hl
-        inc     e
-        jp      find_loop_512t
-char_not_found_512t:
-        ld      e, 0                    ; неизвестный -> пробел
-glyph_found_512t:
-        ld      h, 0
-        ld      l, e
-        add     hl, hl
-        add     hl, hl
-        add     hl, hl                  ; индекс * 8
-        ; tmp_fp = font_even_thin + index*8
-        ld      de, font_even_thin
-        push    hl
-        add     hl, de
-        ld      a, l
-        ld      (tmp_fp), a
-        ld      a, h
-        ld      (tmp_fp + 1), a
-        pop     hl
-        ; tmp_fp2 = font_odd_thin + index*8
-        ld      de, font_odd_thin
-        add     hl, de
-        ld      a, l
-        ld      (tmp_fp2), a
-        ld      a, h
-        ld      (tmp_fp2 + 1), a
 
-        ; --- стартовый адрес: 0xE000 + col * 0x100 + (255 - y) ---
-        ld      a, (tmp_x)
-        add     a, 0xE0
-        ld      h, a                    ; H = 0xE0 + col
-        ld      a, (tmp_y)
-        ld      e, a
-        ld      a, 255
-        sub     e                       ; A = 255 - y
-        ld      l, a                    ; HL = адрес в E000h
+        ; -------------------------------------------------------
+        ; Проверка координат.
+        ; -------------------------------------------------------
 
-        ; --- проверка чётности колонки ---
-        ld      a, (tmp_parity)
-        and     1
-        jp      nz, odd_column
+        lda     tmp_x_512t
+        cpi     64
+        jnc     dct512_done
 
-        ; ====== ЧЁТНАЯ КОЛОНКА: запись напрямую (левая тетрада) ======
-        ld      a, (tmp_color)
-        ld      c, a                    ; C = цвет
+        lda     tmp_y_512t
+        cpi     249
+        jnc     dct512_done
 
-        ; -- bit0 -> E000h (even-plane шрифт) --
-        ld      a, c
-        and     1
-        jp      z, ce_skip0
-        ld      a, (tmp_fp)
-        ld      e, a
-        ld      a, (tmp_fp + 1)
-        ld      d, a                    ; DE = even-глиф
-        call    draw_even_direct
-ce_skip0:
-        ; -- переход на A000h (odd-plane) --
-        ld      a, h
-        sub     0x40
-        ld      h, a
 
-        ; -- bit0 -> A000h (odd-plane шрифт) --
-        ld      a, c
-        and     1
-        jp      z, ce_skip0b
-        ld      a, (tmp_fp2)
-        ld      e, a
-        ld      a, (tmp_fp2 + 1)
-        ld      d, a                    ; DE = odd-глиф
-        call    draw_even_direct
-ce_skip0b:
-        ; -- переход на C000h (bit1, even-plane) --
-        ld      a, h
-        add     a, 0x20
-        ld      h, a
+        ; -------------------------------------------------------
+        ; Ищем глиф.
+        ; E = index.
+        ; -------------------------------------------------------
 
-        ; -- bit1 -> C000h (even-plane шрифт) --
-        ld      a, c
-        and     2
-        jp      z, ce_skip1
-        ld      a, (tmp_fp)
-        ld      e, a
-        ld      a, (tmp_fp + 1)
-        ld      d, a
-        call    draw_even_direct
-ce_skip1:
-        ; -- переход на 8000h (bit1, odd-plane) --
-        ld      a, h
-        sub     0x40
-        ld      h, a
+        lda     tmp_ch_512t
+        mov     c, a
 
-        ; -- bit1 -> 8000h (odd-plane шрифт) --
-        ld      a, c
-        and     2
-        jp      z, ce_done
-        ld      a, (tmp_fp2)
-        ld      e, a
-        ld      a, (tmp_fp2 + 1)
-        ld      d, a
-        call    draw_even_direct
-ce_done:
+        lxi     h, font_chars_512t
+        mvi     e, 0
+
+dct512_find:
+
+        mov     a, m
+        ora     a
+        jz      dct512_not_found
+
+        cmp     c
+        jz      dct512_found
+
+        inx     h
+        inr     e
+        jmp     dct512_find
+
+
+dct512_not_found:
+
+        mvi     e, 0
+
+
+dct512_found:
+
+        ; -------------------------------------------------------
+        ; DE = font_even_thin + index*8
+        ; -------------------------------------------------------
+
+        mvi     d, 0
+        mov     l, e
+        mvi     h, 0
+
+        dad     h
+        dad     h
+        dad     h
+
+        lxi     d, font_even_thin
+        dad     d
+
+        shld    tmp_fp_512t
+
+        ; -------------------------------------------------------
+        ; DE = font_odd_thin + index*8
+        ; -------------------------------------------------------
+
+        mov     a, l
+        sta     tmp_index_lo_512t
+
+        mov     a, h
+        sta     tmp_index_hi_512t
+
+        lhld    tmp_index_lo_512t
+        lxi     d, font_odd_thin
+        dad     d
+
+        shld    tmp_fp2_512t
+
+
+        ; =======================================================
+        ; Вычисляем физический байт.
+        ;
+        ; byte column = x / 2
+        ;
+        ; x=0..31  -> left
+        ; x=32..63 -> right
+        ; =======================================================
+
+        lda     tmp_x_512t
+        mov     c, a
+
+        ; x / 2
+        rar
+        ani     127
+        mov     e, a
+
+        ; -------------------------------------------------------
+        ; x < 32 ?
+        ; -------------------------------------------------------
+
+        mov     a, c
+        cpi     32
+        jc      dct512_left
+
+        ; -------------------------------------------------------
+        ; RIGHT
+        ;
+        ; local byte column = x/2 - 16
+        ; base:
+        ;   bit0 = A000
+        ;   bit1 = 8000
+        ; -------------------------------------------------------
+
+        mov     a, e
+        sui     16
+        adi     0A0h
+        mov     h, a
+
+        jmp     dct512_addr_done
+
+
+dct512_left:
+
+        ; -------------------------------------------------------
+        ; LEFT
+        ;
+        ; base:
+        ;   bit0 = E000
+        ;   bit1 = C000
+        ; -------------------------------------------------------
+
+        mov     a, e
+        adi     0E0h
+        mov     h, a
+
+
+dct512_addr_done:
+
+        ; L = 255-y
+        lda     tmp_y_512t
+        cma
+        mov     l, a
+
+        shld    tmp_vram_512t
+
+
+        ; =======================================================
+        ; Выбираем тетраду.
+        ;
+        ; x even -> high nibble
+        ; x odd  -> low nibble
+        ; =======================================================
+
+        lda     tmp_x_512t
+        ani     1
+        jnz     dct512_right_nibble
+
+        jmp     dct512_left_nibble
+
+
+; ===============================================================
+; LEFT NIBBLE
+; ===============================================================
+
+dct512_left_nibble:
+
+        ; -------------------------------------------------------
+        ; color bit0 -> E000/A000
+        ; -------------------------------------------------------
+
+        lda     tmp_color_512t
+        ani     01h
+        jz      dct512_ln_skip0
+
+        lhld    tmp_vram_512t
+        xchg
+        lhld    tmp_fp_512t
+        call    draw_thin_left
+
+
+dct512_ln_skip0:
+
+        ; -------------------------------------------------------
+        ; color bit1 -> C000/8000
+        ; -------------------------------------------------------
+
+        lda     tmp_color_512t
+        ani     02h
+        jz      dct512_done
+
+        lhld    tmp_vram_512t
+
+        lda     tmp_x_512t
+        cpi     32
+        jc      dct512_ln_c_left
+
+        ; right: A000 -> 8000
+        mov     a, h
+        sui     20h
+        mov     h, a
+        jmp     dct512_ln_c_draw
+
+
+dct512_ln_c_left:
+
+        ; left: E000 -> C000
+        mov     a, h
+        adi     20h
+        mov     h, a
+
+
+dct512_ln_c_draw:
+
+        xchg
+        lhld    tmp_fp_512t
+        call    draw_thin_left
+
         ret
 
-odd_column:
-        ; ====== НЕЧЁТНАЯ КОЛОНКА: сдвиг >> 4 + OR (правая тетрада) ======
-        ld      a, (tmp_color)
-        ld      c, a                    ; C = цвет
 
-        ; -- bit0 -> E000h (even-plane, shift+OR) --
-        ld      a, c
-        and     1
-        jp      z, co_skip0
-        ld      a, (tmp_fp)
-        ld      e, a
-        ld      a, (tmp_fp + 1)
-        ld      d, a
-        call    draw_odd_shift_or
-co_skip0:
-        ; -- переход на A000h --
-        ld      a, h
-        sub     0x40
-        ld      h, a
+; ===============================================================
+; RIGHT NIBBLE
+; ===============================================================
 
-        ; -- bit0 -> A000h (odd-plane, shift+OR) --
-        ld      a, c
-        and     1
-        jp      z, co_skip0b
-        ld      a, (tmp_fp2)
-        ld      e, a
-        ld      a, (tmp_fp2 + 1)
-        ld      d, a
-        call    draw_odd_shift_or
-co_skip0b:
-        ; -- переход на C000h --
-        ld      a, h
-        add     a, 0x20
-        ld      h, a
+dct512_right_nibble:
 
-        ; -- bit1 -> C000h (even-plane, shift+OR) --
-        ld      a, c
-        and     2
-        jp      z, co_skip1
-        ld      a, (tmp_fp)
-        ld      e, a
-        ld      a, (tmp_fp + 1)
-        ld      d, a
-        call    draw_odd_shift_or
-co_skip1:
-        ; -- переход на 8000h --
-        ld      a, h
-        sub     0x40
-        ld      h, a
+        ; -------------------------------------------------------
+        ; color bit0
+        ; -------------------------------------------------------
 
-        ; -- bit1 -> 8000h (odd-plane, shift+OR) --
-        ld      a, c
-        and     2
-        jp      z, co_done
-        ld      a, (tmp_fp2)
-        ld      e, a
-        ld      a, (tmp_fp2 + 1)
-        ld      d, a
-        call    draw_odd_shift_or
-co_done:
+        lda     tmp_color_512t
+        ani     01h
+        jz      dct512_rn_skip0
+
+        lhld    tmp_vram_512t
+        xchg
+        lhld    tmp_fp_512t
+        call    draw_thin_right
+
+
+dct512_rn_skip0:
+
+        ; -------------------------------------------------------
+        ; color bit1
+        ; -------------------------------------------------------
+
+        lda     tmp_color_512t
+        ani     02h
+        jz      dct512_done
+
+        lhld    tmp_vram_512t
+
+        lda     tmp_x_512t
+        cpi     32
+        jc      dct512_rn_c_left
+
+        ; right A000 -> 8000
+        mov     a, h
+        sui     20h
+        mov     h, a
+        jmp     dct512_rn_c_draw
+
+
+dct512_rn_c_left:
+
+        ; left E000 -> C000
+        mov     a, h
+        adi     20h
+        mov     h, a
+
+
+dct512_rn_c_draw:
+
+        xchg
+        lhld    tmp_fp_512t
+        call    draw_thin_right
+
         ret
 
-; ---------------------------------------------------------------
-; Вспомогательные: 8 строк, HL = адрес экрана, DE = шрифт.
-; Все сохраняют HL (база экрана) через push/pop.
-; ---------------------------------------------------------------
 
-; Чётная колонка, прямая запись. Данные в левой тетраде (0xF0).
-draw_even_direct:
-        push    hl
-        ld      b, 8
-ded_loop:
-        ld      a, (de)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        dec     b
-        ld      a, b
-        or      a
-        jp      nz, ded_loop
-        pop     hl
+; ===============================================================
+; draw_thin_left
+;
+; HL = glyph
+; DE = VRAM
+;
+; Заменяем HIGH nibble, LOW сохраняем.
+;
+;   old = xxxx yyyy
+;   new = AAAA yyyy
+;
+; результат:
+;   AAAA yyyy
+; ===============================================================
+
+draw_thin_left:
+
+        mvi     b, 8
+
+dtl_loop:
+
+        mov     a, m
+        ani     0Fh
+        mov     c, a
+
+        ldax    d
+        ani     0F0h
+        ora     c
+
+        stax    d
+
+        inx     h
+        inx     d
+
+        dcr     b
+        jnz     dtl_loop
+
         ret
 
-; Нечётная колонка: сдвиг на 4 вправо + OR.
-draw_odd_shift_or:
-        push    hl
-        ld      b, 8
-doso_loop:
-        ld      a, (de)
-        rrca
-        rrca
-        rrca
-        rrca
-        and     0x0F
-        or      (hl)
-        ld      (hl), a
-        dec     hl
-        inc     de
-        dec     b
-        ld      a, b
-        or      a
-        jp      nz, doso_loop
-        pop     hl
+
+; ===============================================================
+; draw_thin_right
+;
+; HL = glyph
+; DE = VRAM
+;
+; Заменяем LOW nibble, HIGH сохраняем.
+; ===============================================================
+
+draw_thin_right:
+
+        mvi     b, 8
+
+dtr_loop:
+
+        ldax    d
+        mov     c, a
+
+        mov     a, c
+        ani     0F0h
+        mov     c, a
+
+        mov     a, m
+
+        ; source F0 -> 0F
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh
+
+        ora     c
+        stax    d
+
+        inx     h
+        inx     d
+
+        dcr     b
+        jnz     dtr_loop
+
         ret
 
-tmp_x:          defb    0
-tmp_y:          defb    0
-tmp_ch:         defb    0
-tmp_color:      defb    0
-tmp_fp:         defw    0
-tmp_fp2:        defw    0
-tmp_s:          defw    0
-tmp_parity:     defb    0
+
+; ===============================================================
+; graph_print_512t
+;
+; x += 1 после каждого символа.
+;
+; x = 0..63.
+; После x=63 следующий символ уже не выводится.
+; ===============================================================
+
+_graph_print_512t:
+
+        pop     de              ; return
+
+        pop     hl              ; color
+        mov     a, l
+        sta     tmp_color_512t
+
+        pop     hl              ; string
+        shld    tmp_s_512t
+
+        pop     hl              ; y
+        mov     a, l
+        sta     tmp_y_512t
+
+        pop     hl              ; x
+        mov     a, l
+        sta     tmp_x_512t
+
+        push    de
+
+
+gp512t_loop:
+
+        lda     tmp_x_512t
+        cpi     64
+        jnc     gp512t_done
+
+        lhld    tmp_s_512t
+
+        mov     a, m
+        ora     a
+        jz      gp512t_done
+
+        sta     tmp_ch_512t
+
+        inx     h
+        shld    tmp_s_512t
+
+        call    draw_char_512t
+
+        lda     tmp_x_512t
+        inr     a
+        sta     tmp_x_512t
+
+        jmp     gp512t_loop
+
+
+gp512t_done:
+        ret
+
+
+; ===============================================================
+; Конец draw_char_512t / выход при недопустимых координатах
+; ===============================================================
+
+dct512_done:
+        ret
+
+
+; ===============================================================
+; Таблица ASCII-символов
+; ===============================================================
+
+font_chars_512t:
+        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&$#*+%"
+        defb    0
+
+
+; ===============================================================
+; Рабочие переменные
+; ===============================================================
+
+tmp_x_512t:
+        defb    0
+
+tmp_y_512t:
+        defb    0
+
+tmp_ch_512t:
+        defb    0
+
+tmp_color_512t:
+        defb    0
+
+tmp_fp_512t:
+        defw    0
+
+tmp_fp2_512t:
+        defw    0
+
+tmp_vram_512t:
+        defw    0
+
+tmp_s_512t:
+        defw    0
+
+tmp_index_lo_512t:
+        defb    0
+
+tmp_index_hi_512t:
+        defb    0
 
 ; ---------------------------------------------------------------
 ; Символы шрифта (те же, что в graphpr.asm).
 ; ---------------------------------------------------------------
-font_chars_512t:
-        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&#*+%"
+font_chars_512:
+        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&$#*+%"
         defb    0
 
 ; ---------------------------------------------------------------

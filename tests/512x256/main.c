@@ -14,13 +14,13 @@
 
 /* Вывод текста шрифтом 16x8 в режиме 512x256 (pr512.asm) */
 extern void graph_put_char_512(unsigned char x, unsigned char y, char ch,
-                               unsigned char color);
+                               unsigned char color) __z88dk_callee;
 extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
-                            unsigned char color);
+                            unsigned char color) __z88dk_callee;
 
 /* Вывод тонкого текста 4x8 в режиме 512x256 (pr512t.asm) */
 extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
-                             unsigned char color);
+                             unsigned char color) __z88dk_callee;
 
 /* Загрузка 16 цветов палитры (v06pal.asm) */
 extern void v06_set_palette_asm(const unsigned char *pal);
@@ -74,11 +74,6 @@ int main(void)
     /* Очистка через новый API: заполняет плоскости по маске режима */
     gfx_clear(0x00);
 
-    /* Тестовый паттерн: чётные плоскости */
-    gfx_clear(0x00);            /* все плоскости режима → 0x00 */
-
-    while(1);
-
     /* Левый столбец (X=0): E001h..E0FEh, бит 7 */
     fill_stride(0xE001, 0x80, 1, 254);
 
@@ -94,9 +89,9 @@ int main(void)
     fill_stride(0xE0FF, 0xFF, 0x100, 32);
 
     /* Вывод текста */
-    graph_print_512(1, 10, "VECTOR-06C", 0x1);
-    graph_print_512(1, 20, "512x256 MODE", 0xF);
-    graph_print_512t(1, 40, "THIN TEXT TEST", 0xF);
+    graph_print_512(1, 10, "VECTOR-06C", 0x3);
+    graph_print_512(1, 20, "512x256 MODE", 0x3);
+    graph_print_512t(1, 40, "THIN TEXT TEST", 0x3);
 
     while(1);
 
