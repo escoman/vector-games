@@ -172,7 +172,7 @@ int main(void)
     drum_init();
 
     graph_set_black_palette();
-    graph_clear({bg});
+    gfx_clear({bg});
     graph_rle_expand(title_bmp_screen_rle, {rle_x}u, {rle_y}u);
     show_menu(100);
     graph_set_palette(title_bmp_palette);

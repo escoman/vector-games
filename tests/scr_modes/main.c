@@ -24,8 +24,8 @@ extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
 extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
                              unsigned char color);
 
-/* --- Палитра 16 цветов (v06pal.asm) --- */
-extern void v06_set_palette_asm(const unsigned char *pal);
+/* --- Палитра (mode.c: gfx_set_palette расширяет до 16 слотов) --- */
+/* extern void gfx_set_palette(const unsigned char *colors); -- уже в v06.h */
 
 /* --------------------------- Таблица режимов ------------------------- */
 
@@ -71,18 +71,27 @@ static const unsigned char pal16[16] = {
     V06_RGB(7,7,3),  /* 15: белый           */
 };
 
-/*
- * Палитра для 512x256 режимов.
- * В 512-режимах биты пикселя распределяются по плоскостям:
- *   bit 0 → E000/A000, bit 1 → C000/8000.
- * Все ненулевые комбинации бит → белый текст на чёрном фоне.
- */
-static const unsigned char pal_512[16] = {
-    V06_RGB(0,0,0),
-    V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3),
-    V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3),
-    V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3),
-    V06_RGB(7,7,3), V06_RGB(7,7,3), V06_RGB(7,7,3),
+/* 2-цветная палитра для режима 1 (256x256 2-color).
+ * Плоскость: 0xE000. */
+static const unsigned char pal2[2] = {
+    V06_RGB(0,0,0),  /* 0: чёрный (фон) */
+    V06_RGB(7,7,3),  /* 1: белый */
+};
+
+/* 4-цветная палитра для режима 2 (512x256 4-color).
+ * Плоскости: bit0 → E000/A000, bit1 → C000/8000. */
+static const unsigned char pal4[4] = {
+    V06_RGB(0,0,0),  /* 0: чёрный (фон) */
+    V06_RGB(7,0,0),  /* 1: красный (E000/A000) */
+    V06_RGB(0,7,0),  /* 2: зелёный (C000/8000) */
+    V06_RGB(7,7,3),  /* 3: белый (обе плоскости) */
+};
+
+/* 2-цветная палитра для режима 3 (512x256 2-color).
+ * Плоскости: E000+A000 (нечётные пиксели). */
+static const unsigned char pal2w[2] = {
+    V06_RGB(0,0,0),  /* 0: чёрный (фон) */
+    V06_RGB(7,7,3),  /* 1: белый (E000/A000) */
 };
 
 /* -------------------------- Образцы цветов ------------------------ */
@@ -155,7 +164,6 @@ typedef struct {
     const char *text;
     unsigned char x;      /* пиксель (256) или символ (512) */
     unsigned char y;      /* пиксельная строка 0-255        */
-    unsigned char marker; /* 1 = показать '<' у текущего    */
 } menu_item_t;
 
 /* Общие тексты меню (одинаковые для всех режимов). */
@@ -205,18 +213,18 @@ static void draw_menu(void)
 {
     /* Координаты: x = символ/колонка, y = строка (в единицах 8px). */
     static const menu_item_t items[] = {
-        { txt_title, 1,  0, 0 },
-        { txt_sep,   1,  2, 0 },
-        { txt_m0,    1,  4, 1 },
-        { txt_m1,    1,  6, 1 },
-        { txt_m2,    1,  8, 1 },
-        { txt_m3,    1, 10, 1 },
-        { txt_sep,   1, 12, 0 },
-        { txt_key,   1, 14, 0 },
-        { txt_test4, 1, 24, 0 },
-        { txt_test5, 1, 26, 0 },
+        { txt_title, 1,  0 },
+        { txt_sep,   1,  2 },
+        { txt_m0,    1,  4 },
+        { txt_m1,    1,  6 },
+        { txt_m2,    1,  8 },
+        { txt_m3,    1, 10 },
+        { txt_sep,   1, 12 },
+        { txt_key,   1, 14 },
+        { txt_test4, 1, 24 },
+        { txt_test5, 1, 26 },
     };
-    unsigned char i, color, marker_x;
+    unsigned char i, color;
 
     /* Цвет текста: белый для текущего режима. */
     switch (cur_mode) {
@@ -243,14 +251,12 @@ static void draw_menu(void)
         }
 
         print_line(px, py, m->text, color);
+    }
 
-        /* Маркер '>' у текущего режима. */
-        if (m->marker && m->text == (
-                cur_mode == GFX_MODE_256_16 ? txt_m0 :
-                cur_mode == GFX_MODE_256_2  ? txt_m1 :
-                cur_mode == GFX_MODE_512_4  ? txt_m2 : txt_m3)) {
-            print_line(0, py, ">", color);
-        }
+    /* Маркер '>' напротив текущего режима (y = 4 + mode * 2). */
+    {
+        unsigned char my = (4 + cur_mode * 2) * 8;
+        print_line(0, my, ">", color);
     }
 
     /* 512-режимы: более длинные тестовые строки. */
@@ -285,13 +291,15 @@ static void switch_mode(unsigned char mode)
      * не трогаем (аппаратный режим по умолчанию). */
     gfx_set_mode(mode);
 
-    /* Загружаем палитру */
-    if (mode == GFX_MODE_256_16)
-        v06_set_palette_asm(pal16);
-    else
-        v06_set_palette_asm(pal_512);
+    /* Загружаем палитру (gfx_set_palette расширяет до 16 слотов) */
+    switch (mode) {
+    case GFX_MODE_256_16: gfx_set_palette(pal16); break;
+    case GFX_MODE_256_2:  gfx_set_palette(pal2);  break;
+    case GFX_MODE_512_4:  gfx_set_palette(pal4);  break;
+    default:              gfx_set_palette(pal2w); break;
+    }
 
-    /* Очищаем экран (только активные плоскости режима) */
+    /* Очищаем все плоскости (включая мусор от предыдущего режима) */
     gfx_clear(0);
 
     /* Рисуем меню и образцы цветов */

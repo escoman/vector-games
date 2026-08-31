@@ -61,7 +61,7 @@ extern unsigned char gfx_current_mode;
 extern void gfx_set_mode(unsigned char mode);
 
 /* Очистка экрана цветом 0-15. Заполняет только активные плоскости
- * текущего режима (через graph_fill_plane). */
+ * текущего режима (через graph_fill_planes). */
 extern void gfx_clear(unsigned char color);
 
 /* Загрузка палитры из num_colors цветов. Автоматически расширяет
@@ -76,8 +76,9 @@ extern void gfx_set_palette(const unsigned char *colors);
 extern void graph_rle_expand(const unsigned char *src, unsigned char x,
                              unsigned char y);
 
-/* Заливка экрана цветом 0-15 (плоскостная видеопамять). */
-extern void graph_clear(unsigned char color);
+/* Заливка плоскостей VRAM цветом 0-15 (graph_fill_planes в clr.asm).
+ * mask определяет, какие плоскости заполнять; fill: 0x00 или 0xFF. */
+extern void graph_fill_planes(unsigned char mask, unsigned char fill) __z88dk_callee;
 
 /* Загрузка 16 цветов палитры. Формат байта: 0bRRRGGGBB.
  * Палитра Вектора адресуется «цветом под лучом», поэтому запись идёт

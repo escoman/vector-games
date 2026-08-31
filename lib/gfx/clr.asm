@@ -1,18 +1,14 @@
 ;
 ; clr.asm — заполнение плоскостей VRAM Вектора-06Ц.
 ;
-; Две функции:
+;   void graph_fill_planes(unsigned char mask, unsigned char fill)
+;       __z88dk_callee
 ;
-;   void graph_fill_plane(unsigned char mask, unsigned char fill);
-;       Заполняет 8 КБ каждой плоскости, у которой бит в mask
-;       установлен. Плоскости (от старшего адреса к младшему):
-;         bit 0 → 0xE000, bit 1 → 0xC000, bit 2 → 0xA000,
-;         bit 3 → 0x8000.
-;       fill: 0x00 — залить нулями, 0xFF — залить единицами.
-;
-;   void graph_clear(unsigned char color);
-;       Совместимость: заполняет все 4 плоскости.
-;       Эквивалент graph_fill_plane(0x0F, color >= 8 ? 0xFF : 0x00).
+;   Заполняет 8 КБ каждой плоскости, у которой бит в mask
+;   установлен. Плоскости (от старшего адреса к младшему):
+;     bit 0 → 0xE000, bit 1 → 0xC000, bit 2 → 0xA000,
+;     bit 3 → 0x8000.
+;   fill: 0x00 — залить нулями, 0xFF — залить единицами.
 ;
 ; Алгоритм: 4 итерации (по числу плоскостей). На каждой — сдвигаем
 ; маску rrca, проверяем бит. Если установлен — заливаем 8 КБ
@@ -25,125 +21,255 @@
 ;
 
         SECTION code_clib
-        PUBLIC  _graph_fill_plane
-        PUBLIC  _graph_clear
+        PUBLIC  _graph_fill_planes
 
 ; ---------------------------------------------------------------
-; void graph_fill_plane(unsigned char mask, unsigned char fill)
+; void graph_fill_planes(unsigned char mask, unsigned char fill)
+;   __z88dk_callee
 ;
-; mask: sp+2 (16-битный слот, значение в младшем байте)
-; fill: sp+4 (16-битный слот, значение в младшем байте)
+; Быстрая заливка экранных плоскостей Вектора-06Ц через PUSH.
+;
+; mask:
+;   01h -> 0E000h-0FFFFh
+;   02h -> 0C000h-0DFFFh
+;   04h -> 0A000h-0BFFFh
+;   08h -> 08000h-09FFFh
+;
+; fill:
+;   байт заполнения.
+;
+; Один PUSH HL записывает 2 байта.
+;
+; 4096 PUSH = 8192 байта = одна плоскость.
+;
+; Для каждой плоскости:
+;
+;   B = 16
+;   C = 32
+;   8 × PUSH HL
+;
+;   16 × 32 × 8 = 4096 PUSH
+;   4096 × 2 = 8192 байта
+;
+; ВАЖНО:
+;   SP во время PUSH находится внутри VRAM.
+;   Поэтому никаких CALL/RET внутри цикла заливки нет.
+;
+; Только инструкции Intel 8080.
 ; ---------------------------------------------------------------
-_graph_fill_plane:
-        ld      hl, 2
-        add     hl, sp
-        ld      c, (hl)         ; C = маска плоскостей
-        ld      hl, 4
-        add     hl, sp
-        ld      e, (hl)         ; E = байт заливки (0x00 или 0xFF)
 
-        ld      b, 4            ; B = счётчик плоскостей
-        ld      h, 0xE0         ; HL = 0xE000 (первая плоскость)
-        ld      l, 0
+_graph_fill_planes:
+        di
 
-fp_loop:
+        ; -------------------------------------------------------
+        ; Получаем параметры __z88dk_callee.
+        ;
+        ; После CALL:
+        ;
+        ;   SP -> fill
+        ;          mask
+        ;          return address
+        ;
+        ; -------------------------------------------------------
+
+        pop     de              ; DE = return address
+        pop     hl              ; HL = fill
+        pop     bc              ; BC = mask
+
+        push    de              ; вернуть return address
+
+        ; Сохраняем SP вызывающего.
+        ld      (_saved_sp), sp
+
+        ; Сохраняем mask.
         ld      a, c
-        rra                     ; проверяем младший бит маски
-        ld      c, a            ; сохраняём сдвинутую маску
-        jp      nc, fp_skip     ; бит 0 — пропускаем плоскость
+        ld      (_fill_mask), a
 
-        ; заливаем 8 КБ по HL байтом E
-        push    bc
-        ld      a, e
-        ld      b, 0x20         ; 32 страницы
-fp_page:
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        jp      nz, fp_page     ; L не обнулился — страница не кончилась
-        inc     h               ; следующая страница
-        dec     b
-        jp      nz, fp_page
-        pop     bc
+        ; -------------------------------------------------------
+        ; Преобразуем fill:
+        ;
+        ;   fill = 00 -> HL = 0000
+        ;   fill = A5 -> HL = A5A5
+        ;   fill = FF -> HL = FFFF
+        ;
+        ; После этого HL больше не изменяется.
+        ; -------------------------------------------------------
 
-fp_skip:
-        ld      a, h
-        sub     0x20            ; переход к следующей плоскости (адрес уменьшается)
+        ld      a, l
         ld      h, a
-        dec     b
-        jp      nz, fp_loop
+        ld      l, a
+
+        ; =======================================================
+        ; ПЛОСКОСТЬ 0: E000-FFFF
+        ;
+        ; PUSH сначала уменьшает SP:
+        ;
+        ;   SP=0000
+        ;   PUSH -> FFFF,FFFE
+        ;
+        ; Далее запись идёт вниз до E000.
+        ; =======================================================
+
+        ld      a, (_fill_mask)
+        ani     01h
+        jp      z, fp_skip_e000
+
+        ld      sp, 0000h
+
+        ld      b, 16
+
+fp_e000_outer:
+        ld      c, 32
+
+fp_e000_inner:
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+
+        dcr     c
+        jp      nz, fp_e000_inner
+
+        dcr     b
+        jp      nz, fp_e000_outer
+
+fp_skip_e000:
+
+
+        ; =======================================================
+        ; ПЛОСКОСТЬ 1: C000-DFFF
+        ;
+        ; SP = E000
+        ; PUSH -> DFFF...C000
+        ; =======================================================
+
+        ld      a, (_fill_mask)
+        ani     02h
+        jp      z, fp_skip_c000
+
+        ld      sp, 0E000h
+
+        ld      b, 16
+
+fp_c000_outer:
+        ld      c, 32
+
+fp_c000_inner:
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+
+        dcr     c
+        jp      nz, fp_c000_inner
+
+        dcr     b
+        jp      nz, fp_c000_outer
+
+fp_skip_c000:
+
+
+        ; =======================================================
+        ; ПЛОСКОСТЬ 2: A000-BFFF
+        ;
+        ; SP = C000
+        ; PUSH -> BFFF...A000
+        ; =======================================================
+
+        ld      a, (_fill_mask)
+        ani     04h
+        jp      z, fp_skip_a000
+
+        ld      sp, 0C000h
+
+        ld      b, 16
+
+fp_a000_outer:
+        ld      c, 32
+
+fp_a000_inner:
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+
+        dcr     c
+        jp      nz, fp_a000_inner
+
+        dcr     b
+        jp      nz, fp_a000_outer
+
+fp_skip_a000:
+
+
+        ; =======================================================
+        ; ПЛОСКОСТЬ 3: 8000-9FFF
+        ;
+        ; SP = A000
+        ; PUSH -> 9FFF...8000
+        ; =======================================================
+
+        ld      a, (_fill_mask)
+        ani     08h
+        jp      z, fp_skip_8000
+
+        ld      sp, 0A000h
+
+        ld      b, 16
+
+fp_8000_outer:
+        ld      c, 32
+
+fp_8000_inner:
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+
+        dcr     c
+        jp      nz, fp_8000_inner
+
+        dcr     b
+        jp      nz, fp_8000_outer
+
+fp_skip_8000:
+
+
+        ; -------------------------------------------------------
+        ; Восстанавливаем SP вызывающего.
+        ; -------------------------------------------------------
+
+        ld      hl, (_saved_sp)
+        ld      sp, hl
+
+        ei
         ret
 
+
 ; ---------------------------------------------------------------
-; void graph_clear(unsigned char color)
+; Рабочие переменные.
 ;
-; Совместимость: color на sp+2. Заполняет все 4 плоскости.
-; Делегирует graph_fill_plane(0x0F, fill).
+; Они должны находиться вне VRAM.
 ; ---------------------------------------------------------------
-_graph_clear:
-        ld      hl, 2
-        add     hl, sp
-        ld      a, (hl)         ; A = color
-        ; байт заливки: если бит 3 (вес 8) установлен → 0xFF
-        and     0x08
-        ld      e, 0x00
-        jp      z, clr_go
-        ld      e, 0xFF
-clr_go:
-        ld      c, 0x0F         ; маска: все 4 плоскости
-        ld      b, 4
-        ld      h, 0xE0
-        ld      l, 0
 
-clr_loop:
-        ld      a, c
-        rra
-        ld      c, a
-        jp      nc, clr_skip
+_fill_mask:
+        defb    0
 
-        push    bc
-        ld      a, e
-        ld      b, 0x20
-clr_page:
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        ld      (hl), a
-        inc     l
-        jp      nz, clr_page
-        inc     h
-        dec     b
-        jp      nz, clr_page
-        pop     bc
-
-clr_skip:
-        ld      a, h
-        sub     0x20
-        ld      h, a
-        dec     b
-        jp      nz, clr_loop
-        ret
+_saved_sp:
+        defw    0
