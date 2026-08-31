@@ -22,35 +22,12 @@ extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
 extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
                              unsigned char color) __z88dk_callee;
 
+const unsigned char _pal4[4] = {
+    0x00, V06_RGB(7, 0, 0), V06_RGB(0, 7, 0), V06_RGB(7, 7, 3)
+};
+
 /* Загрузка 16 цветов палитры (v06pal.asm) */
 extern void v06_set_palette_asm(const unsigned char *pal);
-
-static void set_palette(void)
-{
-    unsigned char _pal16[16];
-
-    unsigned char bg = 0x00;
-    unsigned char fg = 0xFF;
-
-    _pal16[0x00] = bg;
-    _pal16[0x01] = fg;
-    _pal16[0x02] = fg;
-    _pal16[0x03] = fg;
-    _pal16[0x04] = fg;
-    _pal16[0x05] = fg;
-    _pal16[0x06] = fg;
-    _pal16[0x07] = fg;
-    _pal16[0x08] = fg;
-    _pal16[0x09] = fg;
-    _pal16[0x0A] = fg;
-    _pal16[0x0B] = fg;
-    _pal16[0x0C] = fg;
-    _pal16[0x0D] = fg;
-    _pal16[0x0E] = fg;
-    _pal16[0x0F] = fg;
-
-    v06_set_palette_asm(_pal16);
-}
 
 /* Запись count байт: val по адресам addr, addr+step, addr+2*step, ... */
 static void fill_stride(unsigned int addr, unsigned char val,
@@ -65,11 +42,11 @@ static void fill_stride(unsigned int addr, unsigned char val,
 
 int main(void)
 {
-    /* Загружаем палитру (до переключения режима) */
-    set_palette();
-
     /* Переключаем в 512x256 через новый API */
     gfx_set_mode(GFX_MODE_512_4);
+
+    /* Загружаем палитру (до переключения режима) */
+    gfx_set_palette(_pal4);
 
     /* Очистка через новый API: заполняет плоскости по маске режима */
     gfx_clear(0x00);
@@ -88,10 +65,53 @@ int main(void)
     fill_stride(0xA0FF, 0xFF, 0x100, 32);
     fill_stride(0xE0FF, 0xFF, 0x100, 32);
 
-    /* Вывод текста */
-    graph_print_512(1, 10, "VECTOR-06C", 0x3);
-    graph_print_512(1, 20, "512x256 MODE", 0x3);
-    graph_print_512t(1, 40, "THIN TEXT TEST", 0x3);
+    /* Зелёный прямоугольник (C000 + 8000) с отступом внутрь */
+
+    /* Левая граница (X=1): C000, бит 6, Y=16..239 */
+    fill_stride(0xC110, 0x80, 1, 224);
+
+    /* Правая граница (X=510): 8000, бит 1, Y=16..239 */
+    fill_stride(0x9E10, 0x01, 1, 224);
+
+    /* Верхняя граница (Y=16): 8000 + C000 */
+    fill_stride(0x8110, 0xFF, 0x100, 30);
+    fill_stride(0xC110, 0xFF, 0x100, 30);
+
+    /* Нижняя граница (Y=239): 8000 + C000 */
+    fill_stride(0x81EF, 0xFF, 0x100, 30);
+    fill_stride(0xC1EF, 0xFF, 0x100, 30);
+
+    /* Белый прямоугольник (E000+A000 + C000+8000) с отступом внутрь */
+
+    /* Левая граница (X=2): E000, бит 5, Y=32..223 */
+    fill_stride(0xE220, 0x80, 1, 192);
+    fill_stride(0xC220, 0x80, 1, 192);
+
+    /* Правая граница (X=509): A000, бит 2, Y=32..223 */
+    fill_stride(0xBD20, 0x01, 1, 192);
+    fill_stride(0x9D20, 0x01, 1, 192);
+
+    /* Верхняя граница (Y=32): все 4 плоскости */
+    fill_stride(0xA220, 0xFF, 0x100, 28);
+    fill_stride(0xE220, 0xFF, 0x100, 28);
+    fill_stride(0x8220, 0xFF, 0x100, 28);
+    fill_stride(0xC220, 0xFF, 0x100, 28);
+
+    /* Нижняя граница (Y=223): все 4 плоскости */
+    fill_stride(0xA2DF, 0xFF, 0x100, 28);
+    fill_stride(0xE2DF, 0xFF, 0x100, 28);
+    fill_stride(0x82DF, 0xFF, 0x100, 28);
+    fill_stride(0xC2DF, 0xFF, 0x100, 28);
+
+    graph_print_512(3, 50, "VECTOR-06C", 0x03);
+    graph_print_512(3, 60, "512x256 MODE", 0x03);
+    graph_print_512t(3, 70, "THIN TEXT TEST", 0x03);
+
+    graph_print_512(3, 100, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x01);
+    graph_print_512(3, 110, "0123456789-:().,?!@<>=&#*+%", 0x01);
+
+    graph_print_512t(3, 130, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x02);
+    graph_print_512t(3, 140, "0123456789-:().,?!@<>=&#*+%", 0x02);
 
     while(1);
 
