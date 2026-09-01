@@ -5,12 +5,10 @@
 # make deploy       — скопировать в ROMS эмулятора;
 # make full         — clean + сборка + deploy.
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
 BMP2INC_LZ = ../../utils/bmp2inc_lz.py
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET = dt2_lz.rom
 

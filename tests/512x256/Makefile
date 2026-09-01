@@ -1,10 +1,8 @@
 # Makefile — тест 512x256 для Вектора-06Ц.
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET = 512x256.rom
 

@@ -89,7 +89,7 @@ int main(void)
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
     graph_set_black_palette();
-    graph_clear(0);
+    gfx_clear(0);
     graph_rle_expand(title_bmp_screen_rle, 8u, 0u);
     show_menu();
     graph_set_palette(title_bmp_palette);

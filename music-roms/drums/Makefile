@@ -8,11 +8,9 @@
 #
 # Путь до z88dk можно переопределить: make Z88DK=...
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET   = drums.rom
 
@@ -20,7 +18,7 @@ SRCS     = $(LIB)/sys/startup.asm main.c \
            $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
            $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
            $(LIB)/snd/drums.asm \
-           $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
+           $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB)
 

@@ -8,14 +8,12 @@
 #
 # Путь до z88dk можно переопределить: make Z88DK=...
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
 MUS2INC  = python3 ../../utils/mus2inc.py
 TXT2INC  = python3 ../../utils/txt2inc.py
 BMP2INC  = ../../utils/bmp2inc.py
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET   = nes_drums.rom
 

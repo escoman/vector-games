@@ -279,7 +279,7 @@ static void show_results(unsigned int classic, unsigned int optimized)
     static char buf[8];
 
     graph_set_black_palette();
-    graph_clear(0);
+    gfx_clear(0);
     graph_set_palette(default_palette);
 
     graph_print(8,   0, "SCREEN CLEAR SPEED TEST", 15u);
@@ -320,7 +320,7 @@ int main(void)
 
     /* Начальная инициализация: чёрный экран, текст-приветствие. */
     graph_set_black_palette();
-    graph_clear(0);
+    gfx_clear(0);
     graph_set_palette(default_palette);
 
     graph_print(8,   0, "SCREEN CLEAR SPEED TEST", 15u);
@@ -353,7 +353,7 @@ int main(void)
 
     /* Экран-пауза перед вторым тестом. */
     graph_set_black_palette();
-    graph_clear(0);
+    gfx_clear(0);
     graph_set_palette(default_palette);
     graph_print(8,  80, "TEST 1 DONE",         14u);
     graph_print(8, 128, "PRESS ANY KEY",       14u);

@@ -12,12 +12,10 @@
 #
 # Путь до z88dk можно переопределить: make Z88DK=...
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
 MUS2INC  = python3 ../../utils/mus2inc.py
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET   = synth.rom
 
@@ -31,7 +29,7 @@ SRCS     = $(LIB)/sys/startup.asm main.c \
            $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
            $(LIB)/snd/drums.asm \
            $(LIB)/snd/vi53out.asm $(LIB)/snd/music.c \
-           $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
+           $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
 

@@ -1,10 +1,10 @@
 # Makefile — тест scr_modes (переключение видеорежимов) для Вектора-06Ц.
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
+BMP2INC  = ../../utils/bmp2inc.py
+ASSETS   = ../assets
 
 TARGET = scr_modes.rom
 
@@ -23,11 +23,14 @@ all: $(TARGET)
 
 full: clean all deploy
 
-$(TARGET):
+$(TARGET): $(ASSETS)/logo16_bmp.inc
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) $(SRCS) -o $@
 	@echo "=== Done: $@ ==="
 	@ls -l $@
+
+$(ASSETS)/logo16_bmp.inc: $(ASSETS)/logo16.bmp $(BMP2INC)
+	python3 $(BMP2INC) $<
 
 deploy: $(TARGET)
 	cp -f $(TARGET) $(PPSSPP_ROMS)/

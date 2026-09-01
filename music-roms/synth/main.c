@@ -87,7 +87,7 @@ int main(void)
     music_set_loop(1);          /* тесты крутятся по кругу */
 
     graph_set_black_palette();
-    graph_clear(0);
+    gfx_clear(0);
     graph_print(16u, 16u, "SYNTH TESTS (MUSIC.C):", 8u);
     graph_print(16u, 40u, "1 - SCALE (ONE VOICE)", 8u);
     graph_print(16u, 56u, "2 - VOICES (THREE)", 8u);

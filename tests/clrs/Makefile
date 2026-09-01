@@ -1,8 +1,8 @@
 # Makefile — тест clrs (смена палитры по лучу) для Вектора-06Ц.
 
-Z88DK   ?= /home/alexey/z88dk
+include ../../config.mk
+
 Z80ASM   = $(Z88DK)/bin/z80asm
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET = clrs.rom
 

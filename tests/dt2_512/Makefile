@@ -1,18 +1,15 @@
 # Makefile — тест dt2_512 (512x256, 2 цвета) для Вектора-06Ц.
 
-Z88DK   ?= /home/alexey/z88dk
-ZCC      = $(Z88DK)/bin/zcc
-ZCCCFG  := $(Z88DK)/lib/config
+include ../../config.mk
+
 LIB      = ../../lib
 BMP2INC512 = ../../utils/bmp2inc512.py
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 TARGET = dt2_512.rom
 
 SRCS = $(LIB)/sys/startup.asm \
-       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
-       $(LIB)/gfx/pr.asm $(LIB)/gfx/clr.asm \
-       $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
+       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm \
+       $(LIB)/gfx/mode.c $(LIB)/gfx/clr.asm \
        $(LIB)/unpack/rle512.asm \
        main.c
 

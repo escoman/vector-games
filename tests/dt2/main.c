@@ -16,18 +16,7 @@ int main(void)
     graph_rle_expand(dt2_bmp_screen_rle, 0, 0);
     graph_set_palette(dt2_bmp_palette);
 
-    /* Ждём ESC, опрашивая клавиатуру раз в кадр,
-     * чтобы не дёргать порты ПИА непрерывно. */
-    {
-        unsigned int last_frame = frame_count;
-        for (;;) {
-            while (frame_count == last_frame)
-                ;
-            last_frame = frame_count;
-            if (kbd_scan() == 27)
-                break;
-        }
-    }
+    while(1);
 
     return 0;
 }

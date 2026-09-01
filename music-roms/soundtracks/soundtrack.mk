@@ -9,14 +9,11 @@
 #   ROM_JSON — путь к rom.json (по умолчанию rom.json)
 
 SOUNDTRACKS = ../soundtracks
-Z88DK      ?= /home/alexey/z88dk
-ZCC         = $(Z88DK)/bin/zcc
-ZCCCFG     := $(Z88DK)/lib/config
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../config.mk
 LIB         = ../../lib
 BMP2INC     = ../../utils/bmp2inc.py
 TXT2INC     = ../../utils/txt2inc.py
 GEN_MAIN    = $(SOUNDTRACKS)/gen_main.py
-PPSSPP_ROMS = /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
 ROM_JSON  ?= rom.json
 INCS       = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
@@ -25,7 +22,7 @@ SRCS       = $(LIB)/sys/startup.asm main.c $(SOUNDTRACKS)/nes_drums.c \
              $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm $(LIB)/snd/vi53out.asm \
              $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
              $(LIB)/snd/drums.asm \
-             $(LIB)/gfx/gfx.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
+             $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS     = +vector06c --no-crt -I. -I$(LIB) -I$(SOUNDTRACKS) -DMUSIC_ONLY
 
