@@ -11,6 +11,7 @@
  */
 
 #include "v06.h"
+#include "../assets/logo16_bmp.inc"
 
 /* --- Текст 256x256 (pr.asm) --- */
 extern void graph_print(unsigned char x, unsigned char y, const char *s,
@@ -186,12 +187,13 @@ typedef struct {
 
 /* Общие тексты меню (одинаковые для всех режимов). */
 static const char txt_title[]  = "VECTOR-06C";
-static const char txt_sep[]    = "------------";
+static const char txt_sep[]    = "-------------------";
 static const char txt_m0[]     = "0-256X256 16 COLORS";
 static const char txt_m1[]     = "1-256X256  2 COLORS";
 static const char txt_m2[]     = "2-512X256  4 COLORS";
 static const char txt_m3[]     = "3-512X256  2 COLORS";
-static const char txt_key[]    = "PRESS 0-3";
+static const char txt_key[]    = "PRESS 0-3 FOR MODE";
+static const char txt_image[]    = "PRESS SPACE FOR IMAGE";
 
 static const char txt_test1[]  = "THE QUICK BROWN FOX";
 static const char txt_test2[]  = "JUMPS OVER THE LAZY DOG";
@@ -230,9 +232,10 @@ static void draw_menu(void)
         { txt_m3,    1, 10, 0 },
         { txt_sep,   1, 12, 0 },
         { txt_key,   1, 14, 0 },
-        { txt_test1, 1, 18, 1 },
-        { txt_test2, 1, 19, 1 },
-        { txt_test3, 1, 20, 1 },
+        { txt_image, 1, 16, 0 },
+        { txt_test1, 1, 20, 1 },
+        { txt_test2, 1, 21, 1 },
+        { txt_test3, 1, 22, 1 },
         { txt_test4, 1, 24, 1 },
         { txt_test5, 1, 26, 1 },
     };
@@ -246,6 +249,36 @@ static void draw_menu(void)
 
     /* Маркер '>' напротив текущего режима (y = 4 + mode * 2). */
     print_line(0, (4 + gfx_current_mode * 2) * 8, ">", 0, color);
+}
+
+/* ------------------------ Показ логотипа --------------------------- */
+
+static void switch_mode(unsigned char mode);  /* опережающее объявление */
+
+/* Показывает логотип для текущего режима (пока только 256x256x16).
+ * Выводит "PRESS SPACE KEY" под картинкой и ждёт пробела.
+ * По нажатию — возврат в меню через switch_mode. */
+static void show_logo(void)
+{
+    unsigned char saved_mode = gfx_current_mode;
+
+    graph_set_black_palette();
+    gfx_clear(0);
+
+    if (saved_mode == GFX_MODE_256_16) {
+        /* Картинка 120x120, центрируем: x = (256-120)/8 = 17 (округлено до чётного) */
+        graph_rle_expand(logo16_bmp_screen_rle, 64, 48);
+        graph_set_palette(logo16_bmp_palette);
+        graph_print(8, 176, "PRESS SPACE KEY", WHITE_16);
+    } else {
+        set_palette();
+        graph_print(1, 200, "PRESS SPACE KEY", getModeColor());
+    }
+
+    /* Ждём пробела и возвращаемся в меню */
+    kbd_wait_key(' ');
+
+    switch_mode(saved_mode);
 }
 
 /* ------------------------ Переключение режима ---------------------- */
@@ -288,6 +321,7 @@ int main(void)
             case '1': switch_mode(1); break;
             case '2': switch_mode(2); break;
             case '3': switch_mode(3); break;
+            case ' ': show_logo();  break;
             }
         }
 

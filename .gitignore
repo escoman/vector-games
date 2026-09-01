@@ -40,3 +40,4 @@ tests/dt2/dt2_bmp.inc
 tests/dt2_512/dt2_512.bmp
 tests/dt2_512/dt2_512_bmp.inc
 tests/assets/dt2_bmp.inc
+tests/assets/logo16_bmp.inc

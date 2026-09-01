@@ -61,3 +61,21 @@ unsigned char kbd_scan(void)
     }
     return code;
 }
+
+/* Ждёт нажатия указанной клавиши и возвращается.
+ * Опрос синхронизирован с кадровым счётчиком (50 Гц),
+ * фронт-детектор: реагирует только на нажатие, не на удержание. */
+void kbd_wait_key(unsigned char key)
+{
+    unsigned char cur = 0, prev = 0;
+    unsigned int last = frame_count;
+    while (cur != key) {
+        while (frame_count == last)
+            ;
+        last = frame_count;
+        cur = kbd_scan();
+        if (cur != 0 && cur != prev && cur == key)
+            break;
+        prev = cur;
+    }
+}
