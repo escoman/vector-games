@@ -92,29 +92,43 @@ put_char_done_512t:
 ; void graph_print_512t(x, y, s, color)
 ; ---------------------------------------------------------------
 _graph_print_512t:
-        ld      hl, 2
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_color), a          ; цвет
-        ld      hl, 4
-        add     hl, sp
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        ld      a, e
-        ld      (tmp_s), a
-        ld      a, d
-        ld      (tmp_s + 1), a
-        ld      hl, 6
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_y), a              ; y
-        ld      hl, 8
-        add     hl, sp
-        ld      a, (hl)
-        ld      (tmp_x), a              ; x
-        ld      a, 0                    ; счётчик символов
-        ld      (tmp_parity), a
+        ; __z88dk_callee: компилятор пушит x, y, s, color.
+        ; На стеке (после CALL):
+        ;   SP+0  return address
+        ;   SP+2  color      (последний push)
+        ;   SP+3  s_low
+        ;   SP+4  s_high
+        ;   SP+5  y
+        ;   SP+6  x          (первый push)
+        ;
+        ; Снимаем в обратном порядке: color → s → y → x.
+
+        pop     h                       ; HL = адрес возврата
+
+        pop     d                       ; color
+        mov     a, e
+        sta     tmp_color
+
+        pop     d                       ; s (указатель строки)
+        xchg
+        shld    tmp_s
+        xchg
+
+        pop     d                       ; y
+        mov     a, e
+        sta     tmp_y
+
+        pop     d                       ; x
+        mov     a, e
+        sta     tmp_x
+
+        push    h                       ; вернуть адрес возврата
+
+        mvi     a, 0
+        sta     tmp_parity
+
+        lhld    tmp_s
+        xchg                    ; DE = указатель строки
 print_loop_512t:
         ld      a, (de)
         or      a

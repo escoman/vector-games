@@ -113,6 +113,9 @@ int main(void)
     graph_print_512t(3, 130, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x02);
     graph_print_512t(3, 140, "0123456789-:().,?!@<>=&#*+%", 0x02);
 
+    graph_print_512t(3, 160, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x03);
+    graph_print_512t(3, 170, "0123456789-:().,?!@<>=&#*+%", 0x03);
+
     while(1);
 
     return 0;

@@ -24,26 +24,6 @@ extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
 extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
                              unsigned char color) __z88dk_callee;
 
-/* --- Палитра (mode.c: gfx_set_palette расширяет до 16 слотов) --- */
-/* extern void gfx_set_palette(const unsigned char *colors); -- уже в v06.h */
-
-/* --------------------------- Таблица режимов ------------------------- */
-
-typedef struct {
-    unsigned char width_div8;
-    unsigned char plane_mask;
-    unsigned char num_colors;
-} mode_info_t;
-
-static const mode_info_t modes[] = {
-    { 32, 0x0F, 16 },  /* 0: 256x256, 16 цветов */
-    { 32, 0x01,  2 },  /* 1: 256x256,  2 цвета  */
-    { 64, 0x0F,  4 },  /* 2: 512x256,  4 цвета  */
-    { 64, 0x05,  2 },  /* 3: 512x256,  2 цвета  */
-};
-
-static unsigned char cur_mode = 0;
-
 /* ---------------------------- Палитры ------------------------------ */
 
 /* 16-цветная палитра для режима 0 (256x256).
@@ -94,6 +74,36 @@ static const unsigned char pal2w[2] = {
     V06_RGB(7,7,3),  /* 1: белый (E000/A000) */
 };
 
+static void set_palette()
+{
+    /* Загружаем палитру (gfx_set_palette расширяет до 16 слотов) */
+    switch (gfx_current_mode) {
+    case GFX_MODE_256_16: gfx_set_palette(pal16); break;
+    case GFX_MODE_256_2:  gfx_set_palette(pal2);  break;
+    case GFX_MODE_512_4:  gfx_set_palette(pal4);  break;
+    default:              gfx_set_palette(pal2w); break;
+    }
+}
+
+
+
+/* Белый цвет для текущего режима. */
+#define WHITE_16  15     /* 256x256 16-color */
+#define WHITE_2   1      /* 256x256  2-color */
+#define WHITE_4   3      /* 512x256  4-color */
+#define WHITE_2w  1      /* 512x256  2-color */
+
+static unsigned char getModeColor()
+{
+    /* Цвет текста: белый для текущего режима. */
+    switch (gfx_current_mode) {
+        case GFX_MODE_256_16: return WHITE_16;
+        case GFX_MODE_256_2:  return WHITE_2;
+        case GFX_MODE_512_4:  return WHITE_4;
+        default:              return WHITE_2w;
+    }
+}
+
 /* -------------------------- Образцы цветов ------------------------ */
 
 /* Рисует образцы цветов 1..num_colors-1 (цвет 0 — фон) в виде
@@ -102,10 +112,11 @@ static const unsigned char pal2w[2] = {
  * нечётные из A000/8000. */
 static void draw_swatches(void)
 {
-    unsigned char nc = modes[cur_mode].num_colors;
+    unsigned char nc = gfx_modes[gfx_current_mode].num_colors;
     unsigned char c, row, col;
+    unsigned char color = getModeColor();
 
-    if (modes[cur_mode].width_div8 <= 32) {
+    if (gfx_modes[gfx_current_mode].width_div8 <= 32) {
         /* 256x256: сетка 5×3, шаг 16 пикселей, сдвиг вниз на 16.
          * Блок 8x8 на (col*8, row*8): адрес = 0x8000 + xb*256 + (255-y). */
         for (c = 1; c < nc; c++) {
@@ -132,7 +143,7 @@ static void draw_swatches(void)
                 }
             }
         }
-        graph_print(21 * 8, 0, "PALETTE", 0x0F);
+        graph_print(21, 0, "PALETTE", color);
     } else {
         /* 512x256: сетка 5×3, сдвиг вниз на 16 пикселей.
          * Чётные столбцы — E000/C000, нечётные — A000/8000.
@@ -141,7 +152,7 @@ static void draw_swatches(void)
             col = (c - 1) % 5;
             row = (c - 1) / 5;
             {
-                unsigned char xb0 = 12 + col * 4;   /* чётный столбец */
+                unsigned char xb0 = 21 + col * 2;   /* чётный столбец */
                 unsigned char xb1 = xb0 + 1;         /* нечётный столбец */
                 unsigned char y0 = row * 2 + 2;   /* +16 пикселей */
                 unsigned char i;
@@ -151,10 +162,15 @@ static void draw_swatches(void)
                     if (c & 0x02) *((unsigned char *)0xC000 + xb0 * 256 + addr) = 0xFF;
                     if (c & 0x01) *((unsigned char *)0xA000 + xb1 * 256 + addr) = 0xFF;
                     if (c & 0x02) *((unsigned char *)0x8000 + xb1 * 256 + addr) = 0xFF;
+
+                    if (c & 0x01) *((unsigned char *)0xA000 + xb0 * 256 + addr) = 0xFF;
+                    if (c & 0x02) *((unsigned char *)0x8000 + xb0 * 256 + addr) = 0xFF;
+                    if (c & 0x01) *((unsigned char *)0xE000 + xb1 * 256 + addr) = 0xFF;
+                    if (c & 0x02) *((unsigned char *)0xC000 + xb1 * 256 + addr) = 0xFF;
                 }
             }
         }
-        graph_print_512(24, 0, "PALETTE", 3);
+        graph_print_512(21, 0, "PALETTE", color);
     }
 }
 
@@ -165,6 +181,7 @@ typedef struct {
     const char *text;
     unsigned char x;      /* пиксель (256) или символ (512) */
     unsigned char y;      /* пиксельная строка 0-255        */
+    unsigned char t;      /* узкие символы, если возможно   */
 } menu_item_t;
 
 /* Общие тексты меню (одинаковые для всех режимов). */
@@ -175,37 +192,28 @@ static const char txt_m1[]     = "1-256X256  2 COLORS";
 static const char txt_m2[]     = "2-512X256  4 COLORS";
 static const char txt_m3[]     = "3-512X256  2 COLORS";
 static const char txt_key[]    = "PRESS 0-3";
-static const char txt_test1[]  = "THE QUICK BROWN";
-static const char txt_test2[]  = "FOX JUMPS OVER";
-static const char txt_test3[]  = "THE LAZY DOG";
+
+static const char txt_test1[]  = "THE QUICK BROWN FOX";
+static const char txt_test2[]  = "JUMPS OVER THE LAZY DOG";
+static const char txt_test3[]  = "1234567890 A-Z TEST";
 static const char txt_test4[]  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const char txt_test5[]  = "0123456789-:().,?!@<>=&#*+%";
 
-/* 512-режимы: более длинные тестовые строки (больше места). */
-static const char txt_test1w[] = "THE QUICK BROWN FOX";
-static const char txt_test2w[] = "JUMPS OVER THE LAZY DOG";
-static const char txt_test3w[] = "1234567890 A-Z TEST";
-
-/* Белый цвет для текущего режима. */
-#define WHITE_16  0x0F   /* 256x256 16-color */
-#define WHITE_2   1      /* 256x256  2-color */
-#define WHITE_4   3      /* 512x256  4-color */
-#define WHITE_2w  3      /* 512x256  2-color */
-
 /* Отрисовка одной строки меню через нужный шрифт. */
 static void print_line(unsigned char x, unsigned char y,
-                        const char *s, unsigned char color)
+                        const char *s, unsigned char t, unsigned char color)
 {
-    switch (cur_mode) {
+    switch (gfx_current_mode) {
     case GFX_MODE_256_16:
     case GFX_MODE_256_2:
         graph_print(x, y, s, color);
         break;
     case GFX_MODE_512_4:
-        graph_print_512(x, y, s, color);
-        break;
-    default:
-        graph_print_512t(x, y, s, color);
+    case GFX_MODE_512_2:
+        if (t)
+            graph_print_512t(x, y, s, color);
+        else
+            graph_print_512(x, y, s, color);
         break;
     }
 }
@@ -214,91 +222,41 @@ static void draw_menu(void)
 {
     /* Координаты: x = символ/колонка, y = строка (в единицах 8px). */
     static const menu_item_t items[] = {
-        { txt_title, 1,  0 },
-        { txt_sep,   1,  2 },
-        { txt_m0,    1,  4 },
-        { txt_m1,    1,  6 },
-        { txt_m2,    1,  8 },
-        { txt_m3,    1, 10 },
-        { txt_sep,   1, 12 },
-        { txt_key,   1, 14 },
-        { txt_test4, 1, 24 },
-        { txt_test5, 1, 26 },
+        { txt_title, 1,  0, 0 },
+        { txt_sep,   1,  2, 0 },
+        { txt_m0,    1,  4, 0 },
+        { txt_m1,    1,  6, 0 },
+        { txt_m2,    1,  8, 0 },
+        { txt_m3,    1, 10, 0 },
+        { txt_sep,   1, 12, 0 },
+        { txt_key,   1, 14, 0 },
+        { txt_test1, 1, 18, 1 },
+        { txt_test2, 1, 19, 1 },
+        { txt_test3, 1, 20, 1 },
+        { txt_test4, 1, 24, 1 },
+        { txt_test5, 1, 26, 1 },
     };
-    unsigned char i, color;
 
-    /* Цвет текста: белый для текущего режима. */
-    switch (cur_mode) {
-        case GFX_MODE_256_16: color = WHITE_16; break;
-        case GFX_MODE_256_2:  color = WHITE_2;  break;
-        case GFX_MODE_512_4:  color = WHITE_4;  break;
-        default:              color = WHITE_2w; break;
-    }
+    unsigned char color = getModeColor();
 
-    for (i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
-        unsigned char px, py;
+    for (unsigned char i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
         const menu_item_t *m = &items[i];
-
-        /* Пересчёт координат в пиксели/символы режима. */
-        if (cur_mode <= GFX_MODE_256_2) {
-            px = m->x * 8;        /* символы -> пиксели */
-            py = m->y * 8;
-        } else if (cur_mode == GFX_MODE_512_4) {
-            px = m->x + 1;        /* сдвиг на 1 символ от края */
-            py = m->y * 8;
-        } else {
-            px = m->x + 2;        /* тонкий шрифт: колонка */
-            py = m->y * 8;
-        }
-
-        print_line(px, py, m->text, color);
+        print_line(m->x, m->y * 8, m->text, m->t, color);
     }
 
     /* Маркер '>' напротив текущего режима (y = 4 + mode * 2). */
-    {
-        unsigned char my = (4 + cur_mode * 2) * 8;
-        print_line(0, my, ">", color);
-    }
-
-    /* 512-режимы: более длинные тестовые строки. */
-    if (cur_mode >= GFX_MODE_512_4) {
-        unsigned char ty = 17 * 8;
-        if (cur_mode == GFX_MODE_512_4) {
-            graph_print_512(1, ty,      txt_test1w, color);
-            graph_print_512(1, ty + 8,  txt_test2w, color);
-            graph_print_512(1, ty + 16, txt_test3w, color);
-        } else {
-            graph_print_512t(1, ty,      txt_test1w, color);
-            graph_print_512t(1, ty + 8,  txt_test2w, color);
-            graph_print_512t(1, ty + 16, txt_test3w, color);
-        }
-    } else {
-        /* 256-режимы: короткие тестовые строки. */
-        unsigned char ty = 17 * 8;
-        graph_print(1, ty,      txt_test1, color);
-        graph_print(1, ty + 8,  txt_test2, color);
-        graph_print(1, ty + 16, txt_test3, color);
-    }
+    print_line(0, (4 + gfx_current_mode * 2) * 8, ">", 0, color);
 }
 
 /* ------------------------ Переключение режима ---------------------- */
 
 static void switch_mode(unsigned char mode)
 {
-    cur_mode = mode;
-    gfx_current_mode = mode;
+    graph_set_black_palette();
 
     /* Переключаем аппарат: для 512x256 — ПИА + скролл, для 256x256 —
      * не трогаем (аппаратный режим по умолчанию). */
     gfx_set_mode(mode);
-
-    /* Загружаем палитру (gfx_set_palette расширяет до 16 слотов) */
-    switch (mode) {
-    case GFX_MODE_256_16: gfx_set_palette(pal16); break;
-    case GFX_MODE_256_2:  gfx_set_palette(pal2);  break;
-    case GFX_MODE_512_4:  gfx_set_palette(pal4);  break;
-    default:              gfx_set_palette(pal2w); break;
-    }
 
     /* Очищаем все плоскости (включая мусор от предыдущего режима) */
     gfx_clear(0);
@@ -306,6 +264,8 @@ static void switch_mode(unsigned char mode)
     /* Рисуем меню и образцы цветов */
     draw_menu();
     draw_swatches();
+
+    set_palette();
 }
 
 /* ------------------------------- Main ------------------------------ */
