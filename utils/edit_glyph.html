@@ -91,8 +91,8 @@ button:hover{background:#333}
 <script>
 const DESCS = {
   '8x8':  '8 байт, сверху вниз (row 7 → row 0)',
-  '16x8': '16 байт: even/odd чередуются, снизу вверх (row 0 → row 7)',
-  '8x8t': '8 байт: старшая тетрада = even_thin, младшая = odd_thin, сверху вниз (row 7 → row 0)'
+  '16x8': '16 байт: even/odd чередуются, сверху вниз (row 7 → row 0)',
+  '8x8t': '8 байт: старшая тетрада = even_thin (биты 6,4,2,0), младшая = odd_thin (биты 7,5,3,1), сверху вниз (row 7 → row 0)'
 };
 
 let mode = '8x8';
@@ -183,8 +183,8 @@ function buildGrid() {
     la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even (E000/A000)</div>'
       + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd (C000/8000)</div></div>';
   else if (mode === '8x8t')
-    la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even bits (7,5,3,1)</div>'
-      + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd bits (6,4,2,0)</div></div>';
+    la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even cols (bits 6,4,2,0)</div>'
+      + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd cols (bits 7,5,3,1)</div></div>';
   else la.innerHTML = '';
 
   document.getElementById('desc').textContent = DESCS[mode];
@@ -231,16 +231,16 @@ function oddByte(r) {
 }
 function toThin(byte8, even) {
   if (even) {
+    // bits 6,4,2,0 → positions 7,6,5,4
+    let t = 0;
+    if (byte8 & 0x40) t |= 0x80; if (byte8 & 0x10) t |= 0x40;
+    if (byte8 & 0x04) t |= 0x20; if (byte8 & 0x01) t |= 0x10;
+    return t;
+  } else {
     // bits 7,5,3,1 → positions 7,6,5,4
     let t = 0;
     if (byte8 & 0x80) t |= 0x80; if (byte8 & 0x20) t |= 0x40;
     if (byte8 & 0x08) t |= 0x20; if (byte8 & 0x02) t |= 0x10;
-    return t;
-  } else {
-    // bits 6,4,2,0 → positions 4,5,6,7
-    let t = 0;
-    if (byte8 & 0x40) t |= 0x10; if (byte8 & 0x10) t |= 0x20;
-    if (byte8 & 0x04) t |= 0x40; if (byte8 & 0x01) t |= 0x80;
     return t;
   }
 }
@@ -275,14 +275,15 @@ function importData() {
     }
   }
   else if (mode === '16x8') {
-    // 16 bytes, bottom-first, even/odd interleaved
+    // 16 bytes, top-first, even/odd interleaved
     if (allBytes.length >= 16) {
-      for (let r = 0; r < 8; r++) {
-        const eb = allBytes[r * 2];
-        const ob = allBytes[r * 2 + 1];
-        for (let i = 0; i < 8; i++) {
-          pixels[r][i * 2]     = (eb >> (7 - i)) & 1;
-          pixels[r][i * 2 + 1] = (ob >> (7 - i)) & 1;
+      for (let i = 0; i < 8; i++) {
+        const eb = allBytes[i * 2];
+        const ob = allBytes[i * 2 + 1];
+        const r = 7 - i; // first byte pair = top row (row 7)
+        for (let j = 0; j < 8; j++) {
+          pixels[r][j * 2]     = (eb >> (7 - j)) & 1;
+          pixels[r][j * 2 + 1] = (ob >> (7 - j)) & 1;
         }
       }
     }
@@ -294,23 +295,34 @@ function importData() {
       // Две строки: even_thin + odd_thin → комбинированный формат
       const et = lineBytes[0], ot = lineBytes[1];
       for (let i = 0; i < 8; i++) {
-        const evenThin = et[i] & 0xF0;
-        const full = ((evenThin & 0x80) ? 0x80 : 0) | ((evenThin & 0x40) ? 0x20 : 0)
-                   | ((evenThin & 0x20) ? 0x08 : 0) | ((evenThin & 0x10) ? 0x02 : 0)
-                   | ((ot[i] & 0x10) ? 0x40 : 0) | ((ot[i] & 0x20) ? 0x10 : 0)
-                   | ((ot[i] & 0x40) ? 0x04 : 0) | ((ot[i] & 0x80) ? 0x01 : 0);
-        byteToRow(full, 7 - i);
+        // even_thin: high nibble bits 7,6,5,4 → original bits 6,4,2,0
+        const ehi = et[i] & 0xF0;
+        const elo = et[i] & 0x0F;
+        const evenFull = ((ehi & 0x80) ? 0x40 : 0) | ((ehi & 0x40) ? 0x10 : 0)
+                       | ((ehi & 0x20) ? 0x04 : 0) | ((ehi & 0x10) ? 0x01 : 0)
+                       | ((elo & 0x08) ? 0x80 : 0) | ((elo & 0x04) ? 0x20 : 0)
+                       | ((elo & 0x02) ? 0x08 : 0) | ((elo & 0x01) ? 0x02 : 0);
+        // odd_thin: high nibble bits 7,6,5,4 → original bits 7,5,3,1
+        const ohi = ot[i] & 0xF0;
+        const olo = ot[i] & 0x0F;
+        const oddFull = ((ohi & 0x80) ? 0x80 : 0) | ((ohi & 0x40) ? 0x20 : 0)
+                      | ((ohi & 0x20) ? 0x08 : 0) | ((ohi & 0x10) ? 0x02 : 0)
+                      | ((olo & 0x08) ? 0x40 : 0) | ((olo & 0x04) ? 0x10 : 0)
+                      | ((olo & 0x02) ? 0x04 : 0) | ((olo & 0x01) ? 0x01 : 0);
+        byteToRow(evenFull | oddFull, 7 - i);
       }
     } else if (allBytes.length >= 8) {
-      // Одна строка: комбинированный формат (upper=even, lower=odd)
+      // Одна строка: комбинированный формат (high=even_thin, low=odd_thin)
       for (let i = 0; i < 8; i++) {
         const cb = allBytes[i];
-        const ot = cb & 0xF0;           // odd_thin в старшей тетраде
-        const et = (cb & 0x0F) << 4;    // even_thin в старшей тетраде
-        const full = ((et & 0x80) ? 0x80 : 0) | ((et & 0x40) ? 0x20 : 0)
-                   | ((et & 0x20) ? 0x08 : 0) | ((et & 0x10) ? 0x02 : 0)
-                   | ((ot & 0x10) ? 0x40 : 0) | ((ot & 0x20) ? 0x10 : 0)
-                   | ((ot & 0x40) ? 0x04 : 0) | ((ot & 0x80) ? 0x01 : 0);
+        const et = cb & 0xF0;           // even_thin в старшей тетраде
+        const ot = (cb & 0x0F) << 4;    // odd_thin в старшей тетраде
+        // even_thin: bits 6,4,2,0 → nibble positions 7,6,5,4
+        const full = ((et & 0x80) ? 0x40 : 0) | ((et & 0x40) ? 0x10 : 0)
+                   | ((et & 0x20) ? 0x04 : 0) | ((et & 0x10) ? 0x01 : 0)
+        // odd_thin: bits 7,5,3,1 → nibble positions 7,6,5,4
+                   | ((ot & 0x80) ? 0x80 : 0) | ((ot & 0x40) ? 0x20 : 0)
+                   | ((ot & 0x20) ? 0x08 : 0) | ((ot & 0x10) ? 0x02 : 0);
         byteToRow(full, 7 - i);
       }
     }
@@ -333,10 +345,10 @@ function updateOutput() {
   }
   else if (mode === '16x8') {
     const bs = [];
-    for (let r = 0; r < 8; r++) { bs.push(evenByte(r)); bs.push(oddByte(r)); }
+    for (let r = 7; r >= 0; r--) { bs.push(evenByte(r)); bs.push(oddByte(r)); }
     const l1 = bs.slice(0, 8).map(toHex).join(', ');
     const l2 = bs.slice(8, 16).map(toHex).join(', ');
-    html += '<div class="asm-label">pr512.asm (снизу вверх):</div>';
+    html += '<div class="asm-label">pr512.asm (сверху вниз):</div>';
     html += '<div class="asm-out">        defb    ' + l1 + '\n        defb    ' + l2 + '</div>';
   }
   else if (mode === '8x8t') {
@@ -344,7 +356,7 @@ function updateOutput() {
     const combined = [];
     for (let r = 7; r >= 0; r--) {
       const b = rowByte(r);
-      combined.push((toThin(b, false) & 0xF0) | (toThin(b, true) >> 4));
+      combined.push((toThin(b, true) & 0xF0) | (toThin(b, false) >> 4));
     }
     html += '<div class="asm-label">pr512t.asm (комбинированный формат, сверху вниз):</div>';
     html += '<div class="asm-out">        defb    ' + combined.map(toHex).join(', ') + '</div>';

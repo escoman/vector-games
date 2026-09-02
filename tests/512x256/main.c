@@ -108,13 +108,14 @@ int main(void)
     graph_print_512t(3, 70, "THIN TEXT TEST", 0x03);
 
     graph_print_512(3, 100, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x01);
-    graph_print_512(3, 110, "0123456789-:().,?!@<>=&#*+%", 0x01);
+    graph_print_512(3, 110, "0123456789", 0x01);
+    graph_print_512(3, 120, "-:().,?!@<>=&$#*+%", 0x01);
 
-    graph_print_512t(3, 130, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x02);
-    graph_print_512t(3, 140, "0123456789-:().,?!@<>=&#*+%", 0x02);
+    graph_print_512t(3, 140, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x02);
+    graph_print_512t(3, 150, "0123456789-:().,?!@<>=&$#*+%", 0x02);
 
-    graph_print_512t(3, 160, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x03);
-    graph_print_512t(3, 170, "0123456789-:().,?!@<>=&#*+%", 0x03);
+    graph_print_512t(3, 170, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x03);
+    graph_print_512t(3, 180, "0123456789-:().,?!@<>=&$#*+%", 0x03);
 
     while(1);
 
