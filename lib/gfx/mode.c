@@ -41,12 +41,25 @@ void gfx_set_mode(unsigned char mode)
 
     if (gfx_modes[mode].width_div8 > 32) {
         /* 512x256: ПИА + скролл 0xFF */
-        v06_out(V06_PIA_CW, 0x88);      /* ПИА: PA вход, PB выход */
-        v06_set_mode_bit(0x10);          /* бит 4 = режим, бордюр сохранён */
-        v06_out(V06_PIA_PA, 0xFF);       /* скролл = 0xFF */
+        __asm
+            di
+            ld      a, 0x88
+            out     (0x00), a         ; ПИА: PA вход, PB выход
+            in      a, (0x02)         ; текущий PB
+            and     0x0F              ; сохранить бордюр
+            or      0x10              ; бит 4 = режим 512x256
+            out     (0x02), a
+            ld      a, 0xFF
+            out     (0x03), a         ; скролл = 0xFF
+            ei
+        __endasm;
     } else {
         /* 256x256: сброс бита 4 (мог остаться от 512-режима) */
-        v06_set_mode_bit(0x00);
+        __asm
+            in      a, (0x02)         ; текущий PB
+            and     0x0F              ; бордюр, бит 4 = 0
+            out     (0x02), a
+        __endasm;
     }
 }
 

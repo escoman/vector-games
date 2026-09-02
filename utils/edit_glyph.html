@@ -92,7 +92,7 @@ button:hover{background:#333}
 const DESCS = {
   '8x8':  '8 байт, сверху вниз (row 7 → row 0)',
   '16x8': '16 байт: even/odd чередуются, сверху вниз (row 7 → row 0)',
-  '8x8t': '8 байт: старшая тетрада = even_thin (биты 6,4,2,0), младшая = odd_thin (биты 7,5,3,1), сверху вниз (row 7 → row 0)'
+  '8x8t': '8 байт: старшая тетрада = even (колонки 0-3), младшая = odd (колонки 0-3), сверху вниз (row 7 → row 0)'
 };
 
 let mode = '8x8';
@@ -148,33 +148,59 @@ function buildGrid() {
   const grid = document.getElementById('grid');
 
   colhdr.innerHTML = '';
-  colhdr.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
-  for (let c = 0; c < cols; c++) {
-    const s = document.createElement('span');
-    s.textContent = c;
-    s.className = mode === '16x8' ? (c % 2 === 0 ? 'ev' : 'od') : 'rg';
-    colhdr.appendChild(s);
-  }
-
   lbls.innerHTML = '';
-  lbls.style.gridTemplateRows = `repeat(${rows}, 24px)`;
-  for (let r = rows - 1; r >= 0; r--) {
-    const d = document.createElement('div');
-    d.className = 'row-label'; d.textContent = r;
-    lbls.appendChild(d);
-  }
-
   grid.innerHTML = '';
-  grid.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
-  grid.style.gridTemplateRows = `repeat(${rows}, 24px)`;
-  for (let r = rows - 1; r >= 0; r--) {
+
+  if (mode === '8x8t') {
+    colhdr.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
     for (let c = 0; c < cols; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      if (mode === '16x8' && c === 8) cell.classList.add('div');
-      cell.dataset.r = r; cell.dataset.c = c;
-      cell.addEventListener('click', () => { pixels[r][c] ^= 1; render(); });
-      grid.appendChild(cell);
+      const s = document.createElement('span');
+      s.textContent = c;
+      s.className = c % 2 === 0 ? 'ev' : 'od';
+      colhdr.appendChild(s);
+    }
+    lbls.style.gridTemplateRows = `repeat(${rows}, 24px)`;
+    for (let r = rows - 1; r >= 0; r--) {
+      const d = document.createElement('div');
+      d.className = 'row-label'; d.textContent = r;
+      lbls.appendChild(d);
+    }
+    grid.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
+    grid.style.gridTemplateRows = `repeat(${rows}, 24px)`;
+    for (let r = rows - 1; r >= 0; r--) {
+      for (let c = 0; c < cols; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r; cell.dataset.c = c;
+        cell.addEventListener('click', () => { pixels[r][c] ^= 1; render(); });
+        grid.appendChild(cell);
+      }
+    }
+  } else {
+    colhdr.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
+    for (let c = 0; c < cols; c++) {
+      const s = document.createElement('span');
+      s.textContent = c;
+      s.className = mode === '16x8' ? (c % 2 === 0 ? 'ev' : 'od') : 'rg';
+      colhdr.appendChild(s);
+    }
+    lbls.style.gridTemplateRows = `repeat(${rows}, 24px)`;
+    for (let r = rows - 1; r >= 0; r--) {
+      const d = document.createElement('div');
+      d.className = 'row-label'; d.textContent = r;
+      lbls.appendChild(d);
+    }
+    grid.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
+    grid.style.gridTemplateRows = `repeat(${rows}, 24px)`;
+    for (let r = rows - 1; r >= 0; r--) {
+      for (let c = 0; c < cols; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        if (mode === '16x8' && c === 8) cell.classList.add('div');
+        cell.dataset.r = r; cell.dataset.c = c;
+        cell.addEventListener('click', () => { pixels[r][c] ^= 1; render(); });
+        grid.appendChild(cell);
+      }
     }
   }
 
@@ -183,8 +209,8 @@ function buildGrid() {
     la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even (E000/A000)</div>'
       + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd (C000/8000)</div></div>';
   else if (mode === '8x8t')
-    la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even cols (bits 6,4,2,0)</div>'
-      + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd cols (bits 7,5,3,1)</div></div>';
+    la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even (старшая тетрада)</div>'
+      + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd (младшая тетрада)</div></div>';
   else la.innerHTML = '';
 
   document.getElementById('desc').textContent = DESCS[mode];
@@ -231,16 +257,16 @@ function oddByte(r) {
 }
 function toThin(byte8, even) {
   if (even) {
-    // bits 6,4,2,0 → positions 7,6,5,4
-    let t = 0;
-    if (byte8 & 0x40) t |= 0x80; if (byte8 & 0x10) t |= 0x40;
-    if (byte8 & 0x04) t |= 0x20; if (byte8 & 0x01) t |= 0x10;
-    return t;
-  } else {
-    // bits 7,5,3,1 → positions 7,6,5,4
+    // even columns (0,2,4,6) = high nibble bits → bits 7,5,3,1 → high nibble
     let t = 0;
     if (byte8 & 0x80) t |= 0x80; if (byte8 & 0x20) t |= 0x40;
     if (byte8 & 0x08) t |= 0x20; if (byte8 & 0x02) t |= 0x10;
+    return t;
+  } else {
+    // odd columns (1,3,5,7) = low nibble bits → bits 6,4,2,0 → high nibble (then >>4)
+    let t = 0;
+    if (byte8 & 0x40) t |= 0x80; if (byte8 & 0x10) t |= 0x40;
+    if (byte8 & 0x04) t |= 0x20; if (byte8 & 0x01) t |= 0x10;
     return t;
   }
 }
@@ -255,6 +281,14 @@ function parseHexBytes(text) {
 function byteToRow(byte8, rowIdx) {
   for (let c = 0; c < 8; c++)
     pixels[rowIdx][c] = (byte8 >> (7 - c)) & 1;
+}
+function byteToRowThin(byte8, rowIdx) {
+  const hi = byte8 & 0xF0;
+  const lo = byte8 & 0x0F;
+  for (let i = 0; i < 4; i++) {
+    pixels[rowIdx][i * 2]     = (hi >> (7 - i)) & 1;
+    pixels[rowIdx][i * 2 + 1] = (lo >> (3 - i)) & 1;
+  }
 }
 
 function importData() {
@@ -295,35 +329,26 @@ function importData() {
       // Две строки: even_thin + odd_thin → комбинированный формат
       const et = lineBytes[0], ot = lineBytes[1];
       for (let i = 0; i < 8; i++) {
-        // even_thin: high nibble bits 7,6,5,4 → original bits 6,4,2,0
+        // even_thin: high nibble bits 7,6,5,4 → even pixel columns (bits 7,5,3,1)
         const ehi = et[i] & 0xF0;
         const elo = et[i] & 0x0F;
-        const evenFull = ((ehi & 0x80) ? 0x40 : 0) | ((ehi & 0x40) ? 0x10 : 0)
-                       | ((ehi & 0x20) ? 0x04 : 0) | ((ehi & 0x10) ? 0x01 : 0)
-                       | ((elo & 0x08) ? 0x80 : 0) | ((elo & 0x04) ? 0x20 : 0)
-                       | ((elo & 0x02) ? 0x08 : 0) | ((elo & 0x01) ? 0x02 : 0);
-        // odd_thin: high nibble bits 7,6,5,4 → original bits 7,5,3,1
+        const evenFull = ((ehi & 0x80) ? 0x80 : 0) | ((ehi & 0x40) ? 0x20 : 0)
+                       | ((ehi & 0x20) ? 0x08 : 0) | ((ehi & 0x10) ? 0x02 : 0)
+                       | ((elo & 0x08) ? 0x40 : 0) | ((elo & 0x04) ? 0x10 : 0)
+                       | ((elo & 0x02) ? 0x04 : 0) | ((elo & 0x01) ? 0x01 : 0);
+        // odd_thin: high nibble bits 7,6,5,4 → odd pixel columns (bits 6,4,2,0)
         const ohi = ot[i] & 0xF0;
         const olo = ot[i] & 0x0F;
-        const oddFull = ((ohi & 0x80) ? 0x80 : 0) | ((ohi & 0x40) ? 0x20 : 0)
-                      | ((ohi & 0x20) ? 0x08 : 0) | ((ohi & 0x10) ? 0x02 : 0)
-                      | ((olo & 0x08) ? 0x40 : 0) | ((olo & 0x04) ? 0x10 : 0)
-                      | ((olo & 0x02) ? 0x04 : 0) | ((olo & 0x01) ? 0x01 : 0);
-        byteToRow(evenFull | oddFull, 7 - i);
+        const oddFull = ((ohi & 0x80) ? 0x40 : 0) | ((ohi & 0x40) ? 0x10 : 0)
+                      | ((ohi & 0x20) ? 0x04 : 0) | ((ohi & 0x10) ? 0x01 : 0)
+                      | ((olo & 0x08) ? 0x80 : 0) | ((olo & 0x04) ? 0x20 : 0)
+                      | ((olo & 0x02) ? 0x08 : 0) | ((olo & 0x01) ? 0x02 : 0);
+        byteToRowThin(evenFull | oddFull, 7 - i);
       }
     } else if (allBytes.length >= 8) {
-      // Одна строка: комбинированный формат (high=even_thin, low=odd_thin)
+      // Одна строка: комбинированный формат (high=even, low=odd)
       for (let i = 0; i < 8; i++) {
-        const cb = allBytes[i];
-        const et = cb & 0xF0;           // even_thin в старшей тетраде
-        const ot = (cb & 0x0F) << 4;    // odd_thin в старшей тетраде
-        // even_thin: bits 6,4,2,0 → nibble positions 7,6,5,4
-        const full = ((et & 0x80) ? 0x40 : 0) | ((et & 0x40) ? 0x10 : 0)
-                   | ((et & 0x20) ? 0x04 : 0) | ((et & 0x10) ? 0x01 : 0)
-        // odd_thin: bits 7,5,3,1 → nibble positions 7,6,5,4
-                   | ((ot & 0x80) ? 0x80 : 0) | ((ot & 0x40) ? 0x20 : 0)
-                   | ((ot & 0x20) ? 0x08 : 0) | ((ot & 0x10) ? 0x02 : 0);
-        byteToRow(full, 7 - i);
+        byteToRowThin(allBytes[i], 7 - i);
       }
     }
   }
