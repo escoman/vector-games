@@ -45,10 +45,13 @@ def generate(cfg, out):
     else:
         rle_x = 0
 
+    # title_dx: пиксели → колонки (graph_print принимает колонки 0-31)
+    title_dx_col = cfg.get('title_dx', 0) // 8
+
     n = len(tracks)
     y_start = layout['y_start']
     y_step = layout['y_step']
-    x_left = layout['x_left']
+    x_left = layout['x_left'] // 8  # пиксели → колонки
     x_right = layout['x_right']
     cols = layout['cols']
 
@@ -105,13 +108,13 @@ static void play_song(const music_song_t *song, unsigned char loop)
     w('    unsigned char dy;\n')
     w('    const char *text;\n')
     w('} menu_lines[] = {\n')
-    w(f'    {{ {title_dx}u,  0u, "{title}" }},\n')
+    w(f'    {{ {title_dx_col}u,  0u, "{title}" }},\n')
     w('\n')
 
     for i, t in enumerate(tracks):
         row = i // cols
         col = i % cols
-        dx = (256 // cols) * col if col else x_left
+        dx = (32 // cols) * col if col else x_left
         dy = y_start + row * y_step
         w(f'    {{ {dx}u, {dy}u, "{t["key"]}-{t["name"]}" }},\n')
 
@@ -122,7 +125,7 @@ static void play_song(const music_song_t *song, unsigned char loop)
     cred_y = credits['y']
     w(f'    {{ 0u,     {cred_y}u, "{credits["left"]}" }},\n')
     for j, line in enumerate(credits['right']):
-        dx = 112 if j == 0 else 112
+        dx = 14  # колонка 14 = пиксель 112
         dy = cred_y + j * 10
         w(f'    {{ {dx}u, {dy}u, "{line}" }},\n')
 
