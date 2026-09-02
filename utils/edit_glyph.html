@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Glyph Editor — Vector-06C</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;font-size:14px;color:#e0e0e0;background:#1e1e1e;padding:16px;max-width:900px;margin:0 auto}
+h2{font-size:16px;font-weight:500;margin-bottom:12px}
+.controls{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center}
+.controls label{font-size:12px;color:#888;margin-right:4px}
+select,button{padding:4px 10px;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;
+  border-radius:4px;cursor:pointer;font-size:12px;font-family:monospace}
+button:hover{background:#333}
+.desc{font-size:11px;color:#888;margin-bottom:10px}
+.legend{display:flex;gap:12px;margin:6px 0;font-size:10px;color:#888}
+.legend-item{display:flex;align-items:center;gap:4px}
+.dot{width:10px;height:10px;border-radius:2px}
+.col-hdr{display:grid;gap:1px;margin-bottom:2px}
+.col-hdr span{text-align:center;font-size:8px;font-family:monospace}
+.col-hdr .ev{color:#569cd6}
+.col-hdr .od{color:#cca700}
+.col-hdr .rg{color:#888}
+.grid-wrap{display:flex;gap:2px}
+.row-labels{display:grid;gap:1px;margin-top:14px}
+.row-label{font-size:9px;color:#888;text-align:right;padding-right:4px;
+  display:flex;align-items:center;justify-content:flex-end;height:24px}
+.grid{display:grid;gap:1px}
+.cell{width:24px;height:24px;background:#252525;border:1px solid #444;cursor:pointer;
+  user-select:none;display:flex;align-items:center;justify-content:center;font-size:8px}
+.cell.on-r{background:#4ec9b0;border-color:#4ec9b0}
+.cell.on-e{background:#569cd6;border-color:#569cd6}
+.cell.on-o{background:#cca700;border-color:#cca700}
+.cell.div{border-left:2px solid #cca700}
+.out-section{margin-top:16px;border-top:1px solid #444;padding-top:12px}
+.asm-label{font-size:11px;color:#888;margin-bottom:3px;margin-top:8px}
+.asm-out{font-family:monospace;font-size:12px;color:#4ec9b0;background:#252525;
+  padding:6px 10px;border-radius:4px;white-space:pre;border:1px solid #444;
+  min-height:20px;user-select:all;cursor:text}
+.note{font-size:10px;color:#888;margin-top:10px;line-height:1.6}
+.import-row{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.import-input{flex:1;padding:5px 8px;background:#252525;color:#e0e0e0;border:1px solid #444;
+  border-radius:4px;font-family:monospace;font-size:12px}
+.import-btn{padding:5px 12px;background:#2d5a2d;color:#4ec9b0;border:1px solid #4ec9b0;
+  border-radius:4px;cursor:pointer;font-size:12px;font-family:monospace}
+.import-btn:hover{background:#3a6e3a}
+</style>
+</head>
+<body>
+
+<h2>Glyph Editor — Vector-06C</h2>
+
+<div class="controls">
+  <label>Режим:</label>
+  <select id="mode" onchange="switchMode()">
+    <option value="8x8">8×8 — graph_print (pr.asm)</option>
+    <option value="16x8">16×8 — graph_print_512 (pr512.asm)</option>
+    <option value="8x8t">8×8 thin — graph_print_512t (pr512t.asm)</option>
+  </select>
+  <button onclick="clearAll()">Очистить</button>
+  <button onclick="flipH()">↔</button>
+  <button onclick="flipV()">↕</button>
+  <button onclick="loadPreset()">Стрелка &lt;</button>
+</div>
+<div class="import-row">
+  <input type="text" class="import-input" id="importInput" placeholder="Вставьте defb строку и нажмите Загрузить..."
+         onkeydown="if(event.key==='Enter')importData()">
+  <button class="import-btn" onclick="importData()">Загрузить</button>
+</div>
+<div class="desc" id="desc"></div>
+<div id="legendArea"></div>
+
+<div>
+  <div class="col-hdr" id="colhdr"></div>
+  <div class="grid-wrap">
+    <div class="row-labels" id="rowlbls"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<div class="out-section">
+  <div id="outputArea"></div>
+</div>
+
+<div class="note">
+  Клик — переключить пиксель. Данные обновляются автоматически.<br>
+  Выделите текст в зелёном поле и скопируйте (Ctrl+C) для вставки в ASM.<br>
+  Вставьте строку defb в поле ввода и нажмите «Загрузить» для обратного преобразования.
+</div>
+
+<script>
+const DESCS = {
+  '8x8':  '8 байт, сверху вниз (row 7 → row 0)',
+  '16x8': '16 байт: even/odd чередуются, снизу вверх (row 0 → row 7)',
+  '8x8t': '8 байт: старшая тетрада = even_thin, младшая = odd_thin, сверху вниз (row 7 → row 0)'
+};
+
+let mode = '8x8';
+let cols = 8, rows = 8;
+let pixels = [];
+
+function initPixels() {
+  pixels = Array.from({length: rows}, () => Array(cols).fill(0));
+}
+
+function switchMode() {
+  mode = document.getElementById('mode').value;
+  cols = mode === '16x8' ? 16 : 8;
+  rows = 8;
+  initPixels();
+  document.getElementById('desc').textContent = DESCS[mode];
+  buildGrid();
+  render();
+}
+
+function clearAll() { initPixels(); render(); }
+
+function flipH() {
+  for (let r = 0; r < rows; r++) pixels[r].reverse();
+  render();
+}
+
+function flipV() { pixels.reverse(); render(); }
+
+function loadPreset() {
+  initPixels();
+  if (mode === '16x8') {
+    const p = [
+      [0,0,0,0,0,0,0,0],[0,0,0,0,0,1,1,0],[0,0,0,1,1,0,0,0],[0,1,1,0,0,0,0,0],
+      [1,0,0,0,0,0,0,0],[0,1,1,0,0,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,0,0,1,1,0]
+    ];
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 8; c++) { pixels[r][c*2] = p[r][c]; pixels[r][c*2+1] = p[r][c]; }
+  } else {
+    const p = {7:[0,0,0,0,0,0,0,0],6:[0,0,0,0,0,1,1,0],5:[0,0,0,1,1,0,0,0],4:[0,1,1,0,0,0,0,0],
+               3:[1,0,0,0,0,0,0,0],2:[0,1,1,0,0,0,0,0],1:[0,0,0,1,1,0,0,0],0:[0,0,0,0,0,1,1,0]};
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 8; c++) pixels[r][c] = p[r][c];
+  }
+  render();
+}
+
+/* ── Grid ─────────────────────────────────────────── */
+
+function buildGrid() {
+  const colhdr = document.getElementById('colhdr');
+  const lbls = document.getElementById('rowlbls');
+  const grid = document.getElementById('grid');
+
+  colhdr.innerHTML = '';
+  colhdr.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
+  for (let c = 0; c < cols; c++) {
+    const s = document.createElement('span');
+    s.textContent = c;
+    s.className = mode === '16x8' ? (c % 2 === 0 ? 'ev' : 'od') : 'rg';
+    colhdr.appendChild(s);
+  }
+
+  lbls.innerHTML = '';
+  lbls.style.gridTemplateRows = `repeat(${rows}, 24px)`;
+  for (let r = rows - 1; r >= 0; r--) {
+    const d = document.createElement('div');
+    d.className = 'row-label'; d.textContent = r;
+    lbls.appendChild(d);
+  }
+
+  grid.innerHTML = '';
+  grid.style.gridTemplateColumns = `repeat(${cols}, 24px)`;
+  grid.style.gridTemplateRows = `repeat(${rows}, 24px)`;
+  for (let r = rows - 1; r >= 0; r--) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      if (mode === '16x8' && c === 8) cell.classList.add('div');
+      cell.dataset.r = r; cell.dataset.c = c;
+      cell.addEventListener('click', () => { pixels[r][c] ^= 1; render(); });
+      grid.appendChild(cell);
+    }
+  }
+
+  const la = document.getElementById('legendArea');
+  if (mode === '16x8')
+    la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even (E000/A000)</div>'
+      + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd (C000/8000)</div></div>';
+  else if (mode === '8x8t')
+    la.innerHTML = '<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even bits (7,5,3,1)</div>'
+      + '<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd bits (6,4,2,0)</div></div>';
+  else la.innerHTML = '';
+
+  document.getElementById('desc').textContent = DESCS[mode];
+}
+
+/* ── Render ───────────────────────────────────────── */
+
+function render() {
+  const grid = document.getElementById('grid');
+  const cells = grid.children;
+  for (let r = rows - 1; r >= 0; r--) {
+    for (let c = 0; c < cols; c++) {
+      const idx = (rows - 1 - r) * cols + c;
+      const cell = cells[idx];
+      cell.className = 'cell';
+      if (mode === '16x8' && c === 8) cell.classList.add('div');
+      if (pixels[r][c]) {
+        if (mode === '8x8') cell.classList.add('on-r');
+        else cell.classList.add(c % 2 === 0 ? 'on-e' : 'on-o');
+      }
+    }
+  }
+  updateOutput();
+}
+
+/* ── Byte helpers ─────────────────────────────────── */
+
+function toHex(n) { return '0x' + n.toString(16).toUpperCase().padStart(2, '0'); }
+
+function rowByte(r) {
+  let b = 0;
+  for (let c = 0; c < cols; c++) if (pixels[r][c]) b |= (128 >> c);
+  return b;
+}
+function evenByte(r) {
+  let b = 0;
+  for (let i = 0; i < 8; i++) if (pixels[r][i*2]) b |= (128 >> i);
+  return b;
+}
+function oddByte(r) {
+  let b = 0;
+  for (let i = 0; i < 8; i++) if (pixels[r][i*2+1]) b |= (128 >> i);
+  return b;
+}
+function toThin(byte8, even) {
+  if (even) {
+    // bits 7,5,3,1 → positions 7,6,5,4
+    let t = 0;
+    if (byte8 & 0x80) t |= 0x80; if (byte8 & 0x20) t |= 0x40;
+    if (byte8 & 0x08) t |= 0x20; if (byte8 & 0x02) t |= 0x10;
+    return t;
+  } else {
+    // bits 6,4,2,0 → positions 4,5,6,7
+    let t = 0;
+    if (byte8 & 0x40) t |= 0x10; if (byte8 & 0x10) t |= 0x20;
+    if (byte8 & 0x04) t |= 0x40; if (byte8 & 0x01) t |= 0x80;
+    return t;
+  }
+}
+
+/* ── Import (reverse conversion) ──────────────────── */
+
+function parseHexBytes(text) {
+  const matches = text.match(/0x[0-9a-fA-F]{1,2}/g);
+  return matches ? matches.map(s => parseInt(s, 16)) : [];
+}
+
+function byteToRow(byte8, rowIdx) {
+  for (let c = 0; c < 8; c++)
+    pixels[rowIdx][c] = (byte8 >> (7 - c)) & 1;
+}
+
+function importData() {
+  const text = document.getElementById('importInput').value.trim();
+  if (!text) return;
+
+  const lines = text.split('\n').filter(l => l.trim().length > 0);
+  const allBytes = parseHexBytes(text);
+
+  if (allBytes.length === 0) return;
+
+  initPixels();
+
+  if (mode === '8x8') {
+    // 8 bytes, top-first (row 7 → row 0)
+    if (allBytes.length >= 8) {
+      for (let i = 0; i < 8; i++) byteToRow(allBytes[i], 7 - i);
+    }
+  }
+  else if (mode === '16x8') {
+    // 16 bytes, bottom-first, even/odd interleaved
+    if (allBytes.length >= 16) {
+      for (let r = 0; r < 8; r++) {
+        const eb = allBytes[r * 2];
+        const ob = allBytes[r * 2 + 1];
+        for (let i = 0; i < 8; i++) {
+          pixels[r][i * 2]     = (eb >> (7 - i)) & 1;
+          pixels[r][i * 2 + 1] = (ob >> (7 - i)) & 1;
+        }
+      }
+    }
+  }
+  else if (mode === '8x8t') {
+    // Одна или две строки: even_thin [+ odd_thin]
+    const lineBytes = lines.map(l => parseHexBytes(l));
+    if (lineBytes.length >= 2 && lineBytes[0].length >= 8 && lineBytes[1].length >= 8) {
+      // Две строки: even_thin + odd_thin → комбинированный формат
+      const et = lineBytes[0], ot = lineBytes[1];
+      for (let i = 0; i < 8; i++) {
+        const evenThin = et[i] & 0xF0;
+        const full = ((evenThin & 0x80) ? 0x80 : 0) | ((evenThin & 0x40) ? 0x20 : 0)
+                   | ((evenThin & 0x20) ? 0x08 : 0) | ((evenThin & 0x10) ? 0x02 : 0)
+                   | ((ot[i] & 0x10) ? 0x40 : 0) | ((ot[i] & 0x20) ? 0x10 : 0)
+                   | ((ot[i] & 0x40) ? 0x04 : 0) | ((ot[i] & 0x80) ? 0x01 : 0);
+        byteToRow(full, 7 - i);
+      }
+    } else if (allBytes.length >= 8) {
+      // Одна строка: комбинированный формат (upper=even, lower=odd)
+      for (let i = 0; i < 8; i++) {
+        const cb = allBytes[i];
+        const ot = cb & 0xF0;           // odd_thin в старшей тетраде
+        const et = (cb & 0x0F) << 4;    // even_thin в старшей тетраде
+        const full = ((et & 0x80) ? 0x80 : 0) | ((et & 0x40) ? 0x20 : 0)
+                   | ((et & 0x20) ? 0x08 : 0) | ((et & 0x10) ? 0x02 : 0)
+                   | ((ot & 0x10) ? 0x40 : 0) | ((ot & 0x20) ? 0x10 : 0)
+                   | ((ot & 0x40) ? 0x04 : 0) | ((ot & 0x80) ? 0x01 : 0);
+        byteToRow(full, 7 - i);
+      }
+    }
+  }
+
+  render();
+}
+
+/* ── Output ───────────────────────────────────────── */
+
+function updateOutput() {
+  const oa = document.getElementById('outputArea');
+  let html = '';
+
+  if (mode === '8x8') {
+    const bs = [];
+    for (let r = 7; r >= 0; r--) bs.push(rowByte(r));
+    html += '<div class="asm-label">pr.asm (сверху вниз):</div>';
+    html += '<div class="asm-out">        defb    ' + bs.map(toHex).join(', ') + '</div>';
+  }
+  else if (mode === '16x8') {
+    const bs = [];
+    for (let r = 0; r < 8; r++) { bs.push(evenByte(r)); bs.push(oddByte(r)); }
+    const l1 = bs.slice(0, 8).map(toHex).join(', ');
+    const l2 = bs.slice(8, 16).map(toHex).join(', ');
+    html += '<div class="asm-label">pr512.asm (снизу вверх):</div>';
+    html += '<div class="asm-out">        defb    ' + l1 + '\n        defb    ' + l2 + '</div>';
+  }
+  else if (mode === '8x8t') {
+    // Одна строка: комбинированный байт = even_thin | (odd_thin >> 4)
+    const combined = [];
+    for (let r = 7; r >= 0; r--) {
+      const b = rowByte(r);
+      combined.push((toThin(b, false) & 0xF0) | (toThin(b, true) >> 4));
+    }
+    html += '<div class="asm-label">pr512t.asm (комбинированный формат, сверху вниз):</div>';
+    html += '<div class="asm-out">        defb    ' + combined.map(toHex).join(', ') + '</div>';
+  }
+
+  oa.innerHTML = html;
+}
+
+/* ── Init ─────────────────────────────────────────── */
+initPixels();
+buildGrid();
+render();
+</script>
+</body>
+</html>
