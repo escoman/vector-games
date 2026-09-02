@@ -2,12 +2,14 @@
  * editor.c — линейный текстовый редактор для .mus текста.
  *
  * Буфер строк фиксированной длины, навигация стрелками,
- * вставка/удаление символов, прокрутка, отрисовка graph_print().
+ * вставка/удаление символов, прокрутка, отрисовка graph_put_char().
  * Все введённые символы приводятся к верхнему регистру.
  */
 
 #include "editor.h"
 #include "v06.h"
+#include <intrinsic.h>
+#include "screens.h"
 #include <string.h>
 
 /* Инверсия символов — из main.c (256x256x2, плоскость 0xE000) */
@@ -94,7 +96,7 @@ void editor_draw(editor_t *ed, unsigned char x, unsigned char y,
 {
     unsigned char row;
     unsigned char slen;
-    unsigned char draw_buf[EDITOR_MAX_COLS + 1];
+    static unsigned char draw_buf[EDITOR_MAX_COLS + 1];
     unsigned char cursor_on;
     unsigned char i;
     unsigned char scr_row;
@@ -117,7 +119,6 @@ void editor_draw(editor_t *ed, unsigned char x, unsigned char y,
         unsigned char line_idx = ed->scroll + row;
 
         if (line_idx >= ed->num_lines) {
-            /* Пустая строка ниже текста */
             draw_buf[0] = ' ';
             draw_buf[1] = 0;
             graph_print(x, (unsigned char)(y + scr_row * 8),
@@ -300,4 +301,140 @@ unsigned char editor_handle_key(editor_t *ed, unsigned char key)
     }
 
     return 0;
+}
+
+void screen_editor(unsigned char channel, char *st[4])
+{
+    unsigned char key;
+    unsigned char key_prev = 0;
+    static editor_t ed;
+
+    editor_init(&ed);
+    ed.visible = 27;
+    editor_load(&ed, st[channel]);
+
+    init_screen();
+    /* Заголовок */
+    {
+        char hdr[33];
+        if (channel < 3) {
+            const char *src = "EDIT SCORE X    F2-PLAY F3-SOLO";
+            unsigned char i = 0;
+            while (*src && i < 32) {
+                hdr[i] = (*src == 'X')
+                    ? (char)('1' + channel) : *src;
+                i++; src++;
+            }
+            hdr[i] = 0;
+        } else {
+            const char *src = "EDIT DRUMS      F2-PLAY F3-SOLO";
+            unsigned char i = 0;
+            while (*src && i < 32) {
+                hdr[i] = src[i]; i++;
+            }
+            hdr[i] = 0;
+        }
+        graph_print(0, 8, hdr, 1);
+    }
+    draw_separator(16);
+
+    for (;;) {
+        wait_frame();
+        key = kbd_scan();
+
+        if (key != key_prev && key != 0) {
+            if (key == 129) {  /* F2 — play all */
+                editor_save(&ed, st[channel], 256);
+                playback_start();
+                if (music_is_playing()) {
+                    while (music_is_playing()) {
+                        wait_frame();
+                        init_screen();
+                        graph_print(0, 8,
+                            (channel < 3)
+                            ? "EDIT SCORE X    F2-PLAY F3-SOLO"
+                            : "EDIT DRUMS      F2-PLAY F3-SOLO",
+                            1);
+                        draw_separator(16);
+                        editor_draw(&ed, 0, 24, 1);
+                        if (kbd_scan() == 27) {
+                            playback_stop();
+                            break;
+                        }
+                    }
+                    init_screen();
+                    graph_print(0, 8,
+                        (channel < 3)
+                        ? "EDIT SCORE X    F2-PLAY F3-SOLO"
+                        : "EDIT DRUMS      F2-PLAY F3-SOLO",
+                        1);
+                    draw_separator(16);
+                }
+                key_prev = 0;
+                continue;
+            }
+            if (key == 130) {  /* F3 — solo */
+                editor_save(&ed, st[channel], 256);
+                playback_start();
+                playback_solo(channel);
+                if (music_is_playing()) {
+                    while (music_is_playing()) {
+                        wait_frame();
+                        init_screen();
+                        graph_print(0, 8,
+                            (channel < 3)
+                            ? "EDIT SCORE X    F2-PLAY F3-SOLO"
+                            : "EDIT DRUMS      F2-PLAY F3-SOLO",
+                            1);
+                        draw_separator(16);
+                        editor_draw(&ed, 0, 24, 1);
+                        if (kbd_scan() == 27) {
+                            playback_stop();
+                            break;
+                        }
+                    }
+                    init_screen();
+                    graph_print(0, 8,
+                        (channel < 3)
+                        ? "EDIT SCORE X    F2-PLAY F3-SOLO"
+                        : "EDIT DRUMS      F2-PLAY F3-SOLO",
+                        1);
+                    draw_separator(16);
+                }
+                key_prev = 0;
+                continue;
+            }
+            if (editor_handle_key(&ed, key)) {
+                editor_save(&ed, st[channel], 256);
+                break;
+            }
+        }
+        key_prev = key;
+
+        editor_draw(&ed, 0, 24, 1);
+
+        /* Статус */
+        {
+            char status[33];
+            unsigned char sl = ed.cur_line + 1;
+            unsigned char sc = ed.cur_col;
+            unsigned char nl = ed.num_lines;
+            unsigned char fc = ed.lines[0][0];
+            status[0] = 'L';
+            status[1] = (char)('0' + (sl / 10));
+            status[2] = (char)('0' + (sl % 10));
+            status[3] = ' ';
+            status[4] = 'C';
+            status[5] = (char)('0' + (sc / 10));
+            status[6] = (char)('0' + (sc % 10));
+            status[7] = ' ';
+            status[8] = 'N';
+            status[9] = (char)('0' + nl);
+            status[10] = ' ';
+            status[11] = 'F';
+            status[12] = fc ? fc : '.';
+            status[13] = 0;
+            graph_print(0, 248, status, 1);
+        }
+    }
 }

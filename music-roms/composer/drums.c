@@ -2,6 +2,7 @@
  * drums.c — экран ударных (F3) и воспроизведение семплов.
  */
 #include "v06.h"
+#include <intrinsic.h>
 #include "nes_drums.h"
 #include "screens.h"
 
@@ -23,7 +24,7 @@ void draw_drums(void)
 
     init_screen();
     graph_print(0, 0,
-        "DRUM LIBRARY (0-F TO PLAY)", 3);
+        "DRUM LIBRARY (0-F TO PLAY)", 1);
     draw_separator(8);
 
     for (i = 0; i < 16; i++) {
@@ -44,10 +45,10 @@ void draw_drums(void)
             }
             buf[j + 2] = 0;
         }
-        graph_print(col, y, buf, 3);
+        graph_print(col, y, buf, 1);
     }
 
-    graph_print(0, 152, "AP2-RETURN", 3);
+    graph_print(0, 152, "AP2-RETURN", 1);
 }
 
 unsigned char drums_handle_key(unsigned char key)
@@ -66,4 +67,18 @@ unsigned char drums_handle_key(unsigned char key)
         drum_sample_play(nes_drums_samples[idx]);
 
     return 0;
+}
+
+void screen_drums(void)
+{
+    unsigned char key, prev = 0;
+    draw_drums();
+    for (;;) {
+        wait_frame();
+        key = kbd_scan();
+        if (key != prev && key != 0) {
+            if (drums_handle_key(key)) break;
+        }
+        prev = key;
+    }
 }
