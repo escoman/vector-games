@@ -1,0 +1,15 @@
+Tempo: T120
+
+score 0:
+O4 L4 C D E F G A B O5 C
+
+score 1:
+O3 L4 C E G C E G O4 C E
+
+score 2:
+O2 L2 C G C G
+
+drums:
+L4 0 P 2 P 0 P 4 P
+L4 8 P 10 P 8 P 10 P
+!
