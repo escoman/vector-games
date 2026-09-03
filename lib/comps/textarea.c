@@ -219,8 +219,12 @@ void textarea_draw(component_t *c, unsigned char active)
     }
 }
 
+unsigned int textarea_draw_count = 0;
+
 void textarea_draw_content(component_t *c)
 {
+    textarea_draw_count++;
+
     textarea_t *ta = (textarea_t *)c;
     static unsigned char draw_buf[34];
     unsigned char slen;

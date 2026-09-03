@@ -20,6 +20,8 @@
         PUBLIC  kbd_scan_rows
         PUBLIC  _kbd_scan_rows
         PUBLIC  _kbd_rows
+        PUBLIC  _kbd_shift_state
+        PUBLIC  _kbd_port_c_raw
 
 kbd_scan_rows:
 _kbd_scan_rows:
@@ -49,6 +51,11 @@ row_loop:
         jp      nz, row_loop
         ld      a, 0x88                 ; вернуть обычное управляющее слово
         out     (0x00), a
+        in      a, (0x01)         ; порт C (все биты — вход): СС = бит 5
+        ld      (_kbd_port_c_raw), a ; сырое (active low: 0 = нажата)
+        cpl                       ; инверсия: 1 = нажата
+        and     0x20              ; маска бита 5 (Shift/СС)
+        ld      (_kbd_shift_state), a
         pop     af
         out     (0x02), a               ; восстановить PB (бордюр + режим)
         ld      a, (_graph_scroll_row)
@@ -57,3 +64,7 @@ row_loop:
 
 _kbd_rows:
         defs    8
+_kbd_shift_state:
+        defs    1
+_kbd_port_c_raw:
+        defs    1

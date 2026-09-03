@@ -24,8 +24,9 @@ typedef struct component_s {
 
 typedef unsigned char (*key_handler_t)(unsigned char key);
 /* Внешний обработчик клавиш. Возвращает:
- *   1 — клавиша обработана, controller_run возвращает этот код;
- *   0 — не наш ключ, передать компоненту. */
+ *   0 — не наш ключ, передать компоненту;
+ *   1 — обработан, продолжаем цикл;
+ *  >1 — код выхода (controller_run возвращает это значение). */
 
 #define COMPS_MAX 8
 

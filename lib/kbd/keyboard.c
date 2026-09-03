@@ -12,9 +12,13 @@
 
 #include "v06.h"
 
-/* Опрос матрицы в kbdscan.asm: заполняет kbd_rows[8] (1 = нажата) */
+/* Опрос матрицы в kbdscan.asm: заполняет kbd_rows[8] (1 = нажата).
+ * Также считывает состояние СС в kbd_shift_state (1 = нажата),
+ * пока порт B ещё в режиме входа — иначе чтение порта 0x02
+ * возвращает выходной регистр, а не состояние пинов. */
 extern void kbd_scan_rows(void);
 extern unsigned char kbd_rows[8];
+extern unsigned char kbd_shift_state;
 
 /* Коды клавиш по матрице (строка*8 + столбец), раскладка без shift.
  * Таблица совпадает с z88dk in_keytranstbl; 0 = служебная/нет кода. */
@@ -37,6 +41,24 @@ static const unsigned char kbd_codes[64] = {
     'x', 'y', 'z', '[', '\\', ']', '~', ' ',
 };
 
+/* Сдвиг-таблица: код без СС → код с СС.
+ * 0 = без изменений (пропустить). */
+static const unsigned char kbd_shift[128] = {
+    /* 0-31: служебные */
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    /* 32-47: пробел ! " # $ % & ' ( ) * + , - . / */
+    0, '!','"','#','$','%','&','\'','(',')','*','+',',','-','.','/',
+    /* 48-63: 0-9 : ; < = > ? */
+    ')','!','"','#','$','%','&','\'','(',')','*','+',',','-','.','/',
+    /* 64-95: @ A-Z [ \ ] ^ _ */
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    /* 96-127: ` a-z { | } ~ DEL (не используются) */
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+};
+
 /* Однократный опрос матрицы: код первой нажатой клавиши или 0 */
 unsigned char kbd_scan(void)
 {
@@ -44,8 +66,9 @@ unsigned char kbd_scan(void)
     unsigned char row;
     unsigned char cols;
     unsigned char col;
+    unsigned char shift;
 
-    kbd_scan_rows();
+    kbd_scan_rows();  /* включает СС в kbd_shift_state */
 
     for (row = 0; row < 8u; ++row) {
         cols = kbd_rows[row];           /* 1 = нажата */
@@ -59,6 +82,13 @@ unsigned char kbd_scan(void)
             break;
         }
     }
+
+    /* СС (Shift): применяем сдвиг-таблицу */
+    if (code != 0 && kbd_shift_state) {
+        shift = kbd_shift[code];
+        if (shift) code = shift;
+    }
+
     return code;
 }
 

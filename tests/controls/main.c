@@ -32,14 +32,16 @@ static unsigned char on_key(unsigned char key)
 {
     if (key == 128) {  /* F1 — счётчик */
         char buf[16];
-        unsigned char n = ++f1_count;
+
+        f1_count++;
         unsigned char pos = 0;
         buf[pos++] = 'F';
         buf[pos++] = '1';
         buf[pos++] = ':';
         buf[pos++] = ' ';
-        if (n >= 10) buf[pos++] = '0' + (n / 10);
-        buf[pos++] = '0' + (n % 10);
+        if (f1_count >= 10)
+            buf[pos++] = '0' + (f1_count / 10);
+        buf[pos++] = '0' + (f1_count % 10);
         buf[pos] = 0;
         graph_print(0, 248, buf, 1);
         return 1;
@@ -66,7 +68,7 @@ int main(void)
 
     /* Textarea (многострочное, 3 видимые строки) */
     textarea_init(&note_area, note_buf, sizeof(note_buf) - 1,
-                  20, 3, 1, 100, "NOTES");
+                  20, 5, 1, 100, "NOTES");
 
     /* Контроллер */
     controller_init(&ctrl);
