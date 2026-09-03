@@ -7,6 +7,7 @@
 TESTS = 512x256 \
         cls \
         clrs \
+        controls \
         dt2 \
         dt2_512 \
         dt2_lz \
