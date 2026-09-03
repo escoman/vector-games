@@ -175,19 +175,19 @@ typedef struct {
 
 /* Общие тексты меню (одинаковые для всех режимов). */
 static const char txt_title[]  = "VECTOR-06C";
-static const char txt_sep[]    = "-------------------";
+static const char txt_sep[]    = "___________________";
 static const char txt_m0[]     = "0-256X256 16 COLORS";
 static const char txt_m1[]     = "1-256X256  2 COLORS";
 static const char txt_m2[]     = "2-512X256  4 COLORS";
 static const char txt_m3[]     = "3-512X256  2 COLORS";
 static const char txt_key[]    = "PRESS 0-3 FOR MODE";
-static const char txt_image[]    = "PRESS SPACE FOR IMAGE";
+static const char txt_image[]  = "PRESS SPACE FOR IMAGE";
 
 static const char txt_test1[]  = "THE QUICK BROWN FOX";
 static const char txt_test2[]  = "JUMPS OVER THE LAZY DOG";
 static const char txt_test3[]  = "1234567890 A-Z TEST";
 static const char txt_test4[]  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-static const char txt_test5[]  = "0123456789-:().,?!@<>=&#*+%";
+static const char txt_test5[]  = "0123456789-:().,?!@<>=&#*+%;[]_";
 
 /* Отрисовка одной строки меню через нужный шрифт. */
 static void print_line(unsigned char x, unsigned char y,

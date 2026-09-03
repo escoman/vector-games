@@ -303,11 +303,42 @@ unsigned char editor_handle_key(editor_t *ed, unsigned char key)
     return 0;
 }
 
+/* Инвертировать метку F2-PLAY или F3-SOLO в заголовке редактора. */
+static void invert_label(unsigned char which)
+{
+    /* which: 0 = F2-PLAY (col 14, 7 симв.), 1 = F3-SOLO (col 22, 7 симв.) */
+    invert_chars((unsigned char)(16 + which * 8), 7, 7);
+}
+
+/* Запуск проигрывания из редактора: solo=0 — все каналы, solo=1 — только текущий. */
+static void editor_play(editor_t *ed, char *st[], unsigned char channel,
+                        unsigned char solo)
+{
+    unsigned char k;
+    editor_save(ed, st[channel], 256);
+    playback_start();
+    if (solo)
+        playback_solo(channel);
+    if (!music_is_playing()) return;
+    invert_label(solo);
+    while (music_is_playing()) {
+        wait_frame();
+        editor_draw(ed, 0, 24, 1);
+        k = kbd_scan();
+        if (k == 27 || k == 129 || k == 130) {
+            playback_stop();
+            break;
+        }
+    }
+    invert_label(solo);
+}
+
 void screen_editor(unsigned char channel, char *st[4])
 {
     unsigned char key;
     unsigned char key_prev = 0;
     static editor_t ed;
+    static char hdr[33];
 
     editor_init(&ed);
     ed.visible = 27;
@@ -316,24 +347,16 @@ void screen_editor(unsigned char channel, char *st[4])
     init_screen();
     /* Заголовок */
     {
-        char hdr[33];
-        if (channel < 3) {
-            const char *src = "EDIT SCORE X    F2-PLAY F3-SOLO";
-            unsigned char i = 0;
-            while (*src && i < 32) {
-                hdr[i] = (*src == 'X')
-                    ? (char)('1' + channel) : *src;
-                i++; src++;
-            }
-            hdr[i] = 0;
-        } else {
-            const char *src = "EDIT DRUMS      F2-PLAY F3-SOLO";
-            unsigned char i = 0;
-            while (*src && i < 32) {
-                hdr[i] = src[i]; i++;
-            }
-            hdr[i] = 0;
+        const char *src = (channel < 3)
+            ? "EDIT SCORE X    F2-PLAY F3-SOLO"
+            : "EDIT DRUMS      F2-PLAY F3-SOLO";
+        unsigned char i = 0;
+        while (*src && i < 32) {
+            hdr[i] = (*src == 'X')
+                ? (char)('1' + channel) : *src;
+            i++; src++;
         }
+        hdr[i] = 0;
         graph_print(0, 8, hdr, 1);
     }
     draw_separator(16);
@@ -344,63 +367,12 @@ void screen_editor(unsigned char channel, char *st[4])
 
         if (key != key_prev && key != 0) {
             if (key == 129) {  /* F2 — play all */
-                editor_save(&ed, st[channel], 256);
-                playback_start();
-                if (music_is_playing()) {
-                    while (music_is_playing()) {
-                        wait_frame();
-                        init_screen();
-                        graph_print(0, 8,
-                            (channel < 3)
-                            ? "EDIT SCORE X    F2-PLAY F3-SOLO"
-                            : "EDIT DRUMS      F2-PLAY F3-SOLO",
-                            1);
-                        draw_separator(16);
-                        editor_draw(&ed, 0, 24, 1);
-                        if (kbd_scan() == 27) {
-                            playback_stop();
-                            break;
-                        }
-                    }
-                    init_screen();
-                    graph_print(0, 8,
-                        (channel < 3)
-                        ? "EDIT SCORE X    F2-PLAY F3-SOLO"
-                        : "EDIT DRUMS      F2-PLAY F3-SOLO",
-                        1);
-                    draw_separator(16);
-                }
+                editor_play(&ed, st, channel, 0);
                 key_prev = 0;
                 continue;
             }
             if (key == 130) {  /* F3 — solo */
-                editor_save(&ed, st[channel], 256);
-                playback_start();
-                playback_solo(channel);
-                if (music_is_playing()) {
-                    while (music_is_playing()) {
-                        wait_frame();
-                        init_screen();
-                        graph_print(0, 8,
-                            (channel < 3)
-                            ? "EDIT SCORE X    F2-PLAY F3-SOLO"
-                            : "EDIT DRUMS      F2-PLAY F3-SOLO",
-                            1);
-                        draw_separator(16);
-                        editor_draw(&ed, 0, 24, 1);
-                        if (kbd_scan() == 27) {
-                            playback_stop();
-                            break;
-                        }
-                    }
-                    init_screen();
-                    graph_print(0, 8,
-                        (channel < 3)
-                        ? "EDIT SCORE X    F2-PLAY F3-SOLO"
-                        : "EDIT DRUMS      F2-PLAY F3-SOLO",
-                        1);
-                    draw_separator(16);
-                }
+                editor_play(&ed, st, channel, 1);
                 key_prev = 0;
                 continue;
             }

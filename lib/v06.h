@@ -188,6 +188,9 @@ extern void music_resume(void);
 extern void music_stop(void);
 extern unsigned char music_is_playing(void);
 extern void music_set_loop(unsigned char loop);
+/* Маскировка каналов в runtime: биты 0-2 — тон 0-2, бит 3 — ударные.
+ * 0x0F — все включены, 0x00 — все выключены. */
+extern void music_set_channel_mask(unsigned char mask);
 /* Один шаг music clock — из кадрового прерывания (startup.asm);
  * рядом должен вызываться drum_tick() (огибающие сэмплов). */
 extern void music_tick(void);

@@ -150,7 +150,7 @@ void init_screen(void)
 void draw_separator(unsigned char y)
 {
     graph_print(0, y,
-        "--------------------------------", 1);
+        "________________________________", 1);
 }
 
 /* Инвертировать метку F2-PLAY в заголовке (XOR-тоггл). */
@@ -183,10 +183,8 @@ void playback_stop(void)
 void playback_solo(unsigned char ch)
 {
     if (!playing) return;
-    if (ch == 0) song.s0 = 0;
-    else if (ch == 1) song.s1 = 0;
-    else if (ch == 2) song.s2 = 0;
-    else song.dr = 0;
+    /* Включить только выбранный канал, остальные выключить */
+    music_set_channel_mask((unsigned char)(1u << ch));
 }
 
 void playback_start(void)
@@ -243,6 +241,16 @@ void playback_start(void)
 
 /* ------------------------- Главный экран --------------------------- */
 
+/* Обновление подсветки [EDIT] при смене выделения.
+ * Инвертирует старую и новую позиции — быстрее, чем draw_main(). */
+static void update_selection(unsigned char new_sel)
+{
+    if (playing) return;
+    invert_section(sel_item);  /* убрать подсветку */
+    sel_item = new_sel;
+    invert_section(sel_item);  /* поставить подсветку */
+}
+
 static void draw_main(void)
 {
     unsigned char sec;
@@ -260,48 +268,33 @@ static void draw_main(void)
         unsigned char row = sec * 7 + 3;
         y = (unsigned char)(row * 8);
 
-        /* Метка секции */
-        if (sec < 3) {
-            char label[16];
-            label[0] = 'S'; label[1] = 'C'; label[2] = 'O';
-            label[3] = 'R'; label[4] = 'E'; label[5] = ' ';
-            label[6] = (char)('1' + sec);
-            label[7] = ':'; label[8] = ' ';
-            label[9] = '['; label[10] = 'E'; label[11] = 'D';
-            label[12] = 'I'; label[13] = 'T'; label[14] = ']';
-            label[15] = 0;
-            graph_print(0, y, label, 1);
-            if (sel_item == sec && !playing)
-                invert_section(sec);
-        } else {
-            graph_print(0, y, "DRUMS:   [EDIT]", 1);
-            if (sel_item == sec && !playing)
-                invert_section(sec);
-        }
-
         /* Разделитель */
-        draw_separator((unsigned char)(y + 8));
+        draw_separator((unsigned char)(y + 4));
+
+        /* Метка секции */
+        char label[] = "SCORE 1: [EDIT]";
+        if (sec < 3)
+            label[6] = (char)('1' + sec);
+        else
+            memcpy(label, "DRUMS:   [EDIT]", 15);
+
+        graph_print(0, y, label, 1);
+        if (sel_item == sec && !playing)
+            invert_section(sec);
 
         /* Превью текста (3 строки) */
         {
             unsigned char ln;
             const char *p = score_text[sec];
+            char buf[33];
             for (ln = 0; ln < PREVIEW_H; ln++) {
                 unsigned char cy = (unsigned char)((row + 2 + ln) * 8);
-
-                if (*p) {
-                    char buf[33];
-                    unsigned char i = 0;
-                    while (*p && *p != '\n' && i < 32) {
-                        buf[i] = (*p >= 'a' && *p <= 'z')
-                                 ? (char)(*p - 32) : *p;
-                        i++;
-                        p++;
-                    }
-                    buf[i] = 0;
-                    if (*p == '\n') p++;
-                    graph_print(0, cy, buf, 1);
-                }
+                unsigned char i = 0;
+                while (*p && *p != '\n' && i < 32)
+                    buf[i++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : *p, p++;
+                buf[i] = 0;
+                if (*p == '\n') p++;
+                if (i) graph_print(0, cy, buf, 1);
             }
         }
     }
@@ -359,6 +352,9 @@ int main(void)
             playing = 0;
             drum_mute();
             frame_handler = 0;
+            /* Снять подсветку F2-PLAY и вернуть [EDIT] */
+            invert_play_label();
+            invert_section(sel_item);
         }
 
         key = kbd_scan();
@@ -370,10 +366,15 @@ int main(void)
             } else if (key == 129) {   /* F2 — Play/Stop */
                 if (playing) {
                     playback_stop();
+                    invert_play_label();
+                    invert_section(sel_item);
                 } else {
                     playback_start();
+                    if (playing) {
+                        invert_section(sel_item);
+                        invert_play_label();
+                    }
                 }
-                draw_main();
             } else if (key == 130) {   /* F3 — Drums */
                 screen_drums();
                 draw_main();
@@ -382,9 +383,11 @@ int main(void)
                 screen_about();
                 draw_main();
             } else if (key == 11) {    /* Up */
-                if (sel_item > 0) sel_item--;
+                if (sel_item > 0)
+                    update_selection((unsigned char)(sel_item - 1));
             } else if (key == 10) {    /* Down */
-                if (sel_item < 3) sel_item++;
+                if (sel_item < 3)
+                    update_selection((unsigned char)(sel_item + 1));
             } else if (key == 13) {    /* Enter — Edit */
                 screen_editor(sel_item, score_text);
                 draw_main();

@@ -23,15 +23,15 @@ void draw_drums(void)
     unsigned char i;
 
     init_screen();
+    draw_separator(4);
     graph_print(0, 0,
         "DRUM LIBRARY (0-F TO PLAY)", 1);
-    draw_separator(8);
 
     for (i = 0; i < 16; i++) {
         char buf[33];
         unsigned char col = (i < 8) ? 0 : 17;
         unsigned char row = (i < 8) ? i : (unsigned char)(i - 8);
-        unsigned char y = (unsigned char)((row + 2) * 8);
+        unsigned char y = (unsigned char)((row + 2) * 10);
         unsigned char hi = (unsigned char)(i < 10 ? '0' + i : 'A' + i - 10);
 
         buf[0] = (char)hi;
@@ -75,6 +75,7 @@ void screen_drums(void)
     draw_drums();
     for (;;) {
         wait_frame();
+        drum_tick();
         key = kbd_scan();
         if (key != prev && key != 0) {
             if (drums_handle_key(key)) break;

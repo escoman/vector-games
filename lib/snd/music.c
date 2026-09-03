@@ -120,6 +120,7 @@ static mus_ch_t g_dr;           /* партитура ударных            
 static unsigned char g_playing;
 static unsigned char g_paused;
 static unsigned char g_loop;
+static unsigned char g_ch_mask = 0x0F; /* биты 0-2: тон 0-2, бит 3: ударные */
 static unsigned int g_acc;      /* остаток в аккумуляторе темпа       */
 
 /* ------------------------------ Помощники ----------------------------- */
@@ -183,6 +184,7 @@ void music_stop(void)
 {
     g_playing = 0u;
     g_paused = 0u;
+    g_ch_mask = 0x0Fu;
     g_acc = 0u;
     g_ch[0].pc = g_ch[1].pc = g_ch[2].pc = 0;
     g_dr.pc = 0;
@@ -198,6 +200,18 @@ unsigned char music_is_playing(void)
 void music_set_loop(unsigned char loop)
 {
     g_loop = loop;
+}
+
+/* Маскировка каналов: биты 0-2 — тональные 0-2, бит 3 — ударные.
+ * 0x0F (по умолчанию) — все каналы включены. */
+void music_set_channel_mask(unsigned char mask)
+{
+    g_ch_mask = mask;
+    /* При выключении тональных каналов — сразу тишина */
+    if (!(mask & 1u)) vi53_set_channel(0, 0u);
+    if (!(mask & 2u)) vi53_set_channel(1, 0u);
+    if (!(mask & 4u)) vi53_set_channel(2, 0u);
+    if (!(mask & 8u)) drum_mute();
 }
 
 /* ------------------------------ Рантайм ------------------------------- */
@@ -346,6 +360,16 @@ static void clock_tick(void)
     for (i = 0u; i < 3u; ++i) {
         if (g_ch[i].pc == 0)
             continue;
+        if (!(g_ch_mask & (1u << i))) {
+            /* Канал выключен — пропускаем ноты, но читаем байткод */
+            if (g_ch[i].cnt > 0u)
+                --g_ch[i].cnt;
+            else {
+                g_ch[i].gate = 0u;
+                tone_event(i);
+            }
+            continue;
+        }
         if (g_ch[i].gate > 0u) {
             --g_ch[i].gate;
             if (g_ch[i].gate == 0u)     /* гейт отзвучал — нота */
@@ -357,7 +381,15 @@ static void clock_tick(void)
         }
     }
     if (g_dr.pc != 0) {
-        if (g_dr.cnt > 0u)
+        if (!(g_ch_mask & 8u)) {
+            /* Ударные выключены — пропускаем атаки */
+            if (g_dr.cnt > 0u)
+                --g_dr.cnt;
+            else {
+                drum_event();
+                drum_mute();
+            }
+        } else if (g_dr.cnt > 0u)
             --g_dr.cnt;
         else
             drum_event();
