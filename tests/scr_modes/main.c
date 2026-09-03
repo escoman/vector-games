@@ -13,18 +13,6 @@
 #include "v06.h"
 #include "../assets/logo16_bmp.inc"
 
-/* --- Текст 256x256 (pr.asm) --- */
-extern void graph_print(unsigned char x, unsigned char y, const char *s,
-                        unsigned char color) __z88dk_callee;
-
-/* --- Текст 512x256, шрифт 16x8 (pr512.asm) --- */
-extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
-                            unsigned char color) __z88dk_callee;
-
-/* --- Текст 512x256, тонкий шрифт 4x8 (pr512t.asm) --- */
-extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
-                             unsigned char color) __z88dk_callee;
-
 /* ---------------------------- Палитры ------------------------------ */
 
 /* 16-цветная палитра для режима 0 (256x256).

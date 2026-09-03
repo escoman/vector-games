@@ -80,6 +80,11 @@ extern void graph_rle_expand(const unsigned char *src, unsigned char x,
  * mask определяет, какие плоскости заполнять; fill: 0x00 или 0xFF. */
 extern void graph_fill_planes(unsigned char mask, unsigned char fill) __z88dk_callee;
 
+/* Заливка с шагом: записывает val по адресу addr, затем
+ * addr+step, addr+2*step и т.д., всего count байт (fstride.asm). */
+extern void graph_fill_stride(unsigned int addr, unsigned char val,
+                              unsigned int step, unsigned char count) __z88dk_callee;
+
 /* Загрузка 16 цветов палитры. Формат байта: 0bRRRGGGBB.
  * Палитра Вектора адресуется «цветом под лучом», поэтому запись идёт
  * в кадровый гасящий интервал через регистр бордюра (см. v06pal.asm). */
@@ -100,6 +105,16 @@ extern void graph_put_char(unsigned char x, unsigned char y, char ch,
                            unsigned char color) __z88dk_callee;
 extern void graph_print(unsigned char x, unsigned char y, const char *s,
                         unsigned char color) __z88dk_callee;
+
+/* Текст шрифтом 16x8 в режиме 512x256 (pr512.asm). */
+extern void graph_put_char_512(unsigned char x, unsigned char y, char ch,
+                               unsigned char color) __z88dk_callee;
+extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
+                            unsigned char color) __z88dk_callee;
+
+/* Тонкий текст 4x8 в режиме 512x256 (pr512t.asm). */
+extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
+                             unsigned char color) __z88dk_callee;
 
 /* ------------------------------- Звук --------------------------------- */
 
