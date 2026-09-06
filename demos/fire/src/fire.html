@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>16-цветный огонь для Вектор-06Ц</title>
+    <style>
+        body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 4px solid #333; image-rendering: pixelated; }
+    </style>
+</head>
+<body>
+
+<!-- Виртуальное разрешение 64x64, растянутое для видимости -->
+<canvas id="fireCanvas" width="64" height="64" style="width: 512px; height: 512px;"></canvas>
+
+<script>
+const canvas = document.getElementById('fireCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+// 1. Жесткая 16-цветная палитра (0 - черный, 15 - белый/ярко-желтый)
+const palette = [
+    'rgb(0,0,0)',       // 0: Черный
+    'rgb(20,10,30)',    // 1: Темный дым
+    'rgb(50,15,40)',    // 2: Бордовый дым
+    'rgb(90,20,30)',    // 3: Темно-красный
+    'rgb(140,20,20)',   // 4: Красный
+    'rgb(185,30,10)',   // 5: Ярко-красный
+    'rgb(220,60,10)',   // 6: Темно-оранжевый
+    'rgb(240,100,20)',  // 7: Оранжевый
+    'rgb(255,140,20)',  // 8: Светло-оранжевый
+    'rgb(255,180,30)',  // 9: Желто-оранжевый
+    'rgb(255,210,40)',  // 10: Насыщенный желтый
+    'rgb(255,230,80)',  // 11: Желтый
+    'rgb(255,245,140)', // 12: Светло-желтый
+    'rgb(255,255,190)', // 13: Почти белый
+    'rgb(255,255,230)', // 14: Белесый
+    'rgb(255,255,255)'  // 15: Белое пламя
+];
+
+// Массив экрана: хранит только индексы цветов (0-15)
+const fire = new Array(W * H).fill(0);
+
+function animate() {
+    // Шаг 1: Генерируем "очаги" пламени на дне. 
+    // Вместо сплошной линии делаем яркие "костры", которые случайно вспыхивают
+    for (let x = 0; x < W; x++) {
+        const bottomIdx = (H - 1) * W + x;
+        if (Math.random() > 0.40) {
+            fire[bottomIdx] = 15; // Максимальный жар
+        } else if (Math.random() > 0.5) {
+            fire[bottomIdx] = Math.max(0, fire[bottomIdx] - 2); // Затухание уголька
+        }
+    }
+
+    // Шаг 2: Просчет пламени снизу вверх
+    // Идем с предпоследней строки до самого верха
+    for (let y = 0; y < H - 1; y++) {
+        for (let x = 0; x < W; x++) {
+            const currentIdx = y * W + x;
+            
+            // Смотрим, что горит прямо под нами (в строке y + 1)
+            const srcX = (x + Math.floor(Math.random() * 3) - 1 + W) % W; // Случайный сдвиг влево/вправо (-1, 0, 1)
+            const belowColor = fire[(y + 1) * W + srcX];
+            
+            // Случайное быстрое затухание (имитация искр и рваных языков)
+            // На Векторе это реализуется через простой генератор ПСЧ (например, сдвиговый регистр)
+            let decay = Math.floor(Math.random() * 2); // затухание на 0 или 1 единицу цвета
+            
+            // Если поднимаемся высоко, огонь должен тухнуть быстрее (формирует острые верхушки)
+            if (y < H / 2 && Math.random() > 0.7) decay += 1; 
+
+            let newColor = belowColor - decay;
+            if (newColor < 0) newColor = 0;
+
+            // Записываем цвет в текущий пиксель
+            fire[currentIdx] = newColor;
+        }
+    }
+
+    // Шаг 3: Отрисовка на Canvas (буфер цвета)
+    // На Векторе это была бы прямая запись в видеопамять (4 плана для 16 цветов)
+    ctx.clearRect(0, 0, W, H);
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const colorIdx = fire[y * W + x];
+            if (colorIdx > 0) {
+                ctx.fillStyle = palette[colorIdx];
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+
+    requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+
+</body>
+</html>
