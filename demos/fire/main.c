@@ -2,56 +2,52 @@
  * fire.c — демонстрация алгоритма горения огня для Вектора-06Ц.
  *
  * Зона огня 256×128, прижата к нижнему краю экрана.
+ * Вся работа — напрямую через VRAM (без RAM-буферов).
  *
- * Алгоритм — скользящее окно (256 байт RAM):
- *   - Два буфера по 256 байт (fire_row_a, fire_row_b).
- *   - Каждый пиксель — индекс интенсивности 0..15.
- *   - Строка за строкой снизу вверх: читаем из строки ниже
- *     (src), применяем случайный сдвиг и вычитание затухания,
- *     записываем в dst, рендерим в VRAM.
- *   - После 127 строк буферов достаточно — каждая строка
- *     зависит только от строки непосредственно ниже.
+ * Алгоритм обрабатывает одну битовую плоскость за вызов.
+ * Каждый пиксель — 1 бит; 8 пикселей обрабатываются
+ * побитово за одну операцию (байтовый уровень).
  *
- * Рендер: 8 пикселей (байт) → 4 байта битовых плоскостей VRAM.
- * Один столбец (32 шт.) обрабатывается целиком за проход.
+ *   1. Сид строки base_ht случайными байтами.
+ *   2. Строки base_ht+1 .. base_ht+height-1: мажоритарное
+ *      усреднение 3 соседей строки ниже, затухание.
+ *
+ * Вызов fire_frame(base) для каждой плоскости позволяет
+ * комбинировать 1–4 плоскости для разной глубины цвета.
  */
 
-#include <intrinsic.h>
 #include "v06.h"
 
 /* ----------------------------- ПАЛИТРА --------------------------------
- * 16 цветов огня. Формат V06: BB_GGG_RRR.
- * Конвертация из HTML: R=ROUND(R_html/36), G=ROUND(G_html/36),
- *                       B=ROUND(B_html/85).
+ * 16 цветов. Формат V06: BB_GGG_RRR.
+ * Для одноплоскостного режима достаточно цветов 0 и 1.
  * --------------------------------------------------------------- */
 
 static const unsigned char fire_palette[16] = {
-    V06_RGB(0, 0, 0),   /*  0: 0x00  чёрный                */
-    V06_RGB(1, 0, 0),   /*  1: 0x01  тёмный дым             */
-    V06_RGB(1, 0, 0),   /*  2: 0x01  бордовой дым           */
-    V06_RGB(2, 1, 0),   /*  3: 0x0A  тёмно-красный          */
-    V06_RGB(4, 1, 0),   /*  4: 0x0C  красный                */
-    V06_RGB(5, 1, 0),   /*  5: 0x0D  ярко-красный           */
-    V06_RGB(6, 2, 0),   /*  6: 0x1E  тёмно-оранжевый        */
-    V06_RGB(7, 3, 0),   /*  7: 0x27  оранжевый              */
-    V06_RGB(7, 4, 0),   /*  8: 0x2F  светло-оранжевый       */
-    V06_RGB(7, 5, 0),   /*  9: 0x37  жёлто-оранжевый        */
-    V06_RGB(7, 6, 0),   /* 10: 0x3F  насыщенный жёлтый      */
-    V06_RGB(7, 6, 1),   /* 11: 0x7F  жёлтый                 */
-    V06_RGB(7, 7, 2),   /* 12: 0xBF  светло-жёлтый          */
-    V06_RGB(6, 7, 3),   /* 13: 0xFE  почти белый (корр.)    */
-    V06_RGB(7, 7, 3),   /* 14: 0xFF  белёсый                */
-    V06_RGB(7, 7, 3)    /* 15: 0xFF  белое пламя             */
+    V06_RGB(0, 0, 0),   /*  0: чёрный                */
+    V06_RGB(7, 3, 0),   /*  1: оранжевый             */
+    V06_RGB(7, 6, 0),   /*  2: жёлто-оранжевый       */
+    V06_RGB(7, 7, 2),   /*  3: светло-жёлтый         */
+    V06_RGB(4, 1, 0),   /*  4: красный               */
+    V06_RGB(6, 2, 0),   /*  5: тёмно-оранжевый       */
+    V06_RGB(7, 5, 0),   /*  6: ярко-красный          */
+    V06_RGB(7, 7, 3),   /*  7: белёсый               */
+    V06_RGB(1, 0, 0),   /*  8: тёмный дым            */
+    V06_RGB(2, 1, 0),   /*  9: бордовой дым          */
+    V06_RGB(5, 1, 0),   /* 10: ярко-красный доп.     */
+    V06_RGB(6, 7, 3),   /* 11: почти белый           */
+    V06_RGB(7, 4, 0),   /* 12: светло-оранжевый      */
+    V06_RGB(7, 6, 1),   /* 13: жёлтый                */
+    V06_RGB(6, 7, 3),   /* 14: почти белый (корр.)   */
+    V06_RGB(7, 7, 3)    /* 15: белое пламя            */
 };
 
 /* ------------------------------ ГСЧ -----------------------------------
  * Предгенерированная таблица случайных чисел (256 байт).
- * Заполняется один раз при старте; в цикле огня — чтение по указателю
- * с wraparound через unsigned char индекс.
  * --------------------------------------------------------------- */
 
-static unsigned char rnd_table[256];
-static unsigned char rnd_idx;
+unsigned char rnd_table[256];
+unsigned char rnd_idx;
 
 static void rnd_init(void)
 {
@@ -64,129 +60,109 @@ static void rnd_init(void)
     rnd_idx = 0;
 }
 
-/* Быстрое случайное число — просто читаем из таблицы. */
 #define rnd_next()  (rnd_table[rnd_idx++])
 
-/* -------------------------- БУФЕРНЫЕ СТРОКИ ---------------------------
- * Два буфера по 256 байт — скользящее окно алгоритма огня.
- * Каждый пиксель — интенсивность 0..15.
+/* ----------------------- VRAM-адреса плоскостей ----------------------- */
+
+#define PLANE3_BASE  0x8000u   /* бит 3 */
+#define PLANE2_BASE  0xA000u   /* бит 2 */
+#define PLANE1_BASE  0xC000u   /* бит 1 */
+#define PLANE0_BASE  0xE000u   /* бит 0 */
+
+/* ----------------------- ПОБИТОВОЕ УСРЕДНЕНИЕ -------------------------
+ * Мажоритарная функция: бит результата = 1, если хотя бы
+ * два из трёх входных битов = 1.
  * --------------------------------------------------------------- */
 
-static unsigned char fire_row_a[256];
-static unsigned char fire_row_b[256];
-
-/* ----------------------- РЕНДЕР СТРОКИ В VRAM -------------------------
- * Преобразует 256 байт интенсивностей (8 пикселей × 32 столбца)
- * в 4 битовых плоскости VRAM.
- *
- * VRAM-адреса плоскостей:
- *   Plane 3 (бит 3): 0x8000 + col*256 + ofs
- *   Plane 2 (бит 2): 0xA000 + col*256 + ofs
- *   Plane 1 (бит 1): 0xC000 + col*256 + ofs
- *   Plane 0 (бит 0): 0xE000 + col*256 + ofs
- *
- * ofs = 0 — нижняя строка экрана, ofs = 127 — верхняя строка зоны.
- * --------------------------------------------------------------- */
-
-static void render_row(const unsigned char *row, unsigned char ofs)
-{
-    unsigned char col, x;
-    unsigned char c, p3, p2, p1, p0;
-
-    for (col = 0; col < 32; col++) {
-        p3 = p2 = p1 = p0 = 0;
-        for (x = 0; x < 8; x++) {
-            c = row[col * 8 + x];
-            if (c & 8) p3 |= (unsigned char)(1 << (7 - x));
-            if (c & 4) p2 |= (unsigned char)(1 << (7 - x));
-            if (c & 2) p1 |= (unsigned char)(1 << (7 - x));
-            if (c & 1) p0 |= (unsigned char)(1 << (7 - x));
-        }
-        ((unsigned char *)0x8000)[col * 256 + ofs] = p3;
-        ((unsigned char *)0xA000)[col * 256 + ofs] = p2;
-        ((unsigned char *)0xC000)[col * 256 + ofs] = p1;
-        ((unsigned char *)0xE000)[col * 256 + ofs] = p0;
-    }
-}
-
-/* ------------------------- SEED НИЖНЕЙ СТРОКИ -------------------------
- * Заполняет буфер случайными интенсивностями 0..15.
- * --------------------------------------------------------------- */
-
-static void fire_seed_bottom(unsigned char *dst)
-{
-    unsigned char x = 0;
-
-    do {
-        dst[x] = rnd_next() & 15;
-    } while (++x != 0);
-}
+#define MAJORITY(l, c, r)  (((l) & (c)) | ((l) & (r)) | ((c) & (r)))
 
 /* ----------------------------- КАДАР ОГНЯ -----------------------------
- * Алгоритм скользящего окна:
- *   1. Seed строки 127 (низ экрана) в src.
- *   2. Рендер src в VRAM (ofs = 0).
- *   3. Строки 126..0: swap(src,dst) → вычисление dst из src →
- *      рендер dst в VRAM.
+ * Обрабатывает одну битовую плоскость.
  *
- * Вычисление: сдвиг ±1 пиксель + вычитание затухания (0 или 1).
- * В верхней трети (r < 64) добавляется дополнительное затухание.
+ * plane_base — базовый адрес плоскости (0x8000, 0xA000, 0xC000, 0xE000).
+ * decay — сила затухания (0x00 = макс., 0xFF = нет затухания).
+ * base_ht — высота нижней строки огня (0 = низ экрана).
+ * height — сколько строк обрабатывать вверх от base_ht.
+ *
+ * Адресация: byte_col × 256 + ofs. ofs = 0 — низ, +256 — след. столбец.
+ *
+ * Алгоритм (байтовый, 8 пикселей за операцию):
+ *   1. Сид строки base_ht случайными байтами.
+ *   2. Строки base_ht+1 .. base_ht+height-1: мажоритарное
+ *      усреднение 3 соседей (left, center, right) строки ниже,
+ *      затухание.
  * --------------------------------------------------------------- */
 
-static void fire_frame(void)
+static void fire_frame(unsigned int plane_base, unsigned char decay,
+                       unsigned char base_ht, unsigned char height)
 {
-    unsigned char *src = fire_row_a;
-    unsigned char *dst = fire_row_b;
-    unsigned char r, x;
-    unsigned char col;
-    unsigned char p3, p2, p1, p0;
+    unsigned char *p = (unsigned char *)plane_base;
+    unsigned char ofs, col;
+    unsigned char left, center, right, avg;
+    unsigned char top = (unsigned char)(base_ht + height - 1);
 
-    /* --- Нижняя строка (r = 127): случайные очаги --- */
-    fire_seed_bottom(src);
+    /* 1. Сид строки base_ht — случайные байты */
+    for (col = 0; col < 32; col++) {
+        p[col * 256 + base_ht] = rnd_next();
+    }
 
-    /* Рендер нижней строки: VRAM ofs = 0 */
-    render_row(src, 0);
-
-    /* --- Строки 126..0: swap, вычисление из src, рендер dst --- */
-    for (r = 126; ; r--) {
-        unsigned char dst_ofs = 127 - r;
-
-        /* Смена буферов: src содержит строку ниже, dst — для текущей */
-        {
-            unsigned char *tmp = src;
-            src = dst;
-            dst = tmp;
-        }
-
-        /* Вычисление строки от строки ниже (src) */
-        x = 0;
-        do {
-            unsigned char shift = rnd_next() % 5;   /* 0..4 */
-            unsigned char sx = (unsigned char)(x + shift - 2);
-            unsigned char below = src[sx];
-            unsigned char decay = (rnd_next() < 64) ? 1 : 0;  /* ~25% */
-            dst[x] = (below > decay) ? (unsigned char)(below - decay) : 0;
-        } while (++x != 0);
-
-        /* Рендер dst в VRAM */
+    /* 2. Строки base_ht+1 .. top: огонь поднимается */
+    for (ofs = (unsigned char)(base_ht + 1); ofs <= top; ofs++) {
         for (col = 0; col < 32; col++) {
-            p3 = p2 = p1 = p0 = 0;
-            for (x = 0; x < 8; x++) {
-                unsigned char c = dst[col * 8 + x];
-                if (c & 8) p3 |= (unsigned char)(1 << (7 - x));
-                if (c & 4) p2 |= (unsigned char)(1 << (7 - x));
-                if (c & 2) p1 |= (unsigned char)(1 << (7 - x));
-                if (c & 1) p0 |= (unsigned char)(1 << (7 - x));
-            }
-            ((unsigned char *)0x8000)[col * 256 + dst_ofs] = p3;
-            ((unsigned char *)0xA000)[col * 256 + dst_ofs] = p2;
-            ((unsigned char *)0xC000)[col * 256 + dst_ofs] = p1;
-            ((unsigned char *)0xE000)[col * 256 + dst_ofs] = p0;
-        }
+            /* Байт из строки ниже */
+            center = p[col * 256 + (ofs - 1)];
 
-        if (r == 0) break;
+            /* Левый сосед: сдвиг влево, бит 0 — из левого столбца */
+            left = (unsigned char)(center << 1);
+            if (col > 0)
+                left |= (unsigned char)(p[(col - 1) * 256 + (ofs - 1)] >> 7);
+
+            /* Правый сосед: сдвиг вправо, бит 7 — из правого столбца */
+            right = (unsigned char)(center >> 1);
+            if (col < 31)
+                right |= (unsigned char)(p[(col + 1) * 256 + (ofs - 1)] << 7);
+
+            /* Мажоритарное усреднение */
+            avg = MAJORITY(left, center, right);
+
+            /* Затухание */
+            avg &= ~(unsigned char)(~decay & rnd_next());
+
+            p[col * 256 + ofs] = avg;
+        }
+        /* Сдвиг ГСЧ между строками: ломает периодичность
+         * таблицы (256 байт). */
+        rnd_idx += 7;
     }
 }
+
+/* ----------------------- СРАВНЕНИЕ ОГНЁЙ ----------------------------
+ * Читает два огня из VRAM и рисует XOR-разницу на 100 строк выше
+ * второго огня. Если разница нулевая — огни идентичны. */
+
+static void compare_fires(unsigned int plane_base,
+                          unsigned char ht1, unsigned char ht2,
+                          unsigned char height)
+{
+    unsigned char *p = (unsigned char *)plane_base;
+    unsigned char ofs, col;
+    unsigned char diff_ofs = (unsigned char)(ht2 + height + 10);
+
+    for (ofs = 0; ofs < height; ofs++) {
+        for (col = 0; col < 32; col++) {
+            unsigned char a = p[col * 256 + (unsigned char)(ht1 + ofs)];
+            unsigned char b = p[col * 256 + (unsigned char)(ht2 + ofs)];
+            p[col * 256 + (unsigned char)(diff_ofs + ofs)] = a ^ b;
+        }
+    }
+}
+
+/* ----------------------- ASM-КОПИЯ fire_frame -----------------------
+ * Реализация в fire.asm (сгенерирована компилятором, далее оптимизируется).
+ * Алгоритм идентичен fire_frame(). */
+
+extern void fire_frame_asm(unsigned int plane_base, unsigned char decay,
+                           unsigned char base_ht, unsigned char height) __z88dk_callee;
 
 /* ----------------------------- MAIN ---------------------------------- */
 
@@ -201,16 +177,28 @@ int main(void)
 
     /* Основной цикл: один кадр огня за фрейм (50 Гц). */
     for (;;) {
-        unsigned int cur = frame_count;
-        while (frame_count == cur)
-            intrinsic_halt();
+        gfx_next_frame();
 
-        fire_frame();
+        /* Сохраняем состояние ГСЧ, чтобы оба огня получили
+         * одинаковые случайные данные. */
+        {
+            unsigned char saved_rnd = rnd_idx;
 
-        /* Сбиваем индекс ГСЧ, чтобы кадры не повторялись.
-         * fire_frame делает 65280 вызовов rnd_next (255 × 256),
-         * поэтому rnd_idx возвращается в ту же позицию каждый кадр. */
-        rnd_idx += frame_count & 0x37;
+            /* Огонь C: ofs 0..15 */
+            fire_frame(PLANE0_BASE, 128, 0, 16);
+
+            /* Восстанавливаем ГСЧ для ASM-копии */
+            rnd_idx = saved_rnd;
+
+            /* Огонь ASM-копия: ofs 100..115 */
+            fire_frame_asm(PLANE0_BASE, 128, 100, 16);
+        }
+
+        /* Сравнение: XOR-разница на ofs ~126..141 */
+        compare_fires(PLANE0_BASE, 0, 100, 16);
+
+        /* Сдвигаем ГСЧ, чтобы кадры не повторялись */
+        rnd_idx += 0x37;
     }
 
     return 0;
