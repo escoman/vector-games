@@ -2,6 +2,7 @@
 *.rom
 *.o
 *.sym
+*.map
 zcc_opt.def
 release/*.rom
 
