@@ -53,7 +53,7 @@ class CPU8080:
                  io_write: Optional[Callable[[int, int], None]] = None):
         self.mem = bytearray(65536)
         self.a = self.b = self.c = self.d = self.e = self.h = self.l = 0
-        self.sp = 0xF000
+        self.sp = 0x7FF0
         self.pc = 0
         self.z = self.s = self.p = self.cy = self.ac = 0
         self.halted = False
@@ -203,7 +203,7 @@ class CPU8080:
         # MOV, including M=memory[HL].
         if 0x40 <= op <= 0x7F:
             if op == 0x76:
-                self.halted = True; return 1
+                self.halted = True; self.pc = (self.pc - 1) & MASK16; return 1
             self.set_r8((op >> 3) & 7, self.get_r8(op & 7)); return 0
 
         # MVI r,n
@@ -261,7 +261,7 @@ class CPU8080:
             c = self.a & 1; self.a = (self.a >> 1) | (self.cy << 7); self.cy = c; return 0
 
         # Misc single-byte.
-        if op == 0x00: return 0
+        if op in (0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38): return 0
         if op == 0x27: self._daa(); return 0
         if op == 0x2F: self.a ^= MASK8; return 0
         if op == 0x37: self.cy = 1; return 0
@@ -300,12 +300,12 @@ class CPU8080:
             return 0
 
         # Conditional/unconditional jumps.
-        if op == 0xC3: self.pc = self.fetch16(); return 0
+        if op in (0xC3, 0xCB): self.pc = self.fetch16(); return 0
         if op in (0xC2,0xCA,0xD2,0xDA,0xE2,0xEA,0xF2,0xFA):
             n = self.fetch16(); self.pc = n if self._cond((op >> 3) & 7) else self.pc; return 0
 
         # CALL / conditional CALL.
-        if op == 0xCD:
+        if op in (0xCD, 0xDD, 0xED, 0xFD):
             n = self.fetch16(); self.push(self.pc); self.pc = n; self.call_depth += 1; return 0
         if op in (0xC4,0xCC,0xD4,0xDC,0xE4,0xEC,0xF4,0xFC):
             n = self.fetch16()
@@ -313,7 +313,7 @@ class CPU8080:
             return 0
 
         # RET / conditional RET.
-        if op == 0xC9:
+        if op in (0xC9, 0xD9):
             self.pc = self.pop(); self.call_depth = max(0, self.call_depth - 1); return 1 if self.pc == SENTINEL else 0
         if op in (0xC0,0xC8,0xD0,0xD8,0xE0,0xE8,0xF0,0xF8):
             if self._cond((op >> 3) & 7):
@@ -552,19 +552,23 @@ class Assembler8080:
         def label_name(x): return x.strip().lower()
         for raw in lines:
             s=strip_comment(raw).strip()
+            label_here=None
             if not s: continue
             # allow label and instruction/data on same line
             if ':' in s:
                 left,s2=s.split(':',1); left=left.strip()
                 if re.match(r'^[A-Za-z_.$?][\w.$?]*$', left):
-                    symbols[label_name(left)]=addr; s=s2.strip()
+                    label_here=label_name(left)
+                    symbols[label_here]=addr; s=s2.strip()
                     if not s: continue
+            # NAME EQU value is a common 8080/z88dk form.  Recognize it
+            # before split(None, 1), which would yield only two fields.
+            mequ=re.match(r'^([A-Za-z_.$?][\w.$?]*)\s+(?:EQU|\.EQU)\s+(.+)$', s, re.I)
+            if mequ:
+                name, expression=mequ.groups()
+                symbols[label_name(name)]=expr_eval(expression.strip(),symbols)
+                continue
             toks=s.split(None,1); m=toks[0].lower(); rest=toks[1].strip() if len(toks)>1 else ''
-            # Also accept NAME EQU value, common in z88dk/old 8080 sources.
-            if len(toks)>2 and toks[1].lower() in ('equ','.equ'):
-                eqparts=split_args(' '.join(toks[2:]))
-                if len(eqparts)==1 and re.match(r'^[A-Za-z_.$?][\w.$?]*$', toks[0]):
-                    symbols[label_name(toks[0])]=expr_eval(eqparts[0],symbols); continue
             if m in ('section','public','extern','module','end'): continue
             if m in ('org','.org'):
                 try: addr=expr_eval(rest,symbols)
@@ -575,6 +579,11 @@ class Assembler8080:
                 if len(a)>=2:
                     try: symbols[label_name(a[0])]=expr_eval(a[1],symbols)
                     except: symbols[label_name(a[0])]=0
+                elif len(a)==1 and label_here is not None:
+                    # Also accept LABEL: EQU value.  The colon parser has
+                    # already installed LABEL, so update that symbol here.
+                    try: symbols[label_here]=expr_eval(a[0],symbols)
+                    except: symbols[label_here]=0
                 continue
             if m in ('defb','db','byte'):
                 n=0
@@ -653,7 +662,7 @@ class Emulator8080:
         try: return int(str(entry), 0) & MASK16
         except ValueError: return self.asm.labels[str(entry).lower()]
 
-    def setup_call(self, entry, *, args=(), sp=0xF000, sentinel=SENTINEL):
+    def setup_call(self, entry, *, args=(), sp=0x7FF0, sentinel=SENTINEL):
         c=self.cpu
         c.halted=False; c.steps=0; c.call_depth=0
         # __z88dk_callee entry convention: SP points at return address,
@@ -894,6 +903,20 @@ def self_test():
         if b: c.wb(i,b)
     c.pc=a.labels['start']; c.sp=0x7ff2; c.push(SENTINEL); c.run_until(stop_pc=SENTINEL)
     assert c.pc==SENTINEL and c.hl()==0x1234 and c.rb(0x5000)==0x12
+
+    # EQU regression tests: both the NAME EQU value form and the directive
+    # form must define symbols without emitting data or changing layout.
+    equ_src='''\n        org 4200h\nCONST_A EQU 1234h\nCONST_B EQU CONST_A+2\nCONST_C: EQU CONST_B+2\nstart:  lxi h, CONST_C\n        mvi a, 5ah\n        sta 5000h\n        ret\n'''
+    ea=Assembler8080().assemble_text(equ_src.splitlines())
+    assert ea.labels['const_a']==0x1234
+    assert ea.labels['const_b']==0x1236
+    assert ea.labels['const_c']==0x1238
+    assert ea.labels['start']==0x4200
+    e=Emulator8080(); e.asm=ea; e.program=bytearray(ea.data); e.base=0
+    for i,b in enumerate(ea.data):
+        if b: e.cpu.wb(i,b)
+    e.call('start')
+    assert e.cpu.hl()==0x1238 and e.cpu.rb(0x5000)==0x5a
     print('SELF-TEST: PASS')
 
 
