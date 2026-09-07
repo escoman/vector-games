@@ -146,10 +146,10 @@ void textarea_draw(component_t *c, unsigned char active)
     for (i = 0; i < frame_w; i++)
         draw_buf[i] = '_';
     draw_buf[frame_w] = 0;
-    graph_print(ta->x, (unsigned char)(ta->y + 1), (const char *)draw_buf, 1);
+    gfx_print(ta->x, (unsigned char)(ta->y + 1), (const char *)draw_buf, 1);
 
     /* Нижняя рамка */
-    graph_print(ta->x, (unsigned char)(ta->y + 10 + ta->lines * 8),
+    gfx_print(ta->x, (unsigned char)(ta->y + 10 + ta->lines * 8),
                 (const char *)draw_buf, 1);
 
     /* Label */
@@ -157,7 +157,7 @@ void textarea_draw(component_t *c, unsigned char active)
     for (i = 0; i < llen; i++)
         draw_buf[i] = ta->label[i];
     draw_buf[llen] = 0;
-    graph_print(ta->x, ta->y, (const char *)draw_buf, 1);
+    gfx_print(ta->x, ta->y, (const char *)draw_buf, 1);
 
     /* Инверсия label если активен */
     if (active)
@@ -177,7 +177,7 @@ void textarea_draw(component_t *c, unsigned char active)
         }
         draw_buf[ta->width + 1] = '|';
         draw_buf[ta->width + 2] = 0;
-        graph_print(ta->x, (unsigned char)(ta->y + 14),
+        gfx_print(ta->x, (unsigned char)(ta->y + 14),
                     (const char *)draw_buf, 1);
 
         /* Курсор — ПОСЛЕ текста */
@@ -205,7 +205,7 @@ void textarea_draw(component_t *c, unsigned char active)
             }
             draw_buf[ta->width + 1] = '|';
             draw_buf[ta->width + 2] = 0;
-            graph_print(ta->x, (unsigned char)(ta->y + 14 + row * 8),
+            gfx_print(ta->x, (unsigned char)(ta->y + 14 + row * 8),
                         (const char *)draw_buf, 1);
         }
 
@@ -244,7 +244,7 @@ void textarea_draw_content(component_t *c)
         }
         draw_buf[ta->width + 1] = '|';
         draw_buf[ta->width + 2] = 0;
-        graph_print(ta->x, (unsigned char)(ta->y + 14),
+        gfx_print(ta->x, (unsigned char)(ta->y + 14),
                     (const char *)draw_buf, 1);
 
         /* Курсор — ПОСЛЕ текста */
@@ -272,7 +272,7 @@ void textarea_draw_content(component_t *c)
             }
             draw_buf[ta->width + 1] = '|';
             draw_buf[ta->width + 2] = 0;
-            graph_print(ta->x, (unsigned char)(ta->y + 14 + row * 8),
+            gfx_print(ta->x, (unsigned char)(ta->y + 14 + row * 8),
                         (const char *)draw_buf, 1);
         }
 

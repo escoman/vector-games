@@ -1,7 +1,7 @@
 ;
 ; clr.asm — заполнение плоскостей VRAM Вектора-06Ц.
 ;
-;   void graph_fill_planes(unsigned char mask, unsigned char fill)
+;   void gfx_fill_planes(unsigned char mask, unsigned char fill)
 ;       __z88dk_callee
 ;
 ;   Заполняет 8 КБ каждой плоскости, у которой бит в mask
@@ -21,10 +21,10 @@
 ;
 
         SECTION code_clib
-        PUBLIC  _graph_fill_planes
+        PUBLIC  _gfx_fill_planes
 
 ; ---------------------------------------------------------------
-; void graph_fill_planes(unsigned char mask, unsigned char fill)
+; void gfx_fill_planes(unsigned char mask, unsigned char fill)
 ;   __z88dk_callee
 ;
 ; Быстрая заливка экранных плоскостей Вектора-06Ц через PUSH.
@@ -58,7 +58,7 @@
 ; Только инструкции Intel 8080.
 ; ---------------------------------------------------------------
 
-_graph_fill_planes:
+_gfx_fill_planes:
         di
 
         ; -------------------------------------------------------

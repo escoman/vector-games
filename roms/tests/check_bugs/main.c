@@ -2,7 +2,7 @@
  * check_bugs.c — тест для проверки багов стека.
  *
  * Вызывает ASM-процедуры:
- * 1. Очистка экрана (graph_fill_planes из clr.asm)
+ * 1. Очистка экрана (gfx_fill_planes из clr.asm)
  * 2. Установка палитры (v06_set_palette_asm из v06pal.asm)
  * 3. Рисование на плоскости (plane_fill — inline asm)
  *
@@ -108,11 +108,11 @@ extern void plane_fill(unsigned int addr, unsigned char val, unsigned char count
 int main(void)
 {
     /* 1. Очистка экрана: чёрная палитра + очистка всех плоскостей */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
 
     /* 2. Установка палитры */
-    graph_set_palette(default_palette);
+    gfx_set_bmp_palette(default_palette);
 
     /* 3. Рисование на плоскости 0x8000 (плоскость веса 8):
      *    заполняем 32 байта значением 0xFF */

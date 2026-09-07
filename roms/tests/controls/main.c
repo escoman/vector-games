@@ -43,7 +43,7 @@ static unsigned char on_key(unsigned char key)
             buf[pos++] = '0' + (f1_count / 10);
         buf[pos++] = '0' + (f1_count % 10);
         buf[pos] = 0;
-        graph_print(0, 248, buf, 1);
+        gfx_print(0, 248, buf, 1);
         return 1;
     }
     return 0;
@@ -57,8 +57,8 @@ int main(void)
     gfx_clear(0);
 
     /* Заголовок */
-    graph_print(0, 0, "EDIT / TEXTAREA TEST", 1);
-    graph_print(0, 8, "______________________", 1);
+    gfx_print(0, 0, "EDIT / TEXTAREA TEST", 1);
+    gfx_print(0, 8, "______________________", 1);
 
     /* Edit-поля (однострочные) */
     edit_init(&name_field, name_buf, sizeof(name_buf) - 1,

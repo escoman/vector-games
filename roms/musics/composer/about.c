@@ -38,9 +38,9 @@ void draw_about(void)
     unsigned char i;
 
     init_screen();
-    graph_print(0, 0,  "COMPOSER", 1);
-    graph_print(0, 24, "MUSIC EDITOR FOR VECTOR-06C", 1);
-    graph_print(0, 40, "VERSION 1.0", 1);
+    gfx_print(0, 0,  "COMPOSER", 1);
+    gfx_print(0, 24, "MUSIC EDITOR FOR VECTOR-06C", 1);
+    gfx_print(0, 40, "VERSION 1.0", 1);
 
     /* Диагностика: ненулевые байты в неактивных плоскостях */
     nz = count_nonzero_vram();
@@ -60,9 +60,9 @@ void draw_about(void)
         line[i++] = hexbuf[3];
         line[i] = 0;
     }
-    graph_print(0, 64, line, 1);
+    gfx_print(0, 64, line, 1);
 
-    graph_print(0, 88, "AP2-RETURN", 1);
+    gfx_print(0, 88, "AP2-RETURN", 1);
 }
 
 void screen_about(void)

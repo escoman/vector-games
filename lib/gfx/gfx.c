@@ -5,9 +5,9 @@
  *   0x8000 — плоскость веса 8, 0xA000 — веса 4,
  *   0xC000 — веса 2,           0xE000 — веса 1.
  * Экранная картинка хранится в ROM в RLE-виде (utils/bmp2inc.py);
- * распаковывает её graph_rle_expand на ассемблере (graphrle.asm).
+ * распаковывает её gfx_rle_expand на ассемблере (graphrle.asm).
  *
- * Заливка экрана graph_clear — тоже на ассемблере (graphclr.asm).
+ * Заливка экрана gfx_clear — тоже на ассемблере (graphclr.asm).
  *
  * Палитра загружается ассемблерной v06_set_palette_asm (v06pal.asm):
  * запись слота идёт через бордюр в кадровый гасящий интервал, т.к.
@@ -20,13 +20,13 @@
 extern void v06_set_palette_asm(const unsigned char *pal);
 
 /* Текущий регистр строки; keyboard.c восстанавливает его после опроса */
-unsigned char graph_scroll_row = 0xFF;
+unsigned char gfx_scroll_row = 0xFF;
 
-/* RLE-распаковка (graph_rle_expand) — на ассемблере в graphrle.asm.
- * Заливка экрана (graph_clear) — на ассемблере в graphclr.asm. */
+/* RLE-распаковка (gfx_rle_expand) — на ассемблере в graphrle.asm.
+ * Заливка экрана (gfx_clear) — на ассемблере в graphclr.asm. */
 
 /* Загрузка 16 цветов палитры (формат байта 0bRRRGGGBB) */
-void graph_set_palette(const unsigned char *pal)
+void gfx_set_bmp_palette(const unsigned char *pal)
 {
     v06_set_palette_asm(pal);
 }
@@ -34,7 +34,7 @@ void graph_set_palette(const unsigned char *pal)
 /* Нулевая палитра: все 16 цветов чёрные. Экран становится полностью
  * чёрным, хотя видеопамять не трогается — удобно, чтобы скрыть
  * процесс отрисовки заставки. */
-void graph_set_black_palette(void)
+void gfx_set_black_palette(void)
 {
     static const unsigned char black[16] = { 0 };
 
@@ -42,13 +42,13 @@ void graph_set_black_palette(void)
 }
 
 /* Регистр строки (порт 3); запоминается для keyboard.c */
-void graph_set_scroll(unsigned char row)
+void gfx_set_scroll(unsigned char row)
 {
-    graph_scroll_row = row;
+    gfx_scroll_row = row;
     v06_out(V06_PIA_PA, row);
 }
 
 /* ------------------------- Текст: шрифт 8x8 ------------------------- */
 
-/* graph_put_char и graph_print (и шрифт font8x8) — на ассемблере
+/* gfx_put_char и gfx_print (и шрифт font8x8) — на ассемблере
  * в graphpr.asm. */

@@ -1,7 +1,7 @@
 ;
 ; graphpr512t.asm — вывод тонкого текста (символы 4x8) в режиме 512x256.
 ;
-;   void graph_put_char_512t(unsigned char x, unsigned char y, const char *s,
+;   void gfx_put_char_512t(unsigned char x, unsigned char y, const char *s,
 ;                         unsigned char color);
 ;
 ; Каждый символ занимает 4 пикселя по горизонтали (одна тетрада байта).
@@ -24,11 +24,11 @@
 ;
 
         SECTION code_clib
-        PUBLIC  _graph_put_char_512t
-        PUBLIC  _graph_print_512t
+        PUBLIC  _gfx_put_char_512t
+        PUBLIC  _gfx_print_512t
 
 ; ---------------------------------------------------------------
-; void graph_put_char_512t(x, y, ch, color)
+; void gfx_put_char_512t(x, y, ch, color)
 ;
 ; __z88dk_callee
 ;
@@ -48,7 +48,7 @@
 ; Параметры снимаются POP-ами. SP после PUSH адреса возврата
 ; полностью соответствует __z88dk_callee.
 ; ---------------------------------------------------------------
-_graph_put_char_512t:
+_gfx_put_char_512t:
         pop     h                       ; HL = адрес возврата
         pop     d                       ; DE = x
         mov     a, e
@@ -89,9 +89,9 @@ put_char_done_512t:
         ret
 
 ; ---------------------------------------------------------------
-; void graph_print_512t(x, y, s, color)
+; void gfx_print_512t(x, y, s, color)
 ; ---------------------------------------------------------------
-_graph_print_512t:
+_gfx_print_512t:
         ; __z88dk_callee: компилятор пушит x, y, s, color.
         ; На стеке (после CALL):
         ;   SP+0  return address

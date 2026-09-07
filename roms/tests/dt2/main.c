@@ -12,9 +12,9 @@
 int main(void)
 {
     /* Рисуем на чёрном экране: картинка не видна до загрузки палитры. */
-    graph_set_black_palette();
-    graph_rle_expand(dt2_bmp_screen_rle, 0, 0);
-    graph_set_palette(dt2_bmp_palette);
+    gfx_set_black_palette();
+    gfx_rle_expand(dt2_bmp_screen_rle, 0, 0);
+    gfx_set_bmp_palette(dt2_bmp_palette);
 
     while(1);
 

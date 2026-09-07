@@ -61,7 +61,7 @@ extern unsigned char gfx_current_mode;
 extern void gfx_set_mode(unsigned char mode);
 
 /* Очистка экрана цветом 0-15. Заполняет только активные плоскости
- * текущего режима (через graph_fill_planes). */
+ * текущего режима (через gfx_fill_planes). */
 extern void gfx_clear(unsigned char color);
 
 /* Загрузка палитры из num_colors цветов. Автоматически расширяет
@@ -72,48 +72,48 @@ extern void gfx_set_palette(const unsigned char *colors);
  * в 8-пиксельных блоках, высота; 0 = 256), пары (количество, байт),
  * терминатор — 0. Вывод в точку (x, y) — левый верхний угол картинки;
  * x должно быть кратно 8, картинка должна помещаться в экран 256x256.
- * Область вне картинки не меняется (для чистого экрана — graph_clear). */
-extern void graph_rle_expand(const unsigned char *src, unsigned char x,
+ * Область вне картинки не меняется (для чистого экрана — gfx_clear). */
+extern void gfx_rle_expand(const unsigned char *src, unsigned char x,
                              unsigned char y);
 
-/* Заливка плоскостей VRAM цветом 0-15 (graph_fill_planes в clr.asm).
+/* Заливка плоскостей VRAM цветом 0-15 (gfx_fill_planes в clr.asm).
  * mask определяет, какие плоскости заполнять; fill: 0x00 или 0xFF. */
-extern void graph_fill_planes(unsigned char mask, unsigned char fill) __z88dk_callee;
+extern void gfx_fill_planes(unsigned char mask, unsigned char fill) __z88dk_callee;
 
 /* Заливка с шагом: записывает val по адресу addr, затем
  * addr+step, addr+2*step и т.д., всего count байт (fstride.asm). */
-extern void graph_fill_stride(unsigned int addr, unsigned char val,
+extern void gfx_fill_stride(unsigned int addr, unsigned char val,
                               unsigned int step, unsigned char count) __z88dk_callee;
 
 /* Загрузка 16 цветов палитры. Формат байта: 0bRRRGGGBB.
  * Палитра Вектора адресуется «цветом под лучом», поэтому запись идёт
  * в кадровый гасящий интервал через регистр бордюра (см. v06pal.asm). */
-extern void graph_set_palette(const unsigned char *pal);
+extern void gfx_set_bmp_palette(const unsigned char *pal);
 
 /* Все 16 цветов чёрные (скрыть экран/процесс отрисовки). */
-extern void graph_set_black_palette(void);
+extern void gfx_set_black_palette(void);
 
 /* Регистр строки (скролл); значение запоминается — keyboard.c
  * восстанавливает его после сканирования клавиатуры. */
-extern void graph_set_scroll(unsigned char row);
-extern unsigned char graph_scroll_row;
+extern void gfx_set_scroll(unsigned char row);
+extern unsigned char gfx_scroll_row;
 
 /* Текст шрифтом 8x8 (глифы " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().").
  * Ячейка непрозрачная: пиксели глифа — цвет color (0-15), фон затирается.
  * x должно быть кратно 8, y — верхняя строка ячейки. */
-extern void graph_put_char(unsigned char x, unsigned char y, char ch,
+extern void gfx_put_char(unsigned char x, unsigned char y, char ch,
                            unsigned char color) __z88dk_callee;
-extern void graph_print(unsigned char x, unsigned char y, const char *s,
+extern void gfx_print(unsigned char x, unsigned char y, const char *s,
                         unsigned char color) __z88dk_callee;
 
 /* Текст шрифтом 16x8 в режиме 512x256 (pr512.asm). */
-extern void graph_put_char_512(unsigned char x, unsigned char y, char ch,
+extern void gfx_put_char_512(unsigned char x, unsigned char y, char ch,
                                unsigned char color) __z88dk_callee;
-extern void graph_print_512(unsigned char x, unsigned char y, const char *s,
+extern void gfx_print_512(unsigned char x, unsigned char y, const char *s,
                             unsigned char color) __z88dk_callee;
 
 /* Тонкий текст 4x8 в режиме 512x256 (pr512t.asm). */
-extern void graph_print_512t(unsigned char x, unsigned char y, const char *s,
+extern void gfx_print_512t(unsigned char x, unsigned char y, const char *s,
                              unsigned char color) __z88dk_callee;
 
 /* ------------------------------- Звук --------------------------------- */

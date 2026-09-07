@@ -24,7 +24,7 @@ void draw_drums(void)
 
     init_screen();
     draw_separator(4);
-    graph_print(0, 0,
+    gfx_print(0, 0,
         "DRUM LIBRARY (0-F TO PLAY)", 1);
 
     for (i = 0; i < 16; i++) {
@@ -45,10 +45,10 @@ void draw_drums(void)
             }
             buf[j + 2] = 0;
         }
-        graph_print(col, y, buf, 1);
+        gfx_print(col, y, buf, 1);
     }
 
-    graph_print(0, 152, "AP2-RETURN", 1);
+    gfx_print(0, 152, "AP2-RETURN", 1);
 }
 
 unsigned char drums_handle_key(unsigned char key)

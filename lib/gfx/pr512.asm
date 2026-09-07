@@ -2,9 +2,9 @@
 ; graphpr512.asm — вывод текста шрифтом 16x8 в режиме 512x256
 ; Вектор-06Ц / Intel 8080.
 ;
-;   void graph_put_char_512(unsigned char x, unsigned char y, char ch,
+;   void gfx_put_char_512(unsigned char x, unsigned char y, char ch,
 ;                           unsigned char color);
-;   void graph_print_512(unsigned char x, unsigned char y, const char *s,
+;   void gfx_print_512(unsigned char x, unsigned char y, const char *s,
 ;                        unsigned char color);
 ;
 ; __z88dk_callee.
@@ -23,12 +23,12 @@
 ;
 
         SECTION code_clib
-        PUBLIC  _graph_put_char_512
-        PUBLIC  _graph_print_512
+        PUBLIC  _gfx_put_char_512
+        PUBLIC  _gfx_print_512
 
 
 ; ---------------------------------------------------------------
-; graph_put_char_512(x,y,ch,color)
+; gfx_put_char_512(x,y,ch,color)
 ;
 ; __z88dk_callee
 ;
@@ -42,7 +42,7 @@
 ;
 ; ---------------------------------------------------------------
 
-_graph_put_char_512:
+_gfx_put_char_512:
 
         pop     h
         pop     d
@@ -353,12 +353,12 @@ draw_8_even_bytes:
 
 
 ; ---------------------------------------------------------------
-; graph_print_512(x,y,s,color)
+; gfx_print_512(x,y,s,color)
 ;
 ; __z88dk_callee
 ; ---------------------------------------------------------------
 
-_graph_print_512:
+_gfx_print_512:
 
         pop     h               ; return address
 

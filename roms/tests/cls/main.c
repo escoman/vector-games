@@ -278,30 +278,30 @@ static void show_results(unsigned int classic, unsigned int optimized)
 {
     static char buf[8];
 
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_set_palette(default_palette);
+    gfx_set_palette(default_palette);
 
-    graph_print(8,   0, "SCREEN CLEAR SPEED TEST", 15u);
-    graph_print(8,  16, "------------------------",  7u);
+    gfx_print(8,   0, "SCREEN CLEAR SPEED TEST", 15u);
+    gfx_print(8,  16, "------------------------",  7u);
 
-    graph_print(8,  48, "TIMER: VI53 CH0 1.5MHZ", 11u);
-    graph_print(8,  64, "MODE: 256X256 16 COL",   11u);
-    graph_print(8,  80, "VRAM: 32KB 4 PLANES",    11u);
+    gfx_print(8,  48, "TIMER: VI53 CH0 1.5MHZ", 11u);
+    gfx_print(8,  64, "MODE: 256X256 16 COL",   11u);
+    gfx_print(8,  80, "VRAM: 32KB 4 PLANES",    11u);
 
-    graph_print(8, 112, "CLASSIC x100:",       11u);
+    gfx_print(8, 112, "CLASSIC x100:",       11u);
     word_to_hex(classic, buf);
     buf[4] = '\0';
-    graph_print(8, 128, buf, 8u);
-    graph_print(56, 128, " TICKS ", 7u);
+    gfx_print(8, 128, buf, 8u);
+    gfx_print(56, 128, " TICKS ", 7u);
 
-    graph_print(8, 160, "OPTIMIZED x100:",        11u);
+    gfx_print(8, 160, "OPTIMIZED x100:",        11u);
     word_to_hex(optimized, buf);
     buf[4] = '\0';
-    graph_print(8, 176, buf, 8u);
-    graph_print(56, 176, " TICKS ", 7u);
+    gfx_print(8, 176, buf, 8u);
+    gfx_print(56, 176, " TICKS ", 7u);
 
-    graph_print(8, 232, "ESC - EXIT",               7u);
+    gfx_print(8, 232, "ESC - EXIT",               7u);
 }
 
 
@@ -319,18 +319,18 @@ int main(void)
     unsigned int g_result_optimized = 0;
 
     /* Начальная инициализация: чёрный экран, текст-приветствие. */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_set_palette(default_palette);
+    gfx_set_palette(default_palette);
 
-    graph_print(8,   0, "SCREEN CLEAR SPEED TEST", 15u);
-    graph_print(8,  16, "------------------------",  7u);
-    graph_print(8,  48, "CLASSIC: 4 PLANES",        11u);
-    graph_print(8,  64, "  8 BYTES/ITER  32KB",     11u);
-    graph_print(8,  96, "OPTIMIZED: PUSH",          11u);
-    graph_print(8, 112, "  8 PUSH/ITER  32KB",      11u);
-    graph_print(8, 160, "PRESS ANY KEY",            14u);
-    graph_print(8, 232, "ESC - EXIT",                7u);
+    gfx_print(8,   0, "SCREEN CLEAR SPEED TEST", 15u);
+    gfx_print(8,  16, "------------------------",  7u);
+    gfx_print(8,  48, "CLASSIC: 4 PLANES",        11u);
+    gfx_print(8,  64, "  8 BYTES/ITER  32KB",     11u);
+    gfx_print(8,  96, "OPTIMIZED: PUSH",          11u);
+    gfx_print(8, 112, "  8 PUSH/ITER  32KB",      11u);
+    gfx_print(8, 160, "PRESS ANY KEY",            14u);
+    gfx_print(8, 232, "ESC - EXIT",                7u);
 
     wait_any_key();
 
@@ -352,12 +352,12 @@ int main(void)
     }
 
     /* Экран-пауза перед вторым тестом. */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_set_palette(default_palette);
-    graph_print(8,  80, "TEST 1 DONE",         14u);
-    graph_print(8, 128, "PRESS ANY KEY",       14u);
-    graph_print(8, 160, "FOR TEST 2 (PUSH)",   11u);
+    gfx_set_palette(default_palette);
+    gfx_print(8,  80, "TEST 1 DONE",         14u);
+    gfx_print(8, 128, "PRESS ANY KEY",       14u);
+    gfx_print(8, 160, "FOR TEST 2 (PUSH)",   11u);
 
     wait_any_key();
 

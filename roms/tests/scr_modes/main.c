@@ -5,9 +5,9 @@
  * всех поддерживаемых режимов (0-3). По нажатию клавиши 0-3
  * переключает режим, очищает экран и выводит меню заново.
  *
- * Для 256x256 используется graph_print (шрифт 8x8, pr.asm).
- * Для 512x256 — graph_print_512 (шрифт 16x8, pr512.asm)
- * и graph_print_512t (тонкий шрифт 4x8, pr512t.asm).
+ * Для 256x256 используется gfx_print (шрифт 8x8, pr.asm).
+ * Для 512x256 — gfx_print_512 (шрифт 16x8, pr512.asm)
+ * и gfx_print_512t (тонкий шрифт 4x8, pr512t.asm).
  */
 
 #include "v06.h"
@@ -132,7 +132,7 @@ static void draw_swatches(void)
                 }
             }
         }
-        graph_print(21, 0, "PALETTE", color);
+        gfx_print(21, 0, "PALETTE", color);
     } else {
         /* 512x256: сетка 5×3, сдвиг вниз на 16 пикселей.
          * Чётные столбцы — E000/C000, нечётные — A000/8000.
@@ -159,7 +159,7 @@ static void draw_swatches(void)
                 }
             }
         }
-        graph_print_512(21, 0, "PALETTE", color);
+        gfx_print_512(21, 0, "PALETTE", color);
     }
 }
 
@@ -196,14 +196,14 @@ static void print_line(unsigned char x, unsigned char y,
     switch (gfx_current_mode) {
     case GFX_MODE_256_16:
     case GFX_MODE_256_2:
-        graph_print(x, y, s, color);
+        gfx_print(x, y, s, color);
         break;
     case GFX_MODE_512_4:
     case GFX_MODE_512_2:
         if (t)
-            graph_print_512t(x, y, s, color);
+            gfx_print_512t(x, y, s, color);
         else
-            graph_print_512(x, y, s, color);
+            gfx_print_512(x, y, s, color);
         break;
     }
 }
@@ -250,17 +250,17 @@ static void show_logo(void)
 {
     unsigned char saved_mode = gfx_current_mode;
 
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
 
     if (saved_mode == GFX_MODE_256_16) {
         /* Картинка 120x120, центрируем: x = (256-120)/8 = 17 (округлено до чётного) */
-        graph_rle_expand(logo16_bmp_screen_rle, 64, 48);
-        graph_set_palette(logo16_bmp_palette);
-        graph_print(8, 176, "PRESS SPACE KEY", WHITE_16);
+        gfx_rle_expand(logo16_bmp_screen_rle, 64, 48);
+        gfx_set_bmp_palette(logo16_bmp_palette);
+        gfx_print(8, 176, "PRESS SPACE KEY", WHITE_16);
     } else {
         set_palette();
-        graph_print(1, 200, "PRESS SPACE KEY", getModeColor());
+        gfx_print(1, 200, "PRESS SPACE KEY", getModeColor());
     }
 
     /* Ждём пробела и возвращаемся в меню */
@@ -273,7 +273,7 @@ static void show_logo(void)
 
 static void switch_mode(unsigned char mode)
 {
-    graph_set_black_palette();
+    gfx_set_black_palette();
 
     /* Переключаем аппарат: для 512x256 — ПИА + скролл, для 256x256 —
      * не трогаем (аппаратный режим по умолчанию). */

@@ -1,7 +1,7 @@
 /*
  * graphlz.c — LZ-распаковщик тайлов в видеопамять Вектора-06Ц.
  *
- *   void graph_lz_expand(const unsigned char *src);
+ *   void gfx_lz_expand(const unsigned char *src);
  *
  * Формат данных (bmp2inc_lz.py):
  *   Заголовок: tpp_lo, tpp_hi, ntiles_lo, ntiles_hi (4 байта).
@@ -41,7 +41,7 @@ static void write_tile(unsigned int addr, const unsigned char *src)
     }
 }
 
-void graph_lz_expand(const unsigned char *src)
+void gfx_lz_expand(const unsigned char *src)
 {
     unsigned int tpp;       /* тайлов на плоскость */
     unsigned int ntiles;    /* уникальных тайлов в словаре */

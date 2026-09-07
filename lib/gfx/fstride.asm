@@ -1,5 +1,5 @@
 ; ------------------------------------------------------------
-; void graph_fill_stride(unsigned int addr,
+; void gfx_fill_stride(unsigned int addr,
 ;                  unsigned char val,
 ;                  unsigned int step,
 ;                  unsigned char count)
@@ -29,9 +29,9 @@
 ; ------------------------------------------------------------
 
         SECTION code_clib
-        PUBLIC  _graph_fill_stride
+        PUBLIC  _gfx_fill_stride
 
-_graph_fill_stride:
+_gfx_fill_stride:
 
         DI
 
@@ -95,11 +95,11 @@ _graph_fill_stride:
         MOV     B,A          ; сохранить val
         MOV     A,C
         ORA     A
-        JZ      graph_fill_stride_zero
+        JZ      gfx_fill_stride_zero
 
         MOV     A,B          ; восстановить val
 
-graph_fill_stride_loop:
+gfx_fill_stride_loop:
 
         ; *p = val
         MOV     M,A
@@ -109,9 +109,9 @@ graph_fill_stride_loop:
 
         ; --count
         DCR     C
-        JNZ     graph_fill_stride_loop
+        JNZ     gfx_fill_stride_loop
 
-graph_fill_stride_zero:
+gfx_fill_stride_zero:
 
         EI
         RET

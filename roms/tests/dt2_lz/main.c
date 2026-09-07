@@ -9,13 +9,13 @@
 #include "../assets/dt2_bmp.inc"
 
 /* LZ-распаковщик (lib/graphlz.c + lib/graphlz.asm) */
-extern void graph_lz_expand(const unsigned char *src);
+extern void gfx_lz_expand(const unsigned char *src);
 
 int main(void)
 {
-    //graph_set_black_palette();
-    graph_set_palette(dt2_bmp_palette);
-    graph_lz_expand(dt2_bmp_screen_lz);
+    //gfx_set_black_palette();
+    gfx_set_bmp_palette(dt2_bmp_palette);
+    gfx_lz_expand(dt2_bmp_screen_lz);
 
     while(1);
 

@@ -2,9 +2,9 @@
 ; graphrle.asm — быстрая RLE-распаковка картинки в заданную точку
 ; экрана (Вектор-06Ц).
 ;
-; Заменяет C-функцию graph_rle_expand (graph.c).
+; Заменяет C-функцию gfx_rle_expand (graph.c).
 ;
-;   void graph_rle_expand(const unsigned char *src,
+;   void gfx_rle_expand(const unsigned char *src,
 ;                         unsigned char x, unsigned char y);
 ;
 ; Поток (готовит utils/bmp2inc.py): заголовок из двух байт —
@@ -42,9 +42,9 @@
 ;
 
         SECTION code_clib
-        PUBLIC  _graph_rle_expand
+        PUBLIC  _gfx_rle_expand
 
-_graph_rle_expand:
+_gfx_rle_expand:
         ; --- y (sp+2) -> смещение верхней строки в блоке: 255 - y ---
         ld      hl, 2
         add     hl, sp

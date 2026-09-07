@@ -33,7 +33,7 @@ extern volatile unsigned char diag_drums_finished;
 /* Сброс всех счётчиков (вызывается из music_start). */
 extern void diag_reset(void);
 
-/* Отрисовка диагностического экрана (graph_print). */
+/* Отрисовка диагностического экрана (gfx_print). */
 extern void draw_diag_screen(void);
 
 #endif /* DEBUG_SOUND_H */

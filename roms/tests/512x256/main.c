@@ -19,7 +19,7 @@ const unsigned char _pal4[4] = {
 /* Загрузка 16 цветов палитры (v06pal.asm) */
 extern void v06_set_palette_asm(const unsigned char *pal);
 
-/* graph_fill_stride — asm-реализация в fstride.asm, декларация в v06.h */
+/* gfx_fill_stride — asm-реализация в fstride.asm, декларация в v06.h */
 
 int main(void)
 {
@@ -33,70 +33,70 @@ int main(void)
     gfx_clear(0x00);
 
     /* Левый столбец (X=0): E001h..E0FEh, бит 7 */
-    graph_fill_stride(0xE001, 0x80, 1, 254);
+    gfx_fill_stride(0xE001, 0x80, 1, 254);
 
     /* Правый столбец (X=511): BF01h..BFFEh, бит 0 */
-    graph_fill_stride(0xBF01, 0x01, 1, 254);
+    gfx_fill_stride(0xBF01, 0x01, 1, 254);
 
     /* Верхняя строка (Y=0): A000h..BF00h + E000h..FF00h */
-    graph_fill_stride(0xA000, 0xFF, 0x100, 32);
-    graph_fill_stride(0xE000, 0xFF, 0x100, 32);
+    gfx_fill_stride(0xA000, 0xFF, 0x100, 32);
+    gfx_fill_stride(0xE000, 0xFF, 0x100, 32);
 
     /* Нижняя строка (Y=255): A0FFh..BFFFh + E0FFh..FFFFh */
-    graph_fill_stride(0xA0FF, 0xFF, 0x100, 32);
-    graph_fill_stride(0xE0FF, 0xFF, 0x100, 32);
+    gfx_fill_stride(0xA0FF, 0xFF, 0x100, 32);
+    gfx_fill_stride(0xE0FF, 0xFF, 0x100, 32);
 
     /* Зелёный прямоугольник (C000 + 8000) с отступом внутрь */
 
     /* Левая граница (X=1): C000, бит 6, Y=16..239 */
-    graph_fill_stride(0xC110, 0x80, 1, 224);
+    gfx_fill_stride(0xC110, 0x80, 1, 224);
 
     /* Правая граница (X=510): 8000, бит 1, Y=16..239 */
-    graph_fill_stride(0x9E10, 0x01, 1, 224);
+    gfx_fill_stride(0x9E10, 0x01, 1, 224);
 
     /* Верхняя граница (Y=16): 8000 + C000 */
-    graph_fill_stride(0x8110, 0xFF, 0x100, 30);
-    graph_fill_stride(0xC110, 0xFF, 0x100, 30);
+    gfx_fill_stride(0x8110, 0xFF, 0x100, 30);
+    gfx_fill_stride(0xC110, 0xFF, 0x100, 30);
 
     /* Нижняя граница (Y=239): 8000 + C000 */
-    graph_fill_stride(0x81EF, 0xFF, 0x100, 30);
-    graph_fill_stride(0xC1EF, 0xFF, 0x100, 30);
+    gfx_fill_stride(0x81EF, 0xFF, 0x100, 30);
+    gfx_fill_stride(0xC1EF, 0xFF, 0x100, 30);
 
     /* Белый прямоугольник (E000+A000 + C000+8000) с отступом внутрь */
 
     /* Левая граница (X=2): E000, бит 5, Y=32..223 */
-    graph_fill_stride(0xE220, 0x80, 1, 192);
-    graph_fill_stride(0xC220, 0x80, 1, 192);
+    gfx_fill_stride(0xE220, 0x80, 1, 192);
+    gfx_fill_stride(0xC220, 0x80, 1, 192);
 
     /* Правая граница (X=509): A000, бит 2, Y=32..223 */
-    graph_fill_stride(0xBD20, 0x01, 1, 192);
-    graph_fill_stride(0x9D20, 0x01, 1, 192);
+    gfx_fill_stride(0xBD20, 0x01, 1, 192);
+    gfx_fill_stride(0x9D20, 0x01, 1, 192);
 
     /* Верхняя граница (Y=32): все 4 плоскости */
-    graph_fill_stride(0xA220, 0xFF, 0x100, 28);
-    graph_fill_stride(0xE220, 0xFF, 0x100, 28);
-    graph_fill_stride(0x8220, 0xFF, 0x100, 28);
-    graph_fill_stride(0xC220, 0xFF, 0x100, 28);
+    gfx_fill_stride(0xA220, 0xFF, 0x100, 28);
+    gfx_fill_stride(0xE220, 0xFF, 0x100, 28);
+    gfx_fill_stride(0x8220, 0xFF, 0x100, 28);
+    gfx_fill_stride(0xC220, 0xFF, 0x100, 28);
 
     /* Нижняя граница (Y=223): все 4 плоскости */
-    graph_fill_stride(0xA2DF, 0xFF, 0x100, 28);
-    graph_fill_stride(0xE2DF, 0xFF, 0x100, 28);
-    graph_fill_stride(0x82DF, 0xFF, 0x100, 28);
-    graph_fill_stride(0xC2DF, 0xFF, 0x100, 28);
+    gfx_fill_stride(0xA2DF, 0xFF, 0x100, 28);
+    gfx_fill_stride(0xE2DF, 0xFF, 0x100, 28);
+    gfx_fill_stride(0x82DF, 0xFF, 0x100, 28);
+    gfx_fill_stride(0xC2DF, 0xFF, 0x100, 28);
 
-    graph_print_512(3, 50, "VECTOR-06C", 0x03);
-    graph_print_512(3, 60, "512x256 MODE", 0x03);
-    graph_print_512t(3, 70, "THIN TEXT TEST", 0x03);
+    gfx_print_512(3, 50, "VECTOR-06C", 0x03);
+    gfx_print_512(3, 60, "512x256 MODE", 0x03);
+    gfx_print_512t(3, 70, "THIN TEXT TEST", 0x03);
 
-    graph_print_512(3, 100, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x01);
-    graph_print_512(3, 110, "0123456789", 0x01);
-    graph_print_512(3, 120, "-:().,?!@<>=&$#*+%;[]", 0x01);
+    gfx_print_512(3, 100, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x01);
+    gfx_print_512(3, 110, "0123456789", 0x01);
+    gfx_print_512(3, 120, "-:().,?!@<>=&$#*+%;[]", 0x01);
 
-    graph_print_512t(3, 140, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x02);
-    graph_print_512t(3, 150, "0123456789-:().,?!@<>=&$#*+%;[]", 0x02);
+    gfx_print_512t(3, 140, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x02);
+    gfx_print_512t(3, 150, "0123456789-:().,?!@<>=&$#*+%;[]", 0x02);
 
-    graph_print_512t(3, 170, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x03);
-    graph_print_512t(3, 180, "0123456789-:().,?!@<>=&$#*+%;[]", 0x03);
+    gfx_print_512t(3, 170, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x03);
+    gfx_print_512t(3, 180, "0123456789-:().,?!@<>=&$#*+%;[]", 0x03);
 
     while(1);
 

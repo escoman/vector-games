@@ -169,9 +169,9 @@ extern void fire_frame_asm(unsigned int plane_base, unsigned char decay,
 int main(void)
 {
     /* Инициализация: чёрный экран, затем палитра огня. */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_set_palette(fire_palette);
+    gfx_set_bmp_palette(fire_palette);
 
     rnd_init();
 

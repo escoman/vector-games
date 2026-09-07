@@ -1,7 +1,7 @@
 ;
 ; graphrle512.asm — RLE-распаковка для режима 512x256.
 ;
-;   void graph_rle_expand_512(const unsigned char *src);
+;   void gfx_rle_expand_512(const unsigned char *src);
 ;
 ; Двухцветный режим 512x256 — расширенная плоскость:
 ;   plane 1 (A000h-BFFFh): бит 1, нечётные X
@@ -19,14 +19,14 @@
 ;
 
         SECTION code_clib
-        PUBLIC  _graph_rle_expand_512
+        PUBLIC  _gfx_rle_expand_512
 
 ; ---------------------------------------------------------------
 ; Распаковка RLE: плоскость 1 (A000h) + плоскость 0 (E000h).
 ; 64 блока, HL инкрементируется от A0 до FF.
 ; Параметр src передаётся через стек (cdecl).
 ; ---------------------------------------------------------------
-_graph_rle_expand_512:
+_gfx_rle_expand_512:
         di
         ; --- адрес RLE из стека -> DE ---
         ld      hl, 2

@@ -16,14 +16,14 @@
 #include "dt2_512_bmp.inc"
 
 /* RLE-распаковка: плоскость 1 (A000h) + плоскость 0 (E000h) (graphrle512.asm) */
-extern void graph_rle_expand_512(const unsigned char *src);
+extern void gfx_rle_expand_512(const unsigned char *src);
 
 int main(void)
 {
     gfx_set_mode(GFX_MODE_512_2);
     gfx_set_palette(dt2_512_bmp_palette);
     /* Распаковываем картинку (плоскости A000h + E000h) */
-    graph_rle_expand_512(dt2_512_bmp_screen_rle);
+    gfx_rle_expand_512(dt2_512_bmp_screen_rle);
     
     while(1);
 

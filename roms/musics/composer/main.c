@@ -149,7 +149,7 @@ void init_screen(void)
 
 void draw_separator(unsigned char y)
 {
-    graph_print(0, y,
+    gfx_print(0, y,
         "________________________________", 1);
 }
 
@@ -205,7 +205,7 @@ void playback_start(void)
         if (!res.ok) {
             /* Ошибка парсинга — мигнём красным */
             gfx_clear(0);
-            graph_print(0, 64, "PARSE ERROR", 1);
+            gfx_print(0, 64, "PARSE ERROR", 1);
             return;
         }
     }
@@ -259,7 +259,7 @@ static void draw_main(void)
     init_screen();
 
     /* Заголовок (строка 1, y=8) */
-    graph_print(0, 8,
+    gfx_print(0, 8,
         "F1-HELP F2-PLAY F3-DRUMS F4-LIB", 1);
     if (playing)
         invert_play_label();
@@ -278,7 +278,7 @@ static void draw_main(void)
         else
             memcpy(label, "DRUMS:   [EDIT]", 15);
 
-        graph_print(0, y, label, 1);
+        gfx_print(0, y, label, 1);
         if (sel_item == sec && !playing)
             invert_section(sec);
 
@@ -294,7 +294,7 @@ static void draw_main(void)
                     buf[i++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : *p, p++;
                 buf[i] = 0;
                 if (*p == '\n') p++;
-                if (i) graph_print(0, cy, buf, 1);
+                if (i) gfx_print(0, cy, buf, 1);
             }
         }
     }
@@ -316,7 +316,7 @@ static void draw_main(void)
         mem[24] = 'F'; mem[25] = '5'; mem[26] = '-'; mem[27] = 'A';
         mem[28] = 'B'; mem[29] = 'O'; mem[30] = 'U'; mem[31] = 'T';
         mem[32] = 0;
-        graph_print(0, 248, mem, 1);
+        gfx_print(0, 248, mem, 1);
     }
 }
 

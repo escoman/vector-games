@@ -5,7 +5,7 @@
 ;     z88dk-z80asm -m8080 graphlz.asm
 ;
 ; C interface (standard linkage):
-;     void graph_lz_expand(const unsigned char *src);
+;     void gfx_lz_expand(const unsigned char *src);
 ;
 ; The routine is a direct assembly implementation of graphlz.c:
 ;   - header: tpp(16), ntiles(16), h_div8(8)
@@ -28,16 +28,16 @@
 
 SECTION code_user
 
-PUBLIC _graph_lz_expand
+PUBLIC _gfx_lz_expand
 
 ; ---------------------------------------------------------------------------
-; void graph_lz_expand(const unsigned char *src)
+; void gfx_lz_expand(const unsigned char *src)
 ;
 ; Standard z88dk linkage:
 ;   stack -> return address, src
 ; The stack is restored unchanged before returning.
 ; ---------------------------------------------------------------------------
-_graph_lz_expand:
+_gfx_lz_expand:
         POP     B               ; BC = return address
         POP     H               ; HL = src
         PUSH    H

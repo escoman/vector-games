@@ -122,7 +122,7 @@ static void show_menu(unsigned char selected)
     unsigned char i;
 
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
-        graph_print(menu_lines[i].dx,
+        gfx_print(menu_lines[i].dx,
                     (unsigned char)(y0 + menu_lines[i].dy),
                     menu_lines[i].text,
                     i == selected ? HIGHLIGHT_COLOR : TEXT_COLOR);
@@ -140,11 +140,11 @@ int main(void)
     drum_init();                        /* микшер AY: шум канала C */
 
     /* Экран: чёрный фон, логотип, текст меню. */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_rle_expand(logo_bmp_screen_rle, 8u, 0u);
+    gfx_rle_expand(logo_bmp_screen_rle, 8u, 0u);
     show_menu(255);
-    graph_set_palette(logo_bmp_palette);
+    gfx_set_palette(logo_bmp_palette);
 
     /* Загрузка библиотеки семплов в память (не играет, но семплы доступны). */
     play_song(&nes_drums_song, 0);

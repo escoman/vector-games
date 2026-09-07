@@ -70,9 +70,9 @@ static void show_status(const char *state, const char *title)
 {
     /* ячейка 8x8 непрозрачная — перепечатываем строку целиком,
      * хвост затираем пробелами */
-    graph_print(16u, 224u, state, 8u);
-    graph_print(128u, 224u, title, 9u);
-    //graph_print(200u, 224u, "        ", 8u);
+    gfx_print(16u, 224u, state, 8u);
+    gfx_print(128u, 224u, title, 9u);
+    //gfx_print(200u, 224u, "        ", 8u);
 }
 
 int main(void)
@@ -86,20 +86,20 @@ int main(void)
     drum_init();                /* микшер AY: тон C выкл, шум C вкл */
     music_set_loop(1);          /* тесты крутятся по кругу */
 
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_print(16u, 16u, "SYNTH TESTS (MUSIC.C):", 8u);
-    graph_print(16u, 40u, "1 - SCALE (ONE VOICE)", 8u);
-    graph_print(16u, 56u, "2 - VOICES (THREE)", 8u);
-    graph_print(16u, 72u, "3 - DRUMS (SMP)", 8u);
-    graph_print(16u, 88u, "4 - RHYTHM (L4-L16)", 8u);
-    graph_print(16u, 104u, "5 - SYNC (DRUM + NOTE)", 8u);
-    graph_print(16u, 120u, "6 - FLIGHT (BUMBLEBEE)", 8u);
-    graph_print(16u, 152u, "VK/PBL - PAUSE/RESUME", 8u);
-    graph_print(16u, 168u, "0 - STOP", 8u);
-    graph_print(16u, 184u, "ESC - EXIT", 8u);
+    gfx_print(16u, 16u, "SYNTH TESTS (MUSIC.C):", 8u);
+    gfx_print(16u, 40u, "1 - SCALE (ONE VOICE)", 8u);
+    gfx_print(16u, 56u, "2 - VOICES (THREE)", 8u);
+    gfx_print(16u, 72u, "3 - DRUMS (SMP)", 8u);
+    gfx_print(16u, 88u, "4 - RHYTHM (L4-L16)", 8u);
+    gfx_print(16u, 104u, "5 - SYNC (DRUM + NOTE)", 8u);
+    gfx_print(16u, 120u, "6 - FLIGHT (BUMBLEBEE)", 8u);
+    gfx_print(16u, 152u, "VK/PBL - PAUSE/RESUME", 8u);
+    gfx_print(16u, 168u, "0 - STOP", 8u);
+    gfx_print(16u, 184u, "ESC - EXIT", 8u);
     show_status("STOPPED", "-");
-    graph_set_palette(synth_pal);
+    gfx_set_palette(synth_pal);
 
     for (;;) {
         wait_one_frame();

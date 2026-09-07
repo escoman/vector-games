@@ -4,7 +4,7 @@
 ; Последовательность проверена на эмуляторе PPSSPP (совпадает с
 ; castmus.rom и ISR z88dk): управляющее слово 0x8A в порт 0, маски
 ; строк в порт 3, столбцы читаются из порта 2. После опроса
-; восстанавливается CW 0x88 и регистр строки экрана graph_scroll_row.
+; восстанавливается CW 0x88 и регистр строки экрана gfx_scroll_row.
 ;
 ; Результат — 8 байт в _kbd_rows, бит 1 = клавиша нажата (инверсия
 ; порта). Декодирование в ASCII делает keyboard.c.
@@ -16,7 +16,7 @@
 ;
 
         SECTION code_clib
-        EXTERN  _graph_scroll_row
+        EXTERN  _gfx_scroll_row
         PUBLIC  kbd_scan_rows
         PUBLIC  _kbd_scan_rows
         PUBLIC  _kbd_rows
@@ -58,7 +58,7 @@ row_loop:
         ld      (_kbd_shift_state), a
         pop     af
         out     (0x02), a               ; восстановить PB (бордюр + режим)
-        ld      a, (_graph_scroll_row)
+        ld      a, (_gfx_scroll_row)
         out     (0x03), a               ; вернуть регистр строки экрана
         ret
 

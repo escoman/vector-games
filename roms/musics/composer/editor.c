@@ -2,7 +2,7 @@
  * editor.c — линейный текстовый редактор для .mus текста.
  *
  * Буфер строк фиксированной длины, навигация стрелками,
- * вставка/удаление символов, прокрутка, отрисовка graph_put_char().
+ * вставка/удаление символов, прокрутка, отрисовка gfx_put_char().
  * Все введённые символы приводятся к верхнему регистру.
  */
 
@@ -121,7 +121,7 @@ void editor_draw(editor_t *ed, unsigned char x, unsigned char y,
         if (line_idx >= ed->num_lines) {
             draw_buf[0] = ' ';
             draw_buf[1] = 0;
-            graph_print(x, (unsigned char)(y + scr_row * 8),
+            gfx_print(x, (unsigned char)(y + scr_row * 8),
                             (const char *)draw_buf, color);
             scr_row++;
             continue;
@@ -165,7 +165,7 @@ void editor_draw(editor_t *ed, unsigned char x, unsigned char y,
                     draw_buf[scr_col] = '#';
             }
 
-            graph_print(x, (unsigned char)(y + scr_row * 8),
+            gfx_print(x, (unsigned char)(y + scr_row * 8),
                             (const char *)draw_buf, color);
 
             if (scr_col != 0xFF) {
@@ -357,7 +357,7 @@ void screen_editor(unsigned char channel, char *st[4])
             i++; src++;
         }
         hdr[i] = 0;
-        graph_print(0, 8, hdr, 1);
+        gfx_print(0, 8, hdr, 1);
     }
     draw_separator(16);
 
@@ -406,7 +406,7 @@ void screen_editor(unsigned char channel, char *st[4])
             status[11] = 'F';
             status[12] = fc ? fc : '.';
             status[13] = 0;
-            graph_print(0, 248, status, 1);
+            gfx_print(0, 248, status, 1);
         }
     }
 }

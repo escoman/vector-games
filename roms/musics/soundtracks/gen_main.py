@@ -52,7 +52,7 @@ def generate(cfg, out):
     else:
         rle_x = 0
 
-    # title_dx: пиксели → колонки (graph_print принимает колонки 0-31)
+    # title_dx: пиксели → колонки (gfx_print принимает колонки 0-31)
     title_dx_col = cfg.get('title_dx', 0) // 8
 
     n = len(tracks)
@@ -148,7 +148,7 @@ static void play_song(const music_song_t *song, unsigned char loop)
     unsigned char i;
 
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {{
-        graph_print((unsigned char)(x0 + menu_lines[i].dx),
+        gfx_print((unsigned char)(x0 + menu_lines[i].dx),
                     (unsigned char)(y0 + menu_lines[i].dy),
                     menu_lines[i].text, selected == i ? {hl}u : {norm}u);
     }}
@@ -181,11 +181,11 @@ int main(void)
     frame_handler = on_frame;
     drum_init();
 
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear({bg});
-    graph_rle_expand(title_bmp_screen_rle, {rle_x}u, {rle_y}u);
+    gfx_rle_expand(title_bmp_screen_rle, {rle_x}u, {rle_y}u);
     show_menu(100);
-    graph_set_palette(title_bmp_palette);
+    gfx_set_bmp_palette(title_bmp_palette);
 
     play_song(&nes_drums_song, 0);
 

@@ -70,7 +70,7 @@ static void show_menu(void)
     unsigned char i;
 
     for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
-        graph_print((unsigned char)(x0 + menu_lines[i].dx),
+        gfx_print((unsigned char)(x0 + menu_lines[i].dx),
                     (unsigned char)(y0 + menu_lines[i].dy),
                     menu_lines[i].text, 8u);
     }
@@ -88,11 +88,11 @@ int main(void)
 
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_rle_expand(title_bmp_screen_rle, 8u, 0u);
+    gfx_rle_expand(title_bmp_screen_rle, 8u, 0u);
     show_menu();
-    graph_set_palette(title_bmp_palette);
+    gfx_set_palette(title_bmp_palette);
 
     for (;;) {
         wait_one_frame();

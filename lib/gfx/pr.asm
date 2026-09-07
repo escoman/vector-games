@@ -1,17 +1,17 @@
 ;
 ; graphpr.asm — быстрый вывод текста шрифтом 8x8 (Вектор-06Ц).
 ;
-; Заменяет C-функции graph_put_char и graph_print (graph.c).
+; Заменяет C-функции gfx_put_char и gfx_print (graph.c).
 ;
-;   void graph_put_char(unsigned char x, unsigned char y, char ch,
+;   void gfx_put_char(unsigned char x, unsigned char y, char ch,
 ;                       unsigned char color);
-;   void graph_print(unsigned char x, unsigned char y, const char *s,
+;   void gfx_print(unsigned char x, unsigned char y, const char *s,
 ;                    unsigned char color);
 ;
 ; Соглашение вызова z88dk classic — по выводу компилятора этих функций
 ; (zcc -S): аргументы лежат в стеке в 16-битных слотах, значение в
-; младшем байте. graph_put_char: color sp+2, ch sp+4, y sp+6, x sp+8;
-; graph_print: color sp+2, s sp+4 (слово), y sp+6, x sp+8. Стек чистит
+; младшем байте. gfx_put_char: color sp+2, ch sp+4, y sp+6, x sp+8;
+; gfx_print: color sp+2, s sp+4 (слово), y sp+6, x sp+8. Стек чистит
 ; вызывающий, поэтому функции НЕ трогают SP (никаких push/pop) и
 ; просто делают ret.
 ;
@@ -28,11 +28,11 @@
 
         SECTION code_clib
 
-        PUBLIC  _graph_put_char
-        PUBLIC  _graph_print
+        PUBLIC  _gfx_put_char
+        PUBLIC  _gfx_print
 
 ; ---------------------------------------------------------------
-; void graph_put_char(unsigned char x, unsigned char y,
+; void gfx_put_char(unsigned char x, unsigned char y,
 ;                     char ch, unsigned char color)
 ;   __z88dk_callee
 ;
@@ -65,7 +65,7 @@
 ; Неизвестный символ = пробел.
 ; ---------------------------------------------------------------
 
-_graph_put_char:
+_gfx_put_char:
 
         ; Снимаем return address.
         pop     de
@@ -372,7 +372,7 @@ dc_plane_next:
 
 
 ; ---------------------------------------------------------------
-; void graph_print(unsigned char x, unsigned char y,
+; void gfx_print(unsigned char x, unsigned char y,
 ;                  const char *s, unsigned char color)
 ;   __z88dk_callee
 ;
@@ -383,7 +383,7 @@ dc_plane_next:
 ; обычным PUSH/POP вокруг CALL.
 ; ---------------------------------------------------------------
 
-_graph_print:
+_gfx_print:
 
         ; return address
         pop     de

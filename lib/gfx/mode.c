@@ -69,7 +69,7 @@ void gfx_set_mode(unsigned char mode)
 
 void gfx_clear(unsigned char color)
 {
-    graph_fill_planes(gfx_modes[gfx_current_mode].plane_mask, color);
+    gfx_fill_planes(gfx_modes[gfx_current_mode].plane_mask, color);
 }
 
 /* ------------------------- Загрузка палитры ------------------------- */
