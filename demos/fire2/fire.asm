@@ -30,6 +30,10 @@ _fr_fy: defb 0
 _fr_fx: defb 0
 _fr_byte: defb 0
 _fr_val: defb 0
+_fr_saved_sp: defw 0
+_fr_fire_ptr: defw 0
+_fr_addr: defw 0
+_fr_pair: defb 0
 
 SECTION code_clib
 
@@ -519,161 +523,212 @@ fg_no_dest_inc:
 ; void fire_render(void)
 ; Exact C mapping. Processes one packed buffer byte (two pixels) at a time.
 ; ================================================================
+; ================================================================
+; void fire_render(void)
+; Optimized 8080 renderer.
+; Uses PUSH BC twice to write four identical bytes at once.
+; Interrupts are disabled while SP is redirected into VRAM.
+; ================================================================
 _fire_render:
+        di
+
+        ; Save caller SP before using SP as a temporary VRAM pointer.
+        lxi     h,0
+        dad     sp
+        shld    _fr_saved_sp
         push    bc
-        ; fy=0; fx=0
+        push    de
+        push    hl
+
         xra     a
         sta     _fr_fy
-        sta     _fr_fx
+        sta     _fr_addr
+        mvi     a,4
+        sta     _fr_addr
+        xra     a
+        sta     _fr_addr+1
+        lxi     h,_fire_buf
+        shld    _fr_fire_ptr
+
 fr_y_loop:
-        lda     _fr_fx
-        cpi     64
-        jnc     fr_next_y
-        ; value = fire_buf[fy*32 + fx/2]
-        lda     _fr_fy
-        mov     l,a
-        mvi     h,0
-        dad     h
-        dad     h
-        dad     h
-        dad     h
-        dad     h
-        mov     e,a             ; dummy; recompute byte offset below
-        lda     _fr_fx
-        ora     a
-        rar
-        mov     e,a
-        mvi     d,0
-        dad     d
-        lxi     d,_fire_buf
-        dad     d
+        mvi     a,32
+        sta     _fr_pair
+fr_pair_loop:
+        lhld    _fr_fire_ptr
         mov     a,m
         ora     a
         jz      fr_pair_next
         sta     _fr_val
 
-        ; p=0..3. Build plane byte and write four rows.
-        mvi     c,0
-fr_p_loop:
-        ; high nibble bit p -> F0
+        ; ============================================================
+        ; Plane 0: masks 10h / 01h, base E000.
+        ; ============================================================
         lda     _fr_val
-        ; mask = 0x10 << p, built in A via p loop using table-like shift
-        lxi     h,0x0010
-        mov     e,c
-        mvi     d,0
-fr_hi_shift:
-        mov     a,e
-        ora     a
-        jz      fr_hi_mask_ready
-        dad     h
-        dcr     e
-        jmp     fr_hi_shift
-fr_hi_mask_ready:
-        lda     _fr_val
-        ana     l
-        jz      fr_hi_zero
-        mvi     a,240
-        sta     _fr_byte
-        jmp     fr_low_test
-fr_hi_zero:
+        ani     10h
+        jz      fr0_nohi
+        mvi     a,0F0h
+        jmp     fr0_hi_done
+fr0_nohi:
         xra     a
-        sta     _fr_byte
-fr_low_test:
-        ; low mask = 1 << p
-        lxi     h,1
-        mov     e,c
-        mvi     d,0
-fr_lo_shift:
-        mov     a,e
-        ora     a
-        jz      fr_lo_mask_ready
-        dad     h
-        dcr     e
-        jmp     fr_lo_shift
-fr_lo_mask_ready:
+fr0_hi_done:
+        mov     b,a
         lda     _fr_val
-        ana     l
-        jz      fr_byte_ready
-        lda     _fr_byte
-        ori     15
-        sta     _fr_byte
-fr_byte_ready:
-        lda     _fr_byte
+        ani     01h
+        jz      fr0_ready
+        mov     a,b
+        ori     0Fh
+        mov     b,a
+fr0_ready:
+        mov     a,b
         ora     a
-        jz      fr_p_next
-        ; offset = (fx/2)*256 + fy*4
-        lda     _fr_fx
+        jz      fr1_build
+        mov     c,a
+        lhld    _fr_addr
+        mvi     a,0E0h
+        add     h
+        mov     h,a
+        sphl
+        push    bc
+        push    bc
+
+        ; ============================================================
+        ; Plane 1: masks 20h / 02h, base C000.
+        ; ============================================================
+fr1_build:
+        lda     _fr_val
+        ani     20h
+        jz      fr1_nohi
+        mvi     a,0F0h
+        jmp     fr1_hi_done
+fr1_nohi:
+        xra     a
+fr1_hi_done:
+        mov     b,a
+        lda     _fr_val
+        ani     02h
+        jz      fr1_ready
+        mov     a,b
+        ori     0Fh
+        mov     b,a
+fr1_ready:
+        mov     a,b
         ora     a
-        rar
+        jz      fr2_build
+        mov     c,a
+        lhld    _fr_addr
+        mvi     a,0C0h
+        add     h
         mov     h,a
-        mvi     l,0
-        lda     _fr_fy
-        mov     e,a
-        mvi     d,0
-        mov     a,e
-        add     a
-        mov     e,a
-        mov     a,d
-        adc     a
-        mov     d,a
-        mov     a,e
-        add     e
-        mov     e,a
-        mov     a,d
-        adc     d
-        mov     d,a
-        mov     a,e
-        add     l
-        mov     l,a
-        mov     a,d
-        adc     h
+        sphl
+        push    bc
+        push    bc
+
+        ; ============================================================
+        ; Plane 2: masks 40h / 04h, base A000.
+        ; ============================================================
+fr2_build:
+        lda     _fr_val
+        ani     40h
+        jz      fr2_nohi
+        mvi     a,0F0h
+        jmp     fr2_hi_done
+fr2_nohi:
+        xra     a
+fr2_hi_done:
+        mov     b,a
+        lda     _fr_val
+        ani     04h
+        jz      fr2_ready
+        mov     a,b
+        ori     0Fh
+        mov     b,a
+fr2_ready:
+        mov     a,b
+        ora     a
+        jz      fr3_build
+        mov     c,a
+        lhld    _fr_addr
+        mvi     a,0A0h
+        add     h
         mov     h,a
-        ; choose plane base by p
-        mov     a,c
-        cpi     0
-        jnz     fr_base_p1
-        lxi     d,0xE000
-        jmp     fr_have_base
-fr_base_p1:
-        cpi     1
-        jnz     fr_base_p2
-        lxi     d,0xC000
-        jmp     fr_have_base
-fr_base_p2:
-        cpi     2
-        jnz     fr_base_p3
-        lxi     d,0xA000
-        jmp     fr_have_base
-fr_base_p3:
-        lxi     d,0x8000
-fr_have_base:
-        dad     d
-        lda     _fr_byte
-        mov     d,a
-        mov     m,a
-        inx     h
-        mov     m,a
-        inx     h
-        mov     m,a
-        inx     h
-        mov     m,a
-fr_p_next:
-        inr     c
-        mov     a,c
-        cpi     4
-        jnz     fr_p_loop
+        sphl
+        push    bc
+        push    bc
+
+        ; ============================================================
+        ; Plane 3: masks 80h / 08h, base 8000.
+        ; ============================================================
+fr3_build:
+        lda     _fr_val
+        ani     80h
+        jz      fr3_nohi
+        mvi     a,0F0h
+        jmp     fr3_hi_done
+fr3_nohi:
+        xra     a
+fr3_hi_done:
+        mov     b,a
+        lda     _fr_val
+        ani     08h
+        jz      fr3_ready
+        mov     a,b
+        ori     0Fh
+        mov     b,a
+fr3_ready:
+        mov     a,b
+        ora     a
+        jz      fr_pair_next
+        mov     c,a
+        lhld    _fr_addr
+        mvi     a,080h
+        add     h
+        mov     h,a
+        sphl
+        push    bc
+        push    bc
+
 fr_pair_next:
-        lda     _fr_fx
-        adi     2
-        sta     _fr_fx
-        jmp     fr_y_loop
-fr_next_y:
-        xra     a
-        sta     _fr_fx
+        lhld    _fr_fire_ptr
+        inx     h
+        shld    _fr_fire_ptr
+        lhld    _fr_addr
+        inr     h
+        shld    _fr_addr
+        lda     _fr_pair
+        dcr     a
+        sta     _fr_pair
+        jnz     fr_pair_loop
+
+        lhld    _fr_addr
+        mov     a,l
+        adi     4
+        mov     l,a
+        mvi     h,0
+        jnc     fr_row_no_carry
+        inr     h
+fr_row_no_carry:
+        shld    _fr_addr
         lda     _fr_fy
         inr     a
         sta     _fr_fy
         cpi     64
         jnz     fr_y_loop
+
+fr_restore:
+        ; Restore the register-save frame.  Three registers were pushed
+        ; at entry, so start six bytes below the original SP.
+        lhld    _fr_saved_sp
+        dcx     h
+        dcx     h
+        dcx     h
+        dcx     h
+        dcx     h
+        dcx     h
+        sphl
+        pop     hl
+        pop     de
         pop     bc
+        ; RET consumes the original return address: final SP = entry SP+2.
+        ei
         ret
+
