@@ -36,8 +36,7 @@ ZFLAGS   = +vector06c --no-crt -I. -I$(LIB) -DMUSIC_ONLY
 
 all: $(TARGET)
 
-full: clean
-	$(MAKE) deploy
+full: clean all deploy
 
 samples:
 	python3 gen_samples.py
@@ -63,9 +62,7 @@ $(TARGET): $(INCS) $(SRCS)
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/$(TARGET)
-	@echo "=== Deployed to $(PPSSPP_ROMS)/$(TARGET) ==="
+include $(PROJECT_ROOT)finally.mk
 
 clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm \

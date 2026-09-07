@@ -9,7 +9,7 @@
 #   ROM_JSON — путь к rom.json (по умолчанию rom.json)
 
 SOUNDTRACKS = ../soundtracks
-include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../config.mk
+# config.mk подключается из Makefile подпроекта до include soundtrack.mk
 LIB         = ../../lib
 BMP2INC     = ../../utils/bmp2inc.py
 TXT2INC     = ../../utils/txt2inc.py
@@ -26,12 +26,9 @@ SRCS       = $(LIB)/sys/startup.asm main.c $(SOUNDTRACKS)/nes_drums.c \
 
 ZFLAGS     = +vector06c --no-crt -I. -I$(LIB) -I$(SOUNDTRACKS) -DMUSIC_ONLY
 
-.PHONY: all deploy clean full
+.PHONY: all clean
 
 all: $(TARGET)
-
-full: clean
-	$(MAKE) deploy
 
 # Генерация main.c из rom.json
 main.c: $(ROM_JSON) $(GEN_MAIN)
@@ -52,10 +49,6 @@ $(TARGET): $(SRCS) $(INCS) rom_data/title_bmp.inc
 	    $(ZCC) $(ZFLAGS) $(SRCS) -o $@
 	@echo "=== Done: $@ ==="
 	@ls -l $@
-
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/$(TARGET)
-	@echo "=== Deployed to $(PPSSPP_ROMS)/$(TARGET) ==="
 
 clean:
 	rm -f $(TARGET) main.c *.o zcc_opt.def *.c.asm $(INCS)

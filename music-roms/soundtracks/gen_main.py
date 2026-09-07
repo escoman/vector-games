@@ -118,7 +118,7 @@ static void play_song(const music_song_t *song, unsigned char loop)
         dy = y_start + row * y_step
         w(f'    {{ {dx}u, {dy}u, "{t["key"]}-{t["name"]}" }},\n')
 
-    w(f'    {{ 0u,  {stop_dy}u, "0 - STOP MUSIC" }},\n')
+    w(f'    {{ 0u,  {stop_dy}u, "0-STOP MUSIC" }},\n')
     w('\n')
 
     # Credits
@@ -207,8 +207,6 @@ int main(void)
     w(f'''                }};
                 play_song(songs[track], 0);
                 show_menu(track+1);
-            }} else if (key == 27) {{
-                break;
             }}
         }}
         prev_key = key;

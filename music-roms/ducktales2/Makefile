@@ -12,4 +12,9 @@ TARGET = ducktales2.rom
 SONGS  = track_0 track_1 track_2 track_3 track_4 track_5 track_6 \
          track_7 track_8 track_9 track_10 track_16 track_19
 
+.PHONY: full
+full: clean all deploy
+
+include ../../config.mk
 include ../soundtracks/soundtrack.mk
+include $(PROJECT_ROOT)finally.mk

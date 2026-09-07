@@ -32,9 +32,7 @@ $(TARGET): $(ASSETS)/logo16_bmp.inc
 $(ASSETS)/logo16_bmp.inc: $(ASSETS)/logo16.bmp $(BMP2INC)
 	python3 $(BMP2INC) $<
 
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/
-	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
+include $(PROJECT_ROOT)finally.mk
 
 clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm

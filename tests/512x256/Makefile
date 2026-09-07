@@ -24,9 +24,7 @@ $(TARGET):
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/
-	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
+include $(PROJECT_ROOT)finally.mk
 
 clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm

@@ -39,9 +39,7 @@ $(TARGET): ../assets/dt2_bmp.inc
 	python3 $(BMP2INC_LZ) $<
 
 # --- Deploy / clean ---
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/
-	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
+include $(PROJECT_ROOT)finally.mk
 
 clean:
 	rm -f $(TARGET) *.o *.lis zcc_opt.def *.c.asm ../assets/dt2_bmp.inc

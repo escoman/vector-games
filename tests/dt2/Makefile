@@ -33,9 +33,7 @@ dt2_bmp.inc: dt2.bmp $(BMP2INC)
 dt2.bmp: ../assets/dt2.bmp
 	cp $< $@
 
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/
-	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
+include $(PROJECT_ROOT)finally.mk
 
 clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm dt2_bmp.inc dt2.bmp

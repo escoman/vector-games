@@ -37,8 +37,7 @@ ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
 
 all: $(TARGET)
 
-full: clean
-	$(MAKE) deploy
+full: clean all deploy
 
 rom_data/%.inc: music/%.mus $(SAMPLES)
 	@mkdir -p rom_data
@@ -50,9 +49,7 @@ $(TARGET): $(INCS) $(SRCS)
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
-deploy: $(TARGET)
-	cp -f $(TARGET) $(PPSSPP_ROMS)/$(TARGET)
-	@echo "=== Deployed to $(PPSSPP_ROMS)/$(TARGET) ==="
+include $(PROJECT_ROOT)finally.mk
 
 clean:
 	rm -f $(TARGET) *.o zcc_opt.def *.c.asm $(INCS)
