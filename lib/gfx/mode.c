@@ -133,4 +133,14 @@ void gfx_set_palette(const unsigned char *colors)
     }
 
     v06_set_palette_asm(full);
+
+    /* v06_set_palette_asm может писать в порт ПИИ 00h (CW),
+     * что сбрасывает регистр скролла (port 03h) в 0x00.
+     * Восстанавливаем скролл для 512-режимов. */
+    if (gfx_modes[mode].width_div8 > 32) {
+        __asm
+            ld      a, 0xFF
+            out     (0x03), a         ; скролл = 0xFF
+        __endasm;
+    }
 }
