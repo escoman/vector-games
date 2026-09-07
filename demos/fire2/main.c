@@ -73,7 +73,35 @@ static void rnd_init(void)
 #define FIRE_W  64
 #define FIRE_H  64
 
-static unsigned char fire_buf[FIRE_W * FIRE_H];
+/* 2 точки по 4 бита в одном байте */
+static unsigned char fire_buf[(FIRE_W * FIRE_H) >> 1];
+
+/* Получить цвет точки (x, y), 0..15 */
+static unsigned char get_fire_buf(unsigned char x, unsigned char y)
+{
+    unsigned int index = ((unsigned int)y * FIRE_W + x) >> 1;
+    unsigned char value = fire_buf[index];
+
+    if (x & 1)
+        return value & 0x0F;          /* правая точка */
+    else
+        return value >> 4;            /* левая точка */
+}
+
+/* Записать цвет точки (x, y), 0..15 */
+static void put_fire_buf(unsigned char x, unsigned char y,
+                         unsigned char value)
+{
+    unsigned int index = ((unsigned int)y * FIRE_W + x) >> 1;
+    unsigned char cur = fire_buf[index];
+
+    if (x & 1)
+        /* Правая точка — младшая тетрада */
+        fire_buf[index] = (cur & 0xF0) | (value & 0x0F);
+    else
+        /* Левая точка — старшая тетрада */
+        fire_buf[index] = (cur & 0x0F) | ((value & 0x0F) << 4);
+}
 
 /* ----------------------- АЛГОРИТМ ОГНЯ -------------------------------
  * Классический алгоритм из fire.html:
@@ -93,11 +121,12 @@ static void fire_generate(unsigned char power)
     /* 1. Верхняя строка — «очаги» пламени (источник у основания) */
     for (x = 0; x < FIRE_W; x++) {
         if (rnd_next() < power) {
-            fire_buf[x] = 15;
+            put_fire_buf(x, 0, 15);
         } else if (rnd_next() > 128) {
-            fire_buf[x] =
-                (fire_buf[x] > 2)
-                ? fire_buf[x] - 2 : 0;
+            unsigned char current = get_fire_buf(x, 0);
+
+            put_fire_buf(x, 0,
+                (current > 2) ? current - 2 : 0);
         }
     }
 
@@ -109,15 +138,21 @@ static void fire_generate(unsigned char power)
             if (shift < 0)       shift = FIRE_W - 1;
             else if (shift >= FIRE_W) shift = 0;
 
-            above = fire_buf[(unsigned char)(y - 1) * FIRE_W
-                             + (unsigned char)((signed char)x + shift)];
+            above = get_fire_buf(
+                (unsigned char)((signed char)x + shift),
+                (unsigned char)(y - 1)
+            );
 
             decay = rnd_next() & 1;
+
             if (y < FIRE_H / 2 && (rnd_next() > 178))
                 decay += 1;
 
-            fire_buf[y * FIRE_W + x] =
-                (above > decay) ? above - decay : 0;
+            put_fire_buf(
+                x,
+                y,
+                (above > decay) ? above - decay : 0
+            );
         }
     }
 }
@@ -149,8 +184,8 @@ static void fire_render(void)
     for (fy = 0; fy < FIRE_H; fy++) {
         for (fx = 0; fx < FIRE_W; fx += 2) {
             /* Два соседних пикселя буфера */
-            unsigned char cl = fire_buf[fy * FIRE_W + fx];
-            unsigned char cr = fire_buf[fy * FIRE_W + fx + 1];
+            unsigned char cl = get_fire_buf(fx, fy);
+            unsigned char cr = get_fire_buf(fx + 1, fy);
 
             if ((cl | cr) == 0)
                 continue;   /* оба пикселя чёрные — пропускаем */
@@ -204,7 +239,7 @@ int main(void)
     for (;;) {
         gfx_next_frame();
 
-        fire_generate(10);
+        fire_generate(100);
         fire_render();
     }
 
