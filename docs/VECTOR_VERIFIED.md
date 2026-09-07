@@ -1263,7 +1263,7 @@ VECTOR.MD §1 содержит противоречие с собственны�
 | 14 | Boot ROM отключается после загрузки | VERIFIED_BY_CODE | — | VSDL `detach_boot()`, EMU80 `m_romEnabled` | Оставить |
 | 15 | 512×256×2 цвета = 16 КБ | UNVERIFIED | Не реализовано в эмуляторах | Логически: 2 плоскости × 8 КБ = 16 КБ | Проверить на hardware |
 | 16 | TIMSoft: «порт 02h — код математического цвета» | CONFLICT | Противоречит коду обоих эмуляторов | TIMSoft §6 vs VSDL/EMU80 код | Пометить как CONFLICT |
-| 17 | Бордюр: 256 цветов (TIMSoft) vs 16 (эмуляторы) | PARTIALLY_VERIFIED | TIMSoft говорит 256, эмуляторы используют 4 бита | TIMSoft §1: «до 256 цветов границы»; код: `PB & 0x0f` | Уточнить на hardware |
+| 17 | Бордюр: 256 цветов (TIMSoft) | VERIFIED | Mid-frame palette swap подтверждён | TIMSoft §1: «до 256 цветов границы»; `clrs.asm`: смена палитры через `OUT (0Ch)` во время развёртки | Подтверждено: `clrs.asm` |
 | 18 | 312 строк × 768 пикселей | VERIFIED_BY_CODE | — | VSDL `filler.cpp`, EMU80 `operate()` | Оставить |
 | 19 | Клавиатура 8×8 + СС/УС/РУС | VERIFIED_BY_CODE | — | VSDL `keyboard.h`, EMU80 `Vector.h m_keyMatrix` | Оставить |
 | 20 | Порт 10h = Barkar квазидиск | VERIFIED_BY_CODE | — | VSDL `control_write()`, EMU80 `ramDiskControl()` | Оставить |
@@ -1344,7 +1344,7 @@ RAM (64 КБ, 0000h–FFFFh). TIMSOFT подтверждает: «общая RAM
 | ERAM — штатная функция | UNVERIFIED | Реализовано только в EMU80 |
 | Подпрограммы монитора (7803h и др.) | UNVERIFIED | Не проверено |
 | TIMSoft: «порт 02h — код математического цвета» | CONFLICT | Противоречит обоим эмуляторам |
-| TIMSoft: «до 256 цветов границы» | PARTIALLY_VERIFIED | Эмуляторы используют 4 бита (16 цветов) |
+| TIMSoft: «до 256 цветов границы» | VERIFIED | Mid-frame palette swap: `clrs.asm` меняет палитру через `OUT (0Ch)` во время развёртки |
 | psgT constant = 110837.5 | UNVERIFIED | Расхождение с расчётной частотой AY |
 
 ---
@@ -1422,8 +1422,9 @@ RAM (64 КБ, 0000h–FFFFh). TIMSOFT подтверждает: «общая RAM
 
 TIMSoft — первичный источник от разработчика. Когда TIMSoft согласен с эмуляторами
 (палитра, плоскости, порты) — факт надёжно подтверждён. Когда TIMSoft противоречит
-(порт 02h для палитры, 256 цветов бордюра) — требуется дополнительная проверка на
-реальном hardware.
+(порт 02h для палитры) — требуется дополнительная проверка на
+реальном hardware. Утверждение «до 256 цветов границы» подтверждено:
+technique mid-frame palette swap (`clrs.asm`).
 
 ---
 
@@ -1438,8 +1439,8 @@ TIMSoft — первичный источник от разработчика. �
 | VERIFIED_BY_CODE | ~65 |
 | VERIFIED_BY_PRIMARY_SOURCE | ~7 |
 | VERIFIED (несколько источников) | ~20 |
-| PARTIALLY_VERIFIED | 2 |
-| CONFLICT | 4 |
+| PARTIALLY_VERIFIED | 1 |
+| CONFLICT | 3 |
 | UNVERIFIED | 12 |
 | INCORRECT | 3 (все исправлены) |
 | SPECULATION | 0 |
@@ -1461,9 +1462,8 @@ TIMSoft — первичный источник от разработчика. �
 | # | Конфликт | Источники | Требуется |
 |---|----------|-----------|----------|
 | 1 | TIMSoft: «порт 02h — код математического цвета» vs оба эмулятора | TIMSOFT vs VSDL+EMU80 | Тест на реальном hardware |
-| 2 | TIMSoft: «до 256 цветов границы» vs 4 бита в эмуляторах | TIMSOFT vs VSDL+EMU80 | Тест на реальном hardware |
-| 3 | CALL = 24 (VECTOR.MD) vs 17+4=21 (EMU80 wait table) | VECTOR.MD vs EMU80 | Cycle-exact тест на hardware |
-| 4 | XTHL = 24 (VECTOR.MD) vs 18+4=22 (EMU80 wait table) | VECTOR.MD vs EMU80 | Cycle-exact тест на hardware |
+| 2 | CALL = 24 (VECTOR.MD) vs 17+4=21 (EMU80 wait table) | VECTOR.MD vs EMU80 | Cycle-exact тест на hardware |
+| 3 | XTHL = 24 (VECTOR.MD) vs 18+4=22 (EMU80 wait table) | VECTOR.MD vs EMU80 | Cycle-exact тест на hardware |
 
 ## Оставшиеся неизвестные данные
 
