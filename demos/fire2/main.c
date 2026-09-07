@@ -84,7 +84,7 @@ static unsigned char fire_buf[FIRE_W * FIRE_H];
  *   3. При маппинге y=0 → ofs=0 (низ экрана) огонь растёт снизу вверх.
  * --------------------------------------------------------------- */
 
-static void fire_generate(void)
+static void fire_generate(unsigned char power)
 {
     unsigned char x, y;
     unsigned char above, decay;
@@ -92,7 +92,7 @@ static void fire_generate(void)
 
     /* 1. Верхняя строка — «очаги» пламени (источник у основания) */
     for (x = 0; x < FIRE_W; x++) {
-        if (rnd_next() > 100) {           /* ≈60% вероятность */
+        if (rnd_next() < power) {
             fire_buf[x] = 15;
         } else if (rnd_next() > 128) {
             fire_buf[x] =
@@ -204,13 +204,8 @@ int main(void)
     for (;;) {
         gfx_next_frame();
 
-        fire_generate();
+        fire_generate(10);
         fire_render();
-
-        /* Восстанавливаем палитру после записи в VRAM:
-         * graph_set_palette загружает цвета в VBlank,
-         * обеспечивая корректное отображение. */
-        graph_set_palette(fire_palette);
     }
 
     return 0;
