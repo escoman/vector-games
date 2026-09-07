@@ -12,9 +12,9 @@ smp2wav.py — синтез WAV-превью семплов .smp (шумовой
 Частота шума: F = AY_CLK / (32 * (R6 + 1)), AY_CLK = 1750000 Гц.
 
 Использование:
-    python3 utils/smp2wav.py music-roms/jackal/music/samples
-    python3 utils/smp2wav.py music-roms/jackal/music/samples/kick.smp
-    python3 utils/smp2wav.py music-roms/jackal/music/samples -o /tmp/wav
+    python3 utils/smp2wav.py roms/musics/jackal/music/samples
+    python3 utils/smp2wav.py roms/musics/jackal/music/samples/kick.smp
+    python3 utils/smp2wav.py roms/musics/jackal/music/samples -o /tmp/wav
 """
 
 import argparse

@@ -7,23 +7,6 @@ ROM-файлы для эмулятора PPSSPP, воспроизводящие 
 
 ## Проекты
 
-### jackal
-
-Саундтрек из NES-игры **Jackal** (Konami, 1986).
-8 треков, меню с выбором клавишами 1–8.
-
-| Клавиша | Трек |
-|---------|------|
-| 1 | Intro |
-| 2 | Level 1 |
-| 3 | Level 2 |
-| 4 | Level 3 |
-| 5 | Boss |
-| 6 | Stage Clear |
-| 7 | Game Over |
-| 8 | Credits |
-| 0 | Стоп |
-
 ### castlevania
 
 Саундтрек из NES-игры **Castlevania** (Konami, 1987).
@@ -32,16 +15,17 @@ ROM-файлы для эмулятора PPSSPP, воспроизводящие 
 | Клавиша | Трек |
 |---------|------|
 | 1 | Prologue |
-| 2–6 | Track 1–5 |
-| 7 | Track 7 |
-| 8 | Track 8 |
+| 2–4 | Level 1–3 |
+| 5 | Walking on Cross |
+| 6 | Poison Mind |
+| 7–8 | Stalker, Beginning |
 | 9 | Boss |
 | 0 | Стоп |
 
-### ducktales2
+### jackal
 
-Саундтрек из NES-игры **DuckTales 2** (Capcom, 1993).
-6 треков, меню с выбором клавишами 1–6.
+Саундтрек из NES-игры **Jackal** (Konami, 1986).
+8 треков, меню с выбором клавишами 1–8.
 
 ### nes_drums
 
@@ -51,8 +35,8 @@ ROM-файлы для эмулятора PPSSPP, воспроизводящие 
 
 ### drums
 
-Демо-ROM библиотеки ударных (drums.asm): 7 синтетических инструментов
-на канале шума AY-3-8910 (kick, snare, hat closed/open, tom, clap, rim).
+Демо-ROM библиотеки ударных (drums.asm): 4 синтетических инструмента
+(kick, snare, hat closed, hat open) на канале шума AY.
 Тоновые каналы свободны для мелодии.
 
 ### synth
@@ -63,15 +47,7 @@ ROM-файлы для эмулятора PPSSPP, воспроизводящие 
 
 ## Сборка
 
-### Все проекты сразу
-
-```bash
-make          # собрать все ROM + скопировать в release/
-make clean    # убрать артефакты всех проектов + папку release/
-make full     # clean + сборка всех проектов
-```
-
-### Отдельный проект
+Каждый проект — самостоятельная папка с `Makefile`.
 
 ```bash
 cd roms/musics/<project>
@@ -81,8 +57,6 @@ make full     # clean + deploy
 make clean    # убрать артефакты
 ```
 
-Результат сборки всех проектов — в папке `release/` (ROM-файлы + README).
-
 Путь до z88dk: `/home/alexey/z88dk` (переопределяется `make Z88DK=...`).
 
 ## Пайплайн конвертации музыки
@@ -91,12 +65,6 @@ make clean    # убрать артефакты
 NSF-экспорт (.txt)
        │
        ▼
-  txt2inc.py      → .inc (партитура + повторы + данные)
-```
-
-Или по шагам:
-
-```
   txt2mus.py      → .mus (партитура)
        │
        ▼
@@ -105,6 +73,8 @@ NSF-экспорт (.txt)
        ▼
   mus2inc.py      → .inc (music_song_t для z88dk)
 ```
+
+Или одной командой через `txt2inc.py`. Подробности — в [utils/README.MD](../utils/README.MD).
 
 ## Зависимости
 

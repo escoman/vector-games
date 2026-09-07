@@ -1,0 +1,70 @@
+# Makefile — сборка nes_drums.rom для Вектора-06Ц (z88dk / zcc).
+#
+# make          — собрать nes_drums.rom;
+# make clean    — убрать все артефакты сборки;
+# make deploy   — собрать и положить ROM в папку ROMS эмулятора PPSSPP;
+# make full     — clean + сборка + deploy последовательно;
+# make samples  — перегенерировать 16 семплов (gen_samples.py).
+#
+# Путь до z88dk можно переопределить: make Z88DK=...
+
+include ../../../config.mk
+
+MUS2INC  = python3 ../../../utils/mus2inc.py
+TXT2INC  = python3 ../../../utils/txt2inc.py
+BMP2INC  = ../../../utils/bmp2inc.py
+
+TARGET   = nes_drums.rom
+
+INCS     = nes_drums.h nes_drums.c rom_data/logo_bmp.inc \
+           rom_data/examples.inc rom_data/jackal.inc rom_data/castlevania.inc
+SAMPLES  = $(wildcard src/samples/*.smp)
+
+SRCS     = $(LIB)/sys/startup.asm main.c \
+           nes_drums.c \
+           $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
+           $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
+           $(LIB)/snd/drums.asm \
+           $(LIB)/snd/vi53out.asm $(LIB)/snd/music.c \
+           $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
+
+# music.c: партитурный синтезатор (-DMUSIC_ONLY)
+ZFLAGS   = +vector06c --no-crt -I. -I$(LIB) -DMUSIC_ONLY
+
+.PHONY: all deploy clean full samples
+
+all: $(TARGET)
+
+full: clean all deploy
+
+samples:
+	python3 gen_samples.py
+
+nes_drums.h nes_drums.c: src/nes_drums.mus $(SAMPLES)
+	$(MUS2INC) $< -o nes_drums.inc --name nes_drums --shared-lib
+
+rom_data/logo_bmp.inc: rom_data/logo.bmp
+	python3 $(BMP2INC) --bg-black $<
+
+rom_data/examples.inc: src/examples.mus nes_drums.h
+	$(MUS2INC) $< -o $@ --name examples_music --use-shared nes_drums --allow-len-mismatch
+
+rom_data/jackal.inc: src/jackal.txt nes_drums.h
+	$(TXT2INC) $< -o $@ --name jackal_music --use-shared nes_drums --allow-len-mismatch
+
+rom_data/castlevania.inc: src/castlevania.txt nes_drums.h
+	$(TXT2INC) $< -o $@ --name castlevania_music --use-shared nes_drums --allow-len-mismatch
+
+$(TARGET): $(INCS) $(SRCS)
+	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
+	    $(ZCC) $(ZFLAGS) $(SRCS) -o $@
+	@echo "=== Done: $@ ==="
+	@ls -l $@
+
+include $(PROJECT_ROOT)finally.mk
+
+clean:
+	rm -f $(TARGET) *.o zcc_opt.def *.c.asm \
+		 nes_drums.h nes_drums.c nes_drums.inc \
+		rom_data/logo_bmp.inc \
+		rom_data/examples.inc rom_data/jackal.inc rom_data/castlevania.inc

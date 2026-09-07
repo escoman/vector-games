@@ -4,21 +4,21 @@
 # make clean    — убрать артефакты сборки всех проектов + папку release/;
 # make full     — clean + сборка всех проектов.
 
-MUSIC_ROMS = music-roms/castlevania \
-             music-roms/drums \
-             music-roms/ducktales2 \
-             music-roms/jackal \
-             music-roms/nes_drums \
-             music-roms/supermario \
-             music-roms/synth
+MUSIC_ROMS = roms/musics/castlevania \
+             roms/musics/drums \
+             roms/musics/ducktales2 \
+             roms/musics/jackal \
+             roms/musics/nes_drums \
+             roms/musics/supermario \
+             roms/musics/synth
 
-TESTS = tests/512x256 \
-        tests/cls \
-        tests/clrs \
-        tests/dt2 \
-        tests/dt2_512 \
-        tests/dt2_lz \
-        tests/scr_modes
+TESTS = roms/tests/512x256 \
+        roms/tests/cls \
+        roms/tests/clrs \
+        roms/tests/dt2 \
+        roms/tests/dt2_512 \
+        roms/tests/dt2_lz \
+        roms/tests/scr_modes
 
 ALL = $(MUSIC_ROMS) $(TESTS)
 
@@ -31,20 +31,20 @@ TEST_NAMES      = $(foreach p,$(TESTS),$(p)/$(notdir $(p)).rom)
 
 all:
 	@for p in $(ALL); do $(MAKE) -C $$p || exit 1; done
-	@mkdir -p $(RELEASE)/music-roms $(RELEASE)/tests
+	@mkdir -p $(RELEASE)/musics $(RELEASE)/tests
 	@for rom in $(MUSIC_ROM_NAMES); do \
-		if [ -f "$$rom" ]; then cp -f "$$rom" $(RELEASE)/music-roms/; fi; \
+		if [ -f "$$rom" ]; then cp -f "$$rom" $(RELEASE)/musics/; fi; \
 	done
 	@for rom in $(TEST_NAMES); do \
 		if [ -f "$$rom" ]; then cp -f "$$rom" $(RELEASE)/tests/; fi; \
 	done
 	@echo "=== Release ready ==="
-	@echo "music-roms/:" && ls -1 $(RELEASE)/music-roms/*.rom 2>/dev/null
+	@echo "musics/:" && ls -1 $(RELEASE)/musics/*.rom 2>/dev/null
 	@echo "tests/:" && ls -1 $(RELEASE)/tests/*.rom 2>/dev/null
 
 clean:
 	@for p in $(ALL); do $(MAKE) -C $$p clean; done
-	@rm -rf $(RELEASE)/music-roms $(RELEASE)/tests
+	@rm -rf $(RELEASE)/musics $(RELEASE)/tests
 	@echo "=== All cleaned ==="
 
 full: clean all

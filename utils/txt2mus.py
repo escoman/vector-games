@@ -875,7 +875,7 @@ def self_test():
 
     # 8) эталон track_0.txt, если доступен рядом с репозиторием
     ref_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            '..', 'music-roms', 'jackal', 'music_txt',
+                            '..', 'roms', 'musics', 'jackal', 'music_txt',
                             'track_0.txt')
     if os.path.isfile(ref_path):
         with open(ref_path, encoding='utf-8') as f:

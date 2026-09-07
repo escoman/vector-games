@@ -17,29 +17,29 @@ __pycache__/
 *.pyc
 
 # Генерируемые mus2inc.py партитуры (источники — music/*.mus)
-music-roms/synth/rom_data/*.inc
-music-roms/jackal/rom_data/*_music.inc
-music-roms/jackal/nes_drums.h
-music-roms/jackal/nes_drums.c
-music-roms/nes_drums/rom_data/*.inc
-music-roms/nes_drums/nes_drums.h
-music-roms/nes_drums/nes_drums.c
-music-roms/castlevania/rom_data/*_music.inc
-music-roms/castlevania/nes_drums.h
-music-roms/castlevania/nes_drums.c
-music-roms/ducktales2/rom_data/*_music.inc
-music-roms/ducktales2/rom_data/title_bmp.inc
-music-roms/supermario/rom_data/*_music.inc
-music-roms/supermario/rom_data/title_bmp.inc
+roms/musics/synth/rom_data/*.inc
+roms/musics/jackal/rom_data/*_music.inc
+roms/musics/jackal/nes_drums.h
+roms/musics/jackal/nes_drums.c
+roms/musics/nes_drums/rom_data/*.inc
+roms/musics/nes_drums/nes_drums.h
+roms/musics/nes_drums/nes_drums.c
+roms/musics/castlevania/rom_data/*_music.inc
+roms/musics/castlevania/nes_drums.h
+roms/musics/castlevania/nes_drums.c
+roms/musics/ducktales2/rom_data/*_music.inc
+roms/musics/ducktales2/rom_data/title_bmp.inc
+roms/musics/supermario/rom_data/*_music.inc
+roms/musics/supermario/rom_data/title_bmp.inc
 
 # Генерируемые gen_main.py main.c
-music-roms/*/main.c
-!music-roms/composer/main.c
+roms/musics/*/main.c
+!roms/musics/composer/main.c
 
 # Тесты: генерируемые .inc и копированные BMP
-tests/dt2/dt2.bmp
-tests/dt2/dt2_bmp.inc
-tests/dt2_512/dt2_512.bmp
-tests/dt2_512/dt2_512_bmp.inc
-tests/assets/dt2_bmp.inc
-tests/assets/logo16_bmp.inc
+roms/tests/dt2/dt2.bmp
+roms/tests/dt2/dt2_bmp.inc
+roms/tests/dt2_512/dt2_512.bmp
+roms/tests/dt2_512/dt2_512_bmp.inc
+roms/tests/assets/dt2_bmp.inc
+roms/tests/assets/logo16_bmp.inc

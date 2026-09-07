@@ -1,0 +1,19 @@
+# Makefile — сборка castlevania.rom для Вектора-06Ц.
+#
+# Данные треков и конфигурация меню — в rom.json.
+# Общие правила сборки — в ../soundtracks/soundtrack.mk.
+#
+# make          — собрать castlevania.rom;
+# make clean    — убрать все артефакты (включая сгенерированный main.c);
+# make deploy   — собрать и положить ROM в папку ROMS эмулятора PPSSPP;
+# make full     — clean + deploy.
+
+TARGET = castlevania.rom
+SONGS  = track_0 track_1 track_2 track_3 track_4 track_5 track_6 track_7 track_8
+
+.PHONY: full
+full: clean all deploy
+
+include ../../../config.mk
+include ../soundtracks/soundtrack.mk
+include $(PROJECT_ROOT)finally.mk
