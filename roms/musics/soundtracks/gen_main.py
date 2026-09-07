@@ -15,6 +15,13 @@ import struct
 import sys
 
 
+def index_to_key(i):
+    """Converts track index to key character: 0-8 → '1'-'9', 9-14 → 'A'-'F'."""
+    if i < 9:
+        return str(i + 1)
+    return chr(ord('A') + i - 9)
+
+
 def read_bmp_width(json_path):
     """Читает ширину из BMP-файла заголовка (rom_data/title.bmp)."""
     bmp = os.path.join(os.path.dirname(json_path), 'rom_data', 'title.bmp')
@@ -114,9 +121,9 @@ static void play_song(const music_song_t *song, unsigned char loop)
     for i, t in enumerate(tracks):
         row = i // cols
         col = i % cols
-        dx = (32 // cols) * col if col else x_left
+        dx = ((32 + cols - 1) // cols) * col if col else x_left
         dy = y_start + row * y_step
-        w(f'    {{ {dx}u, {dy}u, "{t["key"]}-{t["name"]}" }},\n')
+        w(f'    {{ {dx}u, {dy}u, "{index_to_key(i)}-{t["name"]}" }},\n')
 
     w(f'    {{ 0u,  {stop_dy}u, "0-STOP MUSIC" }},\n')
     w('\n')

@@ -2,12 +2,12 @@
   "title": "DUCKTALES 2 (NES) SOUNDTRACKS:",
   "title_dx": 8,
   "tracks": [
-    {"key": "1", "name": "TRACK 0",  "file": "track_0"},
-    {"key": "2", "name": "TRACK 1",  "file": "track_1"},
-    {"key": "3", "name": "TRACK 2",  "file": "track_2"},
-    {"key": "4", "name": "TRACK 3",  "file": "track_3"},
-    {"key": "5", "name": "TRACK 4",  "file": "track_4"},
-    {"key": "6", "name": "TRACK 19",  "file": "track_19"}
+    {"name": "TRACK 0",  "file": "track_0"},
+    {"name": "TRACK 1",  "file": "track_1"},
+    {"name": "TRACK 2",  "file": "track_2"},
+    {"name": "TRACK 3",  "file": "track_3"},
+    {"name": "TRACK 4",  "file": "track_4"},
+    {"name": "TRACK 19",  "file": "track_19"}
   ],
   "layout": {
     "cols": 2,
