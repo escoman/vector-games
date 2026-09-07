@@ -11,7 +11,7 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
-       main.c
+       fire.asm main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
 

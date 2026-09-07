@@ -1,25 +1,12 @@
 /*
  * fire2.c — огонь для Вектора-06Ц.
  *
- * Внутренний буфер 64×64 байт (каждый байт — цвет 0–15).
- * Вывод на экран 256×256×16: каждый пиксель буфера увеличивается в 4 раза.
+ * Вся логика (ГСЧ, буфер, генерация, рендеринг) — в fire.asm.
+ * Здесь только инициализация графики и основной цикл.
  *
- * Алгоритм огня — как в fire.html:
- *   1. Нижняя строка буфера — случайные «очаги» пламени.
- *   2. Каждая следующая строка: цвет берётся из строки ниже
- *      со случайным горизонтальным сдвигом (−1, 0, +1) и затуханием.
- *
- * Адресация VRAM (256×256, столбцы снизу вверх):
- *   addr = plane_base + col×256 + (255 − row)
- *   Плоскости: 0 → E000, 1 → C000, 2 → A000, 3 → 8000
- *
- * Байт плоскости содержит 8 горизонтальных пикселей (бит 7 = левый).
- * Для масштабирования 4× один байт покрывает 2 столбца и 1 строку
- * из 4×4-блока: биты 7–4 — столбцы 0–1, биты 3–0 — столбцы 2–3.
- * Старший бит nibble = верхняя строка блока, младший = нижняя.
- *
- * Две соседние точки буфера (0xF0 — левый пиксель, 0x0F — правый)
- * при цвете 0x0F (все плоскости) дают 4 строки 0xFF во всех плоскостях.
+ * Размер буфера огня задаётся константами в fire.asm:
+ *   FIRE_W  — ширина в пикселях (64)
+ *   FIRE_H  — высота в пикселях (64)
  */
 
 #include "v06.h"
@@ -48,181 +35,10 @@ static const unsigned char fire_palette[16] = {
     V06_RGB(7, 7, 3)        /* 15: белое пламя            */
 };
 
-/* ------------------------------ ГСЧ -----------------------------------
- * Предгенерированная таблица случайных чисел (256 байт).
- * --------------------------------------------------------------- */
-
-static unsigned char rnd_table[256];
-static unsigned char rnd_idx;
-
-static void rnd_init(void)
-{
-    unsigned int seed = 0x1234;
-    unsigned char i = 0;
-    do {
-        seed = seed * 251 + 73;
-        rnd_table[i] = (unsigned char)(seed >> 8);
-    } while (++i != 0);
-    rnd_idx = 0;
-}
-
-#define rnd_next()  (rnd_table[rnd_idx++])
-
-/* -------------------------- БУФЕР ОГНЯ -------------------------------- */
-
-#define FIRE_W  64
-#define FIRE_H  64
-
-/* 2 точки по 4 бита в одном байте */
-static unsigned char fire_buf[(FIRE_W * FIRE_H) >> 1];
-
-/* Получить цвет точки (x, y), 0..15 */
-static unsigned char get_fire_buf(unsigned char x, unsigned char y)
-{
-    unsigned int index = ((unsigned int)y * FIRE_W + x) >> 1;
-    unsigned char value = fire_buf[index];
-
-    if (x & 1)
-        return value & 0x0F;          /* правая точка */
-    else
-        return value >> 4;            /* левая точка */
-}
-
-/* Записать цвет точки (x, y), 0..15 */
-static void put_fire_buf(unsigned char x, unsigned char y,
-                         unsigned char value)
-{
-    unsigned int index = ((unsigned int)y * FIRE_W + x) >> 1;
-    unsigned char cur = fire_buf[index];
-
-    if (x & 1)
-        /* Правая точка — младшая тетрада */
-        fire_buf[index] = (cur & 0xF0) | (value & 0x0F);
-    else
-        /* Левая точка — старшая тетрада */
-        fire_buf[index] = (cur & 0x0F) | ((value & 0x0F) << 4);
-}
-
-/* ----------------------- АЛГОРИТМ ОГНЯ -------------------------------
- * Классический алгоритм из fire.html:
- *   1. Верхняя строка (y = 0): случайные очаги — источник огня.
- *   2. Строки y = 1 .. FIRE_H-1: берём пиксель из строки ВЫШЕ (y-1)
- *      со случайным сдвигом x (−1, 0, +1), вычитаем затухание.
- *      В нижней половине — дополнительное затухание (острые вершины).
- *   3. При маппинге y=0 → ofs=0 (низ экрана) огонь растёт снизу вверх.
- * --------------------------------------------------------------- */
-
-static void fire_generate(unsigned char power)
-{
-    unsigned char x, y;
-    unsigned char above, decay;
-    signed char shift;
-
-    /* 1. Верхняя строка — «очаги» пламени (источник у основания) */
-    for (x = 0; x < FIRE_W; x++) {
-        if (rnd_next() < power) {
-            put_fire_buf(x, 0, 15);
-        } else if (rnd_next() > 128) {
-            unsigned char current = get_fire_buf(x, 0);
-
-            put_fire_buf(x, 0,
-                (current > 2) ? current - 2 : 0);
-        }
-    }
-
-    /* 2. Огонь поднимается: от строки 0 к строке FIRE_H-1 */
-    for (y = 1; y < FIRE_H; y++) {
-        for (x = 0; x < FIRE_W; x++) {
-            /* Случайный сдвиг −1, 0, +1 */
-            shift = (signed char)(rnd_next() % 3) - 1;
-            if (shift < 0)       shift = FIRE_W - 1;
-            else if (shift >= FIRE_W) shift = 0;
-
-            above = get_fire_buf(
-                (unsigned char)((signed char)x + shift),
-                (unsigned char)(y - 1)
-            );
-
-            decay = rnd_next() & 1;
-
-            if (y < FIRE_H / 2 && (rnd_next() > 178))
-                decay += 1;
-
-            put_fire_buf(
-                x,
-                y,
-                (above > decay) ? above - decay : 0
-            );
-        }
-    }
-}
-
-/* ----------------------- РЕНДЕРИНГ НА ЭКРАН --------------------------
- * Каждый пиксель буфера 64×64 → блок 4×4 на экране 256×256.
- *
- * Для каждой строки блока (4 строки) записываем один байт в каждую
- * из 4 плоскостей. Байт содержит 2 столбца блока (по 4 пикселя):
- *   биты 7–4: столбцы 0–1 (левая пара), бит 7 = строка 0
- *   биты 3–0: столбцы 2–3 (правая пара), бит 3 = строка 0
- *
- * Два пикселя буфера обрабатываются за раз:
- *   byte = (color_left << 4) | color_right
- *   Если цвет = 0x0F (все 4 плоскости активны) → байт = 0xFF.
- * --------------------------------------------------------------- */
-
-static void fire_render(void)
-{
-    static const unsigned int plane_bases[4] = {
-        0xE000u,  /* плоскость 0 (бит 0) */
-        0xC000u,  /* плоскость 1 (бит 1) */
-        0xA000u,  /* плоскость 2 (бит 2) */
-        0x8000u   /* плоскость 3 (бит 3) */
-    };
-
-    unsigned char fx, fy, p, r;
-
-    for (fy = 0; fy < FIRE_H; fy++) {
-        for (fx = 0; fx < FIRE_W; fx += 2) {
-            /* Два соседних пикселя буфера */
-            unsigned char cl = get_fire_buf(fx, fy);
-            unsigned char cr = get_fire_buf(fx + 1, fy);
-
-            if ((cl | cr) == 0)
-                continue;   /* оба пикселя чёрные — пропускаем */
-
-            /* Адрес блока 4×4 в плоскости:
-             *   VRAM-колонка = sx/8 = fx/2
-             *   col_offset   = (fx/2)*256
-             *   y=0 (источник огня) → низ экрана (ofs=0),
-             *   y=63 (вершины пламени) → верх (ofs≈255).
-             *   ofs = fy*4 + r.
-             *   block_addr = (fx/2)*256 + fy*4. */
-            {
-                unsigned int block_addr =
-                    ((unsigned int)(fx >> 1) << 8)
-                    + (unsigned int)(fy << 2);
-
-                for (p = 0; p < 4; p++) {
-                    /* Бит p каждого пикселя → своя плоскость.
-                     * Левый пиксель → биты 7–4, правый → биты 3–0.
-                     * Если бит = 1, все 4 столбца пикселя горят (0xF). */
-                    unsigned char byte_val = (unsigned char)(
-                        ((cl >> p) & 1) * 0xF0
-                        + ((cr >> p) & 1) * 0x0F);
-
-                    if (byte_val == 0)
-                        continue;
-
-                    for (r = 0; r < 4; r++) {
-                        unsigned int ofs = block_addr + r;
-                        *((unsigned char *)(plane_bases[p] + ofs))
-                            = byte_val;
-                    }
-                }
-            }
-        }
-    }
-}
+/* --- функции огня (fire.asm) --- */
+extern void rnd_init(void) __z88dk_callee;
+extern void fire_generate(unsigned char power) __z88dk_callee;
+extern void fire_render(void) __z88dk_callee;
 
 /* ----------------------------- MAIN ---------------------------------- */
 
