@@ -43,3 +43,5 @@ roms/tests/dt2_512/dt2_512.bmp
 roms/tests/dt2_512/dt2_512_bmp.inc
 roms/tests/assets/dt2_bmp.inc
 roms/tests/assets/logo16_bmp.inc
+
+!roms/redesign/putup/src/putup.rom
