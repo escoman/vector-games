@@ -112,6 +112,15 @@ Workflow:
 
 **Запрещено:** вручную генерировать JSON RDB, редактировать `.rdb` как текст, генерировать `.map` для хранения результатов.
 
+### Функции vs RDB-объекты
+
+| Сущность | Создание | Переименование | Удаление |
+|----------|----------|----------------|----------|
+| Function symbol | `debug_create_function` | `debug_rename_function` | `debug_delete_function` |
+| RDB object | `debug_add_rdb_object` | `debug_update_rdb_object` | `debug_remove_rdb_object` |
+
+`debug_rename_function` работает только с function symbols. Для переименования RDB-объекта используй `debug_update_rdb_object`.
+
 ### ROM Mapping Entry Point
 
 Первичное построение карты ROM всегда начинается с `0x0000`. `_main` не является точкой входа ROM mapping.
@@ -125,14 +134,14 @@ ROM mapping незавершён без:
 
 ## MCP Tools
 
-Сервер `vector-debugger` предоставляет 54 инструмента `debug_*`:
+Сервер `vector-debugger` предоставляет 55 инструментов `debug_*`:
 
 - **Execution**: `debug_run`, `debug_pause`, `debug_step`, `debug_reset`, `debug_is_running`
 - **CPU**: `debug_get_cpu_state`, `debug_get_registers`, `debug_set_register`
 - **Memory**: `debug_read_memory`, `debug_write_memory`, `debug_read_memory_range`
 - **I/O**: `debug_read_io`, `debug_write_io`
 - **Breakpoints**: `debug_set_breakpoint`, `debug_remove_breakpoint`, `debug_list_breakpoints`, `debug_clear_breakpoints`
-- **Disassembly & Analysis**: `debug_disassemble`, `debug_analyze_code`, `debug_get_instruction_history`, `debug_get_execution_trace`
+- **Disassembly & Analysis**: `debug_disassemble`, `debug_analyze_code`, `debug_disassemble_range`, `debug_get_instruction_history`, `debug_get_execution_trace`
 - **Stack**: `debug_get_stack`
 - **Symbols**: `debug_get_symbols`, `debug_get_function`, `debug_get_function_context`, `debug_get_xrefs`, `debug_get_call_graph`
 - **Memory Map / Video**: `debug_get_memory_map`, `debug_get_vram_info`, `debug_get_screen_info`
@@ -168,6 +177,41 @@ ROM mapping незавершён без:
 
 - Спорные участки проверяй дополнительными MCP-запросами (execution trace, I/O trace).
 - Принцип: Suspicious claim → Additional evidence → Validated / Rejected / Unknown.
+
+---
+
+## Workflow: Range Disassembly
+
+Для последовательного дизассемблирования диапазона используй `debug_disassemble_range`:
+
+```
+debug_read_memory_range
+        ↓
+debug_analyze_code
+        ↓
+получить code regions
+        ↓
+debug_disassemble_range
+        ↓
+получить инструкции + branch targets
+        ↓
+анализ функций / RDB
+```
+
+Для отдельной функции:
+```
+RDB function
+    ↓
+address + size
+    ↓
+debug_disassemble_range
+```
+
+**Важно:**
+- Не запускай `debug_analyze_code` повторно для каждого байта или инструкции
+- Используй `debug_disassemble_range` вместо серии `debug_disassemble`
+- Инструмент не выполняет CFG traversal — только последовательное дизассемблирование
+- Для CFG-анализа используй `debug_analyze_code`
 
 ---
 

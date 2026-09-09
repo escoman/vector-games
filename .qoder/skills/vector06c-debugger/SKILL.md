@@ -138,6 +138,20 @@ RDB (ROM Database) является **единственным хранилищ�
 - Вручную генерировать `.map` для хранения результатов анализа.
 - Сохранять результаты анализа вне RDB.
 
+### Функции vs RDB-объекты
+
+В debugger существуют **две разные сущности**:
+
+| Сущность | Создание | Переименование | Удаление |
+|----------|----------|----------------|----------|
+| Function symbol | `debug_create_function` | `debug_rename_function` | `debug_delete_function` |
+| RDB object | `debug_add_rdb_object` | `debug_update_rdb_object` | `debug_remove_rdb_object` |
+
+**Важно:**
+- `debug_rename_function` работает **только** с function symbols, не с RDB-объектами.
+- Для переименования RDB-объекта используй `debug_update_rdb_object(address, name, type, size)` — он обновляет имя, тип и размер существующего объекта.
+- Не нужно удалять и пересоздавать RDB-объект для переименования — используй `debug_update_rdb_object`.
+
 ### RDB Links — связи между объектами
 
 Связи представляют подтверждённые семантические отношения между объектами RDB.
@@ -405,7 +419,7 @@ Hardware status: UNVERIFIED
 
 ## MCP Tools
 
-Сервер `vector-debugger` предоставляет 52 инструмента `debug_*`:
+Сервер `vector-debugger` предоставляет 55 инструментов `debug_*`:
 
 **Execution**: `debug_run`, `debug_pause`, `debug_step`, `debug_reset`, `debug_is_running`
 
@@ -417,7 +431,7 @@ Hardware status: UNVERIFIED
 
 **Breakpoints**: `debug_set_breakpoint`, `debug_remove_breakpoint`, `debug_list_breakpoints`, `debug_clear_breakpoints`
 
-**Disassembly**: `debug_disassemble`, `debug_analyze_code`, `debug_get_instruction_history`, `debug_get_execution_trace`
+**Disassembly & Analysis**: `debug_disassemble`, `debug_analyze_code`, `debug_disassemble_range`, `debug_get_instruction_history`, `debug_get_execution_trace`
 
 **Stack**: `debug_get_stack`
 
@@ -512,6 +526,76 @@ Confidence: [High/Medium/Low]
 - Добавлять собственные поля или секции, не описанные в `debugger/docs/z88dk_map.md`.
 
 Если данных недостаточно для корректной генерации — сообщи, какие данные отсутствуют.
+
+---
+
+## Range Disassembly
+
+Для последовательного анализа диапазона ROM используй `debug_disassemble_range` вместо серии вызовов `debug_disassemble`.
+
+**Когда использовать:**
+- Получить полный кодовый диапазон
+- Проверить последовательность инструкций
+- Исследовать функцию
+- Проверить участок ROM
+- Подготовить данные для анализа
+- Получить branch targets
+
+**Параметры:**
+- `address`: начальный адрес (0..65535)
+- `size`: количество байт (1..16384)
+
+**Результат:**
+Каждая инструкция содержит:
+- `address`: адрес инструкции
+- `bytes`: байты инструкции
+- `mnemonic`: мнемоника (JMP, CALL, RET, etc.)
+- `operands`: операнды
+- `size`: размер инструкции
+- `branch_target`: адрес перехода (для JMP/CALL/RST) или null
+- `branch_type`: тип перехода ("JMP", "JCC", "CALL", "RET", "RST") или null
+
+**Важно:**
+- Дизассемблирование последовательное, без CFG traversal
+- Не изменяет RDB
+- Не выполняет инструкций
+- Для CFG-анализа используй `debug_analyze_code`
+
+**Пример workflow:**
+```
+debug_read_memory_range
+        ↓
+debug_analyze_code
+        ↓
+получить code regions
+        ↓
+debug_disassemble_range
+        ↓
+получить инструкции + branch targets
+        ↓
+анализ функций / RDB
+```
+
+### Multi-Entry Analysis (Stage 6.19)
+
+`debug_analyze_code` поддерживает несколько точек входа:
+
+```json
+{"addresses": [0, 256, 512]}
+```
+
+Если анализ от `0x0000` покрывает только небольшую часть ROM, агент должен:
+
+1. получить известные RDB functions (`debug_list_rdb_objects` / `debug_get_symbols`);
+2. собрать их addresses;
+3. запустить `debug_analyze_code` с несколькими entry points;
+4. сравнить coverage (поле `code_bytes` / `instruction_count`);
+5. использовать полученный результат как evidence.
+
+**Важно:**
+- Не делать вывод `unreachable = data` только на основании отсутствия статической достижимости.
+- `start_address` и `addresses` — взаимоисключающие параметры.
+- Результат содержит `entry_points`, `code_bytes`, `instruction_count`.
 
 ---
 
