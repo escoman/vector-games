@@ -2,747 +2,684 @@
   "format": "rdb",
   "objects": [
     {
-      "address": "0x0100",
-      "comment": "Точка входа. DI; JP init (0x0B57). Также содержит подфункции: draw_sprite_at (0x0104) — вывод спрайта по координатам из (HL) в VRAM 4 тайлами; anim_effect (0x0121) — анимация с задержкой через delay_loop (0x0EF7)",
+      "address": "0x0000",
       "links": [
-        "0x0B77",
-        "0x0104",
-        "0x0121"
+        "0x0B57"
       ],
-      "name": "reset_entry",
-      "size": 4,
+      "name": "reset_vector",
+      "properties": {
+        "interrupt_type": "RESET vector — JMP 0x0B57 (rom_init). Executed on CPU reset/power-on.",
+        "vector_target": "0x0B57 (rom_init)"
+      },
+      "size": 3,
+      "type": "data"
+    },
+    {
+      "address": "0x0038",
+      "links": [
+        "0x03A4"
+      ],
+      "name": "rst7_vblank_vector",
+      "properties": {
+        "frequency_hz": "~50.08 Hz (312 lines × 768 × 12 MHz). Source: VECTOR_VERIFIED.md §10.",
+        "interrupt_type": "RST 7 (VBlank) — JMP 0x03A4 (isr_handler). ~50 Hz, maskable via EI/DI.",
+        "mechanism": "VSDL: inject RST 7 opcode (0xFF) at line 0, pixel 174. EMU80: cpu->intRst(7) when m_intsEnabled.",
+        "vector_target": "0x03A4 (isr_handler)"
+      },
+      "size": 3,
+      "type": "data"
+    },
+    {
+      "address": "0x0100",
+      "comment": "ROM entry point. DI; JMP 0x0B57 (rom_init)",
+      "links": [
+        "0x0B57"
+      ],
+      "name": "rom_entry",
+      "properties": {
+        "params": "none",
+        "returns": "void (JMP to rom_init)"
+      },
       "type": "function"
     },
     {
       "address": "0x0145",
-      "comment": "Копирует блок в VRAM по указателю (0x0B53), продвигает указатель. Вызывает put_char_vram (0x0800). Сохраняет новый указатель в 0x0B53",
-      "links": [
-        "0x0800",
-        "0x014F"
-      ],
-      "name": "copy_block_to_ptr",
-      "size": 14,
+      "comment": "Data reading loop. Reads byte from [HL], calls 0x0803 (draw), advances HL. Called 5x from main_logic.",
+      "name": "data_read_loop",
+      "properties": {
+        "params": "A=data_byte, HL=source_ptr (passed through to draw_to_vram)",
+        "returns": "void (advances HL, saves to [0x0B53])"
+      },
       "type": "function"
     },
     {
       "address": "0x014F",
-      "comment": "Сохраняет HL в указатель VRAM (0x0B53). SHLD 0B53; RET",
-      "name": "save_hl_to_ptr",
+      "name": "save_hl_ptr",
       "size": 4,
-      "type": "function"
-    },
-    {
-      "address": "0x0161",
-      "comment": "Таблица преобразования: ANI 0F; LXI H,016C; DAD D; MOV A,M. Возвращает байт из таблицы по индексу A (0-15)",
-      "links": [
-        "0x1F00"
-      ],
-      "name": "lookup_table_0161",
-      "size": 11,
       "type": "function"
     },
     {
       "address": "0x017C",
-      "comment": "DEC A; JM skip; XOR A; RET. Сравнение A с 0 с учётом знака. Используется для проверки границ и управления потоком",
-      "name": "decr_a_jm_cmp_l",
-      "size": 6,
+      "comment": "Decrement with wrap. A = (A-1) mod 8. If A goes negative, wraps to 7. Used for cycling through 8 states. Called from data_process_loop.",
+      "links": [
+        "0x019B"
+      ],
+      "name": "dec_mod8",
+      "properties": {
+        "params": "A=counter_value",
+        "returns": "A=(A-1) mod 8, wraps to 7 if negative"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x019B",
+      "comment": "Called from dec_mod8 (0x017C). Reads data from 0x08D3 area. Used for 8-state cycling logic.",
+      "name": "sub_019B",
+      "properties": {
+        "params": "none (reads data from [0x08D3] via sub_032C)",
+        "returns": "A=data_value from table lookup"
+      },
       "type": "function"
     },
     {
       "address": "0x01A1",
-      "comment": "Вывод символа A в VRAM через указатель (0x0B53). Читает указатель, вызывает put_char_vram (0x0800), инкрементирует указатель",
-      "links": [
-        "0x0145"
-      ],
-      "name": "copy_block_advance",
-      "size": 13,
+      "comment": "Keyboard input handler. Scans via IN 01, checks bit 5 (ANI 20). Called 4x.",
+      "name": "kbd_input_handler",
+      "properties": {
+        "params": "none (reads keyboard via IN 01)",
+        "returns": "A=keyboard_state (bit 5 tested)"
+      },
       "type": "function"
     },
     {
-      "address": "0x01B0",
-      "comment": "Устанавливает VRAM-указатель (0x0B53) по координатам. D=строка, A=столбец. База из 0x08FF + calc_vram_addr (0x1BD4)",
-      "name": "set_vram_ptr_row_col",
-      "size": 11,
-      "type": "function"
-    },
-    {
-      "address": "0x01BC",
-      "comment": "Диспетчер команд музыки/вывода: ANI 0F → индекс в таблице переходов 0x01CD (16 записей). Вызывает обработчик через PCHL. Команды 0/2 — вывод голоса на VI53, 7 — завершение цикла. Вызывается из music_output (0x3C77)",
+      "address": "0x01AE",
+      "comment": "Reads X/Y from 0x08FE/0x08FF, calls sub_1BD4 for address calc, then JMP data_read_loop. Draws at screen coordinates.",
       "links": [
-        "0x3845"
+        "0x0145",
+        "0x1BD4"
       ],
-      "name": "cmd_dispatch",
-      "size": 17,
+      "name": "calc_and_draw",
+      "properties": {
+        "params": "none (reads X from [0x08FE], Y from [0x08FF])",
+        "returns": "void (sets up HL via calc_obj_addr, JMPs to data_read_loop)"
+      },
       "type": "function"
     },
     {
       "address": "0x0321",
-      "comment": "Посимвольный рендер строки из ROM в VRAM. HL=источник, цикл до нулевого байта",
+      "comment": "Data dispatch table. PCHL-based dispatch to sub-functions at 0x0439, 0x045E, 0x0483, 0x04A8, 0x04CD. Called from 0x01BC.",
       "links": [
-        "0x01A1"
+        "0x032C"
       ],
-      "name": "string_render",
-      "size": 94,
+      "name": "data_dispatch",
+      "properties": {
+        "params": "HL=data_stream_ptr (reads [HL], increments)",
+        "returns": "void (loop: reads bytes, calls kbd_input_handler until zero marker)"
+      },
       "type": "function"
     },
     {
       "address": "0x032C",
-      "comment": "XOR B; LD L,A; RET NC; INC H; RET. Прибавляет смещение к HL с учётом переноса через флаг C. Используется для расчёта адресов в таблицах",
-      "name": "xor_b_set_l",
-      "size": 5,
+      "comment": "Data reader. Called from data_dispatch (0x0321) and dispatch table (0x01BC). Reads data from [HL] via address table lookup.",
+      "name": "sub_032C",
+      "properties": {
+        "params": "A=index_value, HL=lookup_table_ptr",
+        "returns": "A=looked_up_value (16-bit address table lookup with carry math)"
+      },
       "type": "function"
     },
     {
       "address": "0x0331",
-      "comment": "Читает 16-бит число из (HL), конвертирует в десятичные ASCII-цифры делением на 10000/1000/100/10, выводит в VRAM через render_char. Использует 0x08E2 для подавления ведущих нулей",
-      "links": [
-        "0x0800"
-      ],
-      "name": "read_16bit",
-      "size": 10,
+      "name": "load_de_dispatch",
+      "size": 20,
       "type": "function"
     },
     {
       "address": "0x0383",
-      "comment": "Инициализация видео (OUT 0x10), установка ISR на 0x0038 (JMP 0x03A4), RST 0 на 0x0000 (JMP 0x0B57). Сохраняет параметры видео в 0x08CF/0x08D0. EI; RET",
+      "comment": "Interrupt vector setup. Writes JMP 0x03A4 at 0x0038 (RST 7), JMP 0x0B57 at 0x0001. Sets draw_offset=0xE0. OUT 0x10. EI; RET.",
       "links": [
-        "0x03A8"
+        "0x0000",
+        "0x0038"
       ],
-      "name": "init_sub",
-      "size": 33,
+      "name": "init_1",
+      "properties": {
+        "params": "none",
+        "returns": "void (sets up RST 7 vector at 0x0038, draw_offset=0xE0, EI)"
+      },
+      "size": 32,
       "type": "function"
     },
     {
-      "address": "0x03A8",
-      "comment": "ISR: счётчик кадров (0x08DF), сканирование клавиатуры (порты 0x02/0x0C), обновление VV55 (port 0x00/0x03). Патчится самомодификацией: CALL 0x3858 вместо NOP по 0x03F8 — вызов музыки",
+      "address": "0x03A4",
+      "comment": "Interrupt Service Routine. Saves regs, handles AY-3-8910 music playback, reads keyboard (IN 02), calls isr_anim_update. Vector at 0x0038 -> JMP 0x03A4.",
       "links": [
+        "0x384E",
+        "0x090F",
+        "0x08D3",
+        "0x08C3",
         "0x3858",
-        "0x3C77"
+        "0x08DF"
       ],
-      "name": "isr_keyboard_scan",
-      "size": 89,
+      "name": "isr_handler",
+      "properties": {
+        "interrupt_source": "RST 7 (VBlank), ~50 Hz, maskable",
+        "isr_phases": "1)Save regs 2)Inc frame_counter 3)AY sound update (15 regs) 4)Reset AY mux 5)Kbd scan 8 rows 6)Restore AY reg 7)CALL isr_anim_update 8)EI;RET",
+        "params": "none (ISR entry, CPU auto-pushes PC/PSW)",
+        "returns": "void (RET from interrupt, restores H/D/B/PSW)"
+      },
+      "size": 93,
       "type": "function"
     },
     {
       "address": "0x0401",
-      "comment": "Загрузка спрайтовых данных в VRAM 0x6000. Вызывает load_sprite_data (0x04CD), затем 4 функции трансформации спрайтов (отражение/поворот 8x8 пикселей)",
+      "comment": "Graphics data loop. 256 iterations from 0x6000. Calls sub_04CD, then main_logic(0439)/sub_045E/sub_0483/sub_04A8 per position. Processes graphic objects.",
       "links": [
+        "0x0483",
         "0x04CD",
         "0x0439",
-        "0x0539",
-        "0x051B"
+        "0x04A8",
+        "0x045E"
       ],
-      "name": "sub_0401",
-      "size": 46,
+      "name": "init_2",
+      "properties": {
+        "params": "none (self-contained init, sets HL=0x6000, DE=0x3041, B=0x00)",
+        "returns": "void (preserves all registers via PUSH/POP)"
+      },
       "type": "function"
     },
     {
       "address": "0x0439",
-      "comment": "4 подфункции трансформации спрайтов 8x8. Каждая читает 8 байт из (DE) в VRAM (HL), применяя отражение по горизонтали/вертикали/диагонали через битовые маски 0x80/0x40/0x20/0x10. Вызываются из sub_0401",
-      "name": "sub_0439",
-      "size": 226,
+      "comment": "Main game/menu logic. 226 bytes. Contains dispatch table and game state processing.",
+      "name": "main_logic",
+      "properties": {
+        "params": "HL=VRAM_buffer_ptr (0x6000 area), DE=data_source_ptr (from stack)",
+        "returns": "void (modifies 8 bytes at HL based on bit patterns from DE)"
+      },
       "type": "function"
     },
     {
-      "address": "0x051B",
-      "comment": "Графика спрайтов: тайлы 8x8 для мяча, ракеток и игровых объектов. Копируются в VRAM 0x6000 при инициализации",
-      "name": "sprite_graphics",
-      "size": 2085,
-      "type": "data"
+      "address": "0x045E",
+      "comment": "Graphics sub called from init_2. Part of the 256-iteration graphics processing loop.",
+      "name": "sub_045E",
+      "properties": {
+        "params": "HL=VRAM_buffer_ptr, DE=data_source_ptr (same as main_logic)",
+        "returns": "void (processes bit 6/3 patterns)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0483",
+      "comment": "Graphics sub called from init_2. Part of the 256-iteration graphics processing loop.",
+      "name": "sub_0483",
+      "properties": {
+        "params": "HL=VRAM_buffer_ptr, DE=data_source_ptr (same as main_logic)",
+        "returns": "void (processes bit 5/1 patterns)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x04A8",
+      "comment": "Graphics sub called from init_2. Part of the 256-iteration graphics processing loop.",
+      "name": "sub_04A8",
+      "properties": {
+        "params": "HL=VRAM_buffer_ptr, DE=data_source_ptr (same as main_logic)",
+        "returns": "void (processes bit 4/0 patterns)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x04CD",
+      "comment": "Graphics sub called from init_2. Part of the 256-iteration graphics processing loop.",
+      "name": "sub_04CD",
+      "properties": {
+        "params": "none (loads HL=0x2761, BC=0x6000 internally)",
+        "returns": "void (copies 8-byte blocks from ROM to VRAM 0x6000)"
+      },
+      "type": "function"
     },
     {
       "address": "0x0800",
-      "comment": "Вывод символа A в VRAM. Преобразует логические координаты экрана (HL) в физические адреса VRAM через битовые сдвиги (row*32 + col с учётом чередования строк). Использует SP для сохранения/восстановления",
-      "links": [
-        "0x1BD4"
-      ],
-      "name": "copy_block_vram",
-      "size": 163,
+      "comment": "Expand byte to VRAM. Params: A=data_byte (8 pixels), HL=encoded_vram_addr. Expands 1 byte into 8 identical vertical rows in VRAM using stack ops (SPHL/POP D). HL+0xB000 = VRAM base. Decodes X (bits 0-4) and Y (bits 3-5 of H) from HL. Preserves/restores SP via saved_sp_08DD. 163 bytes.",
+      "name": "draw_to_vram",
+      "properties": {
+        "calling_convention": "register-based: A=data_byte, HL=encoded_vram_addr",
+        "description": "Expands single byte A into 8 identical vertical pixel rows in VRAM. HL encodes VRAM destination address. Uses stack manipulation (SPHL, POP D, MOV M,E/D, INX H) for fast 8-row write. Preserves/restores SP via saved_sp_08DD.",
+        "param_A": "data_byte - 8 pixels to expand vertically into 8 rows",
+        "param_HL": "encoded VRAM address from calc_obj_addr (E*32 + D*256 + 0x5000)",
+        "returns": "void - writes 8 bytes to VRAM via stack operations"
+      },
       "type": "function"
     },
     {
-      "address": "0x08A3",
-      "comment": "Таблица инициализации: константы для настройки видео, таймеров и начальных параметров игры. Первые 16 байт — видео-параметры, далее нули",
-      "name": "init_data_table",
-      "size": 692,
-      "type": "data"
-    },
-    {
-      "address": "0x0A06",
-      "comment": "Пиксельная графика заголовка: вертикальные полосы (0x9B) и пробелы (0x20)",
-      "links": [
-        "0x0321"
-      ],
-      "name": "title_gfx_pattern",
-      "size": 64,
-      "type": "data"
-    },
-    {
-      "address": "0x0AC7",
-      "comment": "Тексты: 'PUSH SPACE KEY', 'MSX MAGAZINE, 1987', 'HI SCORE', 'ROUND', 'TIME', 'HURRY'",
-      "links": [
-        "0x0321"
-      ],
-      "name": "title_strings_1",
-      "size": 64,
-      "type": "data"
-    },
-    {
-      "address": "0x0AE9",
-      "comment": "Тексты: 'HURRY UP !!', 'GAME OVER', 'CONGRATULATION !!', 'HI SCORE', 'ROUND', 'TIME'",
-      "links": [
-        "0x0321"
-      ],
-      "name": "game_strings",
-      "size": 64,
-      "type": "data"
-    },
-    {
-      "address": "0x0AF3",
-      "comment": "Тексты: 'BONUS 5000' и другие игровые сообщения",
-      "links": [
-        "0x0321"
-      ],
-      "name": "game_strings_bonus",
-      "size": 32,
-      "type": "data"
-    },
-    {
-      "address": "0x0B57",
-      "comment": "Инициализация игры: очистка RAM/VRAM, копирование спрайтов и данных, настройка переменных",
-      "links": [
-        "0x0C95",
-        "0x3D4E",
-        "0x051B",
-        "0x08A6",
-        "0x08A3"
-      ],
-      "name": "init",
-      "size": 313,
-      "type": "function"
-    },
-    {
-      "address": "0x0C95",
-      "comment": "Цикл опроса клавиатуры на титульном экране: вызывает scan_key (0x0CA3), проверяет нажатие SPACE, выходит при успехе",
-      "links": [
-        "0x0CA5",
-        "0x0C9D"
-      ],
-      "name": "scan_loop",
-      "size": 8,
-      "type": "function"
-    },
-    {
-      "address": "0x0C9D",
-      "comment": "Основной цикл: CALL setup_timer (0x3DCD); JMP game_loop (0x197C)",
-      "links": [
-        "0x197C"
-      ],
-      "name": "main_loop",
-      "size": 6,
-      "type": "function"
-    },
-    {
-      "address": "0x0CA3",
-      "comment": "Опрос клавиатуры: проверка нажатия на титульном экране. Читает VRAM по адресу сканирования, ждёт нажатия SPACE",
-      "links": [
-        "0x0D41"
-      ],
-      "name": "game_logic_0CA3",
-      "size": 155,
-      "type": "function"
-    },
-    {
-      "address": "0x0D41",
-      "comment": "Диспетчер игровых объектов: читает тип из 0x0906, вызывает 0x0153 (draw_sprite). По типу (1-7) переходит на соответствующий обработчик: 1,2 — paddle_update, 3,4 — special_handler, 5 — score_handler, 6,7 — alt_handler",
-      "links": [
-        "0x1497",
-        "0x1489",
-        "0x14F9",
-        "0x1568",
-        "0x15DF",
-        "0x164F",
-        "0x16FC",
-        "0x17A8",
-        "0x1851",
-        "0x18FE",
-        "0x190D"
-      ],
-      "name": "game_logic_0D41",
-      "size": 144,
-      "type": "function"
-    },
-    {
-      "address": "0x0DD6",
-      "comment": "Основная игровая логика: столкновения мяча (0x74), начисление очков (0x6E-0x73), инкремент позиции. Продолжается в 0x0F09 через косвенные JMP",
-      "links": [
-        "0x0D41",
-        "0x0F09"
-      ],
-      "name": "game_logic_0DD6",
-      "size": 368,
-      "type": "function"
-    },
-    {
-      "address": "0x0F09",
-      "comment": "Обработка столкновений: проверка спец-символов (0x6E-0x73), начисление очков, обновление счёта",
-      "links": [
-        "0x0F39"
-      ],
-      "name": "game_logic_0F09",
-      "size": 48,
-      "type": "function"
-    },
-    {
-      "address": "0x0F39",
-      "comment": "Обработчик объекта типа 5: обновление позиции, вызов draw_sprite, проверка границ",
-      "links": [
-        "0x0F63"
-      ],
-      "name": "game_logic_0F39",
-      "size": 42,
-      "type": "function"
-    },
-    {
-      "address": "0x0F63",
-      "comment": "Обработчик объекта типа 6: обновление координат, вызов draw_sprite",
-      "links": [
-        "0x0F6D"
-      ],
-      "name": "game_logic_0F63",
-      "size": 10,
-      "type": "function"
-    },
-    {
-      "address": "0x0F6D",
-      "comment": "Обработчик объекта типа 7: сложная логика обновления, вызов подфункций, переход на 0x0E85",
-      "name": "game_logic_0F6D",
-      "size": 103,
-      "type": "function"
-    },
-    {
-      "address": "0x1197",
-      "comment": "Обновление счёта/состояния: отображение VRAM-буфера, проверка специального символа (0x0B3D), инкремент уровня при достижении порога. Вызывает render_score (0x11E9) и advance_level_counter (0x08FC += 0x07D0)",
-      "links": [
-        "0x126A",
-        "0x1204"
-      ],
-      "name": "game_logic_1197",
-      "size": 106,
-      "type": "function"
-    },
-    {
-      "address": "0x1204",
-      "comment": "Отображение уровня и жизней: render_number для уровня (0x08F5), вывод текста из ROM. Также sub_121A — отображение текущего счёта и рекорда через render_number",
-      "links": [
-        "0x0331"
-      ],
-      "name": "game_logic_1204",
-      "size": 78,
-      "type": "function"
-    },
-    {
-      "address": "0x1252",
-      "comment": "Данные уровней/экранов. Содержит конфигурацию объектов уровня",
-      "links": [
-        "0x13CA",
-        "0x13AA"
-      ],
-      "name": "game_data_1252",
-      "size": 184,
-      "type": "data"
-    },
-    {
-      "address": "0x130A",
-      "comment": "Обновление позиций 3 мячей: для каждого читает координаты из 0x0909/0x090A, проверяет ненулевые, вызывает draw_sprite_at (0x0104), вычисляет адрес через add_offset_to_hl (0x032C), вызывает draw_paddle_segment (0x1BA8)",
-      "links": [
-        "0x0104",
-        "0x032C",
-        "0x1BA8",
-        "0x1B87"
-      ],
-      "name": "game_logic_130A",
-      "size": 160,
-      "type": "function"
-    },
-    {
-      "address": "0x13AA",
-      "comment": "Таблица данных игровой логики: координаты, параметры движения, условия столкновений. Используется из game_logic_0DD6",
-      "name": "game_data_13AA",
-      "size": 1524,
-      "type": "data"
-    },
-    {
-      "address": "0x1489",
-      "comment": "Обработчик объекта 1: обновление позиции и отрисовка. Вызывается через CZ из game_logic_0DD6",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_1",
-      "size": 61,
-      "type": "function"
-    },
-    {
-      "address": "0x14F9",
-      "comment": "Обработчик объекта 2: аналогично объекту 1",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_2",
-      "size": 60,
-      "type": "function"
-    },
-    {
-      "address": "0x1568",
-      "comment": "Обработчик объекта 3: обновление и отрисовка",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_3",
-      "size": 57,
-      "type": "function"
-    },
-    {
-      "address": "0x15DF",
-      "comment": "Обработчик объекта 4: обновление и отрисовка",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_4",
-      "size": 61,
-      "type": "function"
-    },
-    {
-      "address": "0x164F",
-      "comment": "Обработчик объекта 5: сложная логика, 108 байт",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_5",
-      "size": 108,
-      "type": "function"
-    },
-    {
-      "address": "0x16FC",
-      "comment": "Обработчик объекта 6: сложная логика, 107 байт",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_6",
-      "size": 107,
-      "type": "function"
-    },
-    {
-      "address": "0x17A8",
-      "comment": "Обработчик объекта 7: сложная логика, 104 байта",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_7",
-      "size": 104,
-      "type": "function"
-    },
-    {
-      "address": "0x1851",
-      "comment": "Обработчик объекта 8: сложная логика, 108 байт",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_8",
-      "size": 108,
-      "type": "function"
-    },
-    {
-      "address": "0x18FE",
-      "comment": "Обработчик объекта 9: короткий, 14 байт",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_9",
-      "size": 14,
-      "type": "function"
-    },
-    {
-      "address": "0x190D",
-      "comment": "Обработчик объекта 10: короткий, 12 байт",
-      "links": [
-        "0x0104"
-      ],
-      "name": "obj_handler_10",
-      "size": 12,
-      "type": "function"
-    },
-    {
-      "address": "0x197C",
-      "comment": "Игровой цикл: инкремент уровня (0x08F5), копирование данных уровня из таблицы 0x1C0E, очистка VRAM (0x1BE5), отрисовка игрового поля из данных 0x0986, вызов update_score_lives (0x1197), установка переменных игры, переход на 0x0E85",
-      "links": [
-        "0x1696",
-        "0x0DD6",
-        "0x1197",
-        "0x1BE5",
-        "0x130A",
-        "0x1C12",
-        "0x1C16",
-        "0x1C1A",
-        "0x0AE9",
-        "0x0AC7"
-      ],
-      "name": "game_loop",
-      "size": 191,
-      "type": "function"
-    },
-    {
-      "address": "0x19FB",
-      "comment": "Данные игрового поля: параметры мяча, границы, условия отскока",
-      "links": [
-        "0x0DD6"
-      ],
-      "name": "game_data_19FB",
-      "size": 478,
-      "type": "data"
-    },
-    {
-      "address": "0x1B87",
-      "comment": "Отрисовка 4 тайлов ракетки: вызывает calc_vram_addr (0x1BD4), читает 4 байта из (DE), выводит через put_char_auto (0x0145). Также sub_1BA8 — аналогично, но через put_char_vram (0x0803)",
-      "links": [
-        "0x01A1"
-      ],
-      "name": "clear_vram_5000",
-      "size": 33,
-      "type": "function"
-    },
-    {
-      "address": "0x1BD9",
-      "comment": "Данные ракетки: параметры позиции и движения",
-      "links": [
-        "0x1B87"
-      ],
-      "name": "game_data_1BD9",
-      "size": 28,
-      "type": "data"
-    },
-    {
-      "address": "0x1BE5",
-      "comment": "Очистка VRAM 0x5000: устанавливает указатель (0x0B53) на 0x5000, заполняет 0x0400 (1024) байт символом 0x20 (пробел) через put_char_auto (0x01A1)",
-      "links": [
-        "0x01A1"
-      ],
-      "name": "clear_vram_fill",
-      "size": 38,
-      "type": "function"
-    },
-    {
-      "address": "0x1C12",
-      "comment": "Таблица квадратов: 2²,3²,...,14²,255. Используется для расчёта траектории мяча",
-      "name": "game_data_1C12",
-      "size": 29,
-      "type": "data"
-    },
-    {
-      "address": "0x1C16",
-      "comment": "Данные уровней (level_data_table): по 8 байт на уровень. Смещение = level_counter * 8. Содержит координаты объектов и параметры",
-      "name": "game_data_1C16",
-      "size": 4,
-      "type": "data"
-    },
-    {
-      "address": "0x1C1A",
-      "comment": "Таблица конфигурации уровней: данные объектов, координаты, параметры движения",
-      "name": "game_data_1C1A",
-      "size": 771,
-      "type": "data"
-    },
-    {
-      "address": "0x3845",
-      "comment": "RAM-буфер музыки: 14 байт каналов + управляющие байты. Заполняется из ROM, обрабатывается music_buffer_proc (0x3902) каждый ISR-тик",
-      "name": "music_buffer",
-      "size": 16,
+      "address": "0x08C3",
+      "name": "ay_sound_timer",
+      "size": 1,
       "type": "variable"
     },
     {
-      "address": "0x3854",
-      "comment": "Указатель на текущую позицию в музыкальных данных. Инициализируется из 0x3856 при загрузке музыки",
-      "name": "music_data_ptr",
+      "address": "0x08CC",
+      "name": "kbd_state_08CC",
+      "size": 4,
+      "type": "variable"
+    },
+    {
+      "address": "0x08CF",
+      "name": "ay_reg_data",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08D0",
+      "name": "draw_offset_08D0",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08D3",
+      "name": "kbd_row_data",
+      "size": 8,
+      "type": "data"
+    },
+    {
+      "address": "0x08DB",
+      "name": "kbd_buf_ptr",
       "size": 2,
       "type": "variable"
     },
     {
-      "address": "0x3858",
-      "comment": "Главный обработчик музыки (вызывается из ISR через самомодификацию): читает ноты из буфера, вызывает voice_1 (0x3BCA) и voice_2 (0x3C7D). Управление темпом через счётчик 0x383A",
-      "links": [
-        "0x3BCA",
-        "0x3C7D",
-        "0x3845",
-        "0x3854",
-        "0x3890"
-      ],
-      "name": "music_handler",
-      "size": 48,
-      "type": "function"
+      "address": "0x08DD",
+      "name": "saved_sp_08DD",
+      "size": 2,
+      "type": "variable"
     },
     {
-      "address": "0x3890",
-      "comment": "Продвижение по нотам: 3 счётчика позиций (buffer[6-8]) с циклическим wrapping по длинам (0x383B-383D). Вызывает load_proc (0x3946) для обновления буфера из ROM. Вызывается из music_handler при обнулении счётчика 0x383A",
-      "links": [
-        "0x3946"
-      ],
-      "name": "advance_proc",
-      "size": 114,
-      "type": "function"
+      "address": "0x08DF",
+      "name": "vblank_frame_counter",
+      "size": 1,
+      "type": "variable"
     },
     {
-      "address": "0x3902",
-      "comment": "Обработка 14 каналов буфера музыки (0x3845): итерирует по байтам, вызывает cmd_dispatch (0x01BC) для каждого. После цикла — финальный вызов с A=7. Завершает RET",
-      "links": [
-        "0x01BC"
-      ],
-      "name": "music_buffer_proc",
-      "size": 68,
-      "type": "function"
+      "address": "0x08F5",
+      "name": "frame_counter_08F5",
+      "size": 1,
+      "type": "variable"
     },
     {
-      "address": "0x3946",
-      "comment": "Загрузка данных из ROM в буфер музыки: копирует байты из текущей позиции данных в RAM-буфер (0x3845). Маппинг: data[0]→buf[14], data[3]→buf[9], data[4]→buf[10], data[8]→buf[12], data[9]→buf[13]. Также читает длину голоса и проверяет окончание данных. Вызывается из advance_proc",
-      "links": [
-        "0x3845",
-        "0x3E29"
-      ],
-      "name": "load_proc",
-      "size": 172,
-      "type": "function"
+      "address": "0x08FE",
+      "name": "var_08FE",
+      "size": 2,
+      "type": "variable"
     },
     {
-      "address": "0x3A40",
-      "comment": "Обработчик команд музыки: команда 0 — голос 1 (запись частоты в буфер[+9]), команда 2 — голос 2 (запись в буфер[+10/11]). Использует таблицу частот 0x421A. После обработки вызывает music_buffer_proc (0x3902)",
-      "links": [
-        "0x3845",
-        "0x421A"
-      ],
-      "name": "music_cmd_handler",
-      "size": 175,
-      "type": "function"
+      "address": "0x0901",
+      "name": "game_state_0901",
+      "size": 2,
+      "type": "variable"
     },
     {
-      "address": "0x3B0F",
-      "comment": "Вычисление частоты: ANI 7F, DCR A, умножение через таблицу 0x43F9 (множитель ×8). Используется для расчёта периода VI53 таймера из значения ноты",
-      "links": [
-        "0x43F9"
-      ],
-      "name": "music_freq_calc",
-      "size": 66,
-      "type": "function"
+      "address": "0x090F",
+      "name": "var_090F",
+      "size": 1,
+      "type": "variable"
     },
     {
-      "address": "0x3BCA",
-      "comment": "Голос 1: читает ноту из буфера[ptr+0x0D], вычисляет частоту через таблицу 0x445D (множитель ×20), выводит через music_output (0x3C77)",
-      "links": [
-        "0x3C77",
-        "0x445D"
-      ],
-      "name": "music_voice_1",
-      "size": 52,
-      "type": "function"
+      "address": "0x091E",
+      "name": "var_091E",
+      "size": 1,
+      "type": "variable"
     },
     {
-      "address": "0x3C77",
-      "comment": "Вывод на порт: PUSH PSW; CALL cmd_dispatch (0x01BC); POP PSW; RET. Общий выход для обоих голосов музыки",
-      "links": [
-        "0x01BC"
-      ],
-      "name": "music_output",
-      "size": 6,
-      "type": "function"
-    },
-    {
-      "address": "0x3C7D",
-      "comment": "Голос 2: читает ноту из буфера[ptr+0x0A], вычисляет частоту через таблицу 0x42F9 (множитель ×10), выводит через music_output (0x3C77)",
-      "links": [
-        "0x3C77",
-        "0x42F9"
-      ],
-      "name": "music_voice_2",
-      "size": 60,
-      "type": "function"
-    },
-    {
-      "address": "0x3D4E",
-      "comment": "Инициализация музыки: обнуляет счётчики (0x383A-0x383D), загружает указатель из 0x3856, патчит ISR — записывает CALL 0x3858 вместо NOP по 0x03F8 (через copy_with_checksum из 0x3DCA). EI; RET",
-      "links": [
-        "0x3858",
-        "0x3854",
-        "0x3DCD",
-        "0x3DD8",
-        "0x3DB8"
-      ],
-      "name": "music_init",
-      "size": 124,
-      "type": "function"
-    },
-    {
-      "address": "0x3D5D",
-      "comment": "Данные таймера VI53: 11 байт конфигурации для настройки частоты",
-      "name": "timer_data_3D5D",
-      "size": 11,
-      "type": "data"
-    },
-    {
-      "address": "0x3DB8",
-      "comment": "Копирование блока из (HL) в (DE) размером BC с проверкой контрольной суммы (сумма байт != 0). Push/pop AF для сохранения. Используется для копирования данных таймеров в RAM",
-      "links": [
-        "0x08A3"
-      ],
-      "name": "copy_with_checksum",
-      "size": 12,
-      "type": "function"
-    },
-    {
-      "address": "0x3DCD",
-      "comment": "Настройка VI53 для музыки: записывает 3 байта (0x36, 0x76, 0xB6) в порт 0x08 — генерация меандра на динамике. Данные из 0x3DE8 копируются в 0x03F8",
-      "links": [
-        "0x01BC",
-        "0x3D4E"
-      ],
-      "name": "setup_timer_and_copy",
-      "size": 32,
-      "type": "function"
-    },
-    {
-      "address": "0x3E29",
-      "comment": "Музыкальные данные (1008 байт, сохранены в assets/music_data.bin). 4 секции нот по ~96 байт, разделённые тишиной: 1) мелодия (ноты 36-57), 2) мелодия голоса 2 (31-48), 3) бас (12-36), 4) финальная мелодия с заголовком. Указатель из 0x3856",
-      "links": [
-        "0x3854"
-      ],
-      "name": "music_data",
-      "size": 1008,
-      "type": "data"
-    },
-    {
-      "address": "0x421A",
-      "comment": "Таблица частот ВИ53: 64 записи (16-bit LE), хроматическая гамма от G4. Entry[i] = 1500000/freq. Entry 0=3822 (G4, 392Hz), entry 12=1906 (G3), entry 63=100. Используется для конвертации номера ноты в делитель частоты VI53",
-      "name": "freq_table_vi53",
+      "address": "0x0986",
+      "name": "obj_type_table",
       "size": 128,
       "type": "table"
     },
     {
-      "address": "0x42F9",
-      "comment": "Таблица волн голоса 2: 64 байта, паттерны огибающих (значения 0-15). Индексируется номером ноты для расчёта периода",
-      "name": "music_wave_table_2",
+      "address": "0x0A06",
+      "name": "tile_map_data_1",
       "size": 64,
+      "type": "data"
+    },
+    {
+      "address": "0x0AD5",
+      "links": [
+        "0x0AD5"
+      ],
+      "name": "game_text_strings",
+      "size": 64,
+      "type": "data"
+    },
+    {
+      "address": "0x0B41",
+      "name": "obj_ptr_0B41",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0B57",
+      "comment": "ROM initialization. Clears RAM 0x8000-0xFFFF, loads data from ROM to 0x5000, copies graphics 0x2F61->0x7418. Entry from JMP 0x0101.",
+      "links": [
+        "0x0401",
+        "0x3D4E",
+        "0x1BE5",
+        "0x0383",
+        "0x2F61"
+      ],
+      "name": "rom_init",
+      "properties": {
+        "params": "none (entry from JMP rom_entry)",
+        "returns": "void (never returns, flows to data_process_loop)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0C65",
+      "comment": "Main data processing loop. Scans RAM 0x5180 for markers 0x75/0xFE, calls data_read_loop and kbd_input_handler. Calls 0x3DCD and JMPs to 0x197C.",
+      "links": [
+        "0x017C",
+        "0x0145",
+        "0x01A1",
+        "0x01AE",
+        "0x197C"
+      ],
+      "name": "data_process_loop",
+      "properties": {
+        "params": "none (reads globals, HL=0x5180 scan area)",
+        "returns": "void (scans 0x5180 for markers 0x75/0xFE, never returns - loops)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0C95",
+      "comment": "Inner scan loop tail of data_process_loop. INX H; DCR B; JNZ back; JMP data_process_loop. Not a standalone function — part of the scanning loop at 0x0C65.",
+      "name": "scan_loop_tail",
+      "properties": {
+        "params": "HL=scan_ptr, B=loop_counter (part of data_process_loop)",
+        "returns": "void (INX H; DCR B; JNZ loop; JMP data_process_loop)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1197",
+      "links": [
+        "0x52E1"
+      ],
+      "name": "player_control",
+      "size": 60,
+      "type": "function"
+    },
+    {
+      "address": "0x11E9",
+      "links": [
+        "0x52F9"
+      ],
+      "name": "enemy_control",
+      "size": 50,
+      "type": "function"
+    },
+    {
+      "address": "0x121A",
+      "links": [
+        "0x52E0"
+      ],
+      "name": "hud_update",
+      "size": 60,
+      "type": "function"
+    },
+    {
+      "address": "0x197C",
+      "comment": "Game main loop. Increments frame counter at 0x08F5, loads data from ROM tables (0x1C0E/0x1C8E), copies/draws objects, calls sub_1197/sub_11E9/sub_121A.",
+      "links": [
+        "0x1B87",
+        "0x1BA8",
+        "0x1C0E",
+        "0x1C0A",
+        "0x1197",
+        "0x121A",
+        "0x1C09",
+        "0x11E9",
+        "0x0986",
+        "0x1BE5",
+        "0x1C8E"
+      ],
+      "name": "game_main_loop",
+      "properties": {
+        "params": "none (reads frame_counter [0x08F5], ROM tables 0x1C0E/0x1C8E)",
+        "returns": "void (main game loop, never returns)"
+      },
+      "size": 200,
+      "type": "function"
+    },
+    {
+      "address": "0x1B87",
+      "comment": "Object data copy. Calls sub_1BD4 to calc address, reads 5 bytes from [DE] via data_read_loop. Copies object parameters.",
+      "links": [
+        "0x1BD4"
+      ],
+      "name": "obj_copy_data",
+      "properties": {
+        "params": "DE=object_index (used by calc_obj_addr via D,E)",
+        "returns": "void (copies 4 bytes via data_read_loop to obj memory)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1BA8",
+      "comment": "Object draw. Same structure as obj_copy_data but calls draw_to_vram (0x0803) instead. Renders object to VRAM.",
+      "links": [
+        "0x1BD4"
+      ],
+      "name": "obj_draw_data",
+      "properties": {
+        "params": "DE=object_index (used by calc_obj_addr via D,E)",
+        "returns": "void (draws 4 bytes via draw_to_vram to VRAM)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1BC9",
+      "name": "mem_copy",
+      "size": 11,
+      "type": "function"
+    },
+    {
+      "address": "0x1BD4",
+      "comment": "Address calculator. HL = E*32 + D*256 + 0x5000. Converts object index to RAM address. Used by obj_copy_data and obj_draw_data.",
+      "name": "calc_obj_addr",
+      "properties": {
+        "params": "D=object_type_index, E=object_slot_index",
+        "returns": "HL=E*32 + D*256 + 0x5000 (encoded object address in RAM)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1BE5",
+      "comment": "Object setup. Initializes 0x400 bytes at 0x5000 from ROM data via data_read_loop. Waits for keyboard input (0x20).",
+      "links": [
+        "0x0145"
+      ],
+      "name": "obj_setup",
+      "properties": {
+        "params": "none (HL=0x5000, BC=0x0400 set internally)",
+        "returns": "void (fills 0x400 bytes at 0x5000, waits for key 0x20)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1C09",
+      "name": "frame_obj_data_1",
+      "size": 128,
       "type": "table"
     },
     {
-      "address": "0x43F9",
-      "comment": "Таблица частот: ~100 байт, значения периодов VI53 для нот. Используется в music_freq_calc (0x3B0F)",
-      "name": "music_freq_table",
-      "size": 100,
+      "address": "0x1C0A",
+      "name": "obj_coords_table",
+      "size": 256,
+      "type": "table"
+    },
+    {
+      "address": "0x1C0E",
+      "name": "rom_data_table_1C0E",
+      "type": "table"
+    },
+    {
+      "address": "0x1C8E",
+      "name": "frame_obj_data_2",
+      "size": 128,
+      "type": "table"
+    },
+    {
+      "address": "0x270A",
+      "name": "obj_sprite_table",
+      "size": 256,
+      "type": "table"
+    },
+    {
+      "address": "0x2F61",
+      "name": "gfx_source_data",
+      "type": "data"
+    },
+    {
+      "address": "0x383A",
+      "name": "anim_frame_counter",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x384E",
+      "comment": "ISR animation update. Reads obj ptr from 0x3854→0B41. Reads object type from [HL+2]. Uses anim_frame_counter (0x383A) doubled as index. Calls isr_obj_update_1 (3BCA) and isr_obj_update_2 (3C7D).",
+      "links": [
+        "0x3BCA",
+        "0x3C7D",
+        "0x383A",
+        "0x0B41",
+        "0x3890"
+      ],
+      "name": "isr_anim_update",
+      "properties": {
+        "params": "none (reads obj ptr from [0x3854], anim_frame_counter [0x383A])",
+        "returns": "void (updates animation, increments anim_frame_counter)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3854",
+      "name": "obj_data_ptr_3854",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x3890",
+      "comment": "ISR sub called conditionally from isr_anim_update when anim counter is zero. Handles frame reset logic.",
+      "name": "sub_3890",
+      "properties": {
+        "params": "none (reads globals [0x3854], [0x0B41], [0x383B/383C])",
+        "returns": "void (frame reset logic for animation counters)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3BC8",
+      "name": "isr_flag_3BC8",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x3BCA",
+      "comment": "Object update #1. Reads object type from [HL+0x0D], dispatches based on type. Uses data table at 0x445D. Step=0x14 bytes per entry.",
+      "links": [
+        "0x445D"
+      ],
+      "name": "isr_obj_update_1",
+      "properties": {
+        "params": "none (reads obj ptr from [0x3854], type from [HL+0x0D])",
+        "returns": "void (updates object using table at 0x445D, step=0x14)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3C7D",
+      "comment": "Object update #2. Similar to isr_obj_update_1 but uses data table at 0x42F9. Step=0x0A bytes per entry.",
+      "links": [
+        "0x42F9"
+      ],
+      "name": "isr_obj_update_2",
+      "properties": {
+        "params": "none (reads flag [0x3BC8], obj ptr from [0x3854], type from [HL+0x0A])",
+        "returns": "void (updates object using table at 0x42F9, step=0x0A)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3D4E",
+      "comment": "ISR object structure init. Clears anim counters 0x383A-0x383D. Reads base ptr from 0x3856, fills object fields at [0B41+0..4]. Copies 3-byte data from 0x3DCA to VRAM 0x03F8. EI; RET.",
+      "links": [
+        "0x0B41"
+      ],
+      "name": "init_objects",
+      "properties": {
+        "params": "none (reads base ptr from [0x3856], fills obj fields at [0x0B41])",
+        "returns": "void (clears anim counters 0x383A-0x383D, copies 3 bytes to VRAM 0x03F8)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3DCD",
+      "comment": "Copy data to VRAM. Called from data_process_loop (0x0C9D). Copies block to VRAM address 0x03F8.",
+      "name": "sub_3DCD",
+      "properties": {
+        "params": "none (HL=0x3DE8, DE=0x03F8, BC=3 set internally)",
+        "returns": "void (copies 3 bytes to VRAM 0x03F8 via port 0x08)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x42F9",
+      "name": "obj_data_table_2",
       "type": "table"
     },
     {
       "address": "0x445D",
-      "comment": "Таблица волн голоса 1: 64 байта, паттерны (значения 0-3). Индексируется номером ноты для расчёта периода",
-      "name": "music_wave_table_1",
-      "size": 64,
+      "name": "obj_data_table_1",
       "type": "table"
+    },
+    {
+      "address": "0x5287",
+      "links": [
+        "0x6400"
+      ],
+      "name": "text_buffer",
+      "size": 128,
+      "type": "data"
+    },
+    {
+      "address": "0x52E0",
+      "name": "score_timer_data",
+      "size": 8,
+      "type": "data"
+    },
+    {
+      "address": "0x52E1",
+      "name": "player_data",
+      "size": 8,
+      "type": "data"
+    },
+    {
+      "address": "0x52F9",
+      "name": "enemy_data",
+      "size": 8,
+      "type": "data"
+    },
+    {
+      "address": "0x6400",
+      "name": "font_table",
+      "properties": {
+        "glyph_count": "128 entries, 16 bytes each (8 normal + 8 bit-reversed)",
+        "glyph_format": "8x8 pixels, bit7=leftmost, each byte=1 row",
+        "source": "Unpacked from ROM during initialization to RAM 0x6400"
+      },
+      "size": 2048,
+      "type": "data"
     }
   ],
   "platform": "vector06c",
