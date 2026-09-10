@@ -1,0 +1,676 @@
+{
+  "format": "rdb",
+  "objects": [
+    {
+      "address": "0x0038",
+      "comment": "ISR vector: JMP 0x03A4 (installed by func_rom_init)",
+      "name": "data_isr_vector",
+      "size": 3,
+      "type": "data"
+    },
+    {
+      "address": "0x00FE",
+      "comment": "Stack pointer location. SP=0x00FE after init.",
+      "name": "var_stack_ptr",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0100",
+      "comment": "ROM entry: DI; JMP 0x0B57 (decompressed main init)",
+      "links": [
+        "0x0B57"
+      ],
+      "name": "func_rom_entry",
+      "size": 4,
+      "type": "function"
+    },
+    {
+      "address": "0x010C",
+      "comment": "Read 16-bit from [HL] into DE, advance HL+2. Then call func_render_block x4 for data loading. IN: HL=ptr. OUT: DE=value, HL+=2. Clobbers: A,DE,HL.",
+      "name": "func_read_16bit_de",
+      "properties": {
+        "clobbers": "A,DE,HL",
+        "input": "HL=ptr to 16-bit data",
+        "output": "DE=16-bit value; HL+=2"
+      },
+      "size": 16,
+      "type": "function"
+    },
+    {
+      "address": "0x0121",
+      "comment": "Sound init: 4x dispatch with hardcoded params, clears VRAM. IN: none. OUT: none. Clobbers: A,E. Saves: D,PSW.",
+      "links": [
+        "0x0EF7",
+        "0x01BC"
+      ],
+      "name": "func_sound_init",
+      "type": "function"
+    },
+    {
+      "address": "0x0145",
+      "comment": "Data loader 2: CALL 0x0800, INX H, SHLD 0x0B53. Simpler data loading.",
+      "name": "func_data_loader2",
+      "properties": {
+        "clobbers": "A,HL",
+        "input": "HL=ptr; A=data byte",
+        "output": "HL+=1; [0x0B53] updated"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x014F",
+      "comment": "Store HL to data stream pointer at 0x0B53. SHLD 0B53; RET.",
+      "name": "func_store_data_ptr",
+      "properties": {
+        "input": "HL=value to store",
+        "output": "[0x0B53]=HL"
+      },
+      "size": 4,
+      "type": "function"
+    },
+    {
+      "address": "0x0153",
+      "comment": "Piece type lookup: uses timer upper nibble as index into 9-byte table at 0x016C. IN: A=piece type (1-7). OUT: A=variant (0-7). Clobbers: A,D,E,HL.",
+      "links": [
+        "0x0197"
+      ],
+      "name": "func_piece_type_lookup",
+      "properties": {
+        "clobbers": "A,D,E,HL",
+        "input": "A=piece type (1-7)",
+        "output": "A=variant (0-7)"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x017C",
+      "comment": "Keyboard scan + frame timer. IN: A=frame counter (decremented), L=compare value. OUT: A=result (0=key pressed), Z flag. Clobbers: A,flags. Side effect: IN 0x01 every 7 frames.",
+      "links": [
+        "0x08D3"
+      ],
+      "name": "func_keyboard_timer",
+      "properties": {
+        "clobbers": "A,flags",
+        "input": "A=frame counter; L=compare value",
+        "output": "A=result; Z flag"
+      },
+      "size": 30,
+      "type": "function"
+    },
+    {
+      "address": "0x0197",
+      "links": [
+        "0x08D3",
+        "0x032C"
+      ],
+      "name": "func_read_timer_data",
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x01A1",
+      "comment": "Data loader: reads ptr from [0x0B53], calls 0x0800, increments ptr",
+      "links": [
+        "0x0800",
+        "0x0B53"
+      ],
+      "name": "func_data_loader",
+      "properties": {
+        "clobbers": "A,HL",
+        "input": "A=data byte",
+        "output": "HL+=1; [0x0B53] updated"
+      },
+      "size": 13,
+      "type": "function"
+    },
+    {
+      "address": "0x01AE",
+      "comment": "Set stream position from vars 0x08FE/0x08FF. Reads 16-bit via 0x1BD4, stores to 0x0B53.",
+      "name": "func_set_stream_pos",
+      "size": 12,
+      "type": "function"
+    },
+    {
+      "address": "0x01BC",
+      "comment": "Jump table dispatcher. IN: A=index (ANI 0F, 0-15), E=param, B=compare. OUT: depends on index (PCHL). Clobbers: A,HL,D. Saves: H,D,PSW.",
+      "links": [
+        "0x01CD"
+      ],
+      "name": "func_jmp_table_dispatch",
+      "properties": {
+        "clobbers": "A,HL,D",
+        "input": "A=index (ANI 0F); E=param; B=compare",
+        "output": "PCHL (depends on index)"
+      },
+      "size": 24,
+      "type": "function"
+    },
+    {
+      "address": "0x01CD",
+      "comment": "Jump table: 16 entries x 2 bytes. Entries 0-11: sound params + write. Entries 12-15: mul7 calc.",
+      "name": "data_jmp_table",
+      "size": 32,
+      "type": "table"
+    },
+    {
+      "address": "0x0201",
+      "comment": "Sound/timer write: read 16-bit from 0x031A, mul7, OUT 0x0B",
+      "links": [
+        "0x031A",
+        "0x020E"
+      ],
+      "name": "func_sound_timer_write",
+      "size": 13,
+      "type": "function"
+    },
+    {
+      "address": "0x020E",
+      "comment": "Multiply [HL] 16-bit value by 12 via DAD chain. IN: HL=ptr to 16-bit value. OUT: HL=value*12. Clobbers: HL,DE. Note: actually x12, not x7.",
+      "name": "func_mul7",
+      "properties": {
+        "clobbers": "HL,DE",
+        "input": "HL=ptr to 16-bit value",
+        "output": "HL=value*12"
+      },
+      "size": 11,
+      "type": "function"
+    },
+    {
+      "address": "0x026A",
+      "name": "lbl_dispatch_return",
+      "type": "label"
+    },
+    {
+      "address": "0x031A",
+      "comment": "Sound/timer parameter table: 12 bytes (0x031A-0x0325). Written by jump table dispatcher, read by func_sound_timer_write.",
+      "name": "var_sound_params",
+      "size": 12,
+      "type": "variable"
+    },
+    {
+      "address": "0x0321",
+      "name": "func_text_render",
+      "size": 9,
+      "type": "function"
+    },
+    {
+      "address": "0x032C",
+      "comment": "Table lookup: XRA B, MOV L,A; RNC/INR H for carry. Index calculations.",
+      "name": "func_table_lookup",
+      "properties": {
+        "clobbers": "A,HL,carry",
+        "input": "HL=table base; A=index; B=0",
+        "output": "HL=HL+A (element addr)"
+      },
+      "size": 20,
+      "type": "function"
+    },
+    {
+      "address": "0x0351",
+      "comment": "Read 16-bit from [HL] into DE. Alternative entry point (same as func_read_16bit_de).",
+      "name": "func_read_16bit_v2",
+      "properties": {
+        "clobbers": "DE,HL",
+        "input": "HL=ptr to 16-bit data",
+        "output": "DE=16-bit value; HL+=2"
+      },
+      "size": 4,
+      "type": "function"
+    },
+    {
+      "address": "0x0355",
+      "comment": "16-bit division via repeated subtraction. Computes HL/DE with remainder. Used for coordinate calculations.",
+      "name": "func_calc_vram_offset",
+      "properties": {
+        "clobbers": "A,C,DE,HL",
+        "input": "HL=dividend; DE=divisor",
+        "output": "A=quotient; DE=remainder"
+      },
+      "size": 15,
+      "type": "function"
+    },
+    {
+      "address": "0x0383",
+      "comment": "ROM init: PIA port 0x10, timer vars, ISR vector at 0x0038, JMP 0x0B57 at 0x0000, EI",
+      "links": [
+        "0x0038",
+        "0x03A4"
+      ],
+      "name": "func_rom_init",
+      "size": 33,
+      "type": "function"
+    },
+    {
+      "address": "0x03A4",
+      "comment": "ISR handler (RST 7, VBlank ~50Hz). 3 phases: 1) Frame counter [0x08DF]++ and palette animation (16 colors from [0x08DB] to port 0x0C with scroll animation on port 0x03). 2) PIA setup (0x8A→port 0x00, 0x88→port 0x00), keyboard scan via IN 0x02 with scroll values. 3) Post-ISR: scroll [0x08CF]→port 0x03, border [0x08C4]→port 0x02, CALL func_isr_game_state. Saves/restores H,D,B,PSW. Ends with EI;RET.",
+      "links": [
+        "0x08CD",
+        "0x08C3",
+        "0x08DB",
+        "0x3858"
+      ],
+      "name": "func_isr",
+      "properties": {
+        "clobbers": "A,C,D,E (saves H,D,B,PSW)",
+        "input": "none (hardware interrupt RST 7)",
+        "output": "palette/scroll/border via ports; game state update"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0400",
+      "comment": "Startup decompression. IN: none (hardcoded src=0x2761, dst=0x6000). OUT: none. 256 iterations x 4 bitplane unpackers x 8 bytes = 8192 bytes decompressed. Clobbers: all regs (saves H,D,B,PSW).",
+      "links": [
+        "0x045E",
+        "0x04CD",
+        "0x0439",
+        "0x04A8",
+        "0x0483"
+      ],
+      "name": "func_decompress",
+      "type": "function"
+    },
+    {
+      "address": "0x0439",
+      "comment": "Bitplane 0 decompressor. IN: DE=source (decrementing), HL=dest (incrementing). OUT: DE-=8, HL+=8. Extracts bits 7 and 3 from each source byte. Clobbers: A,B,C,DE,HL.",
+      "name": "func_decomp_plane0",
+      "properties": {
+        "clobbers": "A,B,C,DE,HL",
+        "input": "DE=source (decrementing); HL=dest (incrementing)",
+        "output": "DE-=8; HL+=8; bits 7,3 extracted"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x045E",
+      "comment": "Bitplane 1 decompressor. IN: DE=source, HL=dest. OUT: DE-=8, HL+=8. Extracts bits 6 and 2. Clobbers: A,B,C,DE,HL.",
+      "name": "func_decomp_plane1",
+      "properties": {
+        "clobbers": "A,B,C,DE,HL",
+        "input": "DE=source; HL=dest",
+        "output": "DE-=8; HL+=8; bits 6,2 extracted"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0483",
+      "comment": "Bitplane 2 decompressor. IN: DE=source, HL=dest. OUT: DE-=8, HL+=8. Extracts bits 5 and 1. Clobbers: A,B,C,DE,HL.",
+      "name": "func_decomp_plane2",
+      "properties": {
+        "clobbers": "A,B,C,DE,HL",
+        "input": "DE=source; HL=dest",
+        "output": "DE-=8; HL+=8; bits 5,1 extracted"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x04A8",
+      "comment": "Bitplane 3 decompressor. IN: DE=source, HL=dest. OUT: DE-=8, HL+=8. Extracts bits 4 and 0. Clobbers: A,B,C,DE,HL.",
+      "name": "func_decomp_plane3",
+      "properties": {
+        "clobbers": "A,B,C,DE,HL",
+        "input": "DE=source; HL=dest",
+        "output": "DE-=8; HL+=8; bits 4,0 extracted"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x04CD",
+      "comment": "Data transpose/copy. IN: none (hardcoded HL=0x2761, BC=0x6000). OUT: BC=updated dest, HL=updated source. 4 blocks x 8 bytes. Clobbers: A,BC,DE,HL.",
+      "name": "func_decomp_transpose",
+      "type": "function"
+    },
+    {
+      "address": "0x0600",
+      "name": "data_glyph_table_lo",
+      "size": 256,
+      "type": "table"
+    },
+    {
+      "address": "0x0700",
+      "name": "data_glyph_table_hi",
+      "size": 256,
+      "type": "table"
+    },
+    {
+      "address": "0x0800",
+      "comment": "VRAM block copy. IN: A=data byte, HL=logical screen addr, BC=offset. OUT: 16 bytes written to VRAM. Uses SP-swap trick (save SP to 0x08DD). DI/EI. Two entry points: 0x0800 (ORA A;RZ check) and 0x0803 (main code). Clobbers: all regs.",
+      "name": "func_copy_to_vram",
+      "properties": {
+        "clobbers": "A,B,C,D,E,H,L",
+        "input": "A=data byte; HL=screen addr; BC=offset",
+        "output": "16 bytes written to VRAM"
+      },
+      "size": 163,
+      "type": "function"
+    },
+    {
+      "address": "0x0803",
+      "comment": "Render block to VRAM. IN: A=data, HL=screen addr, BC=offset. OUT: block rendered. Calls func_copy_to_vram. Saves: PSW,B,D,H. Clobbers: all regs.",
+      "links": [
+        "0x0800",
+        "0x08DD"
+      ],
+      "name": "func_render_block",
+      "properties": {
+        "clobbers": "all (saves PSW,B,D,H)",
+        "input": "A=data; HL=screen addr; BC=offset",
+        "output": "block rendered in VRAM"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x08C3",
+      "comment": "Animation enable flag. When [0x08C3]!=0, palette animation runs in ISR. Decremented each ISR frame. Controls timing of palette cycling.",
+      "name": "var_frame_counter",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08C4",
+      "comment": "Border color value. Read from [0x08C4] and written to port 0x02 in ISR post-animation phase. Controls screen border color.",
+      "name": "var_border_color",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08CD",
+      "comment": "ISR data pointer for palette animation. Points to 16-byte color data in ROM. Advanced during palette cycling (DCX H).",
+      "name": "var_frame_count_isr",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08CF",
+      "comment": "VRAM scroll value. Read from [0x08CF] and written to port 0x03 in ISR post-animation. Controls screen vertical scroll.",
+      "name": "var_vram_scroll",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x08D3",
+      "comment": "Timer data table. Read by func_read_timer_data via func_table_lookup.",
+      "name": "data_timer_table",
+      "type": "data"
+    },
+    {
+      "address": "0x08DB",
+      "comment": "ISR frame counter. Incremented every VBlank (~50Hz) at 0x03AB. Used for timing measurements.",
+      "name": "var_data_ptr",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x08DD",
+      "comment": "Stack save area. Saved by func_render_block before SP swap.",
+      "name": "var_stack_save",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x08DF",
+      "comment": "ISR frame counter. Incremented every VBlank (~50Hz) at 0x03AB. Used for timing measurements.",
+      "name": "var_isr_frame_count",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08E0",
+      "comment": "Sign flag. Used in data processing.",
+      "name": "var_sign_flag",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08E3",
+      "comment": "Game state: 32 bytes. Coordinates (0x0901-02), piece data (0x0903-05), type (0x0907), rows (0x090D), etc.",
+      "name": "var_game_state",
+      "size": 32,
+      "type": "variable"
+    },
+    {
+      "address": "0x08EF",
+      "comment": "var_lives — Current lives count. Initialized to 3 in func_main_init (0x0BB1). Also reset to 3 per level at 0x0907.",
+      "name": "var_lives",
+      "type": "function"
+    },
+    {
+      "address": "0x08F5",
+      "name": "sub_08F5",
+      "type": "function"
+    },
+    {
+      "address": "0x08FA",
+      "comment": "\"PUSH SPACE KEY\" - title screen prompt",
+      "name": "str_push_space_key",
+      "size": 14,
+      "type": "string"
+    },
+    {
+      "address": "0x0907",
+      "comment": "var_lives_level — Lives count reset at each level start. Set to 3 in func_level_init (0x1A35).",
+      "name": "var_lives_level",
+      "type": "function"
+    },
+    {
+      "address": "0x0926",
+      "comment": "KOI8-R: \"Версия для \\\"Вектор-06Ц\\\"  1991\"",
+      "name": "str_russian_version",
+      "size": 65,
+      "type": "string"
+    },
+    {
+      "address": "0x0967",
+      "comment": "KOI8-R: \"Центр \\\"КОМПЬЮТЕР\\\" г.Кишинев\"",
+      "name": "str_russian_computer",
+      "size": 27,
+      "type": "string"
+    },
+    {
+      "address": "0x0AE7",
+      "comment": "\"PUSH SPACE KEY\"",
+      "name": "str_push_space_key",
+      "size": 15,
+      "type": "string"
+    },
+    {
+      "address": "0x0AF6",
+      "comment": "\"MSX MAGAZINE, 1987\"",
+      "name": "str_msx_magazine",
+      "size": 19,
+      "type": "string"
+    },
+    {
+      "address": "0x0B09",
+      "comment": "\"HI \"",
+      "name": "str_hi",
+      "size": 4,
+      "type": "string"
+    },
+    {
+      "address": "0x0B0D",
+      "comment": "\"SCORE \"",
+      "name": "str_score",
+      "size": 7,
+      "type": "string"
+    },
+    {
+      "address": "0x0B14",
+      "comment": "\"ROUND \"",
+      "name": "str_round",
+      "size": 7,
+      "type": "string"
+    },
+    {
+      "address": "0x0B1B",
+      "comment": "\"TIME \"",
+      "name": "str_time",
+      "size": 6,
+      "type": "string"
+    },
+    {
+      "address": "0x0B21",
+      "comment": "\" HURRY UP ! \"",
+      "name": "str_hurry_up",
+      "size": 13,
+      "type": "string"
+    },
+    {
+      "address": "0x0B29",
+      "comment": "\"BONUS 50000 POINTS\"",
+      "name": "str_bonus",
+      "size": 19,
+      "type": "string"
+    },
+    {
+      "address": "0x0B2E",
+      "comment": "\"GAME OVER\"",
+      "name": "str_game_over",
+      "size": 10,
+      "type": "string"
+    },
+    {
+      "address": "0x0B38",
+      "comment": "\"CONGRATULATION !\"",
+      "name": "str_congratulation",
+      "size": 17,
+      "type": "string"
+    },
+    {
+      "address": "0x0B41",
+      "name": "var_isr_temp_ptr",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0B53",
+      "comment": "Data stream pointer. Used by func_data_loader to track current read position.",
+      "name": "var_data_stream_ptr",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0B57",
+      "comment": "Main init. IN: none (entry from JMP 0x0101). OUT: never returns. Sets SP=0x0100, clears VRAM, calls func_rom_init, func_decompress, func_sound_init, shows title, keyboard poll loop. Clobbers: all regs.",
+      "links": [
+        "0x0383",
+        "0x0121",
+        "0x0400",
+        "0x197C",
+        "0x3DCD",
+        "0x08EF"
+      ],
+      "name": "func_main_init",
+      "type": "function"
+    },
+    {
+      "address": "0x0C65",
+      "name": "lbl_title_key_poll",
+      "type": "label"
+    },
+    {
+      "address": "0x0CA3",
+      "comment": "Piece coordinate divider: LHLD 0x08E9, 4x RAR (divide HL by 16), ANI 1F mask. Used for piece position calculations.",
+      "name": "func_piece_div2",
+      "type": "function"
+    },
+    {
+      "address": "0x0CE0",
+      "comment": "Main game loop: keyboard poll, game state dispatch (CPI 1-7), piece movement/rotation/placement. Calls func_piece_dispatch, func_render_block, func_vram_clear.",
+      "links": [
+        "0x017C",
+        "0x0803",
+        "0x0153",
+        "0x0EF7"
+      ],
+      "name": "func_game_loop",
+      "type": "function"
+    },
+    {
+      "address": "0x0E85",
+      "links": [
+        "0x0EF7",
+        "0x0CE0"
+      ],
+      "name": "sub_0E85",
+      "type": "function"
+    },
+    {
+      "address": "0x0EF7",
+      "comment": "VRAM clear. IN: B=iteration count (scope), HL=start addr. OUT: VRAM area zeroed. Clobbers: A,B,HL. Saves: H,PSW.",
+      "name": "func_vram_clear",
+      "properties": {
+        "input": "B=iteration count; HL=start addr"
+      },
+      "size": 25,
+      "type": "function"
+    },
+    {
+      "address": "0x1489",
+      "name": "sub_1489",
+      "type": "function"
+    },
+    {
+      "address": "0x14F9",
+      "name": "sub_14F9",
+      "type": "function"
+    },
+    {
+      "address": "0x1568",
+      "name": "sub_1568",
+      "type": "function"
+    },
+    {
+      "address": "0x197C",
+      "links": [
+        "0x0E85",
+        "0x0907",
+        "0x091E"
+      ],
+      "name": "func_level_init",
+      "type": "function"
+    },
+    {
+      "address": "0x383A",
+      "name": "var_isr_state_toggle",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x3854",
+      "name": "var_isr_data_ptr",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x3858",
+      "comment": "ISR game state handler. Reads state data from [0x3854] pointer, checks state byte at offset+2. Uses [0x383A] as toggle/counter. Calls sub-functions at 0x3890, 0x3BCA, 0x3C7D depending on state.",
+      "name": "func_isr_game_state",
+      "properties": {
+        "clobbers": "A,B,H",
+        "input": "none (reads from [0x3854] ptr)",
+        "output": "updates game state via sub-calls"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3DCD",
+      "name": "sub_3DCD",
+      "type": "function"
+    },
+    {
+      "address": "0x6000",
+      "name": "data_glyph_block",
+      "size": 8192,
+      "type": "data"
+    }
+  ],
+  "platform": "vector06c",
+  "rom": {
+    "file": "putup.rom",
+    "sha256": "8486442efc390b15860ec7f69c32db93b0884908565fa11fec57d5c551b4e9a6",
+    "size": 17664
+  },
+  "version": 1
+}
