@@ -1,0 +1,46 @@
+# Stage 8. Выгрузка функций в asm-файлы
+
+Всего функций в RDB: 38
+Экспортировано: 38
+Ошибок: 0
+
+## Экспортированные функции
+
+  func_rom_entry @ 0x0100 -> func_rom_entry.asm (4 bytes, 2 instr)
+  func_read_16bit_de @ 0x010C -> func_read_16bit_de.asm (16 bytes, 10 instr)
+  func_sound_init @ 0x0121 -> func_sound_init.asm (36 bytes, 18 instr)
+  func_data_loader2 @ 0x0145 -> func_data_loader2.asm (10 bytes, 6 instr)
+  func_store_data_ptr @ 0x014F -> func_store_data_ptr.asm (4 bytes, 2 instr)
+  func_piece_type_lookup @ 0x0153 -> func_piece_type_lookup.asm (6 bytes, 4 instr)
+  func_keyboard_timer @ 0x017C -> func_keyboard_timer.asm (28 bytes, 16 instr)
+  func_read_timer_data @ 0x0197 -> func_read_timer_data.asm (10 bytes, 6 instr)
+  func_data_loader @ 0x01A1 -> func_data_loader.asm (13 bytes, 7 instr)
+  func_set_stream_pos @ 0x01AE -> func_set_stream_pos.asm (11 bytes, 5 instr)
+  func_jmp_table_dispatch @ 0x01BC -> func_jmp_table_dispatch.asm (24 bytes, 17 instr)
+  func_sound_timer_write @ 0x0201 -> func_sound_timer_write.asm (13 bytes, 7 instr)
+  func_mul7 @ 0x020E -> func_mul7.asm (11 bytes, 11 instr)
+  func_text_render @ 0x0321 -> func_text_render.asm (8 bytes, 6 instr)
+  func_table_lookup @ 0x032C -> func_table_lookup.asm (19 bytes, 13 instr)
+  func_read_16bit_v2 @ 0x0351 -> func_read_16bit_v2.asm (4 bytes, 2 instr)
+  func_calc_vram_offset @ 0x0355 -> func_calc_vram_offset.asm (42 bytes, 25 instr)
+  func_rom_init @ 0x0383 -> func_rom_init.asm (33 bytes, 14 instr)
+  func_isr @ 0x03A4 -> func_isr.asm (93 bytes, 57 instr)
+  func_decompress @ 0x0400 -> func_decompress.asm (46 bytes, 29 instr)
+  func_decomp_plane0 @ 0x0439 -> func_decomp_plane0.asm (37 bytes, 26 instr)
+  func_decomp_plane1 @ 0x045E -> func_decomp_plane1.asm (37 bytes, 26 instr)
+  func_decomp_plane2 @ 0x0483 -> func_decomp_plane2.asm (37 bytes, 26 instr)
+  func_decomp_plane3 @ 0x04A8 -> func_decomp_plane3.asm (37 bytes, 26 instr)
+  func_decomp_transpose @ 0x04CD -> func_decomp_transpose.asm (78 bytes, 50 instr)
+  func_copy_to_vram @ 0x0800 -> func_copy_to_vram.asm (163 bytes, 142 instr)
+  func_render_block @ 0x0803 -> func_render_block.asm (160 bytes, 139 instr)
+  func_main_init @ 0x0B57 -> func_main_init.asm (332 bytes, 151 instr)
+  func_piece_div2 @ 0x0CA3 -> func_piece_div2.asm (61 bytes, 47 instr)
+  func_game_loop @ 0x0CE0 -> func_game_loop.asm (535 bytes, 248 instr)
+  func_game_round_dispatch @ 0x0E85 -> func_game_round_dispatch.asm (132 bytes, 72 instr)
+  func_vram_clear @ 0x0EF7 -> func_vram_clear.asm (23 bytes, 14 instr)
+  func_piece_move_right @ 0x1489 -> func_piece_move_right.asm (61 bytes, 30 instr)
+  func_piece_move_left @ 0x14F9 -> func_piece_move_left.asm (60 bytes, 29 instr)
+  func_piece_move_down @ 0x1568 -> func_piece_move_down.asm (57 bytes, 28 instr)
+  func_level_init @ 0x197C -> func_level_init.asm (191 bytes, 88 instr)
+  func_isr_game_state @ 0x3858 -> func_isr_game_state.asm (48 bytes, 24 instr)
+  func_sound_hw_init @ 0x3DCD -> func_sound_hw_init.asm (27 bytes, 13 instr)

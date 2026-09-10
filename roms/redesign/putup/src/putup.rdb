@@ -26,6 +26,12 @@
       "type": "function"
     },
     {
+      "address": "0x0104",
+      "name": "sub_0104",
+      "size": 29,
+      "type": "function"
+    },
+    {
       "address": "0x010C",
       "comment": "Read 16-bit from [HL] into DE, advance HL+2. Then call func_render_block x4 for data loading. IN: HL=ptr. OUT: DE=value, HL+=2. Clobbers: A,DE,HL.",
       "name": "func_read_16bit_de",
@@ -45,6 +51,7 @@
         "0x01BC"
       ],
       "name": "func_sound_init",
+      "size": 36,
       "type": "function"
     },
     {
@@ -56,6 +63,7 @@
         "input": "HL=ptr; A=data byte",
         "output": "HL+=1; [0x0B53] updated"
       },
+      "size": 10,
       "type": "function"
     },
     {
@@ -81,6 +89,13 @@
         "input": "A=piece type (1-7)",
         "output": "A=variant (0-7)"
       },
+      "size": 6,
+      "type": "function"
+    },
+    {
+      "address": "0x0159",
+      "name": "sub_0159",
+      "size": 19,
       "type": "function"
     },
     {
@@ -227,7 +242,13 @@
         "input": "HL=dividend; DE=divisor",
         "output": "A=quotient; DE=remainder"
       },
-      "size": 15,
+      "size": 42,
+      "type": "function"
+    },
+    {
+      "address": "0x037F",
+      "name": "sub_037F",
+      "size": 4,
       "type": "function"
     },
     {
@@ -256,6 +277,7 @@
         "input": "none (hardware interrupt RST 7)",
         "output": "palette/scroll/border via ports; game state update"
       },
+      "size": 93,
       "type": "function"
     },
     {
@@ -269,6 +291,13 @@
         "0x0483"
       ],
       "name": "func_decompress",
+      "size": 46,
+      "type": "function"
+    },
+    {
+      "address": "0x042F",
+      "name": "sub_042F",
+      "size": 10,
       "type": "function"
     },
     {
@@ -280,6 +309,7 @@
         "input": "DE=source (decrementing); HL=dest (incrementing)",
         "output": "DE-=8; HL+=8; bits 7,3 extracted"
       },
+      "size": 37,
       "type": "function"
     },
     {
@@ -291,6 +321,7 @@
         "input": "DE=source; HL=dest",
         "output": "DE-=8; HL+=8; bits 6,2 extracted"
       },
+      "size": 37,
       "type": "function"
     },
     {
@@ -302,6 +333,7 @@
         "input": "DE=source; HL=dest",
         "output": "DE-=8; HL+=8; bits 5,1 extracted"
       },
+      "size": 37,
       "type": "function"
     },
     {
@@ -313,24 +345,21 @@
         "input": "DE=source; HL=dest",
         "output": "DE-=8; HL+=8; bits 4,0 extracted"
       },
+      "size": 37,
       "type": "function"
     },
     {
       "address": "0x04CD",
       "comment": "Data transpose/copy. IN: none (hardcoded HL=0x2761, BC=0x6000). OUT: BC=updated dest, HL=updated source. 4 blocks x 8 bytes. Clobbers: A,BC,DE,HL.",
       "name": "func_decomp_transpose",
+      "size": 78,
       "type": "function"
     },
     {
       "address": "0x0600",
-      "name": "data_glyph_table_lo",
-      "size": 256,
-      "type": "table"
-    },
-    {
-      "address": "0x0700",
-      "name": "data_glyph_table_hi",
-      "size": 256,
+      "comment": "Glyph offset table: 256 entries x 2 bytes (little-endian). Entry[code] = VRAM address of glyph data in RAM (0x6000+). Physical layout: consecutive 16-bit words at 0x0600-0x07FF. Code accesses lo/hi bytes separately (split across 0x0600 and 0x0700 pages).",
+      "name": "glyph_offset_table",
+      "size": 512,
       "type": "table"
     },
     {
@@ -358,6 +387,7 @@
         "input": "A=data; HL=screen addr; BC=offset",
         "output": "block rendered in VRAM"
       },
+      "size": 160,
       "type": "function"
     },
     {
@@ -431,14 +461,10 @@
     },
     {
       "address": "0x08EF",
-      "comment": "var_lives — Current lives count. Initialized to 3 in func_main_init (0x0BB1). Also reset to 3 per level at 0x0907.",
+      "comment": "Current lives count. Initialized to 3 in func_main_init.",
       "name": "var_lives",
-      "type": "function"
-    },
-    {
-      "address": "0x08F5",
-      "name": "sub_08F5",
-      "type": "function"
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x08FA",
@@ -449,9 +475,10 @@
     },
     {
       "address": "0x0907",
-      "comment": "var_lives_level — Lives count reset at each level start. Set to 3 in func_level_init (0x1A35).",
+      "comment": "Lives count reset at each level start. Set to 3 in func_level_init.",
       "name": "var_lives_level",
-      "type": "function"
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x0926",
@@ -562,6 +589,7 @@
         "0x08EF"
       ],
       "name": "func_main_init",
+      "size": 332,
       "type": "function"
     },
     {
@@ -573,6 +601,7 @@
       "address": "0x0CA3",
       "comment": "Piece coordinate divider: LHLD 0x08E9, 4x RAR (divide HL by 16), ANI 1F mask. Used for piece position calculations.",
       "name": "func_piece_div2",
+      "size": 61,
       "type": "function"
     },
     {
@@ -585,6 +614,7 @@
         "0x0EF7"
       ],
       "name": "func_game_loop",
+      "size": 535,
       "type": "function"
     },
     {
@@ -593,7 +623,8 @@
         "0x0EF7",
         "0x0CE0"
       ],
-      "name": "sub_0E85",
+      "name": "func_game_round_dispatch",
+      "size": 132,
       "type": "function"
     },
     {
@@ -607,18 +638,285 @@
       "type": "function"
     },
     {
+      "address": "0x0F25",
+      "name": "sub_0F25",
+      "size": 20,
+      "type": "function"
+    },
+    {
+      "address": "0x0F28",
+      "name": "sub_0F28",
+      "size": 17,
+      "type": "function"
+    },
+    {
+      "address": "0x0F39",
+      "name": "sub_0F39",
+      "size": 42,
+      "type": "function"
+    },
+    {
+      "address": "0x0F63",
+      "name": "sub_0F63",
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x0F6D",
+      "name": "sub_0F6D",
+      "size": 170,
+      "type": "function"
+    },
+    {
+      "address": "0x0FD4",
+      "name": "sub_0FD4",
+      "size": 67,
+      "type": "function"
+    },
+    {
+      "address": "0x1017",
+      "name": "sub_1017",
+      "size": 43,
+      "type": "function"
+    },
+    {
+      "address": "0x1042",
+      "name": "sub_1042",
+      "size": 41,
+      "type": "function"
+    },
+    {
+      "address": "0x106B",
+      "name": "sub_106B",
+      "size": 175,
+      "type": "function"
+    },
+    {
+      "address": "0x111A",
+      "name": "sub_111A",
+      "size": 59,
+      "type": "function"
+    },
+    {
+      "address": "0x1123",
+      "name": "sub_1123",
+      "size": 50,
+      "type": "function"
+    },
+    {
+      "address": "0x1157",
+      "name": "sub_1157",
+      "size": 42,
+      "type": "function"
+    },
+    {
+      "address": "0x1188",
+      "name": "sub_1188",
+      "size": 15,
+      "type": "function"
+    },
+    {
+      "address": "0x1197",
+      "name": "sub_1197",
+      "size": 82,
+      "type": "function"
+    },
+    {
+      "address": "0x11E9",
+      "name": "sub_11E9",
+      "size": 49,
+      "type": "function"
+    },
+    {
+      "address": "0x121A",
+      "name": "sub_121A",
+      "size": 56,
+      "type": "function"
+    },
+    {
+      "address": "0x1252",
+      "name": "sub_1252",
+      "size": 97,
+      "type": "function"
+    },
+    {
+      "address": "0x12B3",
+      "name": "sub_12B3",
+      "size": 45,
+      "type": "function"
+    },
+    {
+      "address": "0x12E0",
+      "name": "sub_12E0",
+      "size": 22,
+      "type": "function"
+    },
+    {
+      "address": "0x12F6",
+      "name": "sub_12F6",
+      "size": 20,
+      "type": "function"
+    },
+    {
+      "address": "0x130A",
+      "name": "sub_130A",
+      "size": 160,
+      "type": "function"
+    },
+    {
+      "address": "0x13AA",
+      "name": "sub_13AA",
+      "size": 205,
+      "type": "function"
+    },
+    {
+      "address": "0x1477",
+      "name": "sub_1477",
+      "size": 18,
+      "type": "function"
+    },
+    {
       "address": "0x1489",
-      "name": "sub_1489",
+      "name": "func_piece_move_right",
+      "size": 61,
+      "type": "function"
+    },
+    {
+      "address": "0x14C6",
+      "name": "sub_14C6",
+      "size": 51,
       "type": "function"
     },
     {
       "address": "0x14F9",
-      "name": "sub_14F9",
+      "name": "func_piece_move_left",
+      "size": 60,
+      "type": "function"
+    },
+    {
+      "address": "0x1535",
+      "name": "sub_1535",
+      "size": 51,
       "type": "function"
     },
     {
       "address": "0x1568",
-      "name": "sub_1568",
+      "name": "func_piece_move_down",
+      "size": 57,
+      "type": "function"
+    },
+    {
+      "address": "0x15A1",
+      "name": "sub_15A1",
+      "size": 62,
+      "type": "function"
+    },
+    {
+      "address": "0x15DF",
+      "name": "sub_15DF",
+      "size": 61,
+      "type": "function"
+    },
+    {
+      "address": "0x161C",
+      "name": "sub_161C",
+      "size": 51,
+      "type": "function"
+    },
+    {
+      "address": "0x164F",
+      "name": "sub_164F",
+      "size": 108,
+      "type": "function"
+    },
+    {
+      "address": "0x16BB",
+      "name": "sub_16BB",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x16BE",
+      "name": "sub_16BE",
+      "size": 62,
+      "type": "function"
+    },
+    {
+      "address": "0x16FC",
+      "name": "sub_16FC",
+      "size": 107,
+      "type": "function"
+    },
+    {
+      "address": "0x1767",
+      "name": "sub_1767",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x176A",
+      "name": "sub_176A",
+      "size": 62,
+      "type": "function"
+    },
+    {
+      "address": "0x17A8",
+      "name": "sub_17A8",
+      "size": 104,
+      "type": "function"
+    },
+    {
+      "address": "0x1810",
+      "name": "sub_1810",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x1813",
+      "name": "sub_1813",
+      "size": 62,
+      "type": "function"
+    },
+    {
+      "address": "0x1851",
+      "name": "sub_1851",
+      "size": 108,
+      "type": "function"
+    },
+    {
+      "address": "0x18BD",
+      "name": "sub_18BD",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x18C0",
+      "name": "sub_18C0",
+      "size": 62,
+      "type": "function"
+    },
+    {
+      "address": "0x18FE",
+      "name": "sub_18FE",
+      "size": 27,
+      "type": "function"
+    },
+    {
+      "address": "0x1919",
+      "name": "sub_1919",
+      "size": 2,
+      "type": "function"
+    },
+    {
+      "address": "0x191B",
+      "name": "sub_191B",
+      "size": 94,
+      "type": "function"
+    },
+    {
+      "address": "0x1979",
+      "name": "sub_1979",
+      "size": 3,
       "type": "function"
     },
     {
@@ -629,7 +927,140 @@
         "0x091E"
       ],
       "name": "func_level_init",
+      "size": 191,
       "type": "function"
+    },
+    {
+      "address": "0x1A3B",
+      "name": "sub_1A3B",
+      "size": 30,
+      "type": "function"
+    },
+    {
+      "address": "0x1B87",
+      "name": "sub_1B87",
+      "size": 33,
+      "type": "function"
+    },
+    {
+      "address": "0x1BA8",
+      "name": "sub_1BA8",
+      "size": 33,
+      "type": "function"
+    },
+    {
+      "address": "0x1BC9",
+      "name": "sub_1BC9",
+      "size": 11,
+      "type": "function"
+    },
+    {
+      "address": "0x1BD4",
+      "name": "sub_1BD4",
+      "size": 17,
+      "type": "function"
+    },
+    {
+      "address": "0x1BE5",
+      "name": "sub_1BE5",
+      "size": 21,
+      "type": "function"
+    },
+    {
+      "address": "0x1C0E",
+      "name": "data_level_metadata",
+      "size": 120,
+      "type": "table"
+    },
+    {
+      "address": "0x1C8E",
+      "name": "data_level_maps",
+      "size": 2640,
+      "type": "table"
+    },
+    {
+      "address": "0x1D3E",
+      "name": "data_level_02",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x1DEE",
+      "name": "data_level_03",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x1E9E",
+      "name": "data_level_04",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x1F4E",
+      "name": "data_level_05",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x1FFE",
+      "name": "data_level_06",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x20AE",
+      "name": "data_level_07",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x215E",
+      "name": "data_level_08",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x220E",
+      "name": "data_level_09",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x22BE",
+      "name": "data_level_10",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x236E",
+      "name": "data_level_11",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x241E",
+      "name": "data_level_12",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x24CE",
+      "name": "data_level_13",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x257E",
+      "name": "data_level_14",
+      "size": 176,
+      "type": "data"
+    },
+    {
+      "address": "0x262E",
+      "name": "data_level_15",
+      "size": 176,
+      "type": "data"
     },
     {
       "address": "0x383A",
@@ -652,11 +1083,67 @@
         "input": "none (reads from [0x3854] ptr)",
         "output": "updates game state via sub-calls"
       },
+      "size": 48,
+      "type": "function"
+    },
+    {
+      "address": "0x3890",
+      "name": "sub_3890",
+      "size": 114,
+      "type": "function"
+    },
+    {
+      "address": "0x3946",
+      "name": "sub_3946",
+      "size": 40,
+      "type": "function"
+    },
+    {
+      "address": "0x3BCA",
+      "name": "sub_3BCA",
+      "size": 173,
+      "type": "function"
+    },
+    {
+      "address": "0x3C77",
+      "name": "sub_3C77",
+      "size": 6,
+      "type": "function"
+    },
+    {
+      "address": "0x3C7D",
+      "name": "sub_3C7D",
+      "size": 203,
+      "type": "function"
+    },
+    {
+      "address": "0x3D48",
+      "name": "sub_3D48",
+      "size": 6,
+      "type": "function"
+    },
+    {
+      "address": "0x3D4E",
+      "name": "sub_3D4E",
+      "size": 119,
+      "type": "function"
+    },
+    {
+      "address": "0x3DB8",
+      "name": "sub_3DB8",
+      "size": 13,
+      "type": "function"
+    },
+    {
+      "address": "0x3DC5",
+      "name": "sub_3DC5",
+      "size": 5,
       "type": "function"
     },
     {
       "address": "0x3DCD",
-      "name": "sub_3DCD",
+      "name": "func_sound_hw_init",
+      "size": 27,
       "type": "function"
     },
     {

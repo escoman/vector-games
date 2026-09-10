@@ -1,0 +1,50 @@
+; sub_111A @ 0x111A
+
+SECTION code
+
+PUBLIC _sub_111A
+
+_sub_111A:
+    LHLD 0901                    ; 0x111A  [42, 1, 9]
+    XCHG                        ; 0x111D  [235]
+    INR E                       ; 0x111E  [28]
+    INR E                       ; 0x111F  [28]
+    JMP sub_1157                ; 0x1120  [195, 87, 17]
+    PUSH H                       ; 0x1123  [229]
+    PUSH D                       ; 0x1124  [213]
+    PUSH B                       ; 0x1125  [197]
+    PUSH PSW                     ; 0x1126  [245]
+    LHLD 1155                    ; 0x1127  [42, 85, 17]
+    LXI B, 0383                 ; 0x112A  [1, 131, 3]
+    LXI D, 0000                 ; 0x112D  [17, 0, 0]
+    MVI A, 10                   ; 0x1130  [62, 16]
+.loc_1132:
+    PUSH PSW                     ; 0x1132  [245]
+    MOV A, B                    ; 0x1133  [120]
+    RAR                         ; 0x1134  [31]
+    MOV B, A                    ; 0x1135  [71]
+    MOV A, C                    ; 0x1136  [121]
+    RAR                         ; 0x1137  [31]
+    MOV C, A                    ; 0x1138  [79]
+    JNC .loc_113F               ; 0x1139  [210, 63, 17]
+    XCHG                        ; 0x113C  [235]
+    DAD D                       ; 0x113D  [25]
+    XCHG                        ; 0x113E  [235]
+.loc_113F:
+    DAD H                       ; 0x113F  [41]
+    POP PSW                     ; 0x1140  [241]
+    DCR A                       ; 0x1141  [61]
+    JNZ .loc_1132               ; 0x1142  [194, 50, 17]
+    XCHG                        ; 0x1145  [235]
+    MOV A, H                    ; 0x1146  [124]
+    ANI 7F                      ; 0x1147  [230, 127]
+    MOV H, A                    ; 0x1149  [103]
+    SHLD 1155                    ; 0x114A  [34, 85, 17]
+    XRA B                       ; 0x114D  [133]
+    MOV L, A                    ; 0x114E  [111]
+    POP PSW                     ; 0x114F  [241]
+    MOV A, L                    ; 0x1150  [125]
+    POP B                       ; 0x1151  [193]
+    POP D                       ; 0x1152  [209]
+    POP H                       ; 0x1153  [225]
+    RET                         ; 0x1154  [201]
