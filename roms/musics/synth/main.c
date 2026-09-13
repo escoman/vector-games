@@ -8,10 +8,11 @@
  *   3 - DRUMS      только ударные (семплы .smp);
  *   4 - RHYTHM     смесь L4/L8/L16 + паузы, ударные вдвое чаще;
  *   5 - SYNC       удар точно на начало каждой ноты;
- *   6 - FLIGHT     «Полёт шмеля» (Римский-Корсаков), одноголосая.
+ *   6 - FLIGHT     «Полёт шмеля» (Римский-Корсаков), одноголосая;
+ *   7 - GAMMA      гамма вверх-вниз, 0.5 сек на ноту.
  *
  * Управление:
- *   1..6    — выбрать тест и запустить (music_start, с начала);
+ *   1..7    — выбрать тест и запустить (music_start, с начала);
  *   ВК/ПРБЛ — пауза / продолжить (music_pause / music_resume);
  *   0       — остановить (music_stop);
  *   СТОП    — выход из ROM.
@@ -31,6 +32,7 @@
 #include "rom_data/rhythm.inc"
 #include "rom_data/sync.inc"
 #include "rom_data/flight.inc"
+#include "rom_data/gamma.inc"
 
 static const unsigned char synth_pal[16] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -47,6 +49,7 @@ static const struct {
     { "RHYTHM", &rhythm_song },
     { "SYNC",   &sync_song },
     { "FLIGHT", &flight_song },
+    { "GAMMA",  &gamma_song },
 };
 
 /* Оба потребителя кадрового прерывания: единый music clock и
@@ -84,20 +87,21 @@ int main(void)
 
     frame_handler = isr_music;
     drum_init();                /* микшер AY: тон C выкл, шум C вкл */
-    music_set_loop(1);          /* тесты крутятся по кругу */
+    music_set_loop(0);          /* без зацикливания */
 
     gfx_set_black_palette();
     gfx_clear(0);
-    gfx_print(16u, 16u, "SYNTH TESTS (MUSIC.C):", 8u);
-    gfx_print(16u, 40u, "1 - SCALE (ONE VOICE)", 8u);
-    gfx_print(16u, 56u, "2 - VOICES (THREE)", 8u);
-    gfx_print(16u, 72u, "3 - DRUMS (SMP)", 8u);
-    gfx_print(16u, 88u, "4 - RHYTHM (L4-L16)", 8u);
-    gfx_print(16u, 104u, "5 - SYNC (DRUM + NOTE)", 8u);
-    gfx_print(16u, 120u, "6 - FLIGHT (BUMBLEBEE)", 8u);
-    gfx_print(16u, 152u, "VK/PBL - PAUSE/RESUME", 8u);
-    gfx_print(16u, 168u, "0 - STOP", 8u);
-    gfx_print(16u, 184u, "ESC - EXIT", 8u);
+    gfx_print(2u, 16u, "SYNTH TESTS (MUSIC.C):", 8u);
+    gfx_print(2u, 40u, "1 - SCALE (ONE VOICE)", 8u);
+    gfx_print(2u, 56u, "2 - VOICES (THREE)", 8u);
+    gfx_print(2u, 72u, "3 - DRUMS (SMP)", 8u);
+    gfx_print(2u, 88u, "4 - RHYTHM (L4-L16)", 8u);
+    gfx_print(2u, 104u, "5 - SYNC (DRUM + NOTE)", 8u);
+    gfx_print(2u, 120u, "6 - FLIGHT (BUMBLEBEE)", 8u);
+    gfx_print(2u, 136u, "7 - GAMMA (0.5S/NOTE)", 8u);
+    gfx_print(2u, 168u, "VK/PBL - PAUSE/RESUME", 8u);
+    gfx_print(2u, 184u, "0 - STOP", 8u);
+    gfx_print(2u, 200u, "ESC - EXIT", 8u);
     show_status("STOPPED", "-");
     gfx_set_palette(synth_pal);
 
@@ -106,7 +110,7 @@ int main(void)
 
         key = kbd_scan();
         if (key != prev_key) {
-            if (key >= '1' && key <= '6') {
+            if (key >= '1' && key <= '7') {
                 cur = (unsigned char)(key - '1');
                 music_set_data(songs[cur].song);
                 music_start();

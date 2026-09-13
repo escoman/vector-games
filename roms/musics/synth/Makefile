@@ -18,7 +18,7 @@ MUS2INC  = python3 ../../../utils/mus2inc.py
 
 TARGET   = synth.rom
 
-SONGS    = scale voices drums01 rhythm sync flight
+SONGS    = scale voices drums01 rhythm sync flight gamma
 INCS     = $(addprefix rom_data/,$(addsuffix .inc,$(SONGS)))
 SAMPLES  = $(wildcard music/samples/*.smp)
 

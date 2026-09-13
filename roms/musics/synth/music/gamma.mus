@@ -1,0 +1,6 @@
+; Тест 7 — простая гамма вверх-вниз, один канал, каждая нота 0.25 сек (T120 L8).
+score 0:
+T120 O4 L8 C D E F G A B O5 C L1 P O4 L8 C D E F G A B O5 C
+
+score 1:
+T120 O4 L1 P L8 C D E F G A B O5 C O4 L8 C D E F G A B O5 C
