@@ -1,0 +1,171 @@
+{
+  "format": "rdb",
+  "objects": [
+    {
+      "address": "0x002C",
+      "comment": "Вектор прерывания RST 5.5 (0x002C). НЕ настраивается clrs.rom — код инициализации записывает только вектор RST 7 по адресу 0x0038. Этот адрес находится в нижней RAM (нулевая страница). На реальном оборудовании RST 5.5 — пользовательский вектор перезапуска. Загрузочный ROM может разместить код здесь при инициализации. Поскольку clrs.rom не настраивает этот вектор, любое прерывание RST 5.5 выполнит произвольный код/данные по адресу 0x002C. Программа использует только RST 7 (VBlank) как источник прерываний.",
+      "name": "data_rst55_vector",
+      "properties": {
+        "configured": "no",
+        "interrupt_type": "user_defined (not configured by clrs.rom)",
+        "vector_address": "0x002C"
+      },
+      "type": "data"
+    },
+    {
+      "address": "0x0038",
+      "comment": "Вектор аппаратного прерывания RST 7 (VBlank). Записывается func_setup_and_halt по адресам 0x010E–0x0118: STA 0038h=C3h (код JP), LXI H,013Fh / SHLD 0039h — записывает адрес ISR. При VBlank (~50,08 Гц) таймер КР580ВИ53 формирует INTR, и при установленном IFF CPU выполняет RST 7 → читает команду JP по 0x0038 → переходит на 0x013F (func_isr_delay_and_setup). ISR выполняет: (1) цикл задержки с переменным временем, (2) установка регистров (BC=0703h, D=01h, SP=0177h), (3) цикл палитры через func_isr_palette_cycle (9× OUT 0Ch за вызов), (4) перезапуск через func_isr_rearm_and_exit (LXI SP,00FEh / EI / RET). ISR НЕ сохраняет/восстанавливает регистры CPU — используется отдельный стековый механизм для данных палитры. EI по 0x0175 повторно разрешает прерывания для следующего VBlank. Основной цикл (HLT по 0x013B) пробуждается при каждом VBlank RST 7.",
+      "links": [
+        "0x013F"
+      ],
+      "name": "data_rst7_vector",
+      "properties": {
+        "frequency": "50Hz (50.08 Hz verified by emulator code: 312 lines x 768 pixels x 12 MHz)",
+        "handler_address": "0x013F",
+        "instruction": "JP 013Fh (C3 3F 01)",
+        "interrupt_type": "hardware_vblank",
+        "masking": "EI/DI (IFF flag)",
+        "source": "KR580VI53 timer (frame interrupt at start of vertical retrace)",
+        "vector_address": "0x0038"
+      },
+      "size": 3,
+      "type": "data"
+    },
+    {
+      "address": "0x003C",
+      "comment": "Вектор прерывания RST 7.5 (0x003C). НЕ настраивается clrs.rom — код инициализации записывает только вектор RST 7 по адресу 0x0038. Этот адрес находится в нижней RAM (нулевая страница). На реальном оборудовании RST 7.5 — пользовательский вектор перезапуска. Поскольку clrs.rom не настраивает этот вектор, любое прерывание RST 7.5 выполнит произвольный код/данные по адресу 0x003C. Программа использует только RST 7 (VBlank) как источник прерываний.",
+      "name": "data_rst75_vector",
+      "properties": {
+        "configured": "no",
+        "interrupt_type": "user_defined (not configured by clrs.rom)",
+        "vector_address": "0x003C"
+      },
+      "type": "data"
+    },
+    {
+      "address": "0x0100",
+      "comment": "Точка входа ROM. (1) DI — запрет прерываний. (2) Цикл очистки VRAM: HL=8000h, MVI M,00 / INR L / JNZ очищает 256 байт, INR H / JNZ продолжает через все 4 плоскости 8000h–FFFFh. (3) Настройка вектора RST 7: STA 0038h=C3h (код JP), LXI H,013Fh / SHLD 0039h — записывает адрес ISR. (4) Инициализация стека палитры: SP=0577h, PUSH H(0172h) как адрес возврата ISR, затем цикл 7× PUSH H(0152h)+PUSH PSW(F8h), затем арифметический цикл 8× PUSH H + PUSH PSW (F9h..FCh). (5) OUT 02h — установка границы/видеорежима. (6) LXI SP,0100h / EI / HLT — основной цикл ожидания VBlank. JMP 013Bh зацикливает HLT.",
+      "links": [
+        "0x055A",
+        "0x013F",
+        "0x0152",
+        "0x0038"
+      ],
+      "name": "func_setup_and_halt",
+      "properties": {
+        "calling_convention": "none (ROM entry point, no caller, does not return)",
+        "clobbered_registers": "A, B, D, H, L",
+        "flags_set": "Z (INR L, INR H, DCR B, CMP L), C (ADD D, CMP L)",
+        "flags_used": "Z (JNZ at 0107, 010B, 012B), C (JNC at 0131)",
+        "input_registers": "none (ROM entry point, no caller)",
+        "memory_read": "none (no LDA, LDAX, MOV A,M in this function)",
+        "memory_write": "VRAM 0x8000-0xFFFF (MVI M,00 via HL scan), RAM 0x0038 (STA C3h), RAM 0x0039-0x003A (SHLD 013Fh)",
+        "output_registers": "none (function does not return; ends with HLT loop)",
+        "ports_used": "OUT 02h (border/video mode at 0135)",
+        "side_effects": "DI, clears VRAM 0x8000-0xFFFF, writes RST 7 vector at 0x0038-0x003A, builds palette stack at 0x055A, sets border via OUT 02h, resets SP to 0100h, EI, enters HLT loop",
+        "stack_frame_size": "0 (no stack frame, but pushes 24 bytes to build palette stack: 1x PUSH H + 1x PUSH PSW + 7x(PUSH H + PUSH PSW) + 8x(PUSH H + PUSH PSW))",
+        "stack_operations": "PUSH H (x9), PUSH PSW (x9) — builds palette data stack at 0x055A-0x0576"
+      },
+      "size": 63,
+      "type": "function"
+    },
+    {
+      "address": "0x013F",
+      "comment": "Точка входа VBlank ISR (целевой адрес вектора RST 7). (1) Цикл задержки: LXI B,00ECh / DCX B / MOV A,B / ORA C / JNZ — обратный отсчёт BC. (2) NOP NOP — временная вставка (8 T-states). (3) LXI B,0703h / MVI D,01h — установка регистров: B=7 (количество цветов), D=1 (арифметический инкремент для func_isr_palette_cycle). (4) LXI SP,0177h — перемещение SP в область кода func_isr_rearm_and_exit для потребления стека палитры. Проваливается в func_isr_palette_cycle по адресу 0x0152.",
+      "links": [
+        "0x0172",
+        "0x0152"
+      ],
+      "name": "func_isr_delay_and_setup",
+      "properties": {
+        "calling_convention": "ISR entry (called via RST 7 vector), falls through to func_isr_palette_cycle, no RET",
+        "clobbered_registers": "A, B, C, D",
+        "flags_set": "Z (DCX B, ADC M), C (ADC M)",
+        "flags_used": "Z (JNZ at 0145 delay loop), C (ADC M uses carry)",
+        "input_registers": "H, L (HL used as pointer for [HL] read in delay loop; HL=0177h from fall-through after func_setup_and_halt JMP 013Bh → ISR entry)",
+        "interrupt_role": "ISR entry point (VBlank handler start)",
+        "memory_read": "[HL] in delay loop (ADC M at 0144; HL starts at 0177h inside func_isr_rearm_and_exit code area, scans for zero byte)",
+        "memory_write": "none (no STA, STAX, SHLD, MOV M, MVI M)",
+        "output_registers": "B (B=07h for func_isr_palette_cycle), C (C=03h), BC (BC=0703h), D (D=01h arithmetic increment), SP (SP=0177h)",
+        "ports_used": "none (no IN/OUT instructions)",
+        "register_save": "none (ISR does not save registers; uses dedicated stack for palette data)",
+        "side_effects": "variable delay via [HL] scan, sets up BC=0703h and D=01h for palette cycling, repositions SP to 0177h",
+        "stack_frame_size": "0 (no PUSH/POP, only LXI SP)",
+        "stack_operations": "LXI SP,0177h (repositions SP into func_isr_rearm_and_exit code area for palette stack consumption)"
+      },
+      "size": 19,
+      "type": "function"
+    },
+    {
+      "address": "0x014A",
+      "comment": "Пересечение с исполняемым кодом (исправлено из Stage 2: это НЕ данные цветов палитры). Этот RDB-объект перекрывается с исполняемым кодом внутри func_isr_delay_and_setup (байты инструкций LXI B,0703h / MVI D,01h / LXI SP,0177h). Байты 01 03 07 16 01 31 77 01 являются опкодами инструкций, а не таблицей цветов. Фактические значения палитры (F8h–FCh) хранятся в стеке по адресу var_palette_stack, куда помещаются функцией func_setup_and_halt. Этот объект следует рассматривать как артефакт пересечения кода.",
+      "name": "data_isr_code_overlap",
+      "size": 8,
+      "type": "data"
+    },
+    {
+      "address": "0x0152",
+      "comment": "Циклический вывод палитры. Вызывается из func_isr_delay_and_setup (проваливанием) и повторно через RET из func_isr_rearm_and_exit. POP PSW — загружает цвет палитры из стека в A. ORA M ×3 — временная задержка на 12 T-states (гонка с лучом). Затем 8× [OUT 0Ch + арифметика]: выводит A в порт палитры 0Ch, затем изменяет A через SUB L / ADC L / ADD L с чередующимся шаблоном, выводя каждое промежуточное значение. L=52h из инициализации. CMP L / OUT 0Ch — финальное сравнение и вывод. RET — извлекает следующий адрес возврата из стека: первый вызов возвращает на 0172h (func_isr_rearm_and_exit), последующие — на 0176h (самоцикл через RET в func_isr_rearm_and_exit). Каждый вызов обрабатывает одну запись палитры из стека.",
+      "links": [
+        "0x055A"
+      ],
+      "name": "func_isr_palette_cycle",
+      "properties": {
+        "calling_convention": "callee (called via RET from func_isr_rearm_and_exit or fall-through from func_isr_delay_and_setup); returns via RET to func_isr_rearm_and_exit",
+        "clobbered_registers": "A (modified by SUB L, ADC L, ADD L sequence), F (all flags affected by arithmetic)",
+        "flags_set": "Z (ORA A, CMP L), C (SUB L, ADC L, ADD L), S, P (all arithmetic affects sign/parity)",
+        "flags_used": "C (ADC L uses carry flag from previous operation)",
+        "input_registers": "A (via POP PSW from palette stack), L (arithmetic operand: L=52h from func_setup_and_halt init)",
+        "interrupt_role": "ISR palette output (9x OUT 0Ch per invocation, consumes stack entries)",
+        "memory_read": "Stack at [SP] via POP PSW (reads palette color from var_palette_stack 0x055A-0x0576)",
+        "memory_write": "none (no write instructions; SP advances by 2 via POP)",
+        "output_registers": "A (final computed palette value after 8 arithmetic steps)",
+        "ports_used": "OUT 0Ch x9 (palette port: outputs computed color values at 0157, 015A, 015D, 0160, 0163, 0166, 0169, 016C, 016F)",
+        "side_effects": "outputs 9 palette values to port 0Ch (palette register), consumes stack entry (SP += 4 total: 2 POP PSW + 2 RET)",
+        "stack_frame_size": "0 (no frame, but consumes 2 bytes from stack via POP PSW)",
+        "stack_operations": "POP PSW (consumes 2 bytes: palette color into A, flags into F), RET (pops 2-byte return address)"
+      },
+      "size": 32,
+      "type": "function"
+    },
+    {
+      "address": "0x0172",
+      "comment": "Выход из ISR и перезапуск. LXI SP,00FEh — сбрасывает SP в фиксированную позицию (ниже кода, выше области данных стека). EI — повторно разрешает прерывания для следующего VBlank. RET — двойное назначение: (1) первый вызов: извлекает 0172h (помещено func_setup_and_halt) → возврат на 0172h (самоцикл), создавая точку повторного входа для следующего цикла палитры; (2) после RET из func_isr_palette_cycle: извлекает 0176h → возврат на 0176h (самоцикл), в конечном итоге извлекает исходный адрес возврата прерывания и возвращает управление в основной код после HLT. LXI SP обеспечивает перепозиционирование стека для каждого цикла ISR независимо от потребления стека функцией palette_out.",
+      "links": [
+        "0x0172"
+      ],
+      "name": "func_isr_rearm_and_exit",
+      "properties": {
+        "calling_convention": "ISR exit (called from func_isr_palette_cycle via RET); re-enables interrupts and returns via RET",
+        "clobbered_registers": "none (no general-purpose registers modified)",
+        "flags_set": "none",
+        "flags_used": "none",
+        "input_registers": "none (no registers read as input)",
+        "interrupt_role": "ISR exit (re-enables interrupts via EI, resets SP, returns via RET)",
+        "memory_read": "none",
+        "memory_write": "none",
+        "output_registers": "SP (reset to 00FEh)",
+        "ports_used": "none (no IN/OUT instructions)",
+        "side_effects": "EI (re-enables VBlank interrupts), resets SP to 00FEh (below code, above stack data area)",
+        "stack_frame_size": "0 (no frame)",
+        "stack_operations": "LXI SP,00FEh (resets SP to fixed location), RET (pops 2-byte return address from stack)"
+      },
+      "size": 5,
+      "type": "function"
+    },
+    {
+      "address": "0x055A",
+      "comment": "Область стека палитры в RAM. SP инициализирован в 0x0577 функцией func_setup_and_halt. Содержит 12 пар слов (24 байта), размещённых при инициализации: записи по адресам 0x055B–0x0576. Каждая запись — пара PUSH H (0152h = адрес возврата func_isr_palette_cycle) и PUSH PSW (цвет палитры AF). Раскладка сверху (0x0577) вниз: [0172h][0152h,F8h][0152h,F8h]×7[0152h,F9h][0152h,FAh][0152h,FBh][0152h,FCh]. Потребляется через POP PSW в func_isr_palette_cycle. После первого вызова ISR SP перемещается за пределы данных палитры; последующие кадры читают из области за начальной частью стека.",
+      "name": "var_palette_stack",
+      "size": 29,
+      "type": "variable"
+    }
+  ],
+  "platform": "vector06c",
+  "rom": {
+    "file": "clrs.rom",
+    "sha256": "77af8dbcfea2b00e765078ec1c97c755fd97d049e0ee24ee8dc8896ff8f3fcb9",
+    "size": 119
+  },
+  "version": 1
+}
