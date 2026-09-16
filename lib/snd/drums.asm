@@ -425,6 +425,7 @@ tick_end:
         call    tape_on         ; PC0 = 0
         ret
 tick_end_ay:
+        xor     a               ; R10 = 0 — тишина канала C
         ld      e, a
         ld      a, 10
         call    ay_write
@@ -565,7 +566,18 @@ smp_play_ay:
         and     0x0F
         ld      e, a
         ld      a, 10
-        jp      ay_write
+        call    ay_write
+        ; Включить Noise C, выключить Tone C (канал C — общий) так же,
+        ; как табличный удар: сохранить базовый R7 для восстановления
+        ; в tick_end и включить шум в микшере на время семпла.
+        ld      a, (_g_ay_r7)
+        ld      (drum_r7_save), a
+        and     0xDF            ; бит 5 (Noise C) = 0 → включён
+        or      0x04            ; бит 2 (Tone C) = 1 → выключён
+        ld      e, a
+        ld      a, 7
+        call    ay_write
+        ret
 
 ; Ленточный вариант: HL = &arg (SP+2), DE = адрес семпла.
 smp_play_tape:
