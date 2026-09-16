@@ -1,0 +1,529 @@
+{
+  "format": "rdb",
+  "objects": [
+    {
+      "address": "0x0100",
+      "comment": "Точка входа ROM: JMP 0x04CF (инициализация). Самомодифицируется в JMP 0x049D (главный цикл) через SHLD 0101 в func_patch_entry_jump.",
+      "links": [
+        "0x04CF",
+        "0x049D"
+      ],
+      "name": "func_rom_entry",
+      "properties": {
+        "prototype": "(); JMP 0x04CF, самомодиф. в JMP 0x049D"
+      },
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x0103",
+      "comment": "Рабочий указатель текущего потока (мишень LHLD/SHLD 0x0103). Вписан в код сразу за входным JMP; самомодифицируемые данные.",
+      "name": "var_cur_stream_ptr",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0105",
+      "comment": "Поиск по таблице: CMP M / RZ / DAD B / JMP 0x0105 — продвигает HL на шаг BC пока [HL]!=A; возврат RZ при совпадении.",
+      "name": "func_search_value",
+      "properties": {
+        "prototype": "(in A=value, HL=start, BC=stride; out HL->match, ZF set on [HL]==A)"
+      },
+      "size": 6,
+      "type": "function"
+    },
+    {
+      "address": "0x010B",
+      "comment": "Читает 16-битное слово из [HL] в DE (little-endian), HL+=2. MOV E,M; INX H; MOV D,M; INX H; XCHG; RET.",
+      "name": "func_read_word_de",
+      "properties": {
+        "prototype": "(in HL->word16; out DE=word, HL+=2)"
+      },
+      "size": 5,
+      "type": "function"
+    },
+    {
+      "address": "0x0110",
+      "comment": "HL += самоизменяемая база (операнд 0x0111, пишется SHLD 0111 в func_init_song), затем DAD B; DE=HL. Вычисление базового адреса таблицы.",
+      "name": "func_add_selfmod_base",
+      "properties": {
+        "prototype": "(in HL=imm16; base=[0x0111]; out DE=HL+base)"
+      },
+      "size": 6,
+      "type": "function"
+    },
+    {
+      "address": "0x0116",
+      "comment": "Декодирование события паттерна: индекс A*3 от базы [0x0103], 6-байтные записи, тест бита 7, возврат флагов/значений.",
+      "name": "func_event_decode",
+      "properties": {
+        "prototype": "(in A=idx, base=[0x0103]; out BC/DE decoded, flags)"
+      },
+      "size": 66,
+      "type": "function"
+    },
+    {
+      "address": "0x0158",
+      "comment": "Загрузка/переход по паттерну: индекс var_048E, сравнение с var_song_length, чтение таблиц 0x045E/0x0462, запись указателей потока 0x0469/0x046B/0x046D. Вызывается по условию (CZ 0x0158) из func_player_tick.",
+      "links": [
+        "0x0105",
+        "0x010B"
+      ],
+      "name": "func_pattern_fetch",
+      "properties": {
+        "prototype": "(); uses 0x048E/0x045E/0x0462; updates 0x0469/0x046B/0x046D"
+      },
+      "size": 74,
+      "type": "function"
+    },
+    {
+      "address": "0x01A2",
+      "comment": "Dispatch дешифровки трюка: CALL 0x055F (адрес слота), затем B=12, HL=ключ 0x0553, PUSH D, JMP 0x056A (XOR-цикл).",
+      "links": [
+        "0x056A",
+        "0x055F",
+        "0x0553"
+      ],
+      "name": "func_thunk_decrypt_dispatch",
+      "properties": {
+        "prototype": "(); decrypt thunk then jump into it (via 0x055F/0x056A)"
+      },
+      "size": 12,
+      "type": "function"
+    },
+    {
+      "address": "0x01AE",
+      "comment": "Тик проигрывателя: делитель темпа (LDA/DCR/STA 0x0467, JNZ 0x033A), перезагрузка из 0x0466; для 3 каналов SHLD 0x0103 (базы 0x0472/0x047C/0x0486), CALL thunk_decrypt_dispatch, CALL command_dispatch, SHLD потока.",
+      "links": [
+        "0x01A2",
+        "0x0158",
+        "0x0208",
+        "0x033A"
+      ],
+      "name": "func_player_tick",
+      "properties": {
+        "prototype": "(); player tick: tempo divide + 3-channel advance"
+      },
+      "size": 90,
+      "type": "function"
+    },
+    {
+      "address": "0x0208",
+      "comment": "Интерпретатор команд нотного потока: A=[M]; CPI 60/70/80/81/82/8F — диспетчер на обработчики 0x023C/0x024D/0x027F/0x026B/0x024B/0x02A1/0x027B.",
+      "links": [
+        "0x027B",
+        "0x027F",
+        "0x024D",
+        "0x026B",
+        "0x023C",
+        "0x0281",
+        "0x02A1",
+        "0x0105",
+        "0x024B"
+      ],
+      "name": "func_command_dispatch",
+      "properties": {
+        "prototype": "(in HL->cmd byte; loops to handlers; modifies stream [0x0103])"
+      },
+      "size": 52,
+      "type": "function"
+    },
+    {
+      "address": "0x023C",
+      "comment": "Обработчик команд <0x60: запись значения в поток по [0x0103] (+6), установка поля =0x20, возврат в диспетчер (JMP 0x0208).",
+      "name": "func_cmd_handler_60",
+      "properties": {
+        "prototype": "(in A=cmd<0x60; writes stream record, base [0x0103])"
+      },
+      "size": 15,
+      "type": "function"
+    },
+    {
+      "address": "0x024B",
+      "comment": "INX H; RET — общий выход/шаг обработчика команды 0x81.",
+      "name": "func_cmd_retn_inx",
+      "properties": {
+        "prototype": "(); INX H; RET"
+      },
+      "size": 2,
+      "type": "function"
+    },
+    {
+      "address": "0x024D",
+      "comment": "Команда ноты 0x60-0x6F: SUI 0x60, поиск по pitch-таблице канала (LHLD 0x0464; CALL 0x0105, шаг 0x63), запись тона в поток ([0x0103]+3).",
+      "links": [
+        "0x0105"
+      ],
+      "name": "func_cmd_note_pitch",
+      "properties": {
+        "prototype": "(in A=0x60..0x6F note code; table base [0x0464], stride 0x63; writes pitch word to stream)"
+      },
+      "size": 30,
+      "type": "function"
+    },
+    {
+      "address": "0x026B",
+      "comment": "Команда пауза (0x80): установка [0x0103+7]=0xFF (рест), сдвиг указателя потока.",
+      "name": "func_cmd_rest",
+      "properties": {
+        "prototype": "(); rest: [0x0103+7]=0xFF"
+      },
+      "size": 16,
+      "type": "function"
+    },
+    {
+      "address": "0x027B",
+      "comment": "Обработчик команды 0x82: XRA A; JMP 0x0281 (вставка нулевого значения в поток через note_lookup).",
+      "name": "func_cmd_zero",
+      "properties": {
+        "prototype": "(); A=0 -> note_lookup"
+      },
+      "size": 4,
+      "type": "function"
+    },
+    {
+      "address": "0x027F",
+      "comment": "Команда 0x70-0x7F: SUI 0x70 (код), далее общий путь note_lookup.",
+      "name": "func_cmd_sui70",
+      "properties": {
+        "prototype": "(in A=0x70..0x7F; SUI 0x70 -> note_lookup)"
+      },
+      "size": 2,
+      "type": "function"
+    },
+    {
+      "address": "0x0281",
+      "comment": "Поиск ноты/длительности: LXI B,0x21; LHLD 0x0460; CALL 0x0105 — поиск по таблице, запись слова в поток ([0x0103]-2). Общий хвост 0x0294.",
+      "links": [
+        "0x0105"
+      ],
+      "name": "func_note_lookup",
+      "properties": {
+        "prototype": "(in A=code; table [0x0460], stride 0x21; writes record to stream)"
+      },
+      "size": 32,
+      "type": "function"
+    },
+    {
+      "address": "0x02A1",
+      "comment": "Команда 0x80-0x8E (смена параметров): STA 0x049C/0x049A, пометка потока [0x0103-2]=1, поиск ноты (LHLD 0x0460; CALL 0x0105), JMP 0x0294.",
+      "links": [
+        "0x0105"
+      ],
+      "name": "func_cmd_80",
+      "properties": {
+        "prototype": "(in A=0x80..0x8E; sets 0x049C/0x049A; -> note_lookup tail 0x0294)"
+      },
+      "size": 34,
+      "type": "function"
+    },
+    {
+      "address": "0x02C3",
+      "comment": "Декодирование длительности/удержания ноты: чтение [0x0103+7], ANI 0x1F, обращение к таблице 0x0060 (смещение из потока), корректировка счётчика удержания и указателя.",
+      "name": "func_duration_decode",
+      "properties": {
+        "prototype": "(); duration/sustain decode of [0x0103] record; table 0x0060"
+      },
+      "size": 64,
+      "type": "function"
+    },
+    {
+      "address": "0x0303",
+      "comment": "Сохранение громкости: если C==0 — STA 0x0495 (значение из H).",
+      "name": "func_vol_store",
+      "properties": {
+        "prototype": "(in C; if C==0 store H to 0x0495)"
+      },
+      "size": 8,
+      "type": "function"
+    },
+    {
+      "address": "0x030B",
+      "comment": "Проверка/установка гейта канала: чтение [0x0103+7], флаги по [0x0103-2], запись режима 0x02/0 в 0x049C.",
+      "name": "func_channel_gate",
+      "properties": {
+        "prototype": "(); channel gate check [0x0103+7], set 0x049C mode"
+      },
+      "size": 47,
+      "type": "function"
+    },
+    {
+      "address": "0x033A",
+      "comment": "Обработка 3 каналов (хвост func_player_tick): для каждого канала SHLD 0x0103 (0x0472/0x047C/0x0486), CALL duration_decode/pattern/event_decode/pitch_calc/vol_store/channel_gate, накопление значений AY-регистров в 0x0496/0x0497/0x0498/0x0499; в конце JMP 0x0442 (вывод в AY).",
+      "links": [
+        "0x0408",
+        "0x0303",
+        "0x0116",
+        "0x02C3",
+        "0x0442",
+        "0x030B"
+      ],
+      "name": "func_channels_process",
+      "properties": {
+        "prototype": "(); process 3 channels -> AY reg accumulators; tail JMP 0x0442"
+      },
+      "size": 206,
+      "type": "function"
+    },
+    {
+      "address": "0x0408",
+      "comment": "Расчёт периода тона: индекс*2 (ADI/ADD A), обращение к master pitch table 0x057A (DAD), чтение 16-бит, маскирование 0xEF (шум/мост), сложение с базой потока. Возврат периода в HL.",
+      "links": [
+        "0x057A"
+      ],
+      "name": "func_pitch_calc",
+      "properties": {
+        "prototype": "(in A=note idx; master table 0x057A; out HL=period/masked 0xEF)"
+      },
+      "size": 58,
+      "type": "function"
+    },
+    {
+      "address": "0x0442",
+      "comment": "Вывод в AY-3-8910: обход таблицы регистров от 0x049C вниз; OUT 0x15 (номер регистра) + OUT 0x14 (значение); регистры 0x0A..0x00 (тон A/B/C, noise, mixer, volume). Проверено по I/O-трассе.",
+      "name": "func_ay_write_registers",
+      "properties": {
+        "prototype": "(); OUT 0x15/0x14, regs 0x0A..0x00 from [0x049C] downward"
+      },
+      "size": 28,
+      "type": "function"
+    },
+    {
+      "address": "0x045E",
+      "comment": "Базовый указатель паттернов канала A (заполняется из заголовка трека через func_store_de_to_bc, LXI B,0x045E).",
+      "name": "var_pattern_base_A",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0460",
+      "comment": "Базовый указатель паттернов/длительностей канала B (LXI B,0x0460).",
+      "name": "var_pattern_base_B",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0462",
+      "comment": "Базовый указатель паттернов канала C (LXI B,0x0462).",
+      "name": "var_pattern_base_C",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0464",
+      "comment": "Базовый указатель pitch-таблицы (вычисляется в init через func_add_selfmod_base, SHLD 0x0464).",
+      "name": "var_pitch_table_base",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0466",
+      "comment": "Темп трека — значение перезагрузки счётчика (читается из [0x0657] в init).",
+      "name": "var_tempo",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x0467",
+      "comment": "Счётчик делителя темпа (LDA/DCR/STA 0x0467 в func_player_tick).",
+      "name": "var_tempo_counter",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x0468",
+      "comment": "Длина трека (из заголовка, INR; сравнение в func_pattern_fetch).",
+      "name": "var_song_length",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x0469",
+      "comment": "Текущий указатель нотного потока канала A (иниц. 0x046F; SHLD 0x0469).",
+      "name": "var_stream_ptr_A",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x046B",
+      "comment": "Текущий указатель нотного потока канала B.",
+      "name": "var_stream_ptr_B",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x046D",
+      "comment": "Текущий указатель нотного потока канала C.",
+      "name": "var_stream_ptr_C",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x046F",
+      "comment": "Таблица состояния 3 каналов (0x046F..0x049B). Записи по ~10 байт: базы 0x0472/0x047C/0x0486 (указатель потока, питч, громкость, длительность, флаги). Инициализация: 1-й байт 0xFF, остальные 00.",
+      "name": "data_channel_state",
+      "size": 45,
+      "type": "data"
+    },
+    {
+      "address": "0x049C",
+      "comment": "Рабочий регистр заметки/параметра для вывода в AY (STA 0x049C в обработчиках; читается func_ay_write_registers как старшая точка обхода).",
+      "name": "var_ay_note_reg",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x049D",
+      "comment": "Главный цикл: DI; CALL func_player_tick; программная задержка (LXI H,0x0BFC; DCR L/H; JNZ); IN 0x01 (всегда 0xEF) + RAL/JC; ветка счётчика 0x04BB (переменная 0x04A2 вписана в код LXI H); JMP 0x049D.",
+      "links": [
+        "0x01AE"
+      ],
+      "name": "func_main_loop",
+      "properties": {
+        "prototype": "(); main loop: tick + software delay + IN 0x01 poll"
+      },
+      "size": 50,
+      "type": "function"
+    },
+    {
+      "address": "0x04CF",
+      "comment": "Инициализация трека: DI; разбор заголовка 0x0657 (темп->0x0466, длина->0x0468, базы каналов->0x045E/0x0460/0x0462, база питча->0x0464); очистка таблицы состояния 0x046F..0x049B (45 байт, 1-й байт 0xFF); инициализация 3 каналов; JMP func_patch_entry_jump.",
+      "links": [
+        "0x010B",
+        "0x053F",
+        "0x0110",
+        "0x0105",
+        "0x0549",
+        "0x0655"
+      ],
+      "name": "func_init_song",
+      "properties": {
+        "prototype": "(); init: parse header 0x0657, clear 0x046F table, init channels"
+      },
+      "size": 110,
+      "type": "function"
+    },
+    {
+      "address": "0x053D",
+      "comment": "EI; RET — короткий хвост (разрешить прерывания и вернуться). Статических xref нет; объект создан для 100% покрытия (разрыв между func_init_song и func_store_de_to_bc).",
+      "name": "func_053D_ei_ret",
+      "properties": {
+        "prototype": "(); EI; RET"
+      },
+      "size": 2,
+      "type": "function"
+    },
+    {
+      "address": "0x053F",
+      "comment": "Сохранить 16-бит DE в [BC] и [BC+1] с сохранением регистров (PUSH B/PSW; STAX; INX B; STAX; POP).",
+      "name": "func_store_de_to_bc",
+      "properties": {
+        "prototype": "(in DE=word, BC=dest; stores [BC]=E,[BC+1]=D; preserves regs)"
+      },
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x0549",
+      "comment": "Однократный патч входа: CALL func_ay_write_registers; LXI H,0x049D; SHLD 0x0101 (перенаправляет входной JMP 0x0100 на главный цикл 0x049D); PCHL (переход в 0x049D).",
+      "links": [
+        "0x0442"
+      ],
+      "name": "func_patch_entry_jump",
+      "properties": {
+        "prototype": "(); one-time patch: SHLD 0x0101 (JMP->0x049D); PCHL"
+      },
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x0553",
+      "comment": "12-байтовый XOR-ключ дешифровки музыкальных трюков: 77 6C 67 D0 B6 6A 7F 7F 3F B3 38 9F (используется func_xor_decrypt_loop, HL=0x0553).",
+      "name": "data_xor_key",
+      "size": 12,
+      "type": "data"
+    },
+    {
+      "address": "0x055F",
+      "comment": "Вычисление адреса XOR-слота: POP D (адрес возврата), slot=0x0700+2*lo(retaddr) (ADD E; MVI H,06; INX H); PUSH D; PUSH H (слот станет PC); XCHG; PCHL.",
+      "links": [
+        "0x0700"
+      ],
+      "name": "func_thunk_slot_addr",
+      "properties": {
+        "prototype": "(); out: DE=slot addr 0x0700+2*lo(retaddr)"
+      },
+      "size": 11,
+      "type": "function"
+    },
+    {
+      "address": "0x056A",
+      "comment": "XOR-цикл дешифровки 12-байтного слота ключом из 0x0553: LDAX D; XRA M; STAX D; INX H/D; DCR B; JNZ 0x056B. Хвост: LHLD 0x0103; POP PSW; POP D; RET — RET выталкивает адрес слота, PC уходит в расшифрованный трюк.",
+      "links": [
+        "0x0700"
+      ],
+      "name": "func_xor_decrypt_loop",
+      "properties": {
+        "prototype": "(in B=12, DE=slot, HL=key 0x0553; XOR decrypt; RET->thunk)"
+      },
+      "size": 16,
+      "type": "function"
+    },
+    {
+      "address": "0x057A",
+      "comment": "Мастер-таблица периодов тона AY: 96 16-битных убывающих значений (от 0x0EF8 до 0x000F). Индексируется в func_pitch_calc (LXI H,0x057A, шаг 2).",
+      "name": "music_pitch_table",
+      "size": 192,
+      "type": "table"
+    },
+    {
+      "address": "0x063A",
+      "comment": "Текст (автор/контакт): \"(833)62-74-48 VICTOR SATURO\".",
+      "name": "str_credit_contact",
+      "size": 27,
+      "type": "string"
+    },
+    {
+      "address": "0x0655",
+      "comment": "Заголовок трека: [0x0657]=темп, далее слова-указатели баз каналов (чита func_read_word_de в func_init_song).",
+      "name": "data_song_header",
+      "size": 7,
+      "type": "data"
+    },
+    {
+      "address": "0x065C",
+      "comment": "Текст: \"SONG BY ST COMPILE\" (продолжение \"COMPILER\").",
+      "name": "str_credit_song",
+      "size": 18,
+      "type": "string"
+    },
+    {
+      "address": "0x066E",
+      "comment": "Таблицы параметров трека после заголовка (16-битные значения 0x8000/0x0F80 — громкость/огибающие/маски), перед нотными потоками.",
+      "name": "data_song_params",
+      "size": 146,
+      "type": "data"
+    },
+    {
+      "address": "0x0700",
+      "comment": "Нотные потоки 3 каналов + XOR-зашифрованные 12-байтные трюки. Слот трюка = 0x0700+2*lo(адреса возврата) (func_thunk_slot_addr). Чтение только, writes во время дешифровки (инволютивный XOR).",
+      "name": "music_streams",
+      "size": 2090,
+      "type": "data"
+    },
+    {
+      "address": "0x0F2A",
+      "comment": "Хвостовое заполнение нулями (0x0F2A..0x0F7F) до конца ROM.",
+      "name": "data_padding_tail",
+      "size": 86,
+      "type": "data"
+    }
+  ],
+  "platform": "vector06c",
+  "rom": {
+    "file": "TESTAY.ROM",
+    "sha256": "8170faa43034a3ed8ca573be3a854184cdd1751457e74befad83e5289f4d3db5",
+    "size": 3712
+  },
+  "version": 1
+}

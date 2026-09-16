@@ -1,0 +1,24 @@
+{
+  "rom": "TESTAY.ROM",
+  "rom_size": 3712,
+  "origin": "0x0100",
+  "mapping_entry_point": "0x0000",
+  "rom_sha256": "8170faa43034a3ed8ca573be3a854184cdd1751457e74befad83e5289f4d3db5",
+  "objects": 51,
+  "links": 40,
+  "code_ranges": 4,
+  "data_ranges": 21,
+  "warnings": 0,
+  "errors": 0,
+  "conflicts": 0,
+  "unresolved_references": 0,
+  "coverage": {
+    "rom_bytes": 3712,
+    "code_bytes": 1069,
+    "data_bytes": 2643,
+    "instruction_count": 615,
+    "outside_window_dropped": 256,
+    "uncovered": [],
+    "complete": true
+  }
+}
