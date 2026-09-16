@@ -23,6 +23,10 @@
         PUBLIC  _v06_vi53_ch0
         PUBLIC  _v06_vi53_ch1
         PUBLIC  _v06_vi53_ch2
+        PUBLIC  _v06_ay_write
+
+AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
+AY_DAT  equ     0x14            ; AY: запись данных (чётный порт)
 
 _v06_vi53_ctrl:
         ld      hl, 2           ; младший байт аргумента над адресом
@@ -50,4 +54,34 @@ _v06_vi53_ch2:
         add     hl, sp
         ld      a, (hl)
         out     (0x09), a
+        ret
+
+; ------------------------- AY-3-8910 backend -------------------------
+;
+; Запись в регистр AY (music.c, drums.asm, режим MUSIC_MODE_AY).
+; Аргументы в стеке (cdecl): reg по SP+2, val по SP+4.
+; Только 8080-инструкции, OUT (n),A с немедленным портом.
+;
+; DI/EI обрамляют пару OUT: между выбором регистра (0x15) и записью
+; данных (0x14) кадровое прерывание НЕ должно менять регистр AY,
+; иначе данные уйдут в другой регистр (гонка ISR ↔ основной код).
+; В TESTAY.ROM прерывания запрещены (DI) на всё время — там этой
+; проблемы нет; в synth.rom ISR вызывает drum_tick, который тоже
+; пишет в AY, поэтому атомарность пары OUT критична.
+;
+;   void v06_ay_write(unsigned char reg, unsigned char val);
+
+        PUBLIC  _v06_ay_write
+
+_v06_ay_write:
+        di
+        ld      hl, 2
+        add     hl, sp
+        ld      a, (hl)         ; reg
+        out     (AY_SEL), a
+        inc     hl
+        inc     hl
+        ld      a, (hl)         ; val
+        out     (AY_DAT), a
+        ei
         ret

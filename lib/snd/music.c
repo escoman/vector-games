@@ -81,6 +81,97 @@ static void vi53_set_channel(unsigned char channel, unsigned int divisor)
     vi53_data(channel, (unsigned char)(divisor >> 8));
 }
 
+/* ------------------------- AY-3-8910 backend ------------------------- */
+
+/* Запись регистра AY-3-8910. Аргументы через volatile locals
+ * (гарантия доступа по стеку из asm), OUT — в едином asm-блоке,
+ * что исключает проблему порядка аргументов sccz80 и гонок
+ * с прерываниями между двумя OUT. */
+static volatile unsigned char ay_r_, ay_v_;
+static void ay_write(unsigned char reg, unsigned char val)
+{
+    ay_r_ = reg;
+    ay_v_ = val;
+#asm
+    di
+    ld  a, (_ay_r_)
+    out (0x15), a
+    ld  a, (_ay_v_)
+    out (0x14), a
+    ei
+#endasm
+}
+
+/* Зеркало R7 для drums.asm: хранит текущее значение микшера AY,
+ * чтобы ударные могли включить/выключить Noise C, не трогая
+ * биты тонов. Обновляется при каждом ay_write(7, ...). */
+unsigned char g_ay_r7;
+
+void ay_set_r7(unsigned char val)
+{
+    g_ay_r7 = val;
+    ay_write(7, val);
+}
+
+/* Базовая конфигурация микшера AY для режима MUSIC_MODE_AY:
+ * тоны A/B/C включены, шум C включён (для ударных drums.asm),
+ * шум A/B выключен. ТЗ §6: Noise — общий генератор, R7
+ * маршрутизирует его к каналам; drum_init() вызывается ДО music_mode(),
+ * поэтому здесь перезаписываем R7. */
+static void ay_mixer_init(void)
+{
+    /* Tone ABC on, Noise AB/C off. Noise C включают ударные
+     * (drums.asm) при триггере и выключают при завершении. */
+    ay_set_r7(0xF8);
+}
+
+/* Конвертация делителя ВИ53 в период AY-3-8910.
+ * Формула: period_AY = round(AY_CLOCK * div_VI53 / (16 * 1500000)),
+ * AY_CLOCK = 1774000 Гц.  Целочисленная форма:
+ *   period_AY = (div * 887 + 6000) / 12000
+ * (коэффициент 1774000/(16*1500000) = 887/12000, GCD = 125).
+ * Максимальный промежуточный: 65535 * 887 = 58 129 545 < 2^32.
+ * Результат ограничен 12-битным диапазоном AY: 1..4095.
+ * При div == 0 — тишина (возврат 0). */
+static unsigned int vi53_to_ay_period(unsigned int div)
+{
+    unsigned long p;
+    if (div == 0u)
+        return 0u;
+    p = ((unsigned long)div * 887UL + 6000UL) / 12000UL;
+    if (p > 4095UL) p = 4095UL;
+    if (p < 1UL)    p = 1UL;
+    return (unsigned int)p;
+}
+
+/* Установка тона AY (период + громкость). div_VI53 — делитель из
+ * div_tab[], конвертируется в период AY целочисленной формулой
+ * (vi53_to_ay_period). divisor = 0 — тишина (громкость в 0,
+ * период не трогаем — ТЗ §10). Канал C (R10) — общий с drums.asm:
+ * огибающая удара перезаписывает громкость мелодии, это штатное
+ * поведение (ТЗ §6-7). */
+static void ay_set_tone(unsigned char ch, unsigned int div_VI53)
+{
+    unsigned int period;
+    static const unsigned char preg[3] = { 0, 2, 4 };  /* R0, R2, R4 */
+    static const unsigned char vreg[3] = { 8, 9, 10 }; /* R8, R9, R10 */
+
+    period = vi53_to_ay_period(div_VI53);
+    ay_write(preg[ch], (unsigned char)(period & 0xFFu));
+    ay_write(preg[ch] + 1u, (unsigned char)(period >> 8));
+    if (period == 0u)
+        ay_write(vreg[ch], 0u);    /* note OFF: volume = 0 */
+    else
+        ay_write(vreg[ch], 0x0Fu); /* note ON: volume = 15 */
+}
+
+static void ay_mute_all(void)
+{
+    ay_write(8, 0);
+    ay_write(9, 0);
+    ay_write(10, 0);
+}
+
 /* Делители ВИ53 по абсолютному номеру ноты (октава*12 + полутон):
  * делитель = 1500000 / частота, ля 4-й октавы (57) = 440 Гц = 3409.
  * Номера 0..11 ниже рабочей зоны — тишина (делитель > 65535). */
@@ -99,6 +190,37 @@ static const unsigned int div_tab[95] = {
       569u,   537u,   507u,   478u,   451u,   426u,   402u
 };
 
+/* --------------------------- Абстракция вывода ----------------------- */
+
+/* Текущий режим вывода мелодических каналов. MUSIC_MODE_VI53 (0) —
+ * классический, полная обратная совместимость. MUSIC_MODE_AY (1) —
+ * три тона через AY-3-8910, ударные (AY Noise) — в обоих режимах. */
+static unsigned char g_music_mode = MUSIC_MODE_VI53;
+
+/* Включение ноты на текущем backend. note_idx — индекс ноты 0-94
+ * (как в div_tab[]). VI53 получает делитель напрямую; AY — через
+ * конвертацию vi53_to_ay_period() (ТЗ: конвертация параметров). */
+static void music_note_on(unsigned char ch, unsigned char note_idx)
+{
+    if (g_music_mode == MUSIC_MODE_AY) {
+        ay_set_tone(ch, div_tab[note_idx]);
+    } else {
+        vi53_set_channel(ch, div_tab[note_idx]);
+    }
+}
+
+/* Выключение ноты (тишина). Для AY: volume = 0, период не трогаем
+ * (ТЗ §10). Для VI53: режим 3 без загрузки счётчика. */
+static void music_note_off(unsigned char ch)
+{
+    if (g_music_mode == MUSIC_MODE_AY) {
+        static const unsigned char vreg[3] = { 8, 9, 10 };
+        ay_write(vreg[ch], 0u);
+    } else {
+        vi53_set_channel(ch, 0u);
+    }
+}
+
 /* --------------------------- Состояние -------------------------------- */
 
 /* Один поток партитуры: позиция в байткоде и текущее состояние */
@@ -110,7 +232,7 @@ typedef struct {
     unsigned char cnt;          /* тиков до конца текущего события    */
     unsigned char len;          /* текущая длительность (MUS_LEN)     */
     unsigned char gate;         /* тиков тишины до вступления ноты    */
-    unsigned int div;           /* делитель отложенной ноты           */
+    unsigned char note;         /* индекс ноты 0-94 (div_tab/ay_period) */
 } mus_ch_t;
 
 static const music_song_t *g_song;
@@ -127,9 +249,13 @@ static unsigned int g_acc;      /* остаток в аккумуляторе т
 
 static void silence_tones(void)
 {
-    vi53_set_channel(0, 0);
-    vi53_set_channel(1, 0);
-    vi53_set_channel(2, 0);
+    if (g_music_mode == MUSIC_MODE_AY) {
+        ay_mute_all();
+    } else {
+        vi53_set_channel(0, 0);
+        vi53_set_channel(1, 0);
+        vi53_set_channel(2, 0);
+    }
 }
 
 static void reset_stream(mus_ch_t *c, const unsigned char *pc)
@@ -202,15 +328,73 @@ void music_set_loop(unsigned char loop)
     g_loop = loop;
 }
 
+/* ---------------------- Переключение backend ------------------------ */
+
+/* Глобальное переключение вывода мелодических каналов: ВИ53 ↔ AY.
+ * Переключение во время воспроизведения — без сброса позиции, pc,
+ * cnt, gate, состояния g_ch[] и drums (ТЗ §14). Меняется только
+ * аппаратный backend; текущие ноты восстанавливаются на новом
+ * устройстве. Ударные (AY Noise) работают в обоих режимах. */
+void music_mode(unsigned char mode)
+{
+    unsigned char i;
+
+    if (mode == g_music_mode)
+        return;
+
+    if (mode == MUSIC_MODE_AY) {
+        /* ---- VI53 → AY ---- */
+        /* 1. Заглушить активные VI53-каналы */
+        vi53_set_channel(0, 0u);
+        vi53_set_channel(1, 0u);
+        vi53_set_channel(2, 0u);
+        /* 2. Настроить AY: микшер (R7) + громкости */
+        ay_mixer_init();
+        ay_mute_all();
+        /* 3. Переключить режим */
+        g_music_mode = MUSIC_MODE_AY;
+        /* 4. Восстановить текущие ноты на AY (если играет) */
+        if (g_playing && !g_paused) {
+            for (i = 0u; i < 3u; ++i) {
+                if (g_ch[i].gate == 0u && g_ch[i].note < 95u &&
+                    g_ch[i].pc != 0 && (g_ch_mask & (1u << i)))
+                    ay_set_tone(i, div_tab[g_ch[i].note]);
+            }
+        }
+    } else {
+        /* ---- AY → VI53 ---- */
+        /* 1. Заглушить AY tone channels */
+        ay_mute_all();
+        /* 2. Восстановить микшер AY для drum_init (тоны выкл, шум C) */
+        ay_set_r7(0xDF);
+        /* 3. Переключить режим */
+        g_music_mode = MUSIC_MODE_VI53;
+        /* 4. Восстановить текущие ноты на VI53 (если играет) */
+        if (g_playing && !g_paused) {
+            for (i = 0u; i < 3u; ++i) {
+                if (g_ch[i].gate == 0u && g_ch[i].note < 95u &&
+                    g_ch[i].pc != 0 && (g_ch_mask & (1u << i)))
+                    vi53_set_channel(i, div_tab[g_ch[i].note]);
+            }
+        }
+    }
+}
+
 /* Маскировка каналов: биты 0-2 — тональные 0-2, бит 3 — ударные.
  * 0x0F (по умолчанию) — все каналы включены. */
 void music_set_channel_mask(unsigned char mask)
 {
     g_ch_mask = mask;
     /* При выключении тональных каналов — сразу тишина */
-    if (!(mask & 1u)) vi53_set_channel(0, 0u);
-    if (!(mask & 2u)) vi53_set_channel(1, 0u);
-    if (!(mask & 4u)) vi53_set_channel(2, 0u);
+    if (g_music_mode == MUSIC_MODE_AY) {
+        if (!(mask & 1u)) ay_set_tone(0, 0u);
+        if (!(mask & 2u)) ay_set_tone(1, 0u);
+        if (!(mask & 4u)) ay_set_tone(2, 0u);
+    } else {
+        if (!(mask & 1u)) vi53_set_channel(0, 0u);
+        if (!(mask & 2u)) vi53_set_channel(1, 0u);
+        if (!(mask & 4u)) vi53_set_channel(2, 0u);
+    }
     if (!(mask & 8u)) drum_mute();
 }
 
@@ -228,11 +412,11 @@ static void tone_event(unsigned char ch)
         b = *c->pc++;
         if (b == MUS_END) {
             c->pc = 0;                  /* поток закончился */
-            vi53_set_channel(ch, 0u);
+            music_note_off(ch);
             return;
         }
         if (b == MUS_REST) {
-            vi53_set_channel(ch, 0u);
+            music_note_off(ch);
             /* Текущий тик — первый тик паузы (как и в drum_event),
              * поэтому cnt = len - 1. */
             if (c->len > 1u)
@@ -269,9 +453,9 @@ static void tone_event(unsigned char ch)
          * событие длится ровно len тиков (gate=1 + cnt=len-2 + текущий
          * тик = len), дрейфа нет. Делитель отложен, запись в ВИ53 — в
          * clock_tick(). */
-        vi53_set_channel(ch, 0u);
+        music_note_off(ch);
         c->gate = 1u;
-        c->div = div_tab[b - 1u];
+        c->note = (unsigned char)(b - 1u);
         if (c->len >= 2u)
             c->cnt = c->len - 2u;   /* 1 тик — текущий, 1 тик — гейт */
         else
@@ -373,7 +557,7 @@ static void clock_tick(void)
         if (g_ch[i].gate > 0u) {
             --g_ch[i].gate;
             if (g_ch[i].gate == 0u)     /* гейт отзвучал — нота */
-                vi53_set_channel(i, g_ch[i].div);
+                music_note_on(i, g_ch[i].note);
         } else if (g_ch[i].cnt > 0u) {
             --g_ch[i].cnt;
         } else {

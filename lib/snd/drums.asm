@@ -59,15 +59,19 @@
         PUBLIC  _drum_tick
         PUBLIC  _drum_mute
         PUBLIC  _drum_sample_play
+        EXTERN  _g_ay_r7        ; зеркало R7 из music.c
 
 AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
 AY_DAT  equ     0x14            ; AY: запись данных (чётный порт)
 
 ; Запись в регистр AY: A = номер регистра, E = значение.
+; DI/EI защищает пару OUT от прерывания ISR (общий лач AY-регистра).
 ay_write:
+        di
         out     (AY_SEL), a
         ld      a, e
         out     (AY_DAT), a
+        ei
         ret
 
 ; ------------------------------ состояние ------------------------------
@@ -81,6 +85,7 @@ drum_vol:       defb    0       ; текущая громкость (R10)
 drum_dur:       defb    0       ; длительность в тиках
 drum_decay:     defb    0       ; тиков на шаг спада громкости
 drum_clap:      defb    0       ; 1 = режим вспышек clap
+drum_r7_save:   defb    0       ; сохранённый R7 (восстановить при конце)
 
 ; Счётчики:
 drum_pos:       defb    0       ; тиков с момента удара
@@ -108,6 +113,8 @@ _drum_init:
         ld      a, 7            ; микшер: тоны A/B/C выкл, шум A/B выкл,
         ld      e, 0xDF         ; шум C вкл (бит 5 = 0)
         call    ay_write
+        ld      a, 0xDF         ; обновить зеркало R7 в music.c
+        ld      (_g_ay_r7), a
         ld      a, 10           ; громкость канала C: тишина
         ld      e, 0
         call    ay_write
@@ -122,7 +129,19 @@ _drum_mute:
         ld      a, 10           ; громкость канала C: тишина
         ld      e, 0
         call    ay_write
+        ld      a, (drum_r7_save)
+        or      a               ; 0 = удар не запускался, R7 не трогать
+        call    nz, drum_restore_r7
         ret
+
+; Восстановить R7 из drum_r7_save → g_ay_r7 → AY.
+; Вызывается при завершении удара (конец, семпл, mute).
+drum_restore_r7:
+        ld      a, (drum_r7_save)
+        ld      (_g_ay_r7), a
+        ld      e, a
+        ld      a, 7
+        jp      ay_write
 
 _drum_kick:
         ld      hl, tab_kick
@@ -180,6 +199,14 @@ drum_cp:
         ld      hl, drum_vol
         ld      e, (hl)
         call    ay_write
+        ; Включить Noise C, выключить Tone C (канал C — общий):
+        ld      a, (_g_ay_r7)   ; текущий R7 из music.c
+        ld      (drum_r7_save), a  ; сохранить для восстановления
+        and     0xDF            ; бит 5 (Noise C) = 0 → включён
+        or      0x04            ; бит 2 (Tone C) = 1 → выключён
+        ld      e, a
+        ld      a, 7
+        call    ay_write
         ld      a, 1
         ld      (drum_active), a
         ret
@@ -204,6 +231,7 @@ _drum_tick:
         ld      e, a
         ld      a, 10
         call    ay_write
+        call    drum_restore_r7
         ret
 drum_live:
         ld      a, (drum_clap)
@@ -262,7 +290,8 @@ tick_smp:
         ld      (smp_ptr + 1), a
         ld      e, a
         ld      a, 10
-        jp      ay_write
+        call    ay_write
+        jp      drum_restore_r7
 
 ; Запустить семпл .smp (cdecl: указатель в стеке, SP+2).
 ; Формат: байт N — число кадров, затем N пар (R6, R10); 0 = ничего.

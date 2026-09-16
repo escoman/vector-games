@@ -195,6 +195,14 @@ extern void music_set_channel_mask(unsigned char mask);
  * рядом должен вызываться drum_tick() (огибающие сэмплов). */
 extern void music_tick(void);
 
+/* Backend: ВИ53 (0, по умолчанию) или AY-3-8910 (1). Переключение
+ * во время воспроизведения — без сброса позиции и состояния.
+ * Три мелодических канала: 0→VI53 CH0/AY A, 1→CH1/AY B, 2→CH2/AY C.
+ * Ударные (AY Noise) работают в обоих режимах через drums.asm. */
+#define MUSIC_MODE_VI53 0
+#define MUSIC_MODE_AY   1
+extern void music_mode(unsigned char mode);
+
 /* Диагностика (ТЗ §4-12): счётчики для определения рассинхронизации
  * тональных каналов и ударных. Только наблюдение, не влияют на звук. */
 extern volatile unsigned long diag_irq_count;
