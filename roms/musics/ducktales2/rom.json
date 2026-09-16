@@ -6,8 +6,7 @@
     {"name": "TRACK 1",  "file": "track_1"},
     {"name": "TRACK 2",  "file": "track_2"},
     {"name": "TRACK 3",  "file": "track_3"},
-    {"name": "TRACK 4",  "file": "track_4"},
-    {"name": "TRACK 19",  "file": "track_19"}
+    {"name": "TRACK 4",  "file": "track_4"}
   ],
   "layout": {
     "cols": 2,

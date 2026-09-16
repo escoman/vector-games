@@ -19,6 +19,7 @@
         EXTERN  _gfx_scroll_row
         PUBLIC  kbd_scan_rows
         PUBLIC  _kbd_scan_rows
+        PUBLIC  _kbd_scan_now
         PUBLIC  _kbd_rows
         PUBLIC  _kbd_shift_state
         PUBLIC  _kbd_port_c_raw
@@ -29,6 +30,10 @@ _kbd_scan_rows:
         halt                    ; синхронизация с VBLANK: весь опрос
                                 ; проходит в гасящем интервале, порт 0x03
                                 ; (скролл) не дёргает экран
+_kbd_scan_now:
+        ; Точка входа для вызова ИЗ кадрового прерывания: прерывание
+        ; приходит на VSync, луч уже в гашении — ждать halt не нужно
+        ; (и нельзя, мы и так в обработчике). Ниже — общий код опроса.
         in      a, (0x02)              ; сохранить PB (бордюр + режим)
         push    af
         ld      a, 0x8A                 ; порт B — ввод столбцов

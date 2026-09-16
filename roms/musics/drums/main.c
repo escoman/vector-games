@@ -10,8 +10,10 @@
  *   - клавиши:  опрос матрицы портами (keyboard.c).
  *
  * Тоновые каналы AY полностью свободны для мелодии: библиотека не
- * пишет в R0-R5, микшер R7 настраивается один раз в drum_init(),
- * огибающая программная — drum_tick() из кадрового прерывания.
+ * пишет в R0-R5, микшер R7 меняется только при триггере удара
+ * (биты шума/тона C), огибающая программная — drum_tick() из
+ * кадрового прерывания. Выход шума выбран drum_mode(MUSIC_MODE_AY):
+ * в режиме VI53 то же самое код давал бы на Tape Out (PC0).
  *
  * Управление:
  *   1 — KICK (бочка);
@@ -52,20 +54,19 @@ static const struct {
     unsigned char dy;           /* смещение по вертикали от верха меню */
     const char *text;
 } menu_lines[] = {
-    { 40u,  0u, "DRUMS (AY NOISE):" },
+    { 5u,  0u, "DRUMS (AY NOISE):" },
     { 0u,  16u, "1 - KICK" },
     { 0u,  32u, "2 - SNARE" },
     { 0u,  48u, "3 - HAT CLOSED" },
     { 0u,  64u, "4 - HAT OPEN" },
-    { 136u, 16u, "5 - TOM" },
-    { 136u, 32u, "6 - CLAP" },
-    { 136u, 48u, "7 - RIM" },
-    { 136u, 64u, "ESC - EXIT" },
+    { 17u, 16u, "5 - TOM" },
+    { 17u, 32u, "6 - CLAP" },
+    { 17u, 48u, "7 - RIM" }
 };
 
 static void show_menu(void)
 {
-    unsigned char x0 = 16u;
+    unsigned char x0 = 2u;
     unsigned char y0 = (unsigned char)(title_bmp_height + 16u);
     unsigned char i;
 
@@ -76,6 +77,14 @@ static void show_menu(void)
     }
 }
 
+static void show_mode(void)
+{
+    unsigned char y0 = (unsigned char)(title_bmp_height + 16u + 64u);
+
+    gfx_print(19u, y0, "MODE: ", 8u);
+    gfx_print(26u, y0, g_music_mode == MUSIC_MODE_AY ? "AY  " : "VI53", 8u);
+}
+
 /* ------------------------------- main -------------------------------- */
 
 int main(void)
@@ -83,8 +92,9 @@ int main(void)
     unsigned char key;
     unsigned char prev_key = 0;
 
-    frame_handler = drum_tick;      /* огибающие — из кадрового прерывания */
-    drum_init();                    /* микшер: тон C выкл, шум C вкл */
+    frame_handler = drum_tick;
+    drum_mode(g_music_mode);
+    drum_init();
 
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
      * по завершении — рабочая палитра картинки и текст меню */
@@ -92,6 +102,7 @@ int main(void)
     gfx_clear(0);
     gfx_rle_expand(title_bmp_screen_rle, 8u, 0u);
     show_menu();
+    show_mode();
     gfx_set_palette(title_bmp_palette);
 
     for (;;) {
@@ -113,8 +124,9 @@ int main(void)
                 drum_clap();
             } else if (key == '7') {
                 drum_rim();
-            } else if (key == 27) {     /* СТОП (ESC) */
-                break;
+            } else if (key == 128) {     /* F1 */
+                drum_mode((g_music_mode == MUSIC_MODE_VI53) ? MUSIC_MODE_AY : MUSIC_MODE_VI53);
+                show_mode();
             }
         }
         prev_key = key;

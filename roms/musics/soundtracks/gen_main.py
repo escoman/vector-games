@@ -96,6 +96,7 @@ def generate(cfg, out):
 
 static void on_frame(void)
 {
+    kbd_scan_now();
     music_tick();
     drum_tick();
 }
@@ -194,7 +195,7 @@ int main(void)
     for (;;) {{
         wait_one_frame();
 
-        key = kbd_scan();
+        key = kbd_read();
         if (key != prev_key) {{
             if (key == '0') {{
                 music_stop();

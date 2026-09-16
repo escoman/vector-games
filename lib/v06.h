@@ -133,6 +133,13 @@ typedef struct {
 extern void sound_init(void);               /* все каналы в тишину      */
 extern void sound_silence(void);            /* тишина + сброс состояния */
 
+/* Режимы вывода: MUSIC_MODE_VI53 — тоны на КР580ВИ53, шум ударных на
+ * Tape Out (PC0); MUSIC_MODE_AY — тоны и шум на AY-3-8910.
+ * Флаги общие для music_mode() и drum_mode(), поэтому константы живут
+ * вне #ifdef MUSIC_ONLY (drums.asm линкуется и без music.c). */
+#define MUSIC_MODE_VI53 0
+#define MUSIC_MODE_AY   1
+
 /* Плееры мелодий: sound.c (шаговая мелодия, символы sound_*) и
  * music.c (партитурный синтезатор, -DMUSIC_ONLY, символы music_*).
  * Префиксы разные — символы не конфликтуют; в одном ROM всё равно
@@ -198,9 +205,8 @@ extern void music_tick(void);
 /* Backend: ВИ53 (0, по умолчанию) или AY-3-8910 (1). Переключение
  * во время воспроизведения — без сброса позиции и состояния.
  * Три мелодических канала: 0→VI53 CH0/AY A, 1→CH1/AY B, 2→CH2/AY C.
- * Ударные (AY Noise) работают в обоих режимах через drums.asm. */
-#define MUSIC_MODE_VI53 0
-#define MUSIC_MODE_AY   1
+ * Ударные (шум) следуют тому же флагу: VI53 → Tape Out PC0 (LFSR в
+ * drums.asm), AY → шумовой канал AY (см. также drum_mode). */
 extern void music_mode(unsigned char mode);
 
 /* Диагностика (ТЗ §4-12): счётчики для определения рассинхронизации
@@ -242,13 +248,19 @@ extern void sound_tick(void);
 
 /* ------------------------- Ударные (drums.asm) ----------------------- */
 
-/* Синтезатор ударных на AY-3-8910, только канал шума: канал C в режиме
- * «tone off, noise on». Тоновые каналы не трогает: в R0-R5 не пишет,
- * R7 пишет один раз (drum_init), звук управляется R6 (период шума) и
- * R10 (громкость канала C, программная огибающая в drum_tick).
+/* Синтезатор шума: в режиме MUSIC_MODE_AY — канал C AY-3-8910 в
+ * «tone off, noise on» (R6 период, R10 громкость, микшер R7);
+ * в режиме MUSIC_MODE_VI53 — программный 1-битный LFSR-шум на
+ * Tape Out (PIA1 Port C bit 0): R6 задаёт число сдвигов за тик,
+ * R10 — duty-окно переключений PC0. Выход выбирается по g_music_mode
+ * (общий флаг с мелодией, см. music_mode / drum_mode).
+ * Тоновые регистры не трогает: в R0-R5 не пишет, R8/R9 не пишет вовсе,
+ * в R7 меняет только биты шума/тона C (по зеркалу g_ay_r7).
  * noise в sound_step_t — моментальное событие: каждый drum_*() всегда
  * перезапускает звучащий удар, приоритеты ничего не блокируют.
  * Параметры инструментов — таблица в начале drums.asm. */
+extern unsigned char g_music_mode;    /* MUSIC_MODE_* (в music.c)     */
+extern void drum_mode(unsigned char mode); /* выход шума: 0=PC0, 1=AY */
 extern void drum_init(void);            /* микшер и тишина             */
 extern void drum_kick(void);
 extern void drum_snare(void);
@@ -270,6 +282,14 @@ extern void drum_sample_play(const unsigned char *smp);
 /* Однократный опрос матрицы. Возвращает код первой нажатой клавиши
  * (ASCII / 27 = АПС=ESC, 13 = ВК) или 0, если ничего не нажато. */
 extern unsigned char kbd_scan(void);
+
+/* Опрос матрицы без ожидания кадра — для вызова в самом начале
+ * кадрового прерывания: луч на VSync в гашении, маски строк (порт 03h
+ * = скролл) не задевают видимую часть. Парная с kbd_read(). */
+extern void kbd_scan_now(void);
+
+/* Декодировать последний снимок матрицы без повторного опроса портов. */
+extern unsigned char kbd_read(void);
 
 /* Ждёт нажатия указанной клавиши (код как у kbd_scan: ASCII,
  * 27 = ESC, 13 = ВК, ' ' = пробел). Синхронизация 50 Гц,

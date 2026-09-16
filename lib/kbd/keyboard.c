@@ -59,16 +59,16 @@ static const unsigned char kbd_shift[128] = {
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
-/* Однократный опрос матрицы: код первой нажатой клавиши или 0 */
-unsigned char kbd_scan(void)
+/* Декодировать последний снимок матрицы БЕЗ повторного опроса портов.
+ * Нужен, когда опрос уже сделан в кадровом прерывании (kbd_scan_now):
+ * основной цикл тогда не трогает порт 03h (скролл) и не дёргает экран. */
+unsigned char kbd_read(void)
 {
     unsigned char code = 0;
     unsigned char row;
     unsigned char cols;
     unsigned char col;
     unsigned char shift;
-
-    kbd_scan_rows();  /* включает СС в kbd_shift_state */
 
     for (row = 0; row < 8u; ++row) {
         cols = kbd_rows[row];           /* 1 = нажата */
@@ -90,6 +90,14 @@ unsigned char kbd_scan(void)
     }
 
     return code;
+}
+
+/* Однократная полная операция: снять матрицу портами + декодировать.
+ * Код первой нажатой клавиши или 0. */
+unsigned char kbd_scan(void)
+{
+    kbd_scan_rows();  /* включает СС в kbd_shift_state */
+    return kbd_read();
 }
 
 /* Ждёт нажатия указанной клавиши и возвращается.
