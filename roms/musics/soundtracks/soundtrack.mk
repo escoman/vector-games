@@ -18,10 +18,11 @@ ROM_JSON  ?= rom.json
 INCS       = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
 SRCS       = $(LIB)/sys/startup.asm main.c $(SOUNDTRACKS)/nes_drums.c \
-             $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm $(LIB)/snd/vi53out.asm \
+             $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
+             $(LIB)/snd/vi53.c $(LIB)/snd/ay.c \
              $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
              $(LIB)/snd/drums.asm \
-             $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/snd/snd.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
+             $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS     = +vector06c --no-crt -I. -I$(LIB) -I$(SOUNDTRACKS) -DMUSIC_ONLY
 

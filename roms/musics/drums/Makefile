@@ -16,7 +16,7 @@ TARGET   = drums.rom
 SRCS     = $(LIB)/sys/startup.asm main.c \
            $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
            $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
-           $(LIB)/snd/snd.c $(LIB)/snd/drums.asm \
+           $(LIB)/snd/drums.asm \
            $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB)

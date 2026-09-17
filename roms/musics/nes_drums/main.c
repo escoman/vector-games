@@ -1,11 +1,15 @@
 /*
  * main.c — тестовый ROM для Вектор-06Ц: библиотека из 16 синтетических
- *          шумовых инструментов NES ($0..$F) на AY-3-8910.
+ *          шумовых инструментов NES ($0..$F) + партитурный плеер music.c.
  *
  * Всё железо — своими силами без clib z88dk (библиотека vector-games/lib):
  *   - графика:  текст 8x8 (graphpr.asm), очистка экрана (graphclr.asm);
- *   - звук:     AY-3-8910, канал шума, канал C «tone off, noise on»;
- *               тоновые каналы и ВИ53 не используются;
+ *   - звук:     партитурный синтезатор music.c на 3 тональных канала;
+ *               устройство вывода выбирается явно (Ф5):
+ *                 ВИ53 (i8253) — мелодия на 3 каналах ВИ53, шум ударных
+ *                                на Tape Out (PC0, LFSR)  [по умолчанию];
+ *                 AY-3-8910    — мелодия на тонах A/B/C, шум ударных на
+ *                                шумовом генераторе AY (канал C, Noise C);
  *   - клавиши:  опрос матрицы портами (keyboard.c).
  *
  * Воспроизведение:
@@ -20,6 +24,7 @@
  *   Ф2        — Jackal;
  *   Ф3        — Castlevania;
  *   Ф4        — остановить музыку;
+ *   Ф5        — устройство вывода: ВИ53 (Tape Out) ↔ AY-3-8910 (Noise C);
  *   0..9, A-F — семпл $0..$F.
  *
  * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP).
@@ -51,14 +56,23 @@ static void on_frame(void)
     drum_tick();
 }
 
-/* Запуск партитуры: остановить текущую, подменить данные, стартовать. */
+/* Флаг текущего устройства вывода — только для выбора функции запуска/
+ * перепривязки (music_start_vi53/ay, music_use_vi53/ay) и индикации.
+ * Никакого глобального «режима звука»: 0 = КР580ВИ53 (Tape Out), 1 = AY-3-8910. */
+static unsigned char use_ay = 0;
+
+/* Запуск партитуры: остановить текущую, подменить данные, стартовать
+ * на текущем устройстве вывода (use_ay). */
 static void play_song(const music_song_t *song, unsigned char loop)
 {
     music_stop();
     drum_init();
     music_set_data(song);
     music_set_loop(loop);
-    music_start();
+    if (use_ay)
+        music_start_ay();
+    else
+        music_start_vi53();
 }
 
 /* Запуск отдельного семпла по индексу 0..15. */
@@ -93,27 +107,28 @@ static const struct {
 } menu_lines[] = {
     /* семплы: левая колонка */
     {   0u,   0u, "0-CLOSED HI-HAT" },
-    {   0u,   8u, "1-OPEN HI-HAT" },
-    {   0u,  16u, "2-SNARE ATTACK" },
-    {   0u,  24u, "3-SNARE BODY" },
-    {   0u,  32u, "4-SNARE STANDARD" },
-    {   0u,  40u, "5-CYMBAL CRASH" },
-    {   0u,  48u, "6-SNARE LOW" },
-    {   0u,  56u, "7-DISTANT EXPLOS" },
+    {   0u,  10u, "1-OPEN HI-HAT" },
+    {   0u,  20u, "2-SNARE ATTACK" },
+    {   0u,  30u, "3-SNARE BODY" },
+    {   0u,  40u, "4-SNARE STANDARD" },
+    {   0u,  50u, "5-CYMBAL CRASH" },
+    {   0u,  60u, "6-SNARE LOW" },
+    {   0u,  70u, "7-DISTANT EXPLOS" },
     /* семплы: правая колонка */
-    { 142u,   0u, "8-TOM LOW" },
-    { 142u,   8u, "9-TOM RUMBLE" },
-    { 142u,  16u, "A-HEAVY KICK" },
-    { 142u,  24u, "B-TIGHT KICK" },
-    { 142u,  32u, "C-RUMBLE SUB" },
-    { 142u,  40u, "D-ULTRA-LO ROAR" },
-    { 142u,  48u, "E-SUB-BASS DROP" },
-    { 142u,  56u, "F-CRACKLE" },
+    { 17u,   0u, "8-TOM LOW" },
+    { 17u,  10u, "9-TOM RUMBLE" },
+    { 17u,  20u, "A-HEAVY KICK" },
+    { 17u,  30u, "B-TIGHT KICK" },
+    { 17u,  40u, "C-RUMBLE SUB" },
+    { 17u,  50u, "D-ULTRA-LO ROAR" },
+    { 17u,  60u, "E-SUB-BASS DROP" },
+    { 17u,  70u, "F-CRACKLE" },
     /* управление */
-    {   0u,  72u, "F1-EXAMPLE DEMO" },
-    { 142u,  72u, "F2-JACKAL" },
-    {   0u,  80u, "F3-CASTLEVANIA" },
-    { 142u,  80u, "F4-STOP MUSIC" },
+    {   0u, 100u, "F1-EXAMPLE DEMO" },
+    { 17u,  100u, "F2-JACKAL" },
+    {   0u, 110u, "F3-CASTLEVANIA" },
+    { 17u,  110u, "F4-STOP MUSIC" },
+    {   0u, 120u, "F5-MUSIC MODE" },
 };
 
 static void show_menu(unsigned char selected)
@@ -129,6 +144,17 @@ static void show_menu(unsigned char selected)
     }
 }
 
+/* Индикация текущего устройства вывода в правой колонке строки Ф5.
+ * Ячейка 8x8 непрозрачная — значение всегда из 4 символов, хвост
+ * затирается пробелами. */
+static void show_backend(void)
+{
+    unsigned char y0 = (unsigned char)(logo_bmp_height + 16u);
+    gfx_print(17u, (unsigned char)(y0 + 120u),
+                use_ay ? "AY  " : "VI53",
+                use_ay ? HIGHLIGHT_COLOR : TEXT_COLOR);
+}
+
 /* ------------------------------- main -------------------------------- */
 
 int main(void)
@@ -137,13 +163,14 @@ int main(void)
     unsigned char prev_key = 0;
 
     frame_handler = on_frame;           /* мелодия + ударные в прерывании */
-    drum_init();                        /* микшер AY: шум канала C */
+    drum_init();                        /* сброс/глушение ударных; маршрут по умолчанию — Tape Out (ВИ53) */
 
     /* Экран: чёрный фон, логотип, текст меню. */
     gfx_set_black_palette();
     gfx_clear(0);
     gfx_rle_expand(logo_bmp_screen_rle, 8u, 0u);
     show_menu(255);
+    show_backend();
     gfx_set_palette(logo_bmp_palette);
 
     /* Загрузка библиотеки семплов в память (не играет, но семплы доступны). */
@@ -169,6 +196,14 @@ int main(void)
             } else if (key == 131) {    /* Ф4 — stop music */
                 music_stop();
                 sel = 19u;
+            } else if (key == 132) {    /* Ф5 — backend ВИ53 ↔ AY */
+                use_ay = (unsigned char)(!use_ay);
+                if (use_ay)
+                    music_use_ay();
+                else
+                    music_use_vi53();
+                show_backend();
+                sel = 20u;
             } else if (key >= '0' && key <= '9') {
                 play_sample(hex_to_idx(key));
                 sel = hex_to_idx(key);

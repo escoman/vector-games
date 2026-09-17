@@ -27,8 +27,9 @@ SRCS     = $(LIB)/sys/startup.asm main.c \
            $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
            $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
            $(LIB)/snd/drums.asm \
-           $(LIB)/snd/vi53out.asm $(LIB)/snd/music.c \
-           $(LIB)/gfx/mode.c $(LIB)/snd/snd.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
+           $(LIB)/snd/vi53.c $(LIB)/snd/ay.c \
+           $(LIB)/snd/music.c \
+           $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 
 ZFLAGS   = +vector06c --no-crt -I$(LIB) -DMUSIC_ONLY
 

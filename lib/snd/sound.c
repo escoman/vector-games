@@ -26,50 +26,16 @@
 
 #include "v06.h"
 
-/* Прямые записи в порты ВИ53 (vi53out.asm): без самомодификации байта
- * порта и без di/ei, поэтому безопасны и в кадровом прерывании. */
-extern void v06_vi53_ctrl(unsigned char v);
-extern void v06_vi53_ch0(unsigned char v);
-extern void v06_vi53_ch1(unsigned char v);
-extern void v06_vi53_ch2(unsigned char v);
-
-/* ------------------------------ ВИ53 ---------------------------------- */
-
-/* Режим 3, чтение/запись 2 байта: каналы 0/1/2 */
-static const unsigned char vi53_m3[3] = { 0x36, 0x76, 0xB6 };
-/* Режим 0 (OUT = 0, тишина): каналы 0/1/2 */
-static const unsigned char vi53_m0[3] = { 0x30, 0x70, 0xB0 };
-
-/* Запись одного байта в порт данных канала */
-static void vi53_data(unsigned char channel, unsigned char v)
-{
-    if (channel == 0u)
-        v06_vi53_ch0(v);
-    else if (channel == 1u)
-        v06_vi53_ch1(v);
-    else
-        v06_vi53_ch2(v);
-}
-
-/* Установка делителя канала (0 = выключить, режим 0 -> тишина) */
-static void vi53_set_channel(unsigned char channel, unsigned int divisor)
-{
-    if (divisor == 0u) {
-        v06_vi53_ctrl(vi53_m0[channel]);
-        vi53_data(channel, 0x00);
-        vi53_data(channel, 0x00);
-        return;
-    }
-    v06_vi53_ctrl(vi53_m3[channel]);
-    vi53_data(channel, (unsigned char)(divisor & 0xFFu));
-    vi53_data(channel, (unsigned char)(divisor >> 8));
-}
+/* Низкоуровневая запись в КР580ВИ53 вынесена в vi53/vi53.c (ТЗ §16):
+ * sound.c не содержит собственной реализации записи в порты.
+ * vi53_set_channel_m0() сохраняет прежнее поведение шагового плеера —
+ * тон в режиме 3, делитель 0 = режим 0 (OUT=0, тишина). */
 
 void sound_init(void)
 {
-    vi53_set_channel(0, 0);
-    vi53_set_channel(1, 0);
-    vi53_set_channel(2, 0);
+    vi53_set_channel_m0(0, 0);
+    vi53_set_channel_m0(1, 0);
+    vi53_set_channel_m0(2, 0);
 }
 
 /* ------------------------------ Плеер --------------------------------- */
@@ -122,9 +88,9 @@ void sound_start(void)
 void sound_stop(void)
 {
     g_playing = 0u;
-    vi53_set_channel(0, 0);
-    vi53_set_channel(1, 0);
-    vi53_set_channel(2, 0);
+    vi53_set_channel_m0(0, 0);
+    vi53_set_channel_m0(1, 0);
+    vi53_set_channel_m0(2, 0);
     g_cur1 = g_cur2 = g_cur3 = 0u;
     drum_mute();
 }
@@ -161,9 +127,9 @@ static void sound_advance(void)
             if (!g_loop) {
                 /* мелодия отзвучала: тишина и остановка */
                 g_playing = 0u;
-                vi53_set_channel(0, 0);
-                vi53_set_channel(1, 0);
-                vi53_set_channel(2, 0);
+                vi53_set_channel_m0(0, 0);
+                vi53_set_channel_m0(1, 0);
+                vi53_set_channel_m0(2, 0);
                 g_cur1 = g_cur2 = g_cur3 = 0u;
                 return;
             }
@@ -173,15 +139,15 @@ static void sound_advance(void)
 
         if (s->ch1 != g_cur1) {
             g_cur1 = s->ch1;
-            vi53_set_channel(0, g_cur1);
+            vi53_set_channel_m0(0, g_cur1);
         }
         if (s->ch2 != g_cur2) {
             g_cur2 = s->ch2;
-            vi53_set_channel(1, g_cur2);
+            vi53_set_channel_m0(1, g_cur2);
         }
         if (s->ch3 != g_cur3) {
             g_cur3 = s->ch3;
-            vi53_set_channel(2, g_cur3);
+            vi53_set_channel_m0(2, g_cur3);
         }
         /* ударные — на канал шума AY-3-8910 (drums.asm), один
          * триггер на вход в шаг; ВИ53 не трогается */

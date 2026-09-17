@@ -9,7 +9,7 @@
 ;   - управляет звуком через R6 (период шума) и R10 (громкость
 ;     канала C, программная огибающая в drum_tick).
 ;
-; В режиме MUSIC_MODE_VI53 (г_music_mode == 0) шум выводится не через
+; При маршруте Tape Out (drum_route == 0) шум выводится не через
 ; AY, а через Tape Out — 1-битный бипер PIA1 Port C bit 0 (порт 01h,
 ; BSR порт 00h): программный Galois LFSR 16 бит (маска 0xB400); каждый
 ; сдвиг за кадр переключает PC0 в бит шума, число сдвигов задаёт R6
@@ -67,9 +67,9 @@
         PUBLIC  _drum_tick
         PUBLIC  _drum_mute
         PUBLIC  _drum_sample_play
-        PUBLIC  _drum_mode
-        PUBLIC  _g_ay_r7        ; зеркало R7: определение здесь, читает music.c
-        EXTERN  _g_music_mode   ; MUSIC_MODE_VI53 = 0 / MUSIC_MODE_AY = 1
+        PUBLIC  _drum_route_tape
+        PUBLIC  _drum_route_ay
+        PUBLIC  _g_ay_r7        ; зеркало R7: определение здесь, читает ay.c
 
 AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
 AY_DAT  equ     0x14            ; AY: запись данных (чётный порт)
@@ -183,6 +183,11 @@ g_ay_r7:
 _g_ay_r7:
         defb    0xF8    ; тоны A/B/C вкл, шум ABC выкл
 
+; Маршрут физического вывода шума — внутреннее состояние модуля
+; (ТЗ §13/§19: никакого глобального «режима звука»). 0 = Tape Out
+; (PC0, LFSR), 1 = шумовой генератор AY (канал C). По умолчанию лента.
+drum_route:     defb    0
+
 drum_active:    defb    0       ; 0 = тишина, ничего не звучит
 drum_prio:      defb    0       ; приоритет звучащего инструмента
 
@@ -194,7 +199,7 @@ drum_decay:     defb    0       ; тиков на шаг спада громко
 drum_clap:      defb    0       ; 1 = режим вспышек clap
 drum_r7_save:   defb    0       ; сохранённый R7 (восстановить при конце)
 
-; Программный шум для Tape Out (MUSIC_MODE_VI53):
+; Программный шум для Tape Out (маршрут drum_route == 0):
 ; Galois LFSR 16 бит (маска 0xB400, taps 15/14/12/3); каждый сдвиг
 ; за кадр переключает PC0 в бит 0 состояния (он же обратная связь).
 lfsr_state:     defw    1       ; состояние сдвигового регистра (0 запрещён)
@@ -239,21 +244,20 @@ _drum_init:
         ld      (smp_left), a
         jp      _drum_mute      ; R10 = 0 + восстановление R7 (идемпотентно)
 
-; Выбор выхода шума (cdecl: аргумент в стеке, SP+2):
-; 0 (MUSIC_MODE_VI53) — Tape Out PC0, 1 (MUSIC_MODE_AY) — шум AY.
-; Пишет g_music_mode — общий флаг с мелодией, поэтому music_mode()
-; и drum_mode() взаимозаменяемы; ROM без music.c настраивает ударные
-; только через drum_mode().
-_drum_mode:
-        ld      hl, 2
-        add     hl, sp
-        ld      a, (hl)
-        and     0x01            ; A = новый режим (0/1)
-        ld      hl, _g_music_mode
-        cp      (hl)            ; режим не изменился — ничего не делаем
-        ret     z
-        ld      (hl), a         ; сохранить новый режим в байт флага
+; Явный выбор физического выхода шума (без глобального «режима звука»,
+; ТЗ §13/§19): drum_route — внутреннее состояние модуля ударных.
+;   _drum_route_tape — Tape Out (PC0), LFSR-шум (вывод ВИ53-мелодии);
+;   _drum_route_ay   — шумовой генератор AY, канал C (вывод AY-мелодии).
+; Аргументов нет. Каждый вызов глушит звучащий удар на старом выходе,
+; как прежний переключатель выхода шума.
+_drum_route_tape:
+        xor     a               ; 0 = Tape Out
+        ld      (drum_route), a
         jp      _drum_mute      ; заглушить удар на старом выходе
+_drum_route_ay:
+        ld      a, 1            ; 1 = шум AY
+        ld      (drum_route), a
+        jp      _drum_mute
 
 _drum_mute:
         xor     a
@@ -329,10 +333,10 @@ drum_cp:
         xor     a
         ld      (drum_pos), a
         ld      (drum_div), a
-        ld      a, (_g_music_mode)
+        ld      a, (drum_route)
         or      a
         jp      z, trig_tape
-        ; ---- AY (MUSIC_MODE_AY): R6 = период шума ----
+        ; ---- AY (drum_route == 1): R6 = период шума ----
         ld      a, 6
         ld      hl, drum_noise
         ld      e, (hl)
@@ -354,7 +358,7 @@ drum_cp:
         ld      (drum_active), a
         ret
 
-; ---- Tape Out (MUSIC_MODE_VI53): LFSR-шум на PC0, AY не трогаем ----
+; ---- Tape Out (drum_route == 0): LFSR-шум на PC0, AY не трогаем ----
 ; pos/div уже обнулены выше — остаётся включить удар
 trig_tape:
         ld      a, 0xFF         ; ненулевое семя (0 = вечная тишина);
@@ -370,7 +374,7 @@ trig_tape:
 ; ------------------------------ drum_tick ------------------------------
 
 _drum_tick:
-        ld      a, (_g_music_mode)      ; режим шума: AY или Tape Out (PC0)
+        ld      a, (drum_route)         ; маршрут шума: AY или Tape Out (PC0)
         or      a
         jp      z, tick_tape
         ld      a, (smp_ptr)    ; звучит семпл .smp — ведём его
@@ -419,7 +423,7 @@ tape_idle:
 tick_end:
         xor     a               ; удар закончился: тишина
         ld      (drum_active), a
-        ld      a, (_g_music_mode)
+        ld      a, (drum_route)
         or      a
         jp      nz, tick_end_ay
         call    tape_on         ; PC0 = 0
@@ -451,7 +455,7 @@ drum_live:
         dec     a
         ld      (hl), a
         ld      e, a                    ; новая громкость
-        ld      a, (_g_music_mode)
+        ld      a, (drum_route)
         or      a
         jp      z, tape_vol_off         ; ленточный спад: R10 не пишем
         ld      a, 10
@@ -494,7 +498,7 @@ tick_smp:
         ld      a, (hl)         ; R10 кадра
         and     0x0F
         ld      (cur_r10), a
-        ld      a, (_g_music_mode)
+        ld      a, (drum_route)
         or      a
         jp      z, smp_tape
         ; ---- AY: R6 и R10 кадра ----
@@ -531,7 +535,7 @@ smp_advance:
 ; Формат: байт N — число кадров, затем N пар (R6, R10); 0 = ничего.
 ; Первый кадр выводится сразу — атака слышна в тот же тик.
 _drum_sample_play:
-        ld      a, (_g_music_mode)
+        ld      a, (drum_route)
         or      a
         jp      nz, smp_play_ay
         ; Лента: аргумент читается из стека в обеих ветках отдельно
@@ -641,7 +645,7 @@ set_vol:
         jp      z, set_vol_same         ; громкость не изменилась
         ld      a, e
         ld      (drum_vol), a
-        ld      a, (_g_music_mode)
+        ld      a, (drum_route)
         or      a
         jp      z, tape_vol_off
         ld      a, 10

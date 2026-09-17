@@ -18,7 +18,8 @@ TESTS = roms/tests/512x256 \
         roms/tests/dt2 \
         roms/tests/dt2_512 \
         roms/tests/dt2_lz \
-        roms/tests/scr_modes
+        roms/tests/scr_modes \
+        roms/tests/snd_backends
 
 ALL = $(MUSIC_ROMS) $(TESTS)
 

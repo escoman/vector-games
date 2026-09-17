@@ -12,8 +12,9 @@
  * Тоновые каналы AY полностью свободны для мелодии: библиотека не
  * пишет в R0-R5, микшер R7 меняется только при триггере удара
  * (биты шума/тона C), огибающая программная — drum_tick() из
- * кадрового прерывания. Выход шума выбран drum_mode(MUSIC_MODE_AY):
- * в режиме VI53 то же самое код давал бы на Tape Out (PC0).
+ * кадрового прерывания. Маршрут шума задаётся явно: drum_route_ay()
+ * (шумовой канал C AY) или drum_route_tape() (Tape Out, PC0) — по
+ * умолчанию лента, F1 переключает. Никакого глобального «режима звука».
  *
  * Управление:
  *   1 — KICK (бочка);
@@ -77,12 +78,17 @@ static void show_menu(void)
     }
 }
 
+/* Локальный флаг маршрута шума — только для отображения и выбора
+ * drum_route_tape()/drum_route_ay(): 0 = Tape Out (PC0, по умолчанию),
+ * 1 = шумовой генератор AY (канал C). Не глобальный «режим звука». */
+static unsigned char route_ay = 0;
+
 static void show_mode(void)
 {
     unsigned char y0 = (unsigned char)(title_bmp_height + 16u + 64u);
 
     gfx_print(19u, y0, "MODE: ", 8u);
-    gfx_print(26u, y0, g_music_mode == MUSIC_MODE_AY ? "AY  " : "VI53", 8u);
+    gfx_print(26u, y0, route_ay ? "AY  " : "VI53", 8u);
 }
 
 /* ------------------------------- main -------------------------------- */
@@ -93,7 +99,7 @@ int main(void)
     unsigned char prev_key = 0;
 
     frame_handler = drum_tick;
-    drum_mode(g_music_mode);
+    drum_route_tape();          /* шум на Tape Out (PC0), по умолчанию */
     drum_init();
 
     /* титульная заставка: чёрная палитра скрывает процесс распаковки,
@@ -125,7 +131,11 @@ int main(void)
             } else if (key == '7') {
                 drum_rim();
             } else if (key == 128) {     /* F1 */
-                drum_mode((g_music_mode == MUSIC_MODE_VI53) ? MUSIC_MODE_AY : MUSIC_MODE_VI53);
+                route_ay = (unsigned char)(!route_ay);
+                if (route_ay)
+                    drum_route_ay();
+                else
+                    drum_route_tape();
                 show_mode();
             }
         }

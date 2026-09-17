@@ -35,7 +35,7 @@
 #include "rom_data/gamma.inc"
 
 static const unsigned char synth_pal[16] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x07, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00,
     0xFF, 0x24, 0x12, 0x03, 0x00, 0x00, 0x00, 0x00
 };
 
@@ -69,16 +69,18 @@ static void wait_one_frame(void)
         intrinsic_halt();
 }
 
-static unsigned char cur_mode = MUSIC_MODE_VI53;
+/* Флаг текущего устройства вывода — только для отображения и выбора
+ * функции запуска/перепривязки (music_start_vi53/ay, music_use_vi53/ay).
+ * Никакого глобального «режима звука»: 0 = КР580ВИ53 (i8253), 1 = AY-3-8910. */
+static unsigned char use_ay = 0;
 
 static void show_status(const char *state, const char *title)
 {
     /* ячейка 8x8 непрозрачная — перепечатываем строку целиком,
      * хвост затираем пробелами */
-    gfx_print(16u, 224u, state, 8u);
-    gfx_print(80u, 234u,
-              cur_mode == MUSIC_MODE_AY ? "AY      " : "VI53    ", 8u);
-    gfx_print(128u, 224u, title, 9u);
+    gfx_print(2u, 224u, state, 8u);
+    gfx_print(20u, 234u, use_ay ? "AY    " : "  VI53", use_ay ? 4u : 1u);
+    gfx_print(20u, 224u, title, 9u);
 }
 
 int main(void)
@@ -116,7 +118,10 @@ int main(void)
             if (key >= '1' && key <= '7') {
                 cur = (unsigned char)(key - '1');
                 music_set_data(songs[cur].song);
-                music_start();
+                if (use_ay)
+                    music_start_ay();
+                else
+                    music_start_vi53();
                 paused = 0;
                 show_status("PLAYING", songs[cur].title);
             } else if (key == 128) {                    /* F1 */
@@ -136,13 +141,14 @@ int main(void)
                 paused = 0;
                 show_status("STOPPED", songs[cur].title);
             } else if (key == 130) {                    /* F3 */
-                cur_mode = (cur_mode == MUSIC_MODE_VI53)
-                           ? MUSIC_MODE_AY : MUSIC_MODE_VI53;
-                music_mode(cur_mode);
-                /* Demo: канал A на AY-огибающую (повторный треугольник, ~144ms/фаза) */
-                if (cur_mode == MUSIC_MODE_AY) {
-                    ay_set_envelope(AY_CH_A, AY_ENV_7, 500);
+                use_ay = (unsigned char)(!use_ay);
+                if (use_ay) {
+                    music_use_ay();
+                    /* Demo: канал A на AY-огибающую (повторный треугольник, ~144ms/фаза) */
+                    ay_set_envelope(AY_CH_A, AY_ENV_12, 500);
                     ay_set_fixed_volume(AY_CH_B, 11);
+                } else {
+                    music_use_vi53();
                 }
 
                 show_status(paused ? "PAUSED" :
