@@ -49,9 +49,11 @@ static void wait_one_frame(void)
         intrinsic_halt();               /* лёгкий сон до прерывания */
 }
 
-/* Кадровое прерывание: тик плеера мелодии и огибающие ударных. */
+/* Кадровое прерывание: опрос клавиатуры на VSync (луч в гашении —
+ * маски строк порта 03h не дёргают скролл), затем тик плеера и ударных. */
 static void on_frame(void)
 {
+    kbd_scan_now();
     music_tick();
     drum_tick();
 }
@@ -181,7 +183,7 @@ int main(void)
     for (;;) {
         wait_one_frame();
 
-        key = kbd_scan();
+        key = kbd_read();   /* снимок матрицы уже сделан в on_frame (kbd_scan_now) */
         if (key != prev_key) {          /* реакция на нажатие */
             unsigned char sel = 255u;
             if (key == 128) {           /* Ф1 — examples demo */

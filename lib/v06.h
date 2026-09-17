@@ -93,8 +93,10 @@ extern void gfx_set_bmp_palette(const unsigned char *pal);
 /* Все 16 цветов чёрные (скрыть экран/процесс отрисовки). */
 extern void gfx_set_black_palette(void);
 
-/* Регистр строки (скролл); значение запоминается — keyboard.c
- * восстанавливает его после сканирования клавиатуры. */
+/* Регистр строки (скролл). gfx_set_scroll() пишет ТОЛЬКО переменную
+ * gfx_scroll_row (отложенно, безопасно из ISR); в порт 0x03 значение
+ * выпишет опрос клавиатуры на ближайшем VSync (луч в гашении). Немедленная
+ * запись v06_out(V06_PIA_PA,..) из ISR запрещена: v06_out содержит ei. */
 extern void gfx_set_scroll(unsigned char row);
 extern unsigned char gfx_scroll_row;
 
