@@ -139,6 +139,10 @@ int main(void)
                 cur_mode = (cur_mode == MUSIC_MODE_VI53)
                            ? MUSIC_MODE_AY : MUSIC_MODE_VI53;
                 music_mode(cur_mode);
+                /* Demo: channel A on AY envelope (repeating triangle, ~144ms/phase) */
+                if (cur_mode == MUSIC_MODE_AY)
+                    ay_set_envelope(0, AY_ENV_TRIANGLE, 1000);
+
                 show_status(paused ? "PAUSED" :
                             (music_is_playing() ? "PLAYING" : "STOPPED"),
                             songs[cur].title);
