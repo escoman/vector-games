@@ -188,6 +188,7 @@ int main(void)
                 play_song(&examples_music_song, 0);
                 sel = 16u;
             } else if (key == 129) {    /* Ф2 — Jackal */
+                ay_set_envelope(AY_CH_C, AY_ENV_14, 500);
                 play_song(&jackal_music_song, 0);
                 sel = 17u;
             } else if (key == 130) {    /* Ф3 — Castlevania */

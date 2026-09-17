@@ -23,21 +23,24 @@
 #include "v06.h"
 
 /* Запись регистра AY-3-8910. Аргументы через volatile locals
- * (гарантия доступа по стеку из asm), OUT — в едином asm-блоке,
- * что исключает проблему порядка аргументов sccz80 и гонок
- * с прерываниями между двумя OUT. */
+ * (гарантия доступа по стеку из asm), OUT — в едином asm-блоке.
+ *
+ * БЕЗ di/ei: функция вызывается из кадрового прерывания
+ * (music_tick → ay_set_tone → ay_write), где прерывания уже
+ * замаскированы (8080 сам сбрасывает IFF при подтверждении, а
+ * isr_frame делает ei только в самом конце). Лишний ei здесь
+ * разрешил бы прерывания посреди ISR. Пара out(0x15)/out(0x14)
+ * атомарна в ISR и без di. */
 static volatile unsigned char ay_r_, ay_v_;
 void ay_write(unsigned char reg, unsigned char val)
 {
     ay_r_ = reg;
     ay_v_ = val;
 #asm
-    di
     ld  a, (_ay_r_)
     out (0x15), a
     ld  a, (_ay_v_)
     out (0x14), a
-    ei
 #endasm
 }
 
@@ -99,12 +102,14 @@ static unsigned int vi53_to_ay_period(unsigned int div)
     return (unsigned int)p;
 }
 
-/* Установка тона AY (период + громкость). div_VI53 — делитель из
- * таблицы нот, конвертируется в период AY целочисленной формулой
- * (vi53_to_ay_period). divisor = 0 — тишина (громкость в 0,
- * период не трогаем — ТЗ §10). Канал C (R10) — общий с drums.asm:
- * огибающая удара перезаписывает громкость мелодии, это штатное
- * поведение (ТЗ §6-7).
+/* Установка тона AY по ГОТОВОМУ периоду (12 бит) + громкость.
+ * period = 0 — тишина (громкость в 0, период не трогаем — ТЗ §10).
+ * Это аппаратный уровень: музыкальный плеер передаёт сюда период из
+ * готовой таблицы ay_period_tab[], поэтому в кадровом ISR нет
+ * 32-битного умножения/деления (music_tick быстрый, не теряет кадры —
+ * иначе темп «плывёт»). Канал C (R10) — общий с drums.asm: огибающая
+ * удара перезаписывает громкость мелодии, это штатное поведение
+ * (ТЗ §6-7).
  *
  * Режим envelope: если для канала выставлен бит в ay_env_mode, то на
  * каждой атаке ноты (сразу после 1-тикового гейта) генератор
@@ -113,13 +118,11 @@ static unsigned int vi53_to_ay_period(unsigned int div)
  * спадает аппаратно, огибающая «отпускает» канал до следующей атаки.
  * Это тот же приём, что в движе Konami/NES, и согласуется с 1-тиковым
  * гейтом тональных событий в music.c. */
-void ay_set_tone(unsigned char ch, unsigned int div_VI53)
+void ay_set_tone_period(unsigned char ch, unsigned int period)
 {
-    unsigned int period;
     static const unsigned char preg[3] = { 0, 2, 4 };  /* R0, R2, R4 */
     static const unsigned char vreg[3] = { 8, 9, 10 }; /* R8, R9, R10 */
 
-    period = vi53_to_ay_period(div_VI53);
     ay_write(preg[ch], (unsigned char)(period & 0xFFu));
     ay_write(preg[ch] + 1u, (unsigned char)(period >> 8));
     if (period == 0u) {
@@ -136,6 +139,15 @@ void ay_set_tone(unsigned char ch, unsigned int div_VI53)
         /* note ON: фиксированная громкость канала (по умолч. 15) */
         ay_write(vreg[ch], ay_fixed_vol[ch]);
     }
+}
+
+/* Обёртка внешнего API: делитель ВИ53 → период AY (vi53_to_ay_period)
+ * → запись. Используется тестами (snd_backends); плеер ходит в
+ * ay_set_tone_period напрямую через ay_period_tab[], минуя 32-битное
+ * деление в ISR. */
+void ay_set_tone(unsigned char ch, unsigned int div_VI53)
+{
+    ay_set_tone_period(ch, vi53_to_ay_period(div_VI53));
 }
 
 /* Выключение тонального канала (громкость в 0, период не трогаем). */
