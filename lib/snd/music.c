@@ -116,6 +116,20 @@ void ay_set_r7(unsigned char val)
     ay_write(7, val);
 }
 
+/* Состояние огибающей/громкости. Огибающая в AY ОДНА ОБЩАЯ на все три
+ * канала (R11/R12/R13), поэтому shape/period — скаляры, а ay_env_mode —
+ * битовая маска подключаемых каналов (бит0=A, бит1=B, бит2=C; макросы
+ * AY_CH_A/B/C). Всё применяется в ay_set_tone на атаке ноты (см.
+ * ay_set_envelope / ay_set_fixed_volume ниже) — сами эти функции в
+ * регистры AY не пишут, чтобы не дать непрерывный тон.
+ * ay_fixed_vol — фиксированная громкость канала (0..15) для атаки вне
+ * огибающей; R8/R9/R10 независимы, поэтому это массив; по умолч. 15
+ * (выставляется в ay_mixer_init). */
+static unsigned char ay_env_mode;      /* маска каналов на огибающей */
+static unsigned char ay_env_shape;     /* форма R13 (общая)          */
+static unsigned int  ay_env_period;    /* период R11/R12 (общий)     */
+static unsigned char ay_fixed_vol[3];
+
 /* Базовая конфигурация микшера AY для режима MUSIC_MODE_AY:
  * тоны A/B/C включены, шум C выключен (его включают ударные drums.asm
  * при триггере), шум A/B выключен. В MUSIC_MODE_VI53 шум ударных идёт
@@ -123,6 +137,8 @@ void ay_set_r7(unsigned char val)
  * drum_init() вызывается ДО music_mode(), R7 перезаписываем здесь. */
 static void ay_mixer_init(void)
 {
+    /* Фиксированная громкость по умолчанию на каждый канал. */
+    ay_fixed_vol[0] = ay_fixed_vol[1] = ay_fixed_vol[2] = 15u;
     /* Tone ABC on, Noise ABC off. Noise C включают ударные
      * (drums.asm) при триггере и выключают при завершении. */
     ay_set_r7(0xF8);
@@ -162,15 +178,6 @@ static unsigned int vi53_to_ay_period(unsigned int div)
  * Это тот же приём, что в движе Konami/NES, и согласуется с 1-тиковым
  * гейтом тональных событий в tone_event(). */
 
-/* Состояние envelope на канал (см. ay_set_envelope / ay_set_fixed_volume
- * ниже). ay_env_mode — биты 0..2: канал A/B/C подключён к огибающей.
- * shape/period хранятся на канал, хотя физически R11/R12/R13 — ОДИН
- * общий генератор: при атаке перезаписываются значением текущего
- * канала. */
-static unsigned char ay_env_mode;
-static unsigned char ay_env_shape[3];
-static unsigned int  ay_env_period[3];
-
 static void ay_set_tone(unsigned char ch, unsigned int div_VI53)
 {
     unsigned int period;
@@ -186,12 +193,13 @@ static void ay_set_tone(unsigned char ch, unsigned int div_VI53)
         /* Атака на envelope: перезапустить общий генератор и
          * подключить канал. Порядок R11 → R12 → R13 → R8/9/10
          * (ТЗ §6), запись R13 сбрасывает счётчик формы. */
-        ay_write(11, (unsigned char)(ay_env_period[ch] & 0xFFu));
-        ay_write(12, (unsigned char)(ay_env_period[ch] >> 8));
-        ay_write(13, ay_env_shape[ch]);
+        ay_write(11, (unsigned char)(ay_env_period & 0xFFu));
+        ay_write(12, (unsigned char)(ay_env_period >> 8));
+        ay_write(13, ay_env_shape);
         ay_write(vreg[ch], 0x1Fu);
     } else {
-        ay_write(vreg[ch], 0x0Fu); /* note ON: volume = 15 */
+        /* note ON: фиксированная громкость канала (по умолч. 15) */
+        ay_write(vreg[ch], ay_fixed_vol[ch]);
     }
 }
 
@@ -209,57 +217,55 @@ static void ay_mute_all(void)
  * комплект регистров; R8/R9/R10 только подключают/отключают конкретный
  * канал к генерируемой огибающей (бит 4).
  *
- * СЛЕДСТВИЕ: вызов ay_set_envelope() для одного канала МЕНЯЕТ форму
- * и период envelope для ВСЕХ каналов, которые сейчас подключены к
- * огибающей. Если, например, A уже на envelope(DECAY, 1000) и вызвать
- * ay_set_envelope(2, TRIANGLE, 4000), то канал A тоже переключится на
- * TRIANGLE с периодом 4000, и общий генератор перезапустится (запись
- * R13). Независимых огибающих на канал в AY-3-8910 нет.
+ * СЛЕДСТВИЕ: форма/период глобальные. Вызов ay_set_envelope(mask, ...)
+ * МЕНЯЕТ их для ВСЕХ каналов, подключённых к огибающей. Например, был
+ * ay_set_envelope(AY_CH_A, DECAY, 1000), затем
+ * ay_set_envelope(AY_CH_A | AY_CH_B, TRIANGLE, 4000) — и A, и B теперь на
+ * TRIANGLE/4000, и общий генератор перезапустится на ближайшей атаке
+ * (запись R13). Независимых огибающих на канал в AY-3-8910 нет.
  *
- * Модель плеера — «рестарт envelope на атаке ноты»: вызов ниже сохраняет
- * shape/period в ay_env_shape[]/ay_env_period[], выставляет бит в
- * ay_env_mode и — если в данный момент канал уже звучит — сразу
- * переконфигурирует генератор и поднимает бит 4. На каждой следующей
- * атаке ay_set_tone() перезапишет R11/R12/R13 и R8/R9/R10 (см. выше).
+ * chan_mask — битовая маска каналов (бит0=A/бит1=B/бит2=C; макросы
+ * AY_CH_A/B/C). Модель плеера — «применение на атаке ноты»: вызов только
+ * сохраняет глобальные shape/period и выставляет ay_env_mode = chan_mask;
+ * в регистры AY НЕ пишет (иначе огибающая подключилась бы к уже звучащему
+ * тону и дала непрерывный сигнал). На следующей атаке подключённого канала
+ * ay_set_tone() запрограммирует R11/R12/R13 и поднимет бит 4 в R8/R9/R10.
  * На music_note_off() громкость обнуляется → бит 4 спадает, огибающая
  * «отпускает» канал до следующей атаки. */
-void ay_set_envelope(unsigned char channel,
+void ay_set_envelope(unsigned char chan_mask,
                      unsigned char shape,
                      unsigned int period)
 {
-    static const unsigned char vreg[3] = { 8, 9, 10 };  /* R8, R9, R10 */
-
-    if (channel > 2u)
+    chan_mask &= 0x07u;         /* только A/B/C */
+    if (chan_mask == 0u)
         return;
 
-    ay_env_shape[channel] = (unsigned char)(shape & 0x0Fu);
-    ay_env_period[channel] = period;
-    ay_env_mode |= (unsigned char)(1u << channel);
-
-    /* Немедленная переконфигурация генератора (ТЗ §6): R11 → R12 → R13
-     * → R8/R9/R10. Каждый ay_write() атомарен по DI/EI внутри себя. */
-    ay_write(11, (unsigned char)(period & 0xFFu));         /* R11 = lo   */
-    ay_write(12, (unsigned char)(period >> 8));            /* R12 = hi   */
-    ay_write(13, (unsigned char)(shape & 0x0Fu));          /* R13 = shape*/
-    /* 0x1F: бит 4 = 1 — канал на огибающей; младшие 4 бита при этом
-     * аппаратно игнорируются. */
-    ay_write(vreg[channel], 0x1Fu);
+    /* Одно определение общей огибающей: форма/период глобальные,
+     * ay_env_mode = какие каналы к ней подключены. Регистры не трогаем —
+     * применит ay_set_tone на атаке. */
+    ay_env_shape = (unsigned char)(shape & 0x0Fu);
+    ay_env_period = period;
+    ay_env_mode = chan_mask;
 }
 
-/* Вернуть канал на фиксированную громкость (бит 4 в R8/R9/R10 = 0).
- * volume обрезается до 0..15; 0 — тишина. Сбрасывает флаг envelope на
- * канале, следующая атака ay_set_tone() отработает по обычной ветке
- * (0x0F) или по volume из текущего вызова, если нота уже звучит. */
-void ay_set_fixed_volume(unsigned char channel,
+/* Вернуть каналы на фиксированную громкость (снять бит 4 в R8/R9/R10).
+ * chan_mask — биты AY_CH_A/B/C; volume применяется ко всем каналам маски.
+ * Снимает флаг envelope у этих каналов и запоминает громкость в
+ * ay_fixed_vol[]; в регистры НЕ пишет (иначе — фоновый тон). Следующая
+ * атака ay_set_tone() отработает по обычной ветке с volume для канала. */
+void ay_set_fixed_volume(unsigned char chan_mask,
                          unsigned char volume)
 {
-    static const unsigned char vreg[3] = { 8, 9, 10 };    /* R8, R9, R10 */
+    unsigned char ch;
 
-    if (channel > 2u)
+    chan_mask &= 0x07u;         /* только A/B/C */
+    if (chan_mask == 0u)
         return;
-    ay_env_mode &= (unsigned char)~(1u << channel);
-    /* Бит 4 сброшен (маска 0x0F), envelope отключён. */
-    ay_write(vreg[channel], (unsigned char)(volume & 0x0Fu));
+    volume &= 0x0Fu;
+    ay_env_mode &= (unsigned char)~chan_mask;   /* снять огибающую с маски */
+    for (ch = 0u; ch < 3u; ++ch)
+        if (chan_mask & (unsigned char)(1u << ch))
+            ay_fixed_vol[ch] = volume;
 }
 
 /* Делители ВИ53 по абсолютному номеру ноты (октава*12 + полутон):
