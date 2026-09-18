@@ -11,7 +11,8 @@ TESTS = 512x256 \
         dt2 \
         dt2_512 \
         dt2_lz \
-        scr_modes
+        scr_modes \
+        tape_test
 
 .PHONY: all clean full
 

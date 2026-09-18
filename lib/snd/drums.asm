@@ -69,6 +69,16 @@
         PUBLIC  _drum_sample_play
         PUBLIC  _drum_route_tape
         PUBLIC  _drum_route_ay
+        ; Гибкая генерация Tape Out (ТЗ §4-§8): разделение drum engine /
+        ; output route / scheduler. Низкоуровневые примитивы LFSR и
+        ; переключатели планировщика. AY-маршрут их не использует.
+        PUBLIC  _drum_tape_step           ; один шаг LFSR + запись PC0
+        PUBLIC  _drum_tape_generate       ; пакет из N шагов (batch)
+        PUBLIC  _drum_tape_mode_frame     ; планировщик: из interrupt (умолч.)
+        PUBLIC  _drum_tape_mode_manual    ; планировщик: только вручную
+        PUBLIC  _drum_tape_mode_manual_env ; планировщик: вручную + огибающая ISR
+        PUBLIC  _drum_tape_running         ; гейт: слышим ли кадр (manual_env)
+        PUBLIC  _drum_tape_set_steps_per_tick
         PUBLIC  _g_ay_r7        ; зеркало R7: определение здесь, читает ay.c
 
 AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
@@ -84,18 +94,18 @@ pc0_set:
         out     (PIA_CW), a
         ret
 
-; Звуковой тик Tape Out (режим VI53): программный Galois LFSR 16 бит,
-; маска 0xB400 (taps 15/14/12/3, максимальная длина 65535). За тик
-; 50 Гц делается tape_shifts[R6] сдвигов, и КАЖДЫЙ сдвиг переключает
-; PC0 в выходной бит LFSR (бит 0 до сдвига) — только так бипер даёт
-; шум: SoundLog считает перепады, а их максимум = сдвигов_за_тик * 50 Гц
-; (1..64 → 50..3200 Гц). Направление как у AY: R6 больше → шума темнее
-; → меньше сдвигов. Громкость R10 — окно duty (раз на кадр): вне окна
-; и при vol=0 тик молчит (PC0 = 0), так столбик SoundLog следует
-; огибающей. Вызов строго из drum_tick (кадровое прерывание).
+; Принудительная тишина Tape Out: PC0 = 0 (RESET бипера).
 tape_on:
         xor     a
         jp      pc0_set         ; принудительный RESET PC0 (0x00 = BSR сброс)
+
+; Кадровый тик Tape Out (FRAME-планировщик, вызов из drum_tick). Дешёвая
+; генерация шума из interrupt: сначала duty-окно громкости (R10), затем
+; пачка сдвигов LFSR — каждый переключает PC0. Число сдвигов за кадр:
+; таблица tape_shifts[R6] (умолч., прежнее поведение ТЗ §12) или фиксированный
+; порог tape_steps (drum_tape_set_steps_per_tick, ТЗ §6/§11). Сами сдвиги
+; делает общий core tape_batch (его же зовёт drum_tape_generate из main loop),
+; поэтому LFSR/семя/порядок сдвигов/выходной бит не меняются (ТЗ §10).
 tape_tick:
         ; --- duty-окно громкости: активен ли этот кадр ---
         ld      a, (drum_vol)
@@ -113,25 +123,53 @@ tape_duty_ok:
         ld      (duty_phase), a
         cp      c               ; фаза < громкость?
         jp      nc, tape_mute
-        ; --- число сдвигов по R6 ---
-        ld      hl, drum_noise
-        ld      a, (hl)         ; R6 0..31 — тот же параметр, что и для AY
+        ; --- кадр слышимый. manual_env: шаги делает main loop, не здесь ---
+        ld      a, (tape_sched) ; режим 2: открыть гейт и выйти (PC0 не трогать)
+        cp      2
+        jp      nz, tc_framesel
+        ld      a, 1
+        ld      (tape_run), a
+        ret
+tc_framesel:
+        ; --- число сдвигов за кадр: фиксированный порог или таблица R6 ---
+        ld      a, (tape_steps) ; настройка drum_tape_set_steps_per_tick
+        or      a
+        jp      nz, tape_tick_n ; >0 — независимый frame-mode порог (ТЗ §11)
+        ld      a, (drum_noise) ; 0 (умолч.) — прежний расчёт по tape_shifts[R6]
         and     0x1F
         ld      hl, tape_shifts
         ld      c, a
         ld      b, 0
         add     hl, bc
-        ld      b, (hl)         ; сдвигов/переключений PC0 за кадр
-        ; --- DE = состояние LFSR, HL = &старший байт ---
+        ld      b, (hl)         ; B = сдвигов/переключений PC0 за кадр
+        jp      tape_batch
+tape_tick_n:
+        ld      b, a            ; B = фиксированное число шагов за кадр
+        jp      tape_batch
+tape_mute:
+        xor     a
+        ld      (tape_run), a    ; кадр тишины: закрыть гейт manual_env
+        jp      pc0_set          ; PC0 = 0
+
+; ------------------------- ядро LFSR (drum engine) ----------------------
+; Пакет из B (>0) сдвигов Galois 16 бит (маска 0xB400, taps 15/14/12/3);
+; каждый сдвиг переключает PC0 в бит 0 состояния (он же обратная связь).
+; Вход:  B = число сдвигов (1..255, nonzero); состояние читается из
+;        lfsr_state и по окончании обратно. Выход: PC0 = бит последнего
+;        сдвига; AF/BC/DE/HL — scratch (вне ISR вызывается при EI).
+; Только 8080-инструкции (КР580ВМ80А: нет JR/DJNZ/SBC HL). OUT — прямая
+; команда в теле цикла (без call pc0_set), чтобы batch был максимально
+; дешёвым (ТЗ §14). Алгоритм/семя/порядок сдвигов прежние (ТЗ §10).
+tape_batch:
         ld      hl, lfsr_state
         ld      e, (hl)
         inc     hl
-        ld      d, (hl)
+        ld      d, (hl)         ; DE = состояние LFSR
         ld      a, e
         or      d
-        jp      nz, tape_run
+        jp      nz, tb_loop
         ld      de, 0xACE1      ; 0 = вечная тишина — перезагрузить семя
-tape_run:
+tb_loop:
         ; один сдвиг Galois вправо: out = feedback = бит 0 до сдвига
         ld      a, e
         and     0x01            ; CY=0, A = бит 0 (обратная связь = выход)
@@ -144,15 +182,15 @@ tape_run:
         ld      e, a
         ld      a, c            ; восстановить out
         or      a
-        jp      z, tape_pc0     ; без обратной связи
+        jp      z, tb_pc0       ; без обратной связи
         ld      a, d
         xor     0xB4            ; DE ^= 0xB400 (младший байт маски = 0)
         ld      d, a
-tape_pc0:
+tb_pc0:
         ld      a, c            ; PC0 = выходной бит сдвига
-        call    pc0_set         ; переключение бипера
+        out     (PIA_CW), a     ; переключение бипера (BSR: A = 0/1)
         dec     b
-        jp      nz, tape_run
+        jp      nz, tb_loop
         ; --- состояние обратно: HL на &старший, старший в (HL), младший ниже
         ld      a, d
         ld      (hl), a
@@ -160,9 +198,6 @@ tape_pc0:
         ld      a, e
         ld      (hl), a
         ret
-tape_mute:
-        xor     a
-        jp      pc0_set         ; кадр тишины: PC0 = 0
 
 ; Запись в регистр AY: A = номер регистра, E = значение.
 ; БЕЗ di/ei: вызывается из кадрового ISR (drum_tick), где прерывания уже
@@ -189,6 +224,22 @@ _g_ay_r7:
 ; (PC0, LFSR), 1 = шумовой генератор AY (канал C). По умолчанию лента.
 drum_route:     defb    0
 
+; Планировщик генерации Tape Out (ТЗ §3/§6/§7) — отдельно от маршрута и
+; от drum engine. Касается ТОЛЬКО Tape Out; AY-маршрут его не читает.
+;   0 = FRAME  (умолч.) — drum_tick из interrupt ведёт генерацию (ТЗ §12);
+;   1 = MANUAL — drum_tick не трогает PC0 и не ведёт огибающую ленты — шум
+;       генерирует программа из main loop вызовами drum_tape_step()/generate();
+;   2 = MANUAL + огибающая — drum_tick из interrupt ведёт огибающую громкости
+;       и тайминг семплов (duty-окно), но НЕ переключает PC0: плотность
+;       LFSR-шагов задаёт main loop через drum_tape_generate(), а гейт кадра
+;       читается drum_tape_running(). Даёт «макс. частоту» шума без потери
+;       огибающей (§7/§8).
+tape_sched:     defb    0
+; Число сдвигов Tape Out за кадр в FRAME-режиме: 0 (умолч.) — из таблицы
+; tape_shifts[R6] (полное прежнее поведение); >0 — фиксированный порог
+; (настройка для игры: малое n ≈ минимальная нагрузка на CPU, ТЗ §6).
+tape_steps:     defb    0
+
 drum_active:    defb    0       ; 0 = тишина, ничего не звучит
 drum_prio:      defb    0       ; приоритет звучащего инструмента
 
@@ -205,6 +256,8 @@ drum_r7_save:   defb    0       ; сохранённый R7 (восстанов�
 ; за кадр переключает PC0 в бит 0 состояния (он же обратная связь).
 lfsr_state:     defw    1       ; состояние сдвигового регистра (0 запрещён)
 duty_phase:     defb    0       ; фаза счётчика громкости 0-15 (duty-окно)
+tgen_rem:       defw    0       ; scratch: остаток count в drum_tape_generate
+tape_run:       defb    0       ; manual_env: 1 = кадр внутри duty-окна (шум слышим)
 
 ; Счётчики:
 drum_pos:       defb    0       ; тиков с момента удара
@@ -259,6 +312,135 @@ _drum_route_ay:
         ld      a, 1            ; 1 = шум AY
         ld      (drum_route), a
         jp      _drum_mute
+
+; --------------------- гибкая генерация Tape Out ------------------------
+; Разделение (ТЗ §3): drum engine (нижний tape_batch и примитивы) отдельно
+; от маршрута вывода (drum_route) и отдельно от планировщика (tape_sched).
+; AY-маршрут эти функции не использует (§13).
+
+; Планировщик FRAME (умолч.): Tape Out ведётся из drum_tick (кадровый
+; interrupt); прежняя табличная/семпловая огибающая сохранена (§12).
+_drum_tape_mode_frame:
+        xor     a
+        ld      (tape_sched), a
+        ret
+
+; Планировщик MANUAL: drum_tick не трогает PC0 на ленточном маршруте —
+; Tape Out меняется только явными drum_tape_step()/drum_tape_generate().
+; Для музыкальных ROM, расходующих заметную долю CPU на плотный шум (§7/§8).
+_drum_tape_mode_manual:
+        ld      a, 1
+        ld      (tape_sched), a
+        ret
+
+; Планировщик MANUAL + огибающая (ТЗ §7/§8, для музыкальных ROM): drum_tick
+; из interrupt продолжает вести огибающую громкости/тайминг семплов и duty-
+; окно, но НЕ переключает PC0 — плотность LFSR-шагов задаёт main loop
+; вызовами drum_tape_generate(), а drum_tape_running() говорит, слышим ли
+; этот кадр. Даёт «максимальную частоту» шума при сохранённой огибающей.
+_drum_tape_mode_manual_env:
+        ld      a, 2
+        ld      (tape_sched), a
+        ret
+
+; Гейт текущего кадра в режиме manual_env: 1, если кадр внутри duty-
+; окна громкости (шум слышим) — main loop крутит drum_tape_generate();
+; 0 — тишина (PC0 уже 0 из прерывания). Только для чтения из main loop.
+; ВАЖНО: sccz80 продвигает unsigned char до int и в условии if(running())
+; тестирует ВЕСЬ HL (`ld a,h / or l`), а не только L. Поэтому обнуляем H:
+; иначе старший байт остаётся мусором от предыдущих вызовов и гейт
+; зависит от него (ложно «не играет»/«запустилось через пару секунд»). Возврат 0/1 в HL.
+_drum_tape_running:
+        ld      a, (tape_run)
+        ld      l, a
+        ld      h, 0            ; H = 0 — чистый 16-битный 0/1 (сброс мусора)
+        ret
+
+; Число шагов Tape Out за кадр в FRAME-режиме (ТЗ §6). Аргумент — 16-битное
+; беззнаковое в стеке (SP+2 — младший байт), читается как drum_sample_play;
+; 0 = авторежим по tape_shifts[R6]. Не горячий путь (раз при настройке).
+_drum_tape_set_steps_per_tick:
+        ld      hl, 2
+        add     hl, sp
+        ld      a, (hl)         ; младший байт аргумента (0..255)
+        ld      (tape_steps), a
+        ret
+
+; Один шаг генератора Tape Out (базовая операция drum engine, ТЗ §4):
+; один сдвиг Galois LFSR (маска 0xB400) + одна запись PC0. Проверок
+; маршрута/громкости/огибающей НЕТ — максимально дёшево. Состояние — в
+; lfsr_state (продолжает поток с tape_tick/drum_tape_generate). HL
+; сохраняется (push/pop) — единственный регистр, который эта функция
+; меняет и который имеет смысл беречь; BC/DE/AF — scratch по cdecl.
+_drum_tape_step:
+        push    hl
+        ld      hl, lfsr_state
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)         ; DE = состояние LFSR
+        ld      a, e
+        or      d
+        jp      nz, tstep_go
+        ld      de, 0xACE1      ; 0 = вечная тишина — перезагрузить семя
+tstep_go:
+        ld      a, e
+        and     0x01            ; CY=0, A = бит 0 = выход/обратная связь
+        ld      c, a            ; C = уровень PC0 этого шага (0/1)
+        ld      a, d
+        rra                     ; D >>= 1 (бит 7 = 0), CY = D bit0
+        ld      d, a
+        ld      a, e
+        rra                     ; E >>= 1, бит 7 = D bit0
+        ld      e, a
+        ld      a, c
+        or      a
+        jp      z, tstep_pc0    ; без обратной связи
+        ld      a, d
+        xor     0xB4            ; DE ^= 0xB400
+        ld      d, a
+tstep_pc0:
+        ld      a, d            ; сохранить состояние в lfsr_state (HL=&hi)
+        ld      (hl), a
+        dec     hl
+        ld      a, e
+        ld      (hl), a
+        ld      a, c            ; PC0 = выходной бит шага
+        out     (PIA_CW), a     ; переключение бипера
+        pop     hl
+        ret
+
+; Пакетная генерация Tape Out (ТЗ §5): count сдвигов LFSR, каждый
+; переключает PC0. Основной API для музыкальных ROM (main loop). count —
+; 16-битное беззнаковое в стеке (SP+2 lo, SP+3 hi). count не ограничен
+; десятками — позволяет расходовать на звук заметную долю CPU (§8).
+; Разбирается на пакеты по 255 шагов общим ядром tape_batch (тот же LFSR,
+; поток состояния непрерывен между пакетами через lfsr_state).
+_drum_tape_generate:
+        ld      hl, 2
+        add     hl, sp
+        ld      a, (hl)         ; count lo
+        inc     hl
+        ld      h, (hl)         ; count hi
+        ld      l, a            ; HL = count
+        ld      a, h
+        or      l
+        ret     z               ; count = 0 — ничего
+        ld      (tgen_rem), hl
+tgen_loop:
+        ld      hl, (tgen_rem)
+        ld      a, h
+        or      a
+        jp      nz, tgen_big
+        ld      b, l            ; остаток < 256 — последний пакет, затем выход
+        call    tape_batch
+        ret
+tgen_big:
+        ld      b, 255          ; пакет 255 шагов, остаток -= 255, повторить
+        ld      de, 0xFF01      ; rem-255 через DAD (8080: нет 16-битного вычитания)
+        add     hl, de
+        ld      (tgen_rem), hl
+        call    tape_batch
+        jp      tgen_loop
 
 _drum_mute:
         xor     a
@@ -377,7 +559,7 @@ trig_tape:
 _drum_tick:
         ld      a, (drum_route)         ; маршрут шума: AY или Tape Out (PC0)
         or      a
-        jp      z, tick_tape
+        jp      z, tick_tape_sched
         ld      a, (smp_ptr)    ; звучит семпл .smp — ведём его
         ld      hl, smp_ptr + 1
         or      (hl)
@@ -394,6 +576,20 @@ tick_ay:
         jp      tick_end        ; удар закончился: тишина
 
 ; ---- Tape Out: LFSR-шум на PC0, AY не трогаем ----
+; Планировщик (ТЗ §6/§7): в MANUAL-режиме drum_tick не трогает PC0 — ленту
+; ведёт main loop вызовами drum_tape_step()/drum_tape_generate(). В FRAME
+; (умолч.) — прежнее кадровой генерации из interrupt (§12).
+tick_tape_sched:
+        ld      a, (tape_sched)
+        or      a
+        jp      z, tick_tape       ; FRAME: прежнее поведение (§12)
+        cp      1
+        ret     z                  ; MANUAL: PC0 и огибающая на руках у программы
+        ; mode 2 (manual_env): ведём огибающую/тайминг, но PC0 НЕ трогаем —
+        ; main loop сделает шаги, пока выставлен гейт tape_run этого кадра.
+        xor     a
+        ld      (tape_run), a      ; закрыть гейт; tape_tick откроет, если слышно
+        jp      tick_tape
 tick_tape:
         ld      a, (smp_ptr)    ; семпл важнее табличной огибающей
         ld      hl, smp_ptr + 1

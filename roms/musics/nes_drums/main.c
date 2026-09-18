@@ -8,6 +8,11 @@
  *               устройство вывода выбирается явно (Ф5):
  *                 ВИ53 (i8253) — мелодия на 3 каналах ВИ53, шум ударных
  *                                на Tape Out (PC0, LFSR)  [по умолчанию];
+ *                                шум ведётся на МАКСИМАЛЬНОЙ частоте: сами
+ *                                LFSR-шаги генерирует main loop
+ *                                (drum_tape_mode_manual_env + drum_tape_running
+ *                                + drum_tape_generate), а огибающую громкости
+ *                                и тайминг семплов — drum_tick из прерывания;
  *                 AY-3-8910    — мелодия на тонах A/B/C, шум ударных на
  *                                шумовом генераторе AY (канал C, Noise C);
  *   - клавиши:  опрос матрицы портами (keyboard.c).
@@ -163,9 +168,14 @@ int main(void)
 {
     unsigned char key;
     unsigned char prev_key = 0;
+    unsigned int  last_frame;
 
     frame_handler = on_frame;           /* мелодия + ударные в прерывании */
     drum_init();                        /* сброс/глушение ударных; маршрут по умолчанию — Tape Out (ВИ53) */
+    /* VI53: шум ленты на максимальной частоте — плотные пачки LFSR из main
+     * loop (огибающую/duty-окно ведёт drum_tick). В AY-режиме лента не
+     * используется, планировщик Tape Out её не касается. */
+    drum_tape_mode_manual_env();
 
     /* Экран: чёрный фон, логотип, текст меню. */
     gfx_set_black_palette();
@@ -180,8 +190,20 @@ int main(void)
 
     /* Стартовый трек не запускаем — ждём нажатия Ф1 или Ф2. */
 
+    last_frame = frame_count;
     for (;;) {
-        wait_one_frame();
+        /* VI53: пока кадр «слышимый» (дuty-окно из drum_tick), выжимаем
+         * максимум LFSR-шагов из main loop — плотный шум на предельной
+         * частоте. В тишине и в AY-режиме — лёгкий сон до следующего кадра. */
+        if (!use_ay && drum_tape_running()) {
+            drum_tape_generate(400u);   /* ~18 мс на 3 МГц: заметная доля CPU */
+        } else if (frame_count == last_frame) {
+            wait_one_frame();
+        }
+
+        if (frame_count == last_frame)
+            continue;                   /* кадр ещё не сменился */
+        last_frame = frame_count;
 
         key = kbd_read();   /* снимок матрицы уже сделан в on_frame (kbd_scan_now) */
         if (key != prev_key) {          /* реакция на нажатие */

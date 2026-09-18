@@ -389,6 +389,46 @@ extern void drum_mute(void);            /* оборвать звучащий у�
  * табличный удар и наоборот; ведёт его drum_tick(). */
 extern void drum_sample_play(const unsigned char *smp);
 
+/* ------------------ Гибкая генерация шума Tape Out (drums.asm) ---------
+ * Три независимых уровня (ТЗ §3): drum engine (шаг LFSR) → output route
+ * (drum_route_tape/ay, ТЗ выше) → scheduler (когда и сколько шагов Tape
+ * Out выполняется). Планировщик и примитивы ниже касаются ТОЛЬКО Tape Out
+ * (PC0, LFSR); маршрут AY-Noise (§13) и разделение VI53/AY НЕ затронуты.
+ *
+ * DRUM ENGINE — базовые операции (не зависят от планировщика):
+ *   drum_tape_step()    — один сдвиг LFSR + одна запись PC0; без проверок
+ *     маршрута/громкости, максимально дёшево (ТЗ §4). Продолжает общий поток.
+ *   drum_tape_generate(n) — n сдвигов за один вызов (batch, уменьшенные
+ *     накладные расходы, ТЗ §5); основной API музыкальных ROM из main loop.
+ *     n не ограничен десятками — можно расходовать заметную долю CPU (§8).
+ *
+ * SCHEDULER — режим генерации Tape Out относительно кадрового interrupt:
+ *   FRAME (умолч.)   — за tick ведёт drum_tick; за один кадр выполняется
+ *     tape_shifts[R6] шагов (таблица §11) либо фиксированный порог после
+ *     drum_tape_set_steps_per_tick(n) (ТЗ §6). n = малое значение → обычная
+ *     игра с минимальной нагрузкой на CPU.
+ *   MANUAL           — drum_tick полностью НЕ трогает PC0 и не ведёт
+ *     огибающую ленты; Tape Out меняется только явными
+ *     drum_tape_step()/drum_tape_generate() из main loop (§7/§8).
+ *   MANUAL + ОГИБАЮЩАЯ — drum_tape_mode_manual_env(): drum_tick из interrupt
+ *     ведёт огибающую громкости и тайминг семплов (duty-окно), но НЕ
+ *     переключает PC0; плотность шагов задаёт main loop через
+ *     drum_tape_generate(), а слышим ли текущий кадр — drum_tape_running().
+ *     Шум на максимальной частоте без потери огибающей (для музыкальных ROM).
+ *
+ * Различать (§9): LFSR steps/sec ≠ число переключений PC0/sec ≠ частота/
+ * спектр итогового сигнала. Каждый шаг пишет PC0, но перепад значения
+ * происходит только когда меняется бит LFSR; частота следования шагов не
+ * равна частоте шума. Существующие барабаны и огибающая работают как прежде (§12).
+ * Не вносить обязательности: обычным ROM новые вызовы не нужны. */
+extern void drum_tape_step(void);                 /* один шаг LFSR + PC0   */
+extern void drum_tape_generate(unsigned int count); /* пакет из count шагов */
+extern void drum_tape_mode_frame(void);           /* генерация из interrupt */
+extern void drum_tape_mode_manual(void);          /* только вручную         */
+extern void drum_tape_mode_manual_env(void);      /* вручную + огибающая ISR */
+extern unsigned char drum_tape_running(void);     /* гейт кадра (manual_env) */
+extern void drum_tape_set_steps_per_tick(unsigned int n); /* порог FRAME-режима */
+
 /* ----------------------------- Клавиатура ----------------------------- */
 
 /* Однократный опрос матрицы. Возвращает код первой нажатой клавиши
