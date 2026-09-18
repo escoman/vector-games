@@ -9,6 +9,10 @@
 ; вызывает функцию frame_handler, если она назначена. Обработчик
 ; задаётся из C: frame_handler = my_func; (0 = обработчика нет).
 ;
+; Флаг irq_active (виден из C) равен 1, пока выполняется аппаратное
+; прерывание, и 0 вне его — по нему код основного цикла может понять,
+; что идёт обработчик прерывания.
+;
 
 ; --- КОНФИГУРАЦИЯ ПАМЯТИ ---
 ; Верхушка стека (стек растёт вниз).
@@ -28,6 +32,7 @@ STACK_TOP       EQU     0x0100
         EXTERN  _main
         PUBLIC  _frame_count
         PUBLIC  _frame_handler
+        PUBLIC  _irq_active
 
         org     0x0100
 
@@ -68,6 +73,8 @@ exit_loop:
 ; ---------------------------------------------------------------
 isr_frame:
         push    af
+        ld      a, 1
+        ld      (_irq_active), a        ; флаг: идёт аппаратное прерывание
         push    bc
         push    de
         push    hl
@@ -81,6 +88,9 @@ isr_frame:
         or      l
         call    nz, call_hl             ; вызов обработчика
 isr_done:
+        xor     a
+        ld      (_irq_active), a        ; выход: флаг сбрасываем (настоящий af
+                                        ; ещё на стеке, его вернёт pop af)
         pop     hl
         pop     de
         pop     bc
@@ -97,3 +107,5 @@ _frame_count:
         defw    0
 _frame_handler:
         defw    0
+_irq_active:
+        defb    0                       ; 1 = выполняется прерывание (для C)
