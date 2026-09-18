@@ -138,17 +138,50 @@ static const struct {
     {   0u, 120u, "F5-MUSIC MODE" },
 };
 
-static void show_menu(unsigned char selected)
+/* Число строк меню. */
+#define MENU_LINE_COUNT ((unsigned char)(sizeof(menu_lines) / sizeof(menu_lines[0])))
+
+/* Строка, подсвеченная в предыдущий раз (255 = ни одна). Нужна для
+ * инкрементальной перерисовки: обновляем только её и новую выбранную. */
+static unsigned char menu_prev_sel = 255u;
+
+/* Перерисовать одну строку меню заданным цветом. */
+static void draw_menu_line(unsigned char i, unsigned char color)
 {
     unsigned char y0 = (unsigned char)(logo_bmp_height + 16u);
+
+    gfx_print(menu_lines[i].dx,
+                (unsigned char)(y0 + menu_lines[i].dy),
+                menu_lines[i].text,
+                color);
+}
+
+/* Полная перерисовка всех строк меню (только при старте). */
+static void show_menu_full(unsigned char selected)
+{
     unsigned char i;
 
-    for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {
-        gfx_print(menu_lines[i].dx,
-                    (unsigned char)(y0 + menu_lines[i].dy),
-                    menu_lines[i].text,
-                    i == selected ? HIGHLIGHT_COLOR : TEXT_COLOR);
-    }
+    for (i = 0u; i < MENU_LINE_COUNT; ++i)
+        draw_menu_line(i, i == selected ? HIGHLIGHT_COLOR : TEXT_COLOR);
+    menu_prev_sel = selected;
+}
+
+/* Инкрементальная перерисовка меню: обновляются только строки, чья
+ * подсветка изменилась (прежняя выбранная → обычный цвет, новая →
+ * подсветка), а не все 21 строка. Это критично для режима manual_env:
+ * полная перерисовка блокировала main loop на ~13 кадров, и короткие
+ * семплы ударных (5-9 кадров) успевали отзвучать раньше, чем main loop
+ * доходил до drum_tape_generate() → звука не было. Инкрементальный
+ * вариант освобождает цикл примерно за один кадр. */
+static void show_menu(unsigned char selected)
+{
+    if (selected == menu_prev_sel)
+        return;
+    if (menu_prev_sel < MENU_LINE_COUNT)
+        draw_menu_line(menu_prev_sel, TEXT_COLOR);
+    if (selected < MENU_LINE_COUNT)
+        draw_menu_line(selected, HIGHLIGHT_COLOR);
+    menu_prev_sel = selected;
 }
 
 /* Индикация текущего устройства вывода в правой колонке строки Ф5.
@@ -181,7 +214,7 @@ int main(void)
     gfx_set_black_palette();
     gfx_clear(0);
     gfx_rle_expand(logo_bmp_screen_rle, 8u, 0u);
-    show_menu(255);
+    show_menu_full(255);
     show_backend();
     gfx_set_palette(logo_bmp_palette);
 

@@ -142,17 +142,46 @@ static void play_song(const music_song_t *song, unsigned char loop)
     # --- show_menu() ---
     hl = colors['highlight']
     norm = colors['normal']
-    w(f'''static void show_menu(unsigned char selected)
+    w(f'''/* Число строк меню. */
+#define MENU_LINE_COUNT ((unsigned char)(sizeof(menu_lines) / sizeof(menu_lines[0])))
+
+/* Строка, подсвеченная в предыдущий раз (255 = ни одна). */
+static unsigned char menu_prev_sel = 255u;
+
+/* Отрисовка одной строки меню (текст → экранные координаты и цвет). */
+static void draw_menu_line(unsigned char i, unsigned char color)
 {{
     unsigned char x0 = 0u;
     unsigned char y0 = (unsigned char)(title_bmp_height + {menu_y0}u);
+
+    gfx_print((unsigned char)(x0 + menu_lines[i].dx),
+                (unsigned char)(y0 + menu_lines[i].dy),
+                menu_lines[i].text,
+                color);
+}}
+
+/* Полная отрисовка меню — только при старте. */
+static void show_menu_full(unsigned char selected)
+{{
     unsigned char i;
 
-    for (i = 0u; i < sizeof(menu_lines) / sizeof(menu_lines[0]); ++i) {{
-        gfx_print((unsigned char)(x0 + menu_lines[i].dx),
-                    (unsigned char)(y0 + menu_lines[i].dy),
-                    menu_lines[i].text, selected == i ? {hl}u : {norm}u);
-    }}
+    for (i = 0u; i < MENU_LINE_COUNT; ++i)
+        draw_menu_line(i, i == selected ? {hl}u : {norm}u);
+    menu_prev_sel = selected;
+}}
+
+/* Инкрементальная перерисовка: только снятое и новое выделение.
+   Полная перерисовка всех строк на 3 МГц занимает кадры, блокирует
+   main loop и даёт мерцание, поэтому перерисовываем построчно. */
+static void show_menu(unsigned char selected)
+{{
+    if (selected == menu_prev_sel)
+        return;
+    if (menu_prev_sel < MENU_LINE_COUNT)
+        draw_menu_line(menu_prev_sel, {norm}u);
+    if (selected < MENU_LINE_COUNT)
+        draw_menu_line(selected, {hl}u);
+    menu_prev_sel = selected;
 }}
 
 ''')
@@ -185,7 +214,7 @@ int main(void)
     gfx_set_black_palette();
     gfx_clear({bg});
     gfx_rle_expand(title_bmp_screen_rle, {rle_x}u, {rle_y}u);
-    show_menu(100);
+    show_menu_full(100);
     gfx_set_bmp_palette(title_bmp_palette);
 
     play_song(&nes_drums_song, 0);
