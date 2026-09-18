@@ -203,14 +203,26 @@ def main():
                  sorted(res, key=lambda t: -t[1])[:args.top] if n >= args.min]
         print(fmt_table(rrows, [8, 28, 34], ['байт', 'символ', 'файл']))
 
-    # --- 4. Крупнейшие символы кода ---
-    code = [r for s in SECTION_INFO if s.startswith('code_')
-            for r in sized.get(s, [])]
-    if code:
-        print('\n== Крупнейшие символы кода ==')
-        crows = [[f'{n}', name, f'{short_src(src)}'] for name, n, _, src in
-                 sorted(code, key=lambda t: -t[1])[:args.top] if n >= args.min]
-        print(fmt_table(crows, [8, 26, 34], ['байт', 'символ', 'файл']))
+    # --- 4. Крупнейшие функции кода ---
+    # Символы кода группируем по функции-владельцу: sccz80/copt дробят
+    # тело одной C-функции на метки i_NN (цели переходов, инлайнинг).
+    # Поле source несёт имя функции: «path.c::func::скоуп::NN:строка».
+    # Для .asm метки осмысленные (font8x8, div_loop) — группировка по имени.
+    code_by_owner = {}
+    for s in [x for x in SECTION_INFO if x.startswith('code_')]:
+        for name, size, module, source in sized.get(s, []):
+            if '::' in source:
+                owner = source.split('::')[1] or name
+            else:
+                owner = name
+            key = (owner, short_src(source))
+            code_by_owner[key] = code_by_owner.get(key, 0) + size
+    if code_by_owner:
+        print('\n== Крупнейшие функции (код) ==')
+        crows = [[f'{sz}', owner, f'{f}'] for (owner, f), sz in
+                 sorted(code_by_owner.items(), key=lambda kv: -kv[1])[:args.top]
+                 if sz >= args.min]
+        print(fmt_table(crows, [8, 26, 34], ['байт', 'функция', 'файл']))
 
     # --- Вердикт по лимиту 32 КБ ---
     LIMIT = 32768
