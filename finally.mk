@@ -4,6 +4,10 @@
 #
 # Если цель не clean — копирует TARGET (.rom) и MAPFILE (.map)
 # в PPSSPP_ROMS. Если директории нет — предупреждение.
+#
+# make consist — показать состав ROM (ресурсы/код/библиотеки) и размеры.
+# make deploy  — собрать и положить в ROMS эмулятора.
+# make full    — clean + all + deploy.
 
 PPSSPP_ROMS ?= /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
@@ -33,3 +37,28 @@ endif
 endif
 
 endif # not clean
+
+# --- make consist -------------------------------------------------------
+# Разбор состава ROM: сколько занимают ресурсы (rodata — таблицы треков,
+# картинки), код программы, библиотеки и runtime. Пересобирает линковкой с
+# картой (-m), печатает отчёт utils/romconsist.py и удаляет карту. Позволяет
+# понять, что ужимать, когда ROM переваливает за 32 КБ.
+ROMCONSIST ?= $(PROJECT_ROOT)utils/romconsist.py
+CONSIST_MAP = $(TARGET:.rom=.map)
+
+.PHONY: consist
+
+ifeq ($(origin SRCS),undefined)
+consist:
+	@echo "consist: SRCS не определён — нет данных для разбора состава"
+else
+consist: $(TARGET)
+	@ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
+	    $(ZCC) $(ZFLAGS) -m $(SRCS) -o $(TARGET) >/dev/null 2>&1
+	@if [ -f "$(CONSIST_MAP)" ]; then \
+		python3 "$(ROMCONSIST)" "$(CONSIST_MAP)"; \
+		rm -f "$(CONSIST_MAP)"; \
+	else \
+		echo "consist: карта $(CONSIST_MAP) не создана (zcc -m не сработал?)"; \
+	fi
+endif
