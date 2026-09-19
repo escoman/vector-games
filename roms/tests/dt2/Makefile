@@ -7,9 +7,8 @@ BMP2INC  = ../../../utils/bmp2inc.py
 TARGET = dt2.rom
 
 SRCS = $(LIB)/sys/startup.asm \
-       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
-       $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
-       $(LIB)/unpack/rle.asm \
+       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm \
+       $(LIB)/gfx/gfx.c $(LIB)/unpack/rle.asm \
        main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
