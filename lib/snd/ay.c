@@ -49,6 +49,23 @@ void ay_write(unsigned char reg, unsigned char val)
  * биты тонов. Обновляется при каждом ay_set_r7(...). */
 extern unsigned char g_ay_r7;
 
+/* "Желаемая" громкость канала C (R10) со стороны мелодии. Значение,
+ * которое ay_set_tone_period() записала бы в R10, если бы ударные сейчас
+ * его не трогали. Обновляется на каждой атаке/релизе канала C и
+ * читается из drums.asm: чтобы в конце удара вернуть R10 к мелодии,
+ * а не к 0, и чтобы drum_live() брала max(drum_vol, мелодия).
+ * Определение — в drums.asm (там же, где g_ay_r7), чтобы модуль
+ * линковался и в VI53-only сборке без ay.c. */
+extern unsigned char g_ay_r10_melody;
+
+/* Состояние пост-релиза R10 в drums.asm. Когда ay.c пишет R10 мелодии
+ * напрямую (атака/релиз/мьют), надо синхронизировать "последнее
+ * записанное значение" и снять флаг пост-релиза — иначе drum_tick
+ * продолжит писать R10 по своей траектории и перекроет свежую
+ * мелодийную громкость (нота «сядет» на несколько кадров). */
+extern unsigned char drum_r10_current;
+extern unsigned char drum_r10_release;
+
 void ay_set_r7(unsigned char val)
 {
     g_ay_r7 = val;
@@ -78,6 +95,9 @@ void ay_mixer_init(void)
 {
     /* Фиксированная громкость по умолчанию на каждый канал. */
     ay_fixed_vol[0] = ay_fixed_vol[1] = ay_fixed_vol[2] = 15u;
+    g_ay_r10_melody = 0u;
+    drum_r10_current = 0u;
+    drum_r10_release = 0u;
     /* Tone ABC on, Noise ABC off. Noise C включают ударные
      * (drums.asm) при триггере и выключают при завершении. */
     ay_set_r7(0xF8);
@@ -102,11 +122,12 @@ void ay_set_tone_period(unsigned char ch, unsigned int period)
 {
     static const unsigned char preg[3] = { 0, 2, 4 };  /* R0, R2, R4 */
     static const unsigned char vreg[3] = { 8, 9, 10 }; /* R8, R9, R10 */
+    unsigned char vol;
 
     ay_write(preg[ch], (unsigned char)(period & 0xFFu));
     ay_write(preg[ch] + 1u, (unsigned char)(period >> 8));
     if (period == 0u) {
-        ay_write(vreg[ch], 0u);    /* note OFF: volume = 0 */
+        vol = 0u;                          /* note OFF: volume = 0 */
     } else if (ay_env_mode & (unsigned char)(1u << ch)) {
         /* Атака на envelope: перезапустить общий генератор и
          * подключить канал. Порядок R11 → R12 → R13 → R8/9/10
@@ -114,10 +135,16 @@ void ay_set_tone_period(unsigned char ch, unsigned int period)
         ay_write(11, (unsigned char)(ay_env_period & 0xFFu));
         ay_write(12, (unsigned char)(ay_env_period >> 8));
         ay_write(13, ay_env_shape);
-        ay_write(vreg[ch], 0x1Fu);
+        vol = 0x1Fu;
     } else {
         /* note ON: фиксированная громкость канала (по умолч. 15) */
-        ay_write(vreg[ch], ay_fixed_vol[ch]);
+        vol = ay_fixed_vol[ch];
+    }
+    ay_write(vreg[ch], vol);
+    if (ch == 2u) {
+        g_ay_r10_melody = vol;
+        drum_r10_current = vol;
+        drum_r10_release = 0u;
     }
 }
 
@@ -126,6 +153,11 @@ void ay_note_off(unsigned char ch)
 {
     static const unsigned char vreg[3] = { 8, 9, 10 }; /* R8, R9, R10 */
     ay_write(vreg[ch], 0u);
+    if (ch == 2u) {
+        g_ay_r10_melody = 0u;
+        drum_r10_current = 0u;
+        drum_r10_release = 0u;
+    }
 }
 
 /* Тишина на всех трёх тональных каналах. */
@@ -134,6 +166,9 @@ void ay_mute_all(void)
     ay_write(8, 0);
     ay_write(9, 0);
     ay_write(10, 0);
+    g_ay_r10_melody = 0u;
+    drum_r10_current = 0u;
+    drum_r10_release = 0u;
 }
 
 /* ------------------ AY: аппаратная огибающая (R11..R13) --------------- */

@@ -84,10 +84,19 @@
         PUBLIC  _drum_tape_running         ; гейт: слышим ли кадр (manual_env)
         PUBLIC  _drum_tape_set_steps_per_tick
         PUBLIC  _g_ay_r7        ; зеркало R7: определение здесь, читает ay.c
+        PUBLIC  _g_ay_r10_melody ; мелодийная громкость C: определение здесь, пишет ay.c
+        PUBLIC  _drum_r10_current ; для ay.c: синхронизировать с прямой записью R10
+        PUBLIC  _drum_r10_release ; для ay.c: снять пост-релиз на новой атаке
 
 AY_SEL  equ     0x15            ; AY: выбор регистра (нечётный порт)
 AY_DAT  equ     0x14            ; AY: запись данных (чётный порт)
 PIA_CW  equ     0x00            ; PIA1: CW (бит 7 = 1) / BSR (бит 7 = 0)
+
+; Мелодийная громкость канала C (R10), зеркало из ay.c: drum_live()/
+; tick_smp()/drum_trig() берут max(drum_vol, g_ay_r10_melody), чтобы нота
+; не «проваливалась» под огибающей удара; tick_end()/drum_mute() пишут
+; её обратно вместо 0, чтобы не было «прыжка» после удара.
+; Определение — ниже, в разделе состояния (рядом с g_ay_r7).
 
 ; Переключатель PC0 (Tape Out) через BSR: A = уровень 0/1.
 ; BSR (бит 7 = 0): номер бита в битах 3-1 (000 = PC0), бит 0 = set/reset.
@@ -223,6 +232,13 @@ g_ay_r7:
 _g_ay_r7:
         defb    0xF8    ; тоны A/B/C вкл, шум ABC выкл
 
+; Мелодийная громкость канала C (R10) — тоже здесь, drums.asm линкуется
+; всегда (даже в VI53-only сборке, где ay.c выпадает); ay.c пишет её
+; через extern unsigned char g_ay_r10_melody.
+g_ay_r10_melody:
+_g_ay_r10_melody:
+        defb    0x00    ; 0 = мелодия на C молчит
+
 ; Маршрут физического вывода шума — внутреннее состояние модуля
 ; (ТЗ §13/§19: никакого глобального «режима звука»). 0 = Tape Out
 ; (PC0, LFSR), 1 = шумовой генератор AY (канал C). По умолчанию лента.
@@ -246,6 +262,15 @@ tape_steps:     defb    0
 
 drum_active:    defb    0       ; 0 = тишина, ничего не звучит
 drum_prio:      defb    0       ; приоритет звучащего инструмента
+; Пост-релиз R10: после tick_end_ay() плавно ведём R10 к g_ay_r10_melody
+; по ±1 за кадр — иначе слышен «щелчок» вверх на конце удара (было
+; avg(drum,mel), стало mel за один кадр).
+drum_r10_current:
+_drum_r10_current:
+        defb    0       ; R10, записанный модулем в прошлом кадре
+drum_r10_release:
+_drum_r10_release:
+        defb    0       ; 1 = идёт плавный возврат
 
 ; Рабочие параметры удара (копируются из таблицы при запуске):
 drum_noise:     defb    0       ; период шума (R6)
@@ -449,15 +474,14 @@ tgen_big:
 _drum_mute:
         xor     a
         ld      (drum_active), a        ; сбросить звучащий удар
+        ld      (drum_r10_release), a   ; отменить пост-релиз (mute — резкий)
         ld      (smp_ptr), a            ; оборвать и семпл .smp
         ld      (smp_ptr + 1), a
         ld      (smp_left), a
         ld      (duty_phase), a         ; duty-фазу LFSR — в начало
         call    tape_on                 ; PC0 = 0 (безопасно и в AY-режиме:
                                         ; удары туда не идут, бипер молчит)
-        ld      a, 10           ; громкость канала C: тишина
-        ld      e, 0
-        call    ay_write
+        call    drum_restore_r10        ; R10 = мелодийная громкость C
         ld      a, (drum_r7_save)
         or      a               ; 0 = удар не запускался, R7 не трогать
         call    nz, drum_restore_r7
@@ -471,6 +495,85 @@ drum_restore_r7:
         ld      e, a
         ld      a, 7
         jp      ay_write
+
+; Вернуть R10 к «мелодийному» значению (g_ay_r10_melody из ay.c).
+; Вызывается на drum_mute() и tick_end_ay(): раньше писался 0, из-за
+; чего удерживаемая нота на C глохла до следующей атаки music_tick().
+drum_restore_r10:
+        ld      a, (_g_ay_r10_melody)
+        ld      (drum_r10_current), a
+        ld      e, a
+        ld      a, 10
+        jp      ay_write
+
+; Записать R10 во время удара. Вход: A = drum_vol (0..15).
+; Правила компромисса по общей громкости канала C (R10):
+;   мелодия молчит (g_ay_r10_melody = 0x00)   → R10 = drum_vol  (полная
+;                                                 огибающая удара, нота
+;                                                 не мешает);
+;   мелодия на аппаратной огибающей (= 0x1F)  → R10 = 0x1F       (бит 4
+;                                                 включает генератор
+;                                                 огибающей, AY игнорит
+;                                                 нижние биты — мешать
+;                                                 бессмысленно);
+;   drum = 0, мелодия фиксирована             → R10 = melody_vol (хвост
+;                                                 удара не глушит ноту);
+;   оба фиксированы и > 0                     → R10 = (drum + melody) >> 1
+;                                                 среднее: нота слышна
+;                                                 громче половины своей
+;                                                 громкости, удар
+;                                                 затухает, но не до 0.
+; BC/DE — scratch, HL не трогается. Пишет результат в drum_r10_current
+; (для пост-релиза) и в AY R10.
+drum_set_r10:
+        ld      b, a                    ; B = drum_vol
+        ld      a, (_g_ay_r10_melody)
+        or      a
+        jp      z, ds10_drum            ; мелодии нет → удар как есть
+        cp      0x1F
+        jp      z, ds10_write           ; мелодия на огибающей → 0x1F
+        ld      c, a                    ; C = melody_vol (1..15)
+        ld      a, b
+        or      a
+        jp      z, ds10_mel             ; удара нет → мелодия как есть
+        add     a, c                    ; A = drum + melody (1..30)
+        or      a                       ; CY = 0 (OR A always clears CY)
+        rra                             ; A = (drum + melody) >> 1
+        jp      ds10_write
+ds10_mel:
+        ld      a, c                    ; только мелодия (drum=0)
+ds10_write:
+        ld      (drum_r10_current), a
+        ld      e, a
+        ld      a, 10
+        jp      ay_write
+ds10_drum:
+        ld      a, b                    ; только удар (мелодия молчит)
+        jp      ds10_write
+
+; Шаг пост-релиза R10: сдвигаем drum_r10_current на ±1 к цели
+; g_ay_r10_melody. Когда дошли — снимаем флаг drum_r10_release.
+; Вызывается из drum_tick, когда drum_active = 0 и семпл не играет.
+drum_release_step:
+        ld      a, (_g_ay_r10_melody)   ; цель
+        ld      b, a                    ; B = target
+        ld      a, (drum_r10_current)   ; A = current
+        cp      b
+        jp      z, drs_done
+        jp      nc, drs_dec             ; current > target
+        inc     a                       ; current < target
+        jp      drs_write
+drs_dec:
+        dec     a
+drs_write:
+        ld      (drum_r10_current), a
+        ld      e, a
+        ld      a, 10
+        jp      ay_write
+drs_done:
+        xor     a
+        ld      (drum_r10_release), a
+        ret
 
 _drum_kick:
         ld      hl, tab_kick
@@ -528,11 +631,10 @@ drum_cp:
         ld      hl, drum_noise
         ld      e, (hl)
         call    ay_write
-        ; R10 = начальная громкость
-        ld      a, 10
+        ; R10 = начальная громкость (max с мелодией на канале C)
         ld      hl, drum_vol
-        ld      e, (hl)
-        call    ay_write
+        ld      a, (hl)
+        call    drum_set_r10
         ; Включить Noise C, Tone C НЕ трогать (канал C — общий):
         ; мелодия продолжает звучать параллельно удару, R10 — общая
         ; громкость, её ведёт огибающая удара.
@@ -572,13 +674,21 @@ _drum_tick:
 tick_ay:
         ld      a, (drum_active)
         or      a
-        ret     z
+        jp      z, tick_ay_release
         ld      hl, drum_pos
         inc     (hl)
         ld      a, (drum_dur)
         cp      (hl)            ; dur - pos
         jp      nc, drum_live   ; pos <= dur — удар ещё звучит
         jp      tick_end        ; удар закончился: тишина
+
+; Удара нет и семпл не играет: если взведён пост-релиз R10 — ведём
+; плавный возврат к мелодийной громкости (по ±1 за кадр).
+tick_ay_release:
+        ld      a, (drum_r10_release)
+        or      a
+        ret     z
+        jp      drum_release_step
 
 ; ---- Tape Out: LFSR-шум на PC0, AY не трогаем ----
 ; Планировщик (ТЗ §6/§7): в MANUAL-режиме drum_tick не трогает PC0 — ленту
@@ -631,10 +741,10 @@ tick_end:
         call    tape_on         ; PC0 = 0
         ret
 tick_end_ay:
-        xor     a               ; R10 = 0 — тишина канала C
-        ld      e, a
-        ld      a, 10
-        call    ay_write
+        ; Не пишем R10 сразу: запускаем плавный возврат к мелодии
+        ; (drum_release_step делает ±1 за кадр из drum_tick).
+        ld      a, 1
+        ld      (drum_r10_release), a
         jp      drum_restore_r7
 
 drum_live:
@@ -656,12 +766,12 @@ drum_live:
         jp      z, tape_vol_off ; уже тишина: R10 не пишем, PC0 держать в 0
         dec     a
         ld      (hl), a
-        ld      e, a                    ; новая громкость
+        ld      e, a                    ; E = новая громкость (для tape_vol_off)
         ld      a, (drum_route)
         or      a
         jp      z, tape_vol_off         ; ленточный спад: R10 не пишем
-        ld      a, 10
-        jp      ay_write        ; R10 = новая громкость
+        ld      a, e                    ; AY: R10 = max(удар, мелодия)
+        jp      drum_set_r10
 
 ; Лента: громкость (duty-окно) обновлена, вывод сделает tape_tick
 ; на следующем тике — в прерывании достаточно одного адреса порта.
@@ -708,10 +818,9 @@ tick_smp:
         ld      hl, cur_r6
         ld      e, (hl)
         call    ay_write
-        ld      a, 10
         ld      hl, cur_r10
-        ld      e, (hl)
-        call    ay_write
+        ld      a, (hl)
+        call    drum_set_r10
         jp      smp_advance
 smp_tape:
         ; ---- Tape Out: параметры кадра в drum_noise/drum_vol и тик LFSR ----
@@ -770,9 +879,7 @@ smp_play_ay:
         inc     hl
         ld      a, (hl)         ; R10 первого кадра
         and     0x0F
-        ld      e, a
-        ld      a, 10
-        call    ay_write
+        call    drum_set_r10
         ; Включить Noise C, Tone C НЕ трогать (канал C — общий) так же,
         ; как табличный удар: сохранить базовый R7 для восстановления
         ; в tick_end и включить шум в микшере на время семпла, оставив
@@ -850,7 +957,7 @@ set_vol:
         ld      a, (drum_route)
         or      a
         jp      z, tape_vol_off
-        ld      a, 10
-        jp      ay_write
+        ld      a, e                    ; AY: R10 = max(вспышка, мелодия)
+        jp      drum_set_r10
 set_vol_same:
         ret
