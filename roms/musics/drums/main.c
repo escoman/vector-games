@@ -31,21 +31,10 @@
  * Каталог rom_data — данные для ROM (заставка).
  */
 
-#include <intrinsic.h>
 
 #include "v06.h"                    /* общая библиотека Вектора-06Ц */
 
 #include "rom_data/title_bmp.inc"   /* title_bmp_screen_rle, title_bmp_palette */
-
-/* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
-static void wait_one_frame(void)
-{
-    unsigned int start;
-
-    start = frame_count;
-    while (frame_count == start)
-        intrinsic_halt();           /* лёгкий сон до прерывания */
-}
 
 /* Меню под заставкой (шрифт 8x8; цвет 8 — яркий в палитре title.bmp).
  * Картинка занимает строки 0..title_bmp_height, текст — под ней.
@@ -112,7 +101,7 @@ int main(void)
     gfx_set_palette(title_bmp_palette);
 
     for (;;) {
-        wait_one_frame();
+        v06_wait_frame();
 
         key = kbd_scan();
         if (key != prev_key) {          /* реакция на нажатие, не на удержание */

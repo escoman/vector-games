@@ -77,7 +77,6 @@ def generate(cfg, out):
     w(' */\n\n')
 
     # --- Includes ---
-    w('#include <intrinsic.h>\n\n')
     w('#include "v06.h"\n')
     w('#include "nes_drums.h"\n\n')
     w('#include "rom_data/title_bmp.inc"\n')
@@ -86,15 +85,7 @@ def generate(cfg, out):
     w('\n')
 
     # --- Вспомогательные функции ---
-    w('''static void wait_one_frame(void)
-{
-    unsigned int start;
-    start = frame_count;
-    while (frame_count == start)
-        intrinsic_halt();
-}
-
-static void on_frame(void)
+    w('''static void on_frame(void)
 {
     kbd_scan_now();
     music_tick();
@@ -222,7 +213,7 @@ int main(void)
     unsigned char track;
 
     for (;;) {{
-        wait_one_frame();
+        v06_wait_frame();
 
         key = kbd_read();
         if (key != prev_key) {{

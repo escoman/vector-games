@@ -15,7 +15,6 @@
  * Управление: любая клавиша — запуск следующего теста, ESC — выход.
  */
 
-#include <intrinsic.h>
 #include "v06.h"
 
 /* Палитра: 0 — чёрный, 1 — тёмно-серый, 3 — средне-серый,
@@ -234,20 +233,12 @@ extern unsigned int read_timer(void);
  *  Вспомогательные C-функции
  * ================================================================ */
 
-/* Ожидание кадра через счётчик кадров (startup.asm, 50 Гц). */
-static void wait_one_frame(void)
-{
-    unsigned int start = frame_count;
-    while (frame_count == start)
-        intrinsic_halt();
-}
-
 /* Ожидание нажатия любой клавиши (фронт). */
 static void wait_any_key(void)
 {
     unsigned char prev = kbd_scan();
     for (;;) {
-        wait_one_frame();
+        v06_wait_frame();
         unsigned char key = kbd_scan();
         if (key != 0 && key != prev)
             return;

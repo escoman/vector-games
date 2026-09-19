@@ -6,7 +6,6 @@
  * ESC — выход.
  */
 
-#include <intrinsic.h>
 #include <string.h>
 #include "v06.h"
 #include "comps.h"

@@ -22,7 +22,6 @@
  * прерывания 50 Гц через frame_handler.
  */
 
-#include <intrinsic.h>
 
 #include "v06.h"
 
@@ -58,15 +57,6 @@ static void isr_music(void)
 {
     music_tick();
     drum_tick();
-}
-
-static void wait_one_frame(void)
-{
-    unsigned int start;
-
-    start = frame_count;
-    while (frame_count == start)
-        intrinsic_halt();
 }
 
 /* Флаг текущего устройства вывода — только для отображения и выбора
@@ -111,7 +101,7 @@ int main(void)
     gfx_set_palette(synth_pal);
 
     for (;;) {
-        wait_one_frame();
+        v06_wait_frame();
 
         key = kbd_scan();
         if (key != prev_key) {

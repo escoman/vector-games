@@ -2,7 +2,6 @@
  * drums.c — экран ударных (F3) и воспроизведение семплов.
  */
 #include "v06.h"
-#include <intrinsic.h>
 #include "nes_drums.h"
 #include "screens.h"
 
@@ -74,7 +73,7 @@ void screen_drums(void)
     unsigned char key, prev = 0;
     draw_drums();
     for (;;) {
-        wait_frame();
+        v06_wait_frame();
         drum_tick();
         key = kbd_scan();
         if (key != prev && key != 0) {

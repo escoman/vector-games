@@ -33,6 +33,8 @@ STACK_TOP       EQU     0x0100
         PUBLIC  _frame_count
         PUBLIC  _frame_handler
         PUBLIC  _irq_active
+        PUBLIC  v06_wait_frame
+        PUBLIC  _v06_wait_frame
 
         org     0x0100
 
@@ -102,6 +104,35 @@ isr_done:
 ; управление обработчику; его ret вернётся сюда, в isr_done.
 call_hl:
         jp      (hl)
+
+; ---------------------------------------------------------------
+; void v06_wait_frame(void)
+; Ждёт начала следующего кадра: сон HALT до изменения frame_count.
+; 16-битные чтение и сравнение прикрывают di/ei: без этого прерывание
+; между чтением младшего и старшего байтов даёт «рваное» значение
+; (например 0x02FF вместо 0x0200) и цикл засыпает на лишние кадры.
+; ---------------------------------------------------------------
+v06_wait_frame:
+_v06_wait_frame:
+        di
+        ld      hl,(_frame_count)       ; стартовое значение
+        ei
+wf_loop:
+        halt                            ; сон до ближайшего прерывания
+        di
+        ld      a,(_frame_count)        ; младший байт
+        ld      e,a
+        ld      a,(_frame_count+1)      ; старший байт
+        ld      d,a
+        ei
+        ld      a,e
+        sub     l                       ; равны младшие?
+        jp      nz,wf_done
+        ld      a,d
+        sub     h                       ; равны старшие?
+        jp      z,wf_loop               ; счётчик не изменился — спим дальше
+wf_done:
+        ret
 
 _frame_count:
         defw    0

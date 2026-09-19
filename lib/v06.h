@@ -48,9 +48,18 @@
 extern void v06_out(unsigned char port, unsigned char val);
 extern unsigned char v06_in(unsigned char port);
 
+/* Лёгкий сон до ближайшего прерывания (кадрового, 50 Гц). asm("halt")
+ * sccz80 встраивает в код без вызова функции — тот же opcode, что и
+ * у брошенного intrinsic_halt() из <intrinsic.h>. */
+#define HALT()  asm("halt")
+
 extern volatile unsigned int frame_count;       /* счётчик кадров 50 Гц  */
 extern volatile unsigned char irq_active;       /* 1 = в обработчике ПР  */
 extern void (*frame_handler)(void);             /* функц. из ISR, 0=нет  */
+
+/* Ждать начала следующего кадра (сон HALT до изменения frame_count).
+ * Реализация — в startup.asm, атомарные di/ei-чтения счётчика. */
+extern void v06_wait_frame(void);
 
 
 

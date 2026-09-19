@@ -32,7 +32,6 @@
  * через frame_handler.
  */
 
-#include <intrinsic.h>
 
 #include "v06.h"
 
@@ -61,15 +60,6 @@ static void isr_audio(void)
 {
     sound_tick();
     drum_tick();
-}
-
-static void wait_one_frame(void)
-{
-    unsigned int start;
-
-    start = frame_count;
-    while (frame_count == start)
-        intrinsic_halt();
 }
 
 /* Локальный флаг маршрута ударных — только для отображения:
@@ -121,7 +111,7 @@ int main(void)
     gfx_set_palette(test_pal);
 
     for (;;) {
-        wait_one_frame();
+        v06_wait_frame();
 
         key = kbd_scan();
         if (key != prev_key) {

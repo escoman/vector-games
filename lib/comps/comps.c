@@ -7,19 +7,11 @@
 
 #include "comps.h"
 #include "v06.h"
-#include <intrinsic.h>
 
 extern unsigned int textarea_draw_count;
 extern unsigned char kbd_rows[8];
 extern unsigned char kbd_shift_state;
 extern unsigned char kbd_port_c_raw;
-
-static void wait_frame(void)
-{
-    unsigned int s = frame_count;
-    while (frame_count == s)
-        intrinsic_halt();
-}
 
 void controller_init(controller_t *ctrl)
 {
@@ -48,7 +40,7 @@ unsigned char controller_run(controller_t *ctrl)
     }
 
     for (;;) {
-        wait_frame();
+        v06_wait_frame();
         key = kbd_scan();
 
         /* Отладка: key, draw_count и активные строки матрицы */

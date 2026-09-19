@@ -10,7 +10,6 @@
  * ESC — возврат на главный экран.
  */
 
-#include <intrinsic.h>
 #include <string.h>
 #include "v06.h"
 #include "parser.h"
@@ -104,7 +103,6 @@ static const char default_dr[] = "L4 0 P 2 P 0 P 4 P\nL4 8 P 10 P 8 P 10 P";
 
 /* ------------------------- Прототипы ------------------------------- */
 
-void wait_frame(void);
 static void draw_main(void);
 void playback_start(void);
 void playback_stop(void);
@@ -132,13 +130,6 @@ static void on_frame(void)
 }
 
 /* ------------------------- Утилиты --------------------------------- */
-
-void wait_frame(void)
-{
-    unsigned int s = frame_count;
-    while (frame_count == s)
-        intrinsic_halt();
-}
 
 void init_screen(void)
 {
@@ -346,7 +337,7 @@ int main(void)
     draw_main();
 
     for (;;) {
-        wait_frame();
+        v06_wait_frame();
 
         if (playing && !music_is_playing()) {
             playing = 0;

@@ -4,7 +4,9 @@
 # Путь к z88dk можно переопределить:
 #   make Z88DK=/other/path
 
-Z88DK ?= /home/alexey/z88dk
+# Локальный тулчейн: <корень проекта>/z88dk (config.mk лежит в корне).
+_Z88DK_LOCAL := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))z88dk)
+Z88DK ?= $(_Z88DK_LOCAL)
 ifeq ($(wildcard $(Z88DK)),)
 $(error Z88DK not found: $(Z88DK). Set Z88DK=/path/to/z88dk)
 endif

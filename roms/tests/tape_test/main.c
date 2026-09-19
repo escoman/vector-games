@@ -30,7 +30,6 @@
  * программную оценку steps/sec для режимов main loop.
  */
 
-#include <intrinsic.h>
 
 #include "v06.h"
 

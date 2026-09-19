@@ -35,7 +35,6 @@
  * Сборка: make (или make deploy — сразу в папку ROMS эмулятора PPSSPP).
  */
 
-#include <intrinsic.h>
 
 #include "v06.h"                        /* общая библиотека Вектора-06Ц */
 #include "nes_drums.h"              /* nes_drums_song, nes_drums_samples */
@@ -43,16 +42,6 @@
 #include "rom_data/examples.inc"        /* examples_music_song (демо) */
 #include "rom_data/jackal.inc"          /* jackal_music_song */
 #include "rom_data/castlevania.inc"     /* castlevania_music_song */
-
-/* Ожидание начала следующего кадра (счётчик ведёт кадровое прерывание) */
-static void wait_one_frame(void)
-{
-    unsigned int start;
-
-    start = frame_count;
-    while (frame_count == start)
-        intrinsic_halt();               /* лёгкий сон до прерывания */
-}
 
 /* Кадровое прерывание: опрос клавиатуры на VSync (луч в гашении —
  * маски строк порта 03h не дёргают скролл), затем тик плеера и ударных. */
@@ -231,7 +220,7 @@ int main(void)
         if (!use_ay && drum_tape_running()) {
             drum_tape_generate(400u);   /* ~18 мс на 3 МГц: заметная доля CPU */
         } else if (frame_count == last_frame) {
-            wait_one_frame();
+            v06_wait_frame();
         }
 
         if (frame_count == last_frame)

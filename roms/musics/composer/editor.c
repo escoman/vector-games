@@ -8,7 +8,6 @@
 
 #include "editor.h"
 #include "v06.h"
-#include <intrinsic.h>
 #include "screens.h"
 #include <string.h>
 
@@ -322,7 +321,7 @@ static void editor_play(editor_t *ed, char *st[], unsigned char channel,
     if (!music_is_playing()) return;
     invert_label(solo);
     while (music_is_playing()) {
-        wait_frame();
+        v06_wait_frame();
         editor_draw(ed, 0, 24, 1);
         k = kbd_scan();
         if (k == 27 || k == 129 || k == 130) {
@@ -362,7 +361,7 @@ void screen_editor(unsigned char channel, char *st[4])
     draw_separator(16);
 
     for (;;) {
-        wait_frame();
+        v06_wait_frame();
         key = kbd_scan();
 
         if (key != key_prev && key != 0) {
