@@ -73,6 +73,7 @@
         PUBLIC  _drum_sample_play
         PUBLIC  _drum_route_tape
         PUBLIC  _drum_route_ay
+# ifndef MUSIC_AY_DRUMS_AY
         ; Гибкая генерация Tape Out (ТЗ §4-§8): разделение drum engine /
         ; output route / scheduler. Низкоуровневые примитивы LFSR и
         ; переключатели планировщика. AY-маршрут их не использует.
@@ -83,6 +84,7 @@
         PUBLIC  _drum_tape_mode_manual_env ; планировщик: вручную + огибающая ISR
         PUBLIC  _drum_tape_running         ; гейт: слышим ли кадр (manual_env)
         PUBLIC  _drum_tape_set_steps_per_tick
+# endif
         PUBLIC  _g_ay_r7        ; зеркало R7: определение здесь, читает ay.c
         PUBLIC  _g_ay_r10_melody ; мелодийная громкость C: определение здесь, пишет ay.c
         PUBLIC  _drum_r10_current ; для ay.c: синхронизировать с прямой записью R10
@@ -102,6 +104,12 @@ PIA_CW  equ     0x00            ; PIA1: CW (бит 7 = 1) / BSR (бит 7 = 0)
 ; BSR (бит 7 = 0): номер бита в битах 3-1 (000 = PC0), бит 0 = set/reset.
 ; Поэтому уровень 1 -> 0x01 (SET PC0), уровень 0 -> 0x00 (RESET PC0):
 ; значение = A & 1, ровно как декодирует ядро/SoundLog (bit=(v>>1)&7).
+# ifdef MUSIC_AY_DRUMS_AY
+; AY-сборка: весь Tape Out не линкуется; tape_on остаётся заглушкой —
+; на него ссылается общий tick_end (в AY-маршруте не выполняется).
+tape_on:
+        ret
+# else
 pc0_set:
         and     0x01            ; 0x01 = SET PC0, 0x00 = RESET PC0
         out     (PIA_CW), a
@@ -211,6 +219,7 @@ tb_pc0:
         ld      a, e
         ld      (hl), a
         ret
+# endif
 
 ; Запись в регистр AY: A = номер регистра, E = значение.
 ; БЕЗ di/ei: вызывается из кадрового ISR (drum_tick), где прерывания уже
@@ -254,11 +263,13 @@ drum_route:     defb    0
 ;       LFSR-шагов задаёт main loop через drum_tape_generate(), а гейт кадра
 ;       читается drum_tape_running(). Даёт «макс. частоту» шума без потери
 ;       огибающей (§7/§8).
+# ifndef MUSIC_AY_DRUMS_AY
 tape_sched:     defb    0
 ; Число сдвигов Tape Out за кадр в FRAME-режиме: 0 (умолч.) — из таблицы
 ; tape_shifts[R6] (полное прежнее поведение); >0 — фиксированный порог
 ; (настройка для игры: малое n ≈ минимальная нагрузка на CPU, ТЗ §6).
 tape_steps:     defb    0
+# endif
 
 drum_active:    defb    0       ; 0 = тишина, ничего не звучит
 drum_prio:      defb    0       ; приоритет звучащего инструмента
@@ -283,10 +294,12 @@ drum_r7_save:   defb    0       ; сохранённый R7 (восстанов�
 ; Программный шум для Tape Out (маршрут drum_route == 0):
 ; Galois LFSR 16 бит (маска 0xB400, taps 15/14/12/3); каждый сдвиг
 ; за кадр переключает PC0 в бит 0 состояния (он же обратная связь).
+# ifndef MUSIC_AY_DRUMS_AY
 lfsr_state:     defw    1       ; состояние сдвигового регистра (0 запрещён)
 duty_phase:     defb    0       ; фаза счётчика громкости 0-15 (duty-окно)
 tgen_rem:       defw    0       ; scratch: остаток count в drum_tape_generate
 tape_run:       defb    0       ; manual_env: 1 = кадр внутри duty-окна (шум слышим)
+# endif
 
 ; Счётчики:
 drum_pos:       defb    0       ; тиков с момента удара
@@ -303,10 +316,12 @@ cur_r10:        defb    0
 ; Направление как у AY-шума: R6 больше → шум темнее → меньше сдвигов.
 ; Логарифмическая шкала 64..1 ≈ частота переключений 3200..50 Гц на PC0
 ; (в SoundLog Tape Out (PC0) = количество перепадов в секунду)
+# ifndef MUSIC_AY_DRUMS_AY
 tape_shifts:    defb    64, 64, 64, 64, 56, 47, 40, 34
                 defb    28, 24, 20, 17, 14, 12, 10, 8
                 defb    7, 6, 5, 4, 4, 3, 3, 2
                 defb    2, 2, 1, 1, 1, 1, 1, 1
+# endif
 
 ; Таблицы инструментов: prio, R6, vol0, dur, decay, clap
 tab_kick:       defb    3, 31, 15,  7, 1, 0
@@ -342,6 +357,7 @@ _drum_route_ay:
         ld      (drum_route), a
         jp      _drum_mute
 
+# ifndef MUSIC_AY_DRUMS_AY
 ; --------------------- гибкая генерация Tape Out ------------------------
 ; Разделение (ТЗ §3): drum engine (нижний tape_batch и примитивы) отдельно
 ; от маршрута вывода (drum_route) и отдельно от планировщика (tape_sched).
@@ -470,6 +486,7 @@ tgen_big:
         ld      (tgen_rem), hl
         call    tape_batch
         jp      tgen_loop
+# endif
 
 _drum_mute:
         xor     a
@@ -478,9 +495,11 @@ _drum_mute:
         ld      (smp_ptr), a            ; оборвать и семпл .smp
         ld      (smp_ptr + 1), a
         ld      (smp_left), a
+# ifndef MUSIC_AY_DRUMS_AY
         ld      (duty_phase), a         ; duty-фазу LFSR — в начало
         call    tape_on                 ; PC0 = 0 (безопасно и в AY-режиме:
                                         ; удары туда не идут, бипер молчит)
+# endif
         call    drum_restore_r10        ; R10 = мелодийная громкость C
         ld      a, (drum_r7_save)
         or      a               ; 0 = удар не запускался, R7 не трогать
@@ -650,6 +669,10 @@ drum_cp:
 
 ; ---- Tape Out (drum_route == 0): LFSR-шум на PC0, AY не трогаем ----
 ; pos/div уже обнулены выше — остаётся включить удар
+# ifdef MUSIC_AY_DRUMS_AY
+trig_tape:
+        ret
+# else
 trig_tape:
         ld      a, 0xFF         ; ненулевое семя (0 = вечная тишина);
         ld      (lfsr_state), a ; по байтам: 16-битные IMM-записи HL
@@ -660,6 +683,7 @@ trig_tape:
         ld      a, 1
         ld      (drum_active), a
         ret
+# endif
 
 ; ------------------------------ drum_tick ------------------------------
 
@@ -694,6 +718,10 @@ tick_ay_release:
 ; Планировщик (ТЗ §6/§7): в MANUAL-режиме drum_tick не трогает PC0 — ленту
 ; ведёт main loop вызовами drum_tape_step()/drum_tape_generate(). В FRAME
 ; (умолч.) — прежнее кадровой генерации из interrupt (§12).
+# ifdef MUSIC_AY_DRUMS_AY
+tick_tape_sched:
+        ret
+# else
 tick_tape_sched:
         ld      a, (tape_sched)
         or      a
@@ -729,6 +757,7 @@ tape_shifts_run:
 tape_idle:
         xor     a
         jp      pc0_set         ; удара нет — удерживать PC0 в тишине
+# endif
 
 ; Общий конец события: тишина на активном выходе + восстановление R7
 ; (в ленточном режиме drum_r7_save = 0 → R7 не трогаем).
@@ -775,12 +804,17 @@ drum_live:
 
 ; Лента: громкость (duty-окно) обновлена, вывод сделает tape_tick
 ; на следующем тике — в прерывании достаточно одного адреса порта.
+# ifdef MUSIC_AY_DRUMS_AY
+tape_vol_off:
+        ret
+# else
 tape_vol_off:
         or      e
         jp      nz, tape_vol_keep
         jp      tape_on                 ; спала до нуля — PC0 в тишину
 tape_vol_keep:
         ret
+# endif
 
 ; Семпл .smp важнее табличной огибающей: пока звучат кадры семпла,
 ; каждый тик берётся его пара (R6, R10) — в AY они пишутся в регистры,
@@ -822,6 +856,10 @@ tick_smp:
         ld      a, (hl)
         call    drum_set_r10
         jp      smp_advance
+# ifdef MUSIC_AY_DRUMS_AY
+smp_tape:
+        ret
+# else
 smp_tape:
         ; ---- Tape Out: параметры кадра в drum_noise/drum_vol и тик LFSR ----
         ld      hl, cur_r6
@@ -833,6 +871,7 @@ smp_tape:
         ld      a, (hl)
         ld      (de), a
         call    tape_tick
+# endif
 smp_advance:
         ld      hl, smp_left
         dec     (hl)
@@ -893,6 +932,10 @@ smp_play_ay:
         ret
 
 ; Ленточный вариант: HL = &arg (SP+2), DE = адрес семпла.
+# ifdef MUSIC_AY_DRUMS_AY
+smp_play_tape:
+        ret
+# else
 smp_play_tape:
         ld      hl, 2
         add     hl, sp
@@ -925,6 +968,7 @@ smp_play_tape:
         and     0x0F
         ld      (drum_vol), a
         jp      tape_tick       ; первый тик сразу — атака в этом тике
+# endif
 
 tick_clap:
         ; вспышки: pos 1-3 вкл, 4-5 выкл, 6-8 вкл, 9-10 выкл,
