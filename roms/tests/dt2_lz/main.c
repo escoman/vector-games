@@ -2,13 +2,14 @@
  * dt2_bmp_lz/main.c — тест LZ-распаковки картинки на Векторе-06Ц.
  *
  * Загружает LZ-сжатую картинку из dt2_bmp.inc (256x240, 16 цветов,
- * конвертирована bmp2inc_lz.py), выводит на чёрный экран и ждёт ESC.
+ * конвертирована bmp2inc_lz.py), ставит палитру и распаковывает на экран.
+ * Клавиатура не используется — ROM крутит бесконечный цикл.
  */
 
 #include "v06.h"
 #include "../assets/dt2_bmp.inc"
 
-/* LZ-распаковщик (lib/graphlz.c + lib/graphlz.asm) */
+/* LZ-распаковщик (lib/unpack/lz.asm) */
 extern void gfx_lz_expand(const unsigned char *src);
 
 int main(void)

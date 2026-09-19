@@ -13,9 +13,9 @@ TARGET = dt2_lz.rom
 
 # Источники
 SRCS = $(LIB)/sys/startup.asm \
-       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
-       $(LIB)/gfx/pr.asm $(LIB)/gfx/clr.asm $(LIB)/unpack/lz.asm \
-       $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
+       $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm \
+       $(LIB)/gfx/clr.asm $(LIB)/unpack/lz.asm \
+       $(LIB)/gfx/gfx.c \
        main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB) -I..
