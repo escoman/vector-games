@@ -12,6 +12,12 @@ MUSIC_ROMS = roms/musics/castlevania \
              roms/musics/supermario \
              roms/musics/synth
 
+# Саундтреки — ROM с двумя вариантами сборки (обычный + _ay.rom).
+SOUNDTRACKS = roms/musics/castlevania \
+              roms/musics/ducktales2 \
+              roms/musics/jackal \
+              roms/musics/supermario
+
 TESTS = roms/tests/512x256 \
         roms/tests/cls \
         roms/tests/clrs \
@@ -27,6 +33,7 @@ ALL = $(MUSIC_ROMS) $(TESTS)
 RELEASE = release
 
 MUSIC_ROM_NAMES = $(foreach p,$(MUSIC_ROMS),$(p)/$(notdir $(p)).rom)
+MUSIC_ROM_AY    = $(foreach p,$(SOUNDTRACKS),$(p)/$(notdir $(p))_ay.rom)
 TEST_NAMES      = $(foreach p,$(TESTS),$(p)/$(notdir $(p)).rom)
 
 .PHONY: all clean full
@@ -34,7 +41,7 @@ TEST_NAMES      = $(foreach p,$(TESTS),$(p)/$(notdir $(p)).rom)
 all:
 	@for p in $(ALL); do $(MAKE) -C $$p || exit 1; done
 	@mkdir -p $(RELEASE)/musics $(RELEASE)/tests
-	@for rom in $(MUSIC_ROM_NAMES); do \
+	@for rom in $(MUSIC_ROM_NAMES) $(MUSIC_ROM_AY); do \
 		if [ -f "$$rom" ]; then cp -f "$$rom" $(RELEASE)/musics/; fi; \
 	done
 	@for rom in $(TEST_NAMES); do \

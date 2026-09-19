@@ -14,6 +14,9 @@ PPSSPP_ROMS ?= /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTO
 ifneq ($(filter clean,$(MAKECMDGOALS)),clean)
 
 deploy: $(TARGET)
+ifneq ($(TARGET_AY),)
+deploy: $(TARGET_AY)
+endif
 ifeq ($(wildcard $(PPSSPP_ROMS)),)
 	@echo "Oops! This is not Alexey's PC"
 	@echo "Directory not found: $(PPSSPP_ROMS)"
@@ -22,18 +25,22 @@ else
 ifdef TARGET
 	cp -f $(TARGET) $(PPSSPP_ROMS)/
 endif
+ifdef TARGET_AY
+	cp -f $(TARGET_AY) $(PPSSPP_ROMS)/
+endif
 ifdef MAPFILE
 	cp -f $(MAPFILE) $(PPSSPP_ROMS)/
 endif
 	@echo "=== Deployed to $(PPSSPP_ROMS)/ ==="
-	@if [ -f "$(TARGET)" ]; then \
-		SIZE=$$(stat -c%s "$(TARGET)"); \
+	@for r in $(TARGET) $(TARGET_AY); do \
+		[ -f "$$r" ] || continue; \
+		SIZE=$$(stat -c%s "$$r"); \
 		if [ "$$SIZE" -gt 32768 ]; then \
-			echo "\033[33mWARNING: $(TARGET) is $${SIZE} bytes (> 32KB)\033[0m"; \
+			echo "\033[33mWARNING: $$r is $${SIZE} bytes (> 32KB)\033[0m"; \
 		else \
-			echo "$(TARGET): $${SIZE} bytes"; \
+			echo "$$r: $${SIZE} bytes"; \
 		fi; \
-	fi
+	done
 endif
 
 endif # not clean

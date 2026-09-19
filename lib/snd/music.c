@@ -51,6 +51,7 @@
 
 #include "v06.h"
 
+#ifndef MUSIC_AY_DRUMS_AY   /* таблица ВИ53 нужна, пока не собран AY-only ROM */
 /* Делители ВИ53 по абсолютному номеру ноты (октава*12 + полутон):
  * делитель = 1500000 / частота, ля 4-й октавы (57) = 440 Гц = 3409.
  * Номера 0..11 ниже рабочей зоны — тишина (делитель > 65535). */
@@ -68,7 +69,9 @@ static const unsigned int div_tab[95] = {
       903u,   852u,   804u,   759u,   717u,   676u,   638u,   603u,
       569u,   537u,   507u,   478u,   451u,   426u,   402u
 };
+#endif
 
+#ifndef MUSIC_VI53_DRUMS_TAPE   /* таблица AY нужна, пока не собран VI53-only ROM */
 /* Таблица периодов AY-3-8910, предвычисленная из div_tab[] по формуле
  * (div*887 + 6000)/12000 с ограничением 1..4095 (0 = тишина). Плеер
  * берёт отсюда готовый период по индексу ноты, поэтому в кадровом ISR
@@ -88,6 +91,7 @@ static const unsigned int ay_period_tab[95] = {
        67u,    63u,    59u,    56u,    53u,    50u,    47u,    45u,
        42u,    40u,    37u,    35u,    33u,    31u,    30u
 };
+#endif
 
 /* --------------------------- Драйверы вывода ------------------------- */
 
@@ -105,6 +109,7 @@ typedef struct {
     void (*silence_all)(void);
 } music_out_t;
 
+#ifndef MUSIC_AY_DRUMS_AY   /* ВИ53-драйвер: не собирается в AY-only ROM */
 static void vi53_on(unsigned char ch, unsigned char note_idx)
 {
     vi53_set_channel(ch, div_tab[note_idx]);
@@ -119,7 +124,9 @@ static void vi53_silence_all(void)
     vi53_set_channel(1, 0u);
     vi53_set_channel(2, 0u);
 }
+#endif
 
+#ifndef MUSIC_VI53_DRUMS_TAPE   /* AY-драйвер: не собирается в VI53-only ROM */
 static void ay_on(unsigned char ch, unsigned char note_idx)
 {
     ay_set_tone_period(ch, ay_period_tab[note_idx]);
@@ -132,13 +139,22 @@ static void ay_silence_all(void)
 {
     ay_mute_all();
 }
+#endif
 
+#ifndef MUSIC_AY_DRUMS_AY
 static const music_out_t music_out_vi53 = { vi53_on, vi53_off, vi53_silence_all };
+#endif
+#ifndef MUSIC_VI53_DRUMS_TAPE
 static const music_out_t music_out_ay   = { ay_on,   ay_off,   ay_silence_all };
+#endif
 
-/* Текущий драйвер вывода (по умолчанию ВИ53). Локальное состояние
- * плеера, а не глобальный переключатель всей звуковой системы. */
+/* Текущий драйвер вывода (по умолчанию ВИ53; в AY-only ROM — AY). Локальное
+ * состояние плеера, а не глобальный переключатель всей звуковой системы. */
+#ifndef MUSIC_AY_DRUMS_AY
 static const music_out_t *g_out = &music_out_vi53;
+#else
+static const music_out_t *g_out = &music_out_ay;
+#endif
 
 /* Включение ноты на привязанном устройстве. note_idx — индекс ноты
  * 0-94 (как в div_tab[]/ay_period_tab[]). */
@@ -220,13 +236,19 @@ void music_set_data(const music_song_t *song)
     music_stop();
 }
 
-/* Совместимость: запуск с выводом на КР580ВИ53 (ударные на Tape Out),
- * как прежний режим по умолчанию. */
+/* Совместимость: запуск на «своём» устройстве вывода, выбранном флагом
+ * сборки. В AY-only ROM мелодия идёт на AY, иначе — на КР580ВИ53
+ * (ударные на Tape Out), как прежний режим по умолчанию. */
 void music_start(void)
 {
+#ifdef MUSIC_AY_DRUMS_AY
+    music_start_ay();
+#else
     music_start_vi53();
+#endif
 }
 
+#ifndef MUSIC_AY_DRUMS_AY   /* не нужен в AY-only ROM */
 /* Запуск с явной привязкой вывода к КР580ВИ53: мелодия на трёх каналах
  * ВИ53, ударные на Tape Out (PC0). */
 void music_start_vi53(void)
@@ -235,7 +257,9 @@ void music_start_vi53(void)
     drum_route_tape();
     music_start_common();
 }
+#endif
 
+#ifndef MUSIC_VI53_DRUMS_TAPE   /* не нужен в VI53-only ROM */
 /* Запуск с явной привязкой вывода к AY-3-8910: мелодия на каналах
  * A/B/C, ударные на шумовом генераторе AY (Noise C). */
 void music_start_ay(void)
@@ -245,6 +269,7 @@ void music_start_ay(void)
     ay_mixer_init();
     music_start_common();
 }
+#endif
 
 void music_pause(void)
 {
@@ -284,6 +309,7 @@ void music_set_loop(unsigned char loop)
 
 /* ---------------------- Явная привязка вывода ------------------------ */
 
+#if !defined(MUSIC_AY_DRUMS_AY) && !defined(MUSIC_VI53_DRUMS_TAPE)   /* live-перепривязка нужна только ROM с обоими выводами */
 /* Перепривязка вывода к КР580ВИ53 БЕЗ сброса транспорта: позиция, pc,
  * cnt, gate, состояние g_ch[] и ударных сохраняются (ТЗ §14). Меняется
  * только устройство; текущие ноты восстанавливаются на нём. Ударные
@@ -349,6 +375,7 @@ void music_use_ay(void)
         }
     }
 }
+#endif
 
 /* Маскировка каналов: биты 0-2 — тональные 0-2, бит 3 — ударные.
  * 0x0F (по умолчанию) — все каналы включены. */
