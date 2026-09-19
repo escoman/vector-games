@@ -7,7 +7,7 @@ Architecture:
 - `sys/startup.asm` — ROM entry, frame interrupt 50 Hz, `frame_count`, `frame_handler`, `irq_active`;
 - `sys/v06pal.asm` — palette register write during vertical blank;
 - `gfx/` — video memory, modes, clearing, text rendering;
-- `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), noise drum engine (`drums.asm`);
+- `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `unpack/` — RLE and LZ bitmap decompression into VRAM;
 - `comps/` — UI components (controller, edit, textarea) — own header `comps/comps.h`.
@@ -115,6 +115,45 @@ Constraints: `x` must be multiple of 8; image must fit in 256x256. Area outside 
 
 ## SND — Audio Subsystem
 
+### Notes (`notes.c`)
+
+Precomputed pitch tables, indexed by absolute note number = `octave*12 + semitone`, range 0..94. Same indexing as `music.c` bytecode (`0x01..0x5F` → 0..94). Indices 0..11 are silence (VI53 divider would exceed 16 bit).
+
+| Symbol | Meaning |
+|--------|---------|
+| `v06_div_tab[95]`        | VI53 dividers: `f = 1500000 / div` |
+| `v06_ay_period_tab[95]`  | AY-3-8910 periods (12-bit), precomputed via `(div*887+6000)/12000` clamped to 1..4095 |
+
+Mnemonic index macros (use inside `DIV_OF()` / `AY_PER()`):
+
+```c
+N_C(n), N_Cs(n), N_D(n), N_Ds(n), N_E(n), N_F(n), N_Fs(n),
+N_G(n), N_Gs(n), N_A(n), N_As(n), N_B(n)
+/* aliases: N_Db=N_Cs, N_Eb=N_Ds, N_Gb=N_Fs, N_Ab=N_Gs, N_Bb=N_As */
+
+#define DIV_OF(note)   v06_div_tab[(note)]        /* for vi53_set_channel */
+#define AY_PER(note)   v06_ay_period_tab[(note)]  /* for ay_set_tone_period */
+```
+
+Example — A4 (440 Hz concert pitch, index 57):
+
+```c
+vi53_set_channel(0,        DIV_OF(N_A(4)));   /* 3409 */
+ay_set_tone_period(0,      AY_PER(N_A(4)));   /* 252  */
+```
+
+No 32-bit multiply/divide on either path. The old `ay_set_tone(ch, div_VI53)` helper (which did the conversion at runtime via `vi53_to_ay_period`) is removed — callers use `ay_set_tone_period()` with `AY_PER(N_x(oct))` directly.
+
+Caveat: `DIV_OF(x)`/`AY_PER(x)` are runtime array lookups, so they cannot appear in `static const` struct initializers (SDCC requires a compile-time constant). Test ROMs that build a static `melody[]` keep the raw divider literal (e.g. `3409u` — the same value the table contains at that index).
+
+Table variants are selected by the same guards as `music.c`:
+- `MUSIC_AY_DRUMS_AY` — omit `v06_div_tab` (VI53 tone path unused in AY-only ROM);
+- `MUSIC_VI53_DRUMS_TAPE` — omit `v06_ay_period_tab` (AY tone path unused in VI53-only ROM).
+
+Linking: any ROM that references `v06_div_tab`/`v06_ay_period_tab` (i.e. uses `music.c` or `DIV_OF`/`AY_PER`) must also link `lib/snd/notes.c`.
+
+---
+
 ### KR580VI53 (vi53.c)
 
 Sole owner of VI53 port writes. Channel: 0/1/2 (ports 0x0B/0x0A/0x09).
@@ -156,7 +195,9 @@ Practical aliases: `AY_ENV_DECAY`, `AY_ENV_ATTACK`, `AY_ENV_TRIANGLE`, `AY_ENV_T
 
 #### ay_set_tone_period(ch, period)
 
-Sets tone channel `ch` (0=A, 1=B, 2=C) from a ready AY period (12 bit, 0 = silence, volume to 0). Hardware level: period → R0..R5 + volume/envelope. The music player uses this with periods from `ay_period_tab[]`, avoiding 32-bit math in ISR. Applies envelope on attack if `ay_env_mode` is set for the channel.
+Sets tone channel `ch` (0=A, 1=B, 2=C) from a ready AY period (12 bit, 0 = silence, volume to 0). Hardware level: period → R0..R5 + volume/envelope. Callers take the period from `v06_ay_period_tab[]` via `AY_PER(N_x(oct))` (`notes.c`), so no 32-bit math is involved. Applies envelope on attack if `ay_env_mode` is set for the channel.
+
+> The old `ay_set_tone(ch, div_VI53)` wrapper (which did `div → period` via `vi53_to_ay_period()` and pulled in `l_long_mult`/`l_long_div_u` from the SDCC runtime) is removed. Use `ay_set_tone_period(ch, AY_PER(N_x(oct)))` instead.
 
 #### ay_set_envelope(chan_mask, shape, period)
 

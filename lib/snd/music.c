@@ -51,48 +51,6 @@
 
 #include "v06.h"
 
-#ifndef MUSIC_AY_DRUMS_AY   /* таблица ВИ53 нужна, пока не собран AY-only ROM */
-/* Делители ВИ53 по абсолютному номеру ноты (октава*12 + полутон):
- * делитель = 1500000 / частота, ля 4-й октавы (57) = 440 Гц = 3409.
- * Номера 0..11 ниже рабочей зоны — тишина (делитель > 65535). */
-static const unsigned int div_tab[95] = {
-        0u,     0u,     0u,     0u,     0u,     0u,     0u,     0u,
-        0u,     0u,     0u,     0u, 45867u, 43293u, 40863u, 38569u,
-    36405u, 34361u, 32433u, 30613u, 28894u, 27273u, 25742u, 24297u,
-    22934u, 21646u, 20431u, 19285u, 18202u, 17181u, 16216u, 15306u,
-    14447u, 13636u, 12871u, 12149u, 11467u, 10823u, 10216u,  9642u,
-     9101u,  8590u,  8108u,  7653u,  7224u,  6818u,  6436u,  6074u,
-     5733u,  5412u,  5108u,  4821u,  4551u,  4295u,  4054u,  3827u,
-     3612u,  3409u,  3218u,  3037u,  2867u,  2706u,  2554u,  2411u,
-     2275u,  2148u,  2027u,  1913u,  1806u,  1705u,  1609u,  1519u,
-     1433u,  1353u,  1277u,  1205u,  1138u,  1074u,  1014u,   957u,
-      903u,   852u,   804u,   759u,   717u,   676u,   638u,   603u,
-      569u,   537u,   507u,   478u,   451u,   426u,   402u
-};
-#endif
-
-#ifndef MUSIC_VI53_DRUMS_TAPE   /* таблица AY нужна, пока не собран VI53-only ROM */
-/* Таблица периодов AY-3-8910, предвычисленная из div_tab[] по формуле
- * (div*887 + 6000)/12000 с ограничением 1..4095 (0 = тишина). Плеер
- * берёт отсюда готовый период по индексу ноты, поэтому в кадровом ISR
- * нет 32-битного умножения/деления — music_tick быстрый и не теряет
- * кадры (иначе темп «плывёт»). Индексы 0-11 — паузы (div=0 → 0). */
-static const unsigned int ay_period_tab[95] = {
-        0u,     0u,     0u,     0u,     0u,     0u,     0u,     0u,
-        0u,     0u,     0u,     0u,  3390u,  3200u,  3020u,  2851u,
-     2691u,  2540u,  2397u,  2263u,  2136u,  2016u,  1903u,  1796u,
-     1695u,  1600u,  1510u,  1425u,  1345u,  1270u,  1199u,  1131u,
-     1068u,  1008u,   951u,   898u,   848u,   800u,   755u,   713u,
-      673u,   635u,   599u,   566u,   534u,   504u,   476u,   449u,
-      424u,   400u,   378u,   356u,   336u,   317u,   300u,   283u,
-      267u,   252u,   238u,   224u,   212u,   200u,   189u,   178u,
-      168u,   159u,   150u,   141u,   133u,   126u,   119u,   112u,
-      106u,   100u,    94u,    89u,    84u,    79u,    75u,    71u,
-       67u,    63u,    59u,    56u,    53u,    50u,    47u,    45u,
-       42u,    40u,    37u,    35u,    33u,    31u,    30u
-};
-#endif
-
 /* --------------------------- Драйверы вывода ------------------------- */
 
 /* Привязка вывода: тоновые каналы направляют события на явно выбранное
@@ -101,8 +59,8 @@ static const unsigned int ay_period_tab[95] = {
  * указатель на драйвер (g_out), выбор делается вызовом
  * music_start_vi53/music_start_ay или music_use_vi53/music_use_ay.
  * note_on принимает индекс ноты 0-94; каждый драйвер берёт готовое
- * значение из своей таблицы: ВИ53 — делитель div_tab[], AY — период
- * ay_period_tab[] (без 32-битной математики в ISR). */
+ * значение из своей таблицы: ВИ53 — делитель v06_div_tab[], AY — период
+ * v06_ay_period_tab[] (без 32-битной математики в ISR; таблицы — lib/snd/notes.c). */
 typedef struct {
     void (*note_on)(unsigned char ch, unsigned char note_idx);
     void (*note_off)(unsigned char ch);
@@ -112,7 +70,7 @@ typedef struct {
 #ifndef MUSIC_AY_DRUMS_AY   /* ВИ53-драйвер: не собирается в AY-only ROM */
 static void vi53_on(unsigned char ch, unsigned char note_idx)
 {
-    vi53_set_channel(ch, div_tab[note_idx]);
+    vi53_set_channel(ch, v06_div_tab[note_idx]);
 }
 static void vi53_off(unsigned char ch)
 {
@@ -129,7 +87,7 @@ static void vi53_silence_all(void)
 #ifndef MUSIC_VI53_DRUMS_TAPE   /* AY-драйвер: не собирается в VI53-only ROM */
 static void ay_on(unsigned char ch, unsigned char note_idx)
 {
-    ay_set_tone_period(ch, ay_period_tab[note_idx]);
+    ay_set_tone_period(ch, v06_ay_period_tab[note_idx]);
 }
 static void ay_off(unsigned char ch)
 {
@@ -157,7 +115,7 @@ static const music_out_t *g_out = &music_out_ay;
 #endif
 
 /* Включение ноты на привязанном устройстве. note_idx — индекс ноты
- * 0-94 (как в div_tab[]/ay_period_tab[]). */
+ * 0-94 (как в v06_div_tab[]/v06_ay_period_tab[]). */
 static void music_note_on(unsigned char ch, unsigned char note_idx)
 {
     g_out->note_on(ch, note_idx);
@@ -339,7 +297,7 @@ void music_use_vi53(void)
         for (i = 0u; i < 3u; ++i) {
             if (g_ch[i].gate == 0u && g_ch[i].note < 95u &&
                 g_ch[i].pc != 0 && (g_ch_mask & (1u << i)))
-                vi53_set_channel(i, div_tab[g_ch[i].note]);
+                vi53_set_channel(i, v06_div_tab[g_ch[i].note]);
         }
     }
 }
@@ -371,7 +329,7 @@ void music_use_ay(void)
         for (i = 0u; i < 3u; ++i) {
             if (g_ch[i].gate == 0u && g_ch[i].note < 95u &&
                 g_ch[i].pc != 0 && (g_ch_mask & (1u << i)))
-                ay_set_tone_period(i, ay_period_tab[g_ch[i].note]);
+                ay_set_tone_period(i, v06_ay_period_tab[g_ch[i].note]);
         }
     }
 }

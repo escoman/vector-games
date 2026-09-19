@@ -130,6 +130,38 @@ extern void gfx_lz_expand(const unsigned char *src);
 /*                                  SND                                    */
 /* ----------------------------------------------------------------------- */
 
+/* - - - - - - - - - - - - Ноты (notes.c) - - - - - - - - - - - - - - - - - */
+
+/* Абсолютный номер ноты = октава*12 + полутон, 0..94 (то же, что в
+ * байткоде music.c: 0x01..0x5F → 0..94). Мнемоники: N_<нота>(<октава>). */
+#define N_C(n)    ((n)*12 + 0)
+#define N_Cs(n)   ((n)*12 + 1)
+#define N_Db(n)   N_Cs(n)
+#define N_D(n)    ((n)*12 + 2)
+#define N_Ds(n)   ((n)*12 + 3)
+#define N_Eb(n)   N_Ds(n)
+#define N_E(n)    ((n)*12 + 4)
+#define N_F(n)    ((n)*12 + 5)
+#define N_Fs(n)   ((n)*12 + 6)
+#define N_Gb(n)   N_Fs(n)
+#define N_G(n)    ((n)*12 + 7)
+#define N_Gs(n)   ((n)*12 + 8)
+#define N_Ab(n)   N_Gs(n)
+#define N_A(n)    ((n)*12 + 9)   /* N_A(4) = 57 = 440 Гц */
+#define N_As(n)   ((n)*12 + 10)
+#define N_Bb(n)   N_As(n)
+#define N_B(n)    ((n)*12 + 11)
+
+/* Предвычисленные таблицы высот (lib/snd/notes.c). */
+extern const unsigned int v06_div_tab[95];        /* ВИ53: 1500000/f   */
+extern const unsigned int v06_ay_period_tab[95];  /* AY:   12 бит      */
+
+/* Быстрый доступ к частотам нот — только индексация массива, без
+ * 32-битного умножения/деления. В static-инициализаторах массивов
+ * не используются (SDCC требует compile-time константу). */
+#define DIV_OF(note)   (v06_div_tab[(note)])
+#define AY_PER(note)   (v06_ay_period_tab[(note)])
+
 /* - - - - - - - - - - - - KR580VI53 (vi53.c) - - - - - - - - - - - - - - */
 
 extern void vi53_set_channel(unsigned char channel, unsigned int divisor);
@@ -175,7 +207,6 @@ extern void ay_mixer_init(void);
 
 /* Тональные каналы */
 extern void ay_set_tone_period(unsigned char ch, unsigned int period);
-extern void ay_set_tone(unsigned char ch, unsigned int div_VI53);
 extern void ay_note_off(unsigned char ch);
 extern void ay_mute_all(void);
 

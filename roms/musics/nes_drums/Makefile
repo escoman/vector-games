@@ -26,6 +26,7 @@ SRCS     = $(LIB)/sys/startup.asm main.c \
            $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
            $(LIB)/snd/drums.asm \
            $(LIB)/snd/vi53.c $(LIB)/snd/ay.c \
+           $(LIB)/snd/notes.c \
            $(LIB)/snd/music.c \
            $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
 

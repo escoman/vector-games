@@ -3,7 +3,7 @@
  *
  * В ОДНОМ образе линкуются оба независимых аппаратных модуля:
  *   vi53/ (КР580ВИ53, i8253) — vi53_set_channel / vi53_set_channel_m0;
- *   ay/   (AY-3-8910)        — ay_set_tone / ay_set_envelope / ay_mute_all;
+ *   ay/   (AY-3-8910)        — ay_set_tone_period / ay_set_envelope / ay_mute_all;
  * плюс шаговый плеер sound.c (sound_*) и ударные drums.asm (drum_*).
  *
  * ROM собран БЕЗ -DMUSIC_ONLY, поэтому доступен шаговый плеер sound_*;
@@ -13,8 +13,10 @@
  *   Test 1 (sound → ВИ53): короткая мелодия sound_step_t выводится
  *     плеером sound.c на три канала ВИ53, ударные — на Tape Out (PC0);
  *   Test 4 (ВИ53 + AY одновременно): прямые вызовы vi53_set_channel()
- *     и ay_set_tone() в одном образе — оба устройства звучат разом,
+ *     и ay_set_tone_period() в одном образе — оба устройства звучат разом,
  *     без конфликта портов (ВИ53: 0x08-0x0B, AY: 0x14/0x15).
+ *     Высоты нот берутся из v06_div_tab[]/v06_ay_period_tab[]
+ *     через макросы DIV_OF()/AY_PER() — без 32-битного деления.
  *
  * Управление:
  *   1 — мелодия sound_* на ВИ53 (Test 1);
@@ -39,23 +41,18 @@ static const unsigned char test_pal[16] = {
     0xFF, 0x24, 0x12, 0x03, 0x00, 0x00, 0x00, 0x00
 };
 
-/* Делители ВИ53 (частота = 1500000 / делитель):
- *   3409 ≈ 440 Гц (ля 1-й октавы), 2867 ≈ 523 Гц (до),
- *   2554 ≈ 587 Гц (ре), 2275 ≈ 659 Гц (ми). */
-#define DIV_A4   3409u
-#define DIV_C5   2867u
-#define DIV_D5   2554u
-#define DIV_E5   2275u
-
-/* Короткая шаговая мелодия для sound.c (Test 1). noise: 1 = снейр/том,
- * 2 = бочка (drums.asm, на текущем маршруте). */
+/* Делители ВИ53 (частота = 1500000 / делитель).
+ * В static-инициализаторе массива struct нужна compile-time
+ * константа, поэтому значения приведены буквально (те же, что
+ * в v06_div_tab[N_*()]). Runtime-вызовы ниже идут через
+ * DIV_OF()/AY_PER() — по таблице, без 32-битного деления. */
 static const sound_step_t melody[] = {
-    { 12u, DIV_A4, 0u,     0u,     0u },
-    { 12u, DIV_C5, 0u,     0u,     2u },
-    { 12u, DIV_D5, 0u,     0u,     0u },
-    { 12u, DIV_E5, 0u,     0u,     1u },
-    { 24u, DIV_A4, DIV_E5, 0u,     0u },
-    { 12u, 0u,     0u,     0u,     0u }
+    { 12u, 3409u,    0u,   0u,   0u },   /* A4 = 440 Гц */
+    { 12u, 2867u,    0u,   0u,   2u },   /* C5 = 523 Гц */
+    { 12u, 2554u,    0u,   0u,   0u },   /* D5 = 587 Гц */
+    { 12u, 2275u,    0u,   0u,   1u },   /* E5 = 659 Гц */
+    { 24u, 3409u, 2275u,   0u,   0u },   /* A4 + E5      */
+    { 12u,    0u,    0u,   0u,   0u }    /* тишина        */
 };
 
 /* Оба потребителя кадрового прерывания: шаговый плеер и огибающие
@@ -120,7 +117,6 @@ int main(void)
     gfx_print(4u, 96u,  "5 - VI53 + AY TOGETHER", 8u);
     gfx_print(4u, 120u, "F1 - DRUM ROUTE (TAPE/AY)", 8u);
     gfx_print(4u, 136u, "F2 - SILENCE", 8u);
-    gfx_print(4u, 152u, "ESC - EXIT", 8u);
     show_status("READY");
     gfx_set_palette(test_pal);
 
@@ -129,10 +125,7 @@ int main(void)
 
         key = kbd_scan();
         if (key != prev_key) {
-            if (key == 27) {                    /* ESC — выход */
-                all_silence();
-                break;
-            } else if (key == '1') {            /* Test 1: sound_* → ВИ53 */
+            if (key == '1') {            /* Test 1: sound_* → ВИ53 */
                 all_silence();
                 sound_set_data(melody,
                                (unsigned int)(sizeof(melody) / sizeof(melody[0])));
@@ -141,22 +134,22 @@ int main(void)
                 show_status("SOUND MELODY (VI53)");
             } else if (key == '2') {            /* прямой тон ВИ53 */
                 all_silence();
-                vi53_set_channel(0, DIV_A4);
+                vi53_set_channel(0, DIV_OF(N_A(4)));
                 show_status("VI53 CH0 440 HZ");
             } else if (key == '3') {            /* прямой тон AY + огибающая */
                 all_silence();
                 ay_set_envelope(AY_CH_A, AY_ENV_DECAY, 8000u);
-                ay_set_tone(0, DIV_A4);
+                ay_set_tone_period(0, AY_PER(N_A(4)));
                 show_status("AY CH A + ENVELOPE");
             } else if (key == '4') {            /* удар */
                 drum_kick();
                 show_status("DRUM KICK");
             } else if (key == '5') {            /* Test 4: ВИ53 + AY разом */
                 all_silence();
-                vi53_set_channel(0, DIV_A4);    /* ВИ53 канал 0 */
+                vi53_set_channel(0, DIV_OF(N_A(4)));    /* ВИ53 канал 0 */
                 ay_set_fixed_volume(AY_CH_A, 15u);
-                ay_set_tone(0, DIV_C5);         /* AY канал A   */
-                ay_set_tone(1, DIV_E5);         /* AY канал B   */
+                ay_set_tone_period(0, AY_PER(N_C(5)));  /* AY канал A   */
+                ay_set_tone_period(1, AY_PER(N_E(5)));  /* AY канал B   */
                 drum_kick();
                 show_status("VI53 + AY TOGETHER");
             } else if (key == 128) {            /* F1 — маршрут ударных */

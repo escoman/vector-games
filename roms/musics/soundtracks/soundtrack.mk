@@ -22,7 +22,7 @@ SRCS_COMMON = $(LIB)/sys/startup.asm main.c $(SOUNDTRACKS)/nes_drums.c \
               $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
               $(LIB)/gfx/pr.asm $(LIB)/unpack/rle.asm $(LIB)/gfx/clr.asm \
               $(LIB)/snd/drums.asm \
-              $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
+              $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/snd/notes.c $(LIB)/snd/music.c $(LIB)/kbd/keyboard.c
 # Библиотека вывода линкуется ОДНА на вариант: чужой вывод в ROM не попадает.
 SRCS       = $(SRCS_COMMON) $(LIB)/snd/vi53.c     # TARGET    — вывод на ВИ53
 SRCS_AY    = $(SRCS_COMMON) $(LIB)/snd/ay.c       # TARGET_AY — вывод на AY
