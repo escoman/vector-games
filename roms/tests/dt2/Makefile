@@ -27,7 +27,7 @@ $(TARGET): dt2_bmp.inc
 	@ls -l $@
 
 dt2_bmp.inc: dt2.bmp $(BMP2INC)
-	python3 $(BMP2INC) --bg-black $<
+	python3 $(BMP2INC) --bg-index 0 $<
 
 dt2.bmp: ../assets/dt2.bmp
 	cp $< $@

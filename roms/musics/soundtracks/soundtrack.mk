@@ -15,6 +15,10 @@ TXT2INC     = ../../../utils/txt2inc.py
 GEN_MAIN    = $(SOUNDTRACKS)/gen_main.py
 
 ROM_JSON  ?= rom.json
+# Индекс цвета в исходном .bmp, который bmp2inc фиксирует на нулевой индекс
+# палитры — это цвет, которым gfx_clear(0) заливает фон заставки. Берётся из
+# rom.json ("bg_index"); по умолчанию 0 (чёрный, как делал прежний --bg-black).
+BG_INDEX  ?= $(shell python3 -c "import json;print(json.load(open('$(ROM_JSON)')).get('bg_index',0))" 2>/dev/null || echo 0)
 INCS       = $(addprefix rom_data/,$(addsuffix _music.inc,$(SONGS)))
 
 # Общая часть источников (без библиотеки вывода — её добавляет вариант).
@@ -49,9 +53,9 @@ rom_data/%_music.inc: music_txt/%.txt $(SOUNDTRACKS)/nes_drums.h $(TXT2INC)
 	@mkdir -p rom_data
 	python3 $(TXT2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch
 
-# Заставка: bmp → inc
+# Заставка: bmp → inc. --bg-index фиксирует фон (из rom.json) на нулевом индексе.
 rom_data/title_bmp.inc: rom_data/title.bmp $(BMP2INC)
-	python3 $(BMP2INC) --bg-black $<
+	python3 $(BMP2INC) --bg-index $(BG_INDEX) $<
 
 # Сборка ROM: вариант по умолчанию — вывод на КР580ВИ53 (ударные Tape Out).
 $(TARGET): $(SRCS) $(INCS) rom_data/title_bmp.inc

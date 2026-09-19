@@ -11,8 +11,7 @@
     {"name": "TRACK 7",   "file": "track_7"},
     {"name": "TRACK 8",   "file": "track_8"},
     {"name": "TRACK 9",   "file": "track_9"},
-    {"name": "TRACK 10",  "file": "track_10"},
-    {"name": "TRACK 13",  "file": "track_13"}
+    {"name": "TRACK 10",  "file": "track_10"}
   ],
   "layout": {
     "cols": 3,
@@ -24,8 +23,8 @@
     "menu_y0": 4,
     "rle_y": 0
   },
+  "bg_index": 3,
   "colors": {
-    "background": 0,
     "normal": 5,
     "highlight": 1
   },

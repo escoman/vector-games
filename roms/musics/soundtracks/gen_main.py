@@ -178,7 +178,9 @@ static void show_menu(unsigned char selected)
 ''')
 
     # --- main() ---
-    bg = colors.get('background', 0)
+    # gfx_clear всегда вызывается с 0: цвет фона задаётся фиксацией нужного
+    # BMP-индекса на нулевой индекс палитры (bmp2inc --bg-index, значение из
+    # rom.json "bg_index"), поэтому отдельный ключ background в json не нужен.
     # Определяем диапазон клавиш
     if n <= 9:
         # Только цифровые клавиши 1-9
@@ -203,7 +205,7 @@ int main(void)
     drum_init();
 
     gfx_set_black_palette();
-    gfx_clear({bg});
+    gfx_clear(0);
     gfx_rle_expand(title_bmp_screen_rle, {rle_x}u, {rle_y}u);
     show_menu_full(100);
     gfx_set_bmp_palette(title_bmp_palette);

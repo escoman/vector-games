@@ -46,7 +46,7 @@ nes_drums.h nes_drums.c: src/nes_drums.mus $(SAMPLES)
 	$(MUS2INC) $< -o nes_drums.inc --name nes_drums --shared-lib
 
 rom_data/logo_bmp.inc: rom_data/logo.bmp
-	python3 $(BMP2INC) --bg-black $<
+	python3 $(BMP2INC) --bg-index 0 $<
 
 rom_data/examples.inc: src/examples.mus nes_drums.h
 	$(MUS2INC) $< -o $@ --name examples_music --use-shared nes_drums --allow-len-mismatch

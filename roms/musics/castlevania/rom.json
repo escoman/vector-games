@@ -21,8 +21,8 @@
     "menu_y0": 8,
     "rle_y": 0
   },
+  "bg_index": 0,
   "colors": {
-    "background": 0,
     "normal": 4,
     "highlight": 8
   },

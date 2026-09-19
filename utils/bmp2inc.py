@@ -3,7 +3,12 @@
 bmp2inc.py — конвертация 16-цветного BMP в .inc для ROM Вектора-06Ц.
 
 Использование:
-    python3 bmp2inc.py path/to/image.bmp
+    python3 bmp2inc.py [--bg-index N] path/to/image.bmp
+
+    --bg-index N — зафиксировать цвет с исходным палитровым индексом N
+    (порядок палитры .bmp) на нулевом индексе выходной палитры. Нулевой
+    индекс — цвет, которым фон заливается через gfx_clear(0); он не участвует
+    в перестановках оптимизатора. Без опции индексы назначаются свободно.
 
 Скрипт создаёт файл inc рядом с исходным: image.bmp -> image_bmp.inc.
 
@@ -189,21 +194,27 @@ def color_groups(width, height, pixels, palette):
     return grouped, pal_bytes
 
 
-def greedy_perm(grouped, pin_index0=False):
+def greedy_perm(grouped, pin=None):
     """Жадное назначение: частым группам — малобитовые индексы.
     Возвращает perm: perm[старый индекс] = новый индекс. Неиспользуемым
     («мёртвым») старым индексам раздаются оставшиеся значения, чтобы
     perm оставался перестановкой 0-15 (иначе обмены в поиске могут
     слить два цвета в один).
-    pin_index0: если True, старый индекс 0 всегда получает новый 0."""
+    pin: если задан (исходный индекс .bmp), группа этого индекса всегда
+    получает новый 0 (цвет фона); остальные назначаются жадно."""
     perm = [0] * 16
     n_groups = 0
     assigned = set()
 
-    if pin_index0:
-        # Найти группу, содержащую старый индекс 0
-        for (total, idxs, vb), new_idx in zip(grouped, INDEX_ORDER):
-            if 0 in idxs:
+    if pin is not None:
+        # Если цвета фона нет в картинке — пин нечем выполнить, назначаем свободно
+        if not any(pin in idxs for (_t, idxs, _vb) in grouped):
+            pin = None
+
+    if pin is not None:
+        # Найти группу, содержащую исходный индекс pin, — ей новый 0
+        for (total, idxs, vb) in grouped:
+            if pin in idxs:
                 for i in idxs:
                     perm[i] = 0
                     assigned.add(i)
@@ -314,19 +325,26 @@ def format_array(f, name, data, per_line=16):
 
 
 def main():
+    USAGE = f"Использование: {sys.argv[0]} [--bg-index N] <файл.bmp>"
     if len(sys.argv) < 2:
-        print(f"Использование: {sys.argv[0]} [--bg-black] <файл.bmp>",
-              file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         sys.exit(1)
 
-    bg_black = False
+    bg_index = None
     args = [a for a in sys.argv[1:]]
-    if '--bg-black' in args:
-        bg_black = True
-        args.remove('--bg-black')
+    if '--bg-index' in args:
+        i = args.index('--bg-index')
+        if i + 1 >= len(args):
+            die("после --bg-index нужен индекс 0-15")
+        try:
+            bg_index = int(args[i + 1])
+        except ValueError:
+            die(f"--bg-index: не число: {args[i + 1]}")
+        if not 0 <= bg_index <= 15:
+            die("--bg-index: индекс вне 0-15")
+        del args[i:i + 2]
     if len(args) != 1:
-        print(f"Использование: {sys.argv[0]} [--bg-black] <файл.bmp>",
-              file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         sys.exit(1)
 
     bmp_path = args[0]
@@ -350,10 +368,14 @@ def main():
         print(f"    точек {total:6d}: индексы [{old}], цвет 0x{vb:02X}")
 
     identity = list(range(16))
-    greedy = greedy_perm(grouped, pin_index0=bg_black)
-    pinned = frozenset({0}) if bg_black else frozenset()
-    candidates = [
-        ("палитра BMP как есть", identity, False),
+    greedy = greedy_perm(grouped, pin=bg_index)
+    pinned = frozenset({bg_index}) if bg_index is not None else frozenset()
+    candidates = []
+    # «как есть» допустимо только когда пин ему не мешает (нет пина или
+    # pin==0: в identity perm[0]==0 уже выполняется).
+    if bg_index is None or bg_index == 0:
+        candidates.append(("палитра BMP как есть", identity, False))
+    candidates += [
         ("жадное по частоте, перестановки внутри классов", greedy, True),
         ("жадное по частоте, свободные перестановки", greedy, False),
     ]
@@ -370,22 +392,9 @@ def main():
     new_pal = [0] * 16
     for old in active:
         new_pal[perm[old]] = old_pal_bytes[old]
-
-    if bg_black and 0 in active:
-        # Сдвигаем палитру: цвет старого индекса 0 уходит на свободное
-        # место, а позиция 0 освобождается под чёрный фон.
-        saved_color = new_pal[perm[0]]
-        if saved_color != 0:
-            used_new = {perm[v] for v in active}
-            spare = next(i for i in range(16) if i not in used_new)
-            new_pal[spare] = saved_color
-            perm[0] = spare
-            # Если другие старые индексы указывали на позицию 0,
-            # перенаправляем их на spare тоже.
-            for old in range(16):
-                if old != 0 and perm[old] == 0:
-                    perm[old] = spare
-        new_pal[0] = 0  # позиция 0 — чёрный (фон)
+    # Пин в greedy_perm + pinned в local_search гарантируют perm[bg_index]==0,
+    # поэтому new_pal[0] = цвет фона из .bmp; прежнего форса «ноль = чёрный»
+    # (как делал --bg-black) здесь уже нет.
 
     new_pixels = [[perm[v] for v in row] for row in pixels]
     rect = build_rect(width, height, new_pixels)
