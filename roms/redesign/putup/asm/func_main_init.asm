@@ -1,170 +1,145 @@
-; func_main_init @ 0x0B57
-; Main init. IN: none (entry from JMP 0x0101). OUT: never returns. Sets SP=0x0100, clears VRAM, calls func_rom_init, func_decompress, func_sound_init, shows title, keyboard poll loop. Clobbers: all regs.
+; Функция: func_main_init
+; Адрес: 0x0B57
+; Размер: 270 байт (0x0B57-0x0C64), fall-through в lbl_title_key_poll
+; Описание: Инициализация программы и вывод заставки. DI; LXI SP,0100h;
+;           очистка VRAM 0x8000-0xFFFF=0; CALL func_hw_init; var_palette_ptr=08B2h;
+;           var_palette_timer=09h; заполнение data_ram_buffer_5000 (0x400 байт)=0FFh;
+;           CALL func_load_glyph_block; копирование спрайтов data_sprites_2F61 ->
+;           data_ram_sprites_7418 (1Ch блоков по 8 байт, источник убывает);
+;           инициализация игровых переменных 0x08EB-0x08FB; CALL func_music_init;
+;           var_score=0, var_level=0, var_page_flip=1, var_bonus_counter,
+;           var_bonus_threshold=07D0h; CALL func_clear_textbuf; рисунок заставки
+;           тайлами data_tile_graphics; строки str_title_logo, str_push_space,
+;           str_msx_magazine, str_hi + счёт, str_credits_koi8. Далее без возврата
+;           переходит в lbl_title_key_poll (ожидание пробела).
 
-SECTION code
-
-PUBLIC _func_main_init
-
-_func_main_init:
-    DI                          ; 0x0B57  [243]
-    LXI SP, 0100                ; 0x0B58  [49, 0, 1]
-    LXI H, 8000                 ; 0x0B5B  [33, 0, 128]
-.loc_0B5E:
-    MVI M, 00                   ; 0x0B5E  [54, 0]
-    INX H                       ; 0x0B60  [35]
-    MOV A, H                    ; 0x0B61  [124]
-    XRA M                       ; 0x0B62  [181]
-    JNZ .loc_0B5E               ; 0x0B63  [194, 94, 11]
-    CALL func_rom_init           ; 0x0B66  [205, 131, 3]
-    LXI H, 08B2                 ; 0x0B69  [33, 178, 8]
-    SHLD 08DB                    ; 0x0B6C  [34, 219, 8]
-    MVI A, 09                   ; 0x0B6F  [62, 9]
-    STA 08C3                    ; 0x0B71  [50, 195, 8]
-    LXI H, 5000                 ; 0x0B74  [33, 0, 80]
-    LXI B, 0400                 ; 0x0B77  [1, 0, 4]
-.loc_0B7A:
-    MVI M, FF                   ; 0x0B7A  [54, 255]
-    INX H                       ; 0x0B7C  [35]
-    DCX B                       ; 0x0B7D  [11]
-    MOV A, B                    ; 0x0B7E  [120]
-    ADC M                       ; 0x0B7F  [177]
-    JNZ .loc_0B7A               ; 0x0B80  [194, 122, 11]
-    CALL 0401                    ; 0x0B83  [205, 1, 4]
-    LXI H, 7418                 ; 0x0B86  [33, 24, 116]
-    LXI D, 2F61                 ; 0x0B89  [17, 97, 47]
-    MVI B, 1C                   ; 0x0B8C  [6, 28]
-.loc_0B8E:
-    PUSH B                       ; 0x0B8E  [197]
-    MVI C, 08                   ; 0x0B8F  [14, 8]
-.loc_0B91:
-    LDAX D                       ; 0x0B91  [26]
-    MOV M, A                    ; 0x0B92  [119]
-    INX H                       ; 0x0B93  [35]
-    DCX D                       ; 0x0B94  [27]
-    DCR C                       ; 0x0B95  [13]
-    JNZ .loc_0B91               ; 0x0B96  [194, 145, 11]
-    LXI B, 0010                 ; 0x0B99  [1, 16, 0]
-    XCHG                        ; 0x0B9C  [235]
-    DAD B                       ; 0x0B9D  [9]
-    XCHG                        ; 0x0B9E  [235]
-    LXI B, 0018                 ; 0x0B9F  [1, 24, 0]
-    DAD B                       ; 0x0BA2  [9]
-    POP B                       ; 0x0BA3  [193]
-    DCR B                       ; 0x0BA4  [5]
-    JNZ .loc_0B8E               ; 0x0BA5  [194, 142, 11]
-    LXI H, 07D0                 ; 0x0BA8  [33, 208, 7]
-    SHLD 08EB                    ; 0x0BAB  [34, 235, 8]
-    MVI A, 01                   ; 0x0BAE  [62, 1]
-    STA 08EE                    ; 0x0BB0  [50, 238, 8]
-    MVI A, 03                   ; 0x0BB3  [62, 3]
-    STA 08EF                    ; 0x0BB5  [50, 239, 8]
-    MVI A, 05                   ; 0x0BB8  [62, 5]
-    STA 08F0                    ; 0x0BBA  [50, 240, 8]
-    MVI A, 08                   ; 0x0BBD  [62, 8]
-    STA 08F1                    ; 0x0BBF  [50, 241, 8]
-    CALL sub_3D4E                ; 0x0BC2  [205, 78, 61]
-    CMP L                       ; 0x0BC5  [175]
-    LXI H, 0000                 ; 0x0BC6  [33, 0, 0]
-    SHLD 08F3                    ; 0x0BC9  [34, 243, 8]
-    STA 08F5                    ; 0x0BCC  [50, 245, 8]
-    STA 08F7                    ; 0x0BCF  [50, 247, 8]
-    INR A                       ; 0x0BD2  [60]
-    STA 08F8                    ; 0x0BD3  [50, 248, 8]
-    STA 08F9                    ; 0x0BD6  [50, 249, 8]
-    INR A                       ; 0x0BD9  [60]
-    STA 08FA                    ; 0x0BDA  [50, 250, 8]
-    INR A                       ; 0x0BDD  [60]
-    STA 08FB                    ; 0x0BDE  [50, 251, 8]
-    LXI H, 07D0                 ; 0x0BE1  [33, 208, 7]
-    SHLD 08FC                    ; 0x0BE4  [34, 252, 8]
-    CALL sub_1BE5                ; 0x0BE7  [205, 229, 27]
-    LXI H, 0986                 ; 0x0BEA  [33, 134, 9]
-    LXI D, 0000                 ; 0x0BED  [17, 0, 0]
-    LXI B, 0080                 ; 0x0BF0  [1, 128, 0]
-.loc_0BF3:
-    PUSH B                       ; 0x0BF3  [197]
-    PUSH H                       ; 0x0BF4  [229]
-    MOV A, M                    ; 0x0BF5  [126]
-    CMP B                       ; 0x0BF6  [135]
-    CMP B                       ; 0x0BF7  [135]
-    LXI H, 2706                 ; 0x0BF8  [33, 6, 39]
-    CALL func_table_lookup       ; 0x0BFB  [205, 44, 3]
-    PUSH D                       ; 0x0BFE  [213]
-    CALL sub_1B87                ; 0x0BFF  [205, 135, 27]
-    POP D                       ; 0x0C02  [209]
-    INR D                       ; 0x0C03  [20]
-    INR D                       ; 0x0C04  [20]
-    MOV A, D                    ; 0x0C05  [122]
-    CPI 20                      ; 0x0C06  [254, 32]
-    JNZ .loc_0C0F               ; 0x0C08  [194, 15, 12]
-    MVI D, 00                   ; 0x0C0B  [22, 0]
-    INR E                       ; 0x0C0D  [28]
-    INR E                       ; 0x0C0E  [28]
-.loc_0C0F:
-    POP H                       ; 0x0C0F  [225]
-    INX H                       ; 0x0C10  [35]
-    POP B                       ; 0x0C11  [193]
-    DCX B                       ; 0x0C12  [11]
-    MOV A, B                    ; 0x0C13  [120]
-    ADC M                       ; 0x0C14  [177]
-    JNZ .loc_0BF3               ; 0x0C15  [194, 243, 11]
-    LXI H, 50A0                 ; 0x0C18  [33, 160, 80]
-    CALL func_store_data_ptr     ; 0x0C1B  [205, 79, 1]
-    LXI H, 0A06                 ; 0x0C1E  [33, 6, 10]
-    CALL func_text_render        ; 0x0C21  [205, 33, 3]
-    LXI H, 5229                 ; 0x0C24  [33, 41, 82]
-    CALL func_store_data_ptr     ; 0x0C27  [205, 79, 1]
-    LXI H, 0AC7                 ; 0x0C2A  [33, 199, 10]
-    CALL func_text_render        ; 0x0C2D  [205, 33, 3]
-    LXI H, 5287                 ; 0x0C30  [33, 135, 82]
-    CALL func_store_data_ptr     ; 0x0C33  [205, 79, 1]
-    LXI H, 0AD6                 ; 0x0C36  [33, 214, 10]
-    CALL func_text_render        ; 0x0C39  [205, 33, 3]
-    LXI H, 506B                 ; 0x0C3C  [33, 107, 80]
-    CALL func_store_data_ptr     ; 0x0C3F  [205, 79, 1]
-    LXI H, 0AE9                 ; 0x0C42  [33, 233, 10]
-    CALL func_text_render        ; 0x0C45  [205, 33, 3]
-    LXI H, 506E                 ; 0x0C48  [33, 110, 80]
-    CALL func_store_data_ptr     ; 0x0C4B  [205, 79, 1]
-    LXI H, 08EB                 ; 0x0C4E  [33, 235, 8]
-    CALL 0331                    ; 0x0C51  [205, 49, 3]
-    MVI A, 30                   ; 0x0C54  [62, 48]
-    CALL func_data_loader        ; 0x0C56  [205, 161, 1]
-    LXI H, 52E0                 ; 0x0C59  [33, 224, 82]
-    CALL func_store_data_ptr     ; 0x0C5C  [205, 79, 1]
-    LXI H, 0925                 ; 0x0C5F  [33, 37, 9]
-    CALL func_text_render        ; 0x0C62  [205, 33, 3]
-    LXI B, 0C00                 ; 0x0C65  [1, 0, 12]
-.loc_0C68:
-    CMP L                       ; 0x0C68  [175]
-    PUSH B                       ; 0x0C69  [197]
-    CALL func_keyboard_timer     ; 0x0C6A  [205, 124, 1]
-    POP B                       ; 0x0C6D  [193]
-    CMP M                       ; 0x0C6E  [183]
-    JNZ .loc_0C9D               ; 0x0C6F  [194, 157, 12]
-    DCX B                       ; 0x0C72  [11]
-    MOV A, C                    ; 0x0C73  [121]
-    ADD M                       ; 0x0C74  [176]
-    JNZ .loc_0C68               ; 0x0C75  [194, 104, 12]
-    LXI H, 5180                 ; 0x0C78  [33, 128, 81]
-    MVI B, 20                   ; 0x0C7B  [6, 32]
-.loc_0C7D:
-    MOV A, M                    ; 0x0C7D  [126]
-    CPI 75                      ; 0x0C7E  [254, 117]
-    JZ .loc_0C90               ; 0x0C80  [202, 144, 12]
-    CPI FE                      ; 0x0C83  [254, 254]
-    JNZ .loc_0C95               ; 0x0C85  [194, 149, 12]
-    MVI A, 75                   ; 0x0C88  [62, 117]
-    CALL func_data_loader2       ; 0x0C8A  [205, 69, 1]
-    JMP .loc_0C95               ; 0x0C8D  [195, 149, 12]
-.loc_0C90:
-    MVI A, FE                   ; 0x0C90  [62, 254]
-    CALL func_data_loader2       ; 0x0C92  [205, 69, 1]
-.loc_0C95:
-    INX H                       ; 0x0C95  [35]
-    DCR B                       ; 0x0C96  [5]
-    JNZ .loc_0C7D               ; 0x0C97  [194, 125, 12]
-    JMP lbl_title_key_poll      ; 0x0C9A  [195, 101, 12]
-.loc_0C9D:
-    CALL func_sound_hw_init      ; 0x0C9D  [205, 205, 61]
-    JMP func_level_init         ; 0x0CA0  [195, 124, 25]
+func_main_init:
+    DI                          ; 0x0B57
+    LXI SP, 0100h               ; 0x0B58
+    LXI H, 8000h                ; 0x0B5B
+loc_0B5E:
+    MVI M, 00h                  ; 0x0B5E
+    INX H                       ; 0x0B60
+    MOV A, H                    ; 0x0B61
+    ORA L                       ; 0x0B62
+    JNZ loc_0B5E                ; 0x0B63
+    CALL func_hw_init           ; 0x0B66
+    LXI H, 08B2h                ; 0x0B69
+    SHLD var_palette_ptr        ; 0x0B6C
+    MVI A, 09h                  ; 0x0B6F
+    STA var_palette_timer       ; 0x0B71
+    LXI H, data_ram_buffer_5000 ; 0x0B74
+    LXI B, 0400h                ; 0x0B77
+loc_0B7A:
+    MVI M, 0FFh                 ; 0x0B7A
+    INX H                       ; 0x0B7C
+    DCX B                       ; 0x0B7D
+    MOV A, B                    ; 0x0B7E
+    ORA C                       ; 0x0B7F
+    JNZ loc_0B7A                ; 0x0B80
+    CALL func_load_glyph_block  ; 0x0B83
+    LXI H, data_ram_sprites_7418 ; 0x0B86
+    LXI D, data_sprites_2F61    ; 0x0B89
+    MVI B, 1Ch                  ; 0x0B8C
+loc_0B8E:
+    PUSH B                      ; 0x0B8E
+    MVI C, 08h                  ; 0x0B8F
+loc_0B91:
+    LDAX D                      ; 0x0B91
+    MOV M, A                    ; 0x0B92
+    INX H                       ; 0x0B93
+    DCX D                       ; 0x0B94
+    DCR C                       ; 0x0B95
+    JNZ loc_0B91                ; 0x0B96
+    LXI B, 0010h                ; 0x0B99
+    XCHG                        ; 0x0B9C
+    DAD B                       ; 0x0B9D
+    XCHG                        ; 0x0B9E
+    LXI B, 0018h                ; 0x0B9F
+    DAD B                       ; 0x0BA2
+    POP B                       ; 0x0BA3
+    DCR B                       ; 0x0BA4
+    JNZ loc_0B8E                ; 0x0BA5
+    LXI H, 07D0h                ; 0x0BA8
+    SHLD 08EBh                  ; 0x0BAB
+    MVI A, 01h                  ; 0x0BAE
+    STA 08EEh                   ; 0x0BB0
+    MVI A, 03h                  ; 0x0BB3
+    STA 08EFh                   ; 0x0BB5
+    MVI A, 05h                  ; 0x0BB8
+    STA 08F0h                   ; 0x0BBA
+    MVI A, 08h                  ; 0x0BBD
+    STA 08F1h                   ; 0x0BBF
+    CALL func_music_init        ; 0x0BC2
+    XRA A                       ; 0x0BC5
+    LXI H, 0000h                ; 0x0BC6
+    SHLD var_score              ; 0x0BC9
+    STA var_level               ; 0x0BCC
+    STA 08F7h                   ; 0x0BCF
+    INR A                       ; 0x0BD2
+    STA 08F8h                   ; 0x0BD3
+    STA var_page_flip           ; 0x0BD6
+    INR A                       ; 0x0BD9
+    STA 08FAh                   ; 0x0BDA
+    INR A                       ; 0x0BDD
+    STA var_bonus_counter       ; 0x0BDE
+    LXI H, 07D0h                ; 0x0BE1
+    SHLD var_bonus_threshold    ; 0x0BE4
+    CALL func_clear_textbuf     ; 0x0BE7
+    LXI H, 0986h                ; 0x0BEA
+    LXI D, 0000h                ; 0x0BED
+    LXI B, 0080h                ; 0x0BF0
+loc_0BF3:
+    PUSH B                      ; 0x0BF3
+    PUSH H                      ; 0x0BF4
+    MOV A, M                    ; 0x0BF5
+    ADD A                       ; 0x0BF6
+    ADD A                       ; 0x0BF7
+    LXI H, data_tile_graphics   ; 0x0BF8
+    CALL func_hl_add_a          ; 0x0BFB
+    PUSH D                      ; 0x0BFE
+    CALL func_draw_tile_to_buf  ; 0x0BFF
+    POP D                       ; 0x0C02
+    INR D                       ; 0x0C03
+    INR D                       ; 0x0C04
+    MOV A, D                    ; 0x0C05
+    CPI 20h                     ; 0x0C06
+    JNZ loc_0C0F                ; 0x0C08
+    MVI D, 00h                  ; 0x0C0B
+    INR E                       ; 0x0C0D
+    INR E                       ; 0x0C0E
+loc_0C0F:
+    POP H                       ; 0x0C0F
+    INX H                       ; 0x0C10
+    POP B                       ; 0x0C11
+    DCX B                       ; 0x0C12
+    MOV A, B                    ; 0x0C13
+    ORA C                       ; 0x0C14
+    JNZ loc_0BF3                ; 0x0C15
+    LXI H, 50A0h                ; 0x0C18
+    CALL func_set_text_ptr      ; 0x0C1B
+    LXI H, str_title_logo       ; 0x0C1E
+    CALL func_print_string      ; 0x0C21
+    LXI H, 5229h                ; 0x0C24
+    CALL func_set_text_ptr      ; 0x0C27
+    LXI H, str_push_space       ; 0x0C2A
+    CALL func_print_string      ; 0x0C2D
+    LXI H, 5287h                ; 0x0C30
+    CALL func_set_text_ptr      ; 0x0C33
+    LXI H, str_msx_magazine     ; 0x0C36
+    CALL func_print_string      ; 0x0C39
+    LXI H, 506Bh                ; 0x0C3C
+    CALL func_set_text_ptr      ; 0x0C3F
+    LXI H, str_hi               ; 0x0C42
+    CALL func_print_string      ; 0x0C45
+    LXI H, 506Eh                ; 0x0C48
+    CALL func_set_text_ptr      ; 0x0C4B
+    LXI H, 08EBh                ; 0x0C4E
+    CALL func_print_uint16      ; 0x0C51
+    MVI A, 30h                  ; 0x0C54
+    CALL func_print_char_at_ptr ; 0x0C56
+    LXI H, 52E0h                ; 0x0C59
+    CALL func_set_text_ptr      ; 0x0C5C
+    LXI H, str_credits_koi8     ; 0x0C5F
+    CALL func_print_string      ; 0x0C62
+    ; fall-through в lbl_title_key_poll (0x0C65)
