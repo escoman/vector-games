@@ -7,7 +7,7 @@
 ;           Копирует 5 последовательных байт таблицы в data_voice_param_buf по
 ;           смещениям +4..+8, затем ещё 4 байта по смещениям +0Ah..+0Dh.
 ;           Последний байт: если != 0 устанавливает бит 5 (ORI 20h) по смещению +0Eh,
-;           иначе сбрасывает (ANI DFh). Два выхода RET (0x3BB5 / 0x3BC7).
+;           иначе сбрасывает (ANI 0DFh). Два выхода RET (0x3BB5 / 0x3BC7).
 
 func_music_set_note_params:
     MOV A, M                        ; 0x3B0F
@@ -142,7 +142,7 @@ loc_3BB6:
     DAD D                           ; 0x3BBF
     POP D                           ; 0x3BC0
     MOV A, M                        ; 0x3BC1
-    ANI DFh                         ; 0x3BC2
+    ANI 0DFh                         ; 0x3BC2
     MOV M, A                        ; 0x3BC4
     POP H                           ; 0x3BC5
     POP PSW                         ; 0x3BC6

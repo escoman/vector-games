@@ -1425,13 +1425,21 @@
         "0x3BCA",
         "0x3C7D",
         "0x3E1A",
-        "0x421A"
+        "0x421A",
+        "0x3890"
       ],
       "name": "func_music_tick",
       "properties": {
         "params": "in: none (reads music state vars 0x3854/0x383A); out: none. Per-frame sequencer tick called from VBlank ISR."
       },
       "size": 52,
+      "type": "function"
+    },
+    {
+      "address": "0x3890",
+      "comment": "Subroutine 0x3890..0x3902. Callee of `CZ 3890h` (CALLCC) at 0x3877 inside func_music_tick (0x3858). Prologue PUSH H. Music/voice helper invoked conditionally per tick. Detailed semantics UNKNOWN. In Stage-12 build this region is covered by an address-exact verbatim gap bin (gap filled from putup.rom), so the raw `CZ 3890h` operand resolves to the correct target without a symbolic label; object added for discoverability (TZ Stage 12 p.3).",
+      "name": "func_music_sub_3890",
+      "size": 114,
       "type": "function"
     },
     {

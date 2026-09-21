@@ -13,6 +13,7 @@
 ;   меткой data_level_NN для Stage 11 (data_level_01 = база таблицы, объекта в RDB нет).
 
 ; --- Уровень 01 (0x1C8E, объект data_level_maps) ---
+data_level_maps:          ; base alias (func_level_loader LXI H,data_level_maps)
 data_level_01:
     INCBIN "bin/data_level_01.bin"
 ; --- Уровень 02 (0x1D3E, объект data_level_02) ---

@@ -62,7 +62,9 @@ loc_03DA:
     OUT 03h                     ; 0x03F1
     LDA var_portb_mode          ; 0x03F3
     OUT 02h                     ; 0x03F6
-    CALL func_music_tick        ; 0x03F8
+    NOP                         ; 0x03F8  (ROM placeholder 00; runtime func_music_start_track installs CALL func_music_tick 0x3858 ->0x03F8)
+    NOP                         ; 0x03F9
+    NOP                         ; 0x03FA
     POP PSW                     ; 0x03FB
     POP B                       ; 0x03FC
     POP D                       ; 0x03FD

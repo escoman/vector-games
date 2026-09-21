@@ -7,21 +7,5 @@
 ;             на 0FFh (@0x0988), поэтому trailing 02 02 02 не выводятся (заполнение до
 ;             след. объекта str_title_logo @0x0A06). Непечатаемые KOI8-R байты даны DEFB.
 
-str_credits_koi8:
-    DEFB 20h, 0F7h, 0C5h, 0D2h, 0D3h, 0C9h, 0D1h, 20h   ; 0x0925 " Версия "
-    DEFB 0C4h, 0CCh, 0D1h, 20h, 22h, 0F7h, 0C5h, 0CBh   ; 0x092D "для \"Век"
-    DEFB 0D4h, 0CFh, 0D2h, 2Dh, 30h, 36h, 0E3h, 22h     ; 0x0935 "тор-06Ц\""
-    DEFB 20h, 20h, 31h, 39h, 39h, 31h, 20h, 20h         ; 0x093D "  1991  "
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x0945 (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x094D (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x0955 (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x095D (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x0965 (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x096D (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 20h, 20h, 20h, 20h         ; 0x0975 (пробелы)
-    DEFB 20h, 20h, 20h, 20h, 0E3h, 0C5h, 0CEh, 0D4h     ; 0x097D "    Центр"
-    DEFB 0D2h, 20h, 22h, 0EBh, 0EFh, 0EDh, 0F0h, 0F8h   ; 0x0985 "т \"КОМПЬ"
-    DEFB 0E0h, 0F4h, 0E5h, 0F2h, 22h, 20h, 0C7h, 2Eh    ; 0x098D "ЮТЕР\" г."
-    DEFB 0EBh, 0C9h, 0DBh, 0C9h, 0CEh, 0C5h, 0D7h, 20h  ; 0x0995 "Кишинев "
-    DEFB 20h, 20h, 0FFh                                 ; 0x099D "  " + FF @0x0988
-    DEFB 02h, 02h, 02h                                  ; 0x09A0 заполнение (не печат.)
+str_credits_koi8:  ; byte-exact image slice 0x0925..0x09A3 (126 bytes)
+    INCBIN "bin/str_credits_koi8.bin"

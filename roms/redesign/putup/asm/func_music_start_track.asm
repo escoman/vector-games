@@ -18,6 +18,6 @@ func_music_start_track:
     OUT 08h                         ; 0x3DDD
     MVI A, 76h                      ; 0x3DDF
     OUT 08h                         ; 0x3DE1
-    MVI A, B6h                      ; 0x3DE3
+    MVI A, 0B6h                      ; 0x3DE3
     OUT 08h                         ; 0x3DE5
     RET                             ; 0x3DE7
