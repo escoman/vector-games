@@ -1355,8 +1355,50 @@
       "type": "variable"
     },
     {
+      "address": "0x383B",
+      "comment": "Stage11: Voice 01 (ch0) step index 0..95. Incremented each completed note (after func_music_process_voice); wraps to 0 at scores[+6]=96. Combined with var_music_stream_base_01 to form current note read address.",
+      "name": "var_music_ptr_01",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x383C",
+      "comment": "Stage11: Voice 02 (ch1) step index 0..95; wraps at scores[+7]=96. + var_music_stream_base_02 = current read address.",
+      "name": "var_music_ptr_02",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x383D",
+      "comment": "Stage11: Voice 03 (ch2) step index 0..95; wraps at scores[+8]=96. + var_music_stream_base_03 = current read address.",
+      "name": "var_music_ptr_03",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x383F",
+      "comment": "Stage11: RAM word = base address of voice 01 note stream = 0x3E29 (var_music_track_base + 0). Seeded by func_music_init @0x3D4E.",
+      "name": "var_music_stream_base_01",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x3841",
+      "comment": "Stage11: RAM word = base address of voice 02 note stream = 0x3F29 (var_music_track_base + 0x100). Seeded by func_music_init.",
+      "name": "var_music_stream_base_02",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x3843",
+      "comment": "Stage11: RAM word = base address of voice 03 note stream = 0x4029 (var_music_track_base + 0x200). Seeded by func_music_init.",
+      "name": "var_music_stream_base_03",
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x3845",
-      "comment": "14-байтный блок голосовых параметров для текущей ноты. Заполняется func_music_set_note_params(0x3B0F) из data_note_param_table_43F9; потребляется func_music_load_voice_params(0x3902), которая передаёт каждый параметр в func_sound_op.",
+      "comment": "Stage11: data_voice_param_buf — 15-byte working buffer for the current step, consumed by func_music_load_voice_params(0x3902) which emits bytes 0..13 as sound-op codes 0..13 (+byte14 as op7) via func_sound_op(0x01BC). Layout after func_music_process_voice: [0..1]=ch0 period LE, [2..3]=ch1 period, [4..5]=ch2 period, [6]=scores+9, [8]=scores+3 (op8 gate ch0), [9]=scores+4 (op9 gate ch1), [10]=scores+5 (op10 gate ch2), [11..13]=scores+0x0A/B/C, [14]=op7 toggle byte. Play-note routines add per-tick vibrato to [0]/[2] before OUT.",
       "name": "data_voice_param_buf",
       "size": 14,
       "type": "data"
@@ -1370,17 +1412,20 @@
     },
     {
       "address": "0x3856",
+      "comment": "Stage11: var_music_track_base — RAM word = base of the three voice streams = 0x3E29. func_music_init seeds stream-base ptrs 0x383F/0x3841/0x3843 = base, base+0x100, base+0x200.",
       "name": "var_music_track_base",
       "size": 2,
       "type": "variable"
     },
     {
       "address": "0x3858",
-      "comment": "Покадровый тик музыкального проигрывателя. Вызывается из func_vblank_isr(0x03A4) каждый VBlank. Загружает указатель текущей позиции трека var_3854 в рабочий указатель var_0B41; читает байт длительности на ptr+2, сравнивает со счётчиком тиков var_383A (сбрасывается в 0 по достижении); CZ->func_music_init(0x3890 wrapper); CALL func_music_play_note_ch0(0x3BCA) и func_music_play_note_ch1(0x3C7D); инкрементирует счётчик тиков var_383A. Управляет 3-канальным музыкальным секвенсером VI53.",
+      "comment": "THE MELODY DRIVER (a.k.a. func_music_driver). Per-VBlank-frame tick, invoked from func_vblank_isr (RST 7 @0x0038) via the ISR trampoline that copies CALL func_music_tick to 0x03F8. Reads data_music_scores(0x3E1A) header (duration=scores+2=6 ticks, loop lens=scores+6/7/8=96). Manages tick counter var_music_tick(0x383A) and per-voice step indices var_music_ptr_01/02/03(0x383B/C/D): when tick wraps, wraps each index at its loop length, CALLs func_music_process_voice(0x3946) to look up the three periods (from data_music_period_table) into data_voice_param_buf, then CALLs func_music_play_note_ch0(0x3BCA)/ch1(0x3C7D) each frame to emit + vibrato. Outputs to KR580VI53 tone generator ch0/ch1/ch2. Drives the 3-channel title melody.",
       "links": [
         "0x3854",
         "0x3BCA",
-        "0x3C7D"
+        "0x3C7D",
+        "0x3E1A",
+        "0x421A"
       ],
       "name": "func_music_tick",
       "properties": {
@@ -1417,7 +1462,20 @@
     },
     {
       "address": "0x3946",
-      "comment": "Обработка музыкального голоса: читает указатель текущего трека var_3854, устанавливает рабочий указатель var_0B41, читает байты ноты/параметров по различным смещениям (ptr+0x0E) и применяет их через звуковой движок. Обрабатывает параметры ноты по голосам во время воспроизведения.",
+      "comment": "Stage11: Reads current note code for each of 3 voices from stream (var_music_stream_base_NN + var_music_ptr_NN). If code==0 -> rest (clears buf slot). Else computes period = data_music_period_table[ (scores+1 BASE=6) + code ] via index=2*(6+code), stores 16-bit LE into data_voice_param_buf slots: ch0->buf[0..1], ch1->buf[2..3], ch2->buf[4..5]. Also permutes score header bytes (scores +0/+3/+4/+5/+9/+A/+B/+C) into buf[14/8/9/10/6/11/12/13] (gate/envelope/control ops). ch2 code bit7 -> func_music_set_note_params(0x3B0F). Ends with CALL func_music_load_voice_params(0x3902) which emits buf[0..13] as sound-op codes 0..13 (+buf[14] as op7) through func_sound_op -> VI53 ports.",
+      "links": [
+        "0x421A",
+        "0x3E29",
+        "0x3F29",
+        "0x3E1A",
+        "0x4029",
+        "0x3845",
+        "0x383B",
+        "0x383C",
+        "0x383D",
+        "0x3B0F",
+        "0x3902"
+      ],
       "name": "func_music_process_voice",
       "properties": {
         "params": "in: none (reads track ptr var_3854); out: none. Per-voice note parameter processing."
@@ -1438,13 +1496,14 @@
     },
     {
       "address": "0x3BC8",
+      "comment": "Stage11: Despite prior name, this is the working copy of the voice-0 (ch0) current note byte (bit7 = reserved on ch0; low 7 bits = note code), stored by func_music_process_voice @0x39DE; read by func_music_play_note_ch0 (LDA 3BC8). var at 0x3BC9 = same for voice-1/ch1.",
       "name": "var_music_voice2_flag",
       "size": 1,
       "type": "variable"
     },
     {
       "address": "0x3BCA",
-      "comment": "Воспроизведение ноты на канале 0 (музыкальный голос 1). Читает селектор ноты на track ptr+0x0D; если ненулевой, индексирует таблицу частот нот @0x445D (шаг 0x14=20 через цикл), прибавляет смещение тика var_383A, читает буфер голосовых параметров @0x3845, затем вызывает func_snd_op_keep_a2(0x3C77)->func_sound_op для извлечения тона. Базовая рутина звукоизвлечения ноты для голоса 1.",
+      "comment": "Stage11: Per-tick voice-0 (ch0) sounding routine. Does NOT set base pitch (that is done once per step by func_music_process_voice into data_voice_param_buf). Each frame reads row selector scores[+0x0D], indexes data_music_vibrato_table[(row-1)*20 + tick], adds to buf[0], and emits through func_snd_op_keep_a2 -> func_sound_op op0 -> KR580VI53 ch0 (port 0Bh). So it re-asserts ch0 with vibrato every VBlank while the step lasts (6 frames).",
       "links": [
         "0x445D",
         "0x3C77"
@@ -1498,7 +1557,10 @@
       "address": "0x3D4E",
       "comment": "Инициализация музыкального движка. DI; очищает переменные тика/состояния музыки 0x383A,0x383B,0x383C,0x383D=0; загружает базовый указатель трека из var_3856 в рабочий буфер @0x383F; копирует байты ноты/установки в голосовой буфер через var_0B41. Вызывается из func_main_init(0x0B57) при старте и из пути перезапуска музыки. Готовит состояние секвенсера.",
       "links": [
-        "0x3856"
+        "0x3856",
+        "0x3843",
+        "0x3841",
+        "0x383F"
       ],
       "name": "func_music_init",
       "properties": {
@@ -1537,6 +1599,56 @@
       "type": "data"
     },
     {
+      "address": "0x3E1A",
+      "comment": "Stage11: Title-melody SCORE control block (15 bytes, ROM @0x3E1A). var_music_track_ptr(0x3854)=0x3E1A points here. Layout: +0=0x38 (base byte -> op7/toggle); +1=0x06 = BASE NOTE (semitone offset added to every voice note code); +2=0x06 = DURATION = 6 VBlank ticks per step (tempo); +3=0x0F op8 (gate ch0); +4=0x00 op9 (gate ch1); +5=0x0E op10 (gate ch2); +6/+7/+8 = 0x60(96) per-voice LOOP LENGTH (each stream wraps at 96 steps); +9=0x1F op6; +A=0 op11; +B=3 op12; +C=2 op13; +D=5 = ch0 per-tick modulation (vibrato) row in data_music_vibrato_table; +E=0. NOTE: this engine has NO separate DEFW pointer table; the three voice note-streams are at fixed offsets from var_music_track_base(0x3856)=0x3E29: track01=0x3E29, track02=base+0x100, track03=base+0x200 (func_music_init@0x3D4E seeds stream-base ptrs 0x383F/0x3841/0x3843 with stride +0x100).",
+      "links": [
+        "0x4029",
+        "0x3E29",
+        "0x3F29",
+        "0x421A"
+      ],
+      "name": "data_music_scores",
+      "size": 15,
+      "type": "data"
+    },
+    {
+      "address": "0x3E29",
+      "comment": "Stage11: Voice 01 note stream -> VI53 counter ch0 (port 0Bh). 96 step bytes. Each byte = NOTE CODE: 0x00 = REST (silence, period slot left as rest); else pitch = data_music_period_table[BASE(=scores+1=6) + code]. This voice uses no bit7 commands (all codes <=0x39). Fixed note length = scores+2 = 6 ticks. Per-tick vibrato offset from data_music_vibrato_table (stride 20, row = scores+13). Current read addr = var_music_stream_base_01(0x383F) + var_music_ptr_01(0x383B). Processed by func_music_process_voice @0x39D3.",
+      "links": [
+        "0x383B"
+      ],
+      "name": "data_music_track_01",
+      "size": 96,
+      "type": "data"
+    },
+    {
+      "address": "0x3F29",
+      "comment": "Stage11: Voice 02 note stream -> VI53 counter ch1 (port 0Ah). 96 step bytes. Same format as track_01: 0=REST, else period = data_music_period_table[6 + code]. No bit7 commands. Read addr = var_music_stream_base_02(0x3841) + var_music_ptr_02(0x383C). Processed by func_music_process_voice @0x3A32.",
+      "links": [
+        "0x383C"
+      ],
+      "name": "data_music_track_02",
+      "size": 96,
+      "type": "data"
+    },
+    {
+      "address": "0x4029",
+      "comment": "Stage11: Voice 03 note stream -> VI53 counter ch2 (port 09h, bass). 96 step bytes. 0=REST (buf[10] cleared). Bit7 CLEAR (code<0x80): period = data_music_period_table[6 + code]. Bit7 SET (code>=0x80): EXTENDED note -> func_music_set_note_params uses data_note_param_table_43F9[((code&0x7F)-1)*8] 8-byte block: block[0..1]=literal ch2 period, block[3..7]=envelope/gate/timbre params (buf slots 10..14). Read addr = var_music_stream_base_03(0x3843) + var_music_ptr_03(0x383D). Processed by func_music_process_voice @0x3A95.",
+      "links": [
+        "0x383D"
+      ],
+      "name": "data_music_track_03",
+      "size": 96,
+      "type": "data"
+    },
+    {
+      "address": "0x421A",
+      "comment": "Stage11: 96-word (192-byte) 16-bit little-endian CHROMATIC PERIOD TABLE (8 octaves x 12 semitones). Equal temperament: period[i] = round(3822 / 2^(i/12)). Indexed by (BASE + note_code) for all 3 melody voices in func_music_process_voice. func_snd_calc_period(0x020E) multiplies the value by 12 (DAD sequence = 12x) to form the VI53 counter reload written to ports 0Bh/0Ah/09h. Output frequency = f_VI53 / (12*period), f_VI53 ~ 1.5 MHz (docs/VECTOR_VERIFIED: 1497600..1500000). Reference: i=0 ->3822 ->~32.7Hz = C1 = MIDI 24, so MIDI note = i + 24 (= note_code + BASE + 24 = note_code + 30). i=24 ->956; i=36 ->478 ->~261.5Hz=C4=MIDI60; i=61 ->113 ->~1106Hz. Verified live: buf periods ch0=113=i61, ch1=179=i53, ch2=1073=i22.",
+      "name": "data_music_period_table",
+      "size": 192,
+      "type": "table"
+    },
+    {
       "address": "0x42F9",
       "comment": "Таблица частот/параметров нот для музыкального канала 1, шаг 10 байт на ноту. Индексируется селектором ноты в func_music_play_note_ch1(0x3C7D).",
       "name": "data_note_table_ch1",
@@ -1544,15 +1656,15 @@
     },
     {
       "address": "0x43F9",
-      "comment": "Таблица параметров нот (14-байтные блоки), индексируется значением ноты в func_music_set_note_params(0x3B0F); источник для data_voice_param_buf @0x3845.",
+      "comment": "Stage11: data_note_param_table_43F9 — 8-byte-per-entry extended-note parameter table for ch2 (voice 03) when a note code has bit7 SET. Index=((code&0x7F)-1)*8. block[0..1]=literal ch2 period (written to buf[4..5]); block[3..6]->buf[10..13] (gate/envelope/timbre ops 10..13); block[7]!=0 -> set bit5 on op7 toggle buf[14] else clear. Used by func_music_set_note_params(0x3B0F). For MIDI the ch2 pitch of these notes = value in block[0..1].",
       "name": "data_note_param_table_43F9",
       "type": "data"
     },
     {
       "address": "0x445D",
-      "comment": "Таблица частот/параметров нот для музыкального канала 0, шаг 20 байт на ноту. Индексируется селектором ноты в func_music_play_note_ch0(0x3BCA).",
-      "name": "data_note_freq_table_ch0",
-      "type": "data"
+      "comment": "Stage11 (renamed from data_note_freq_table_ch0): per-tick pitch-modulation (vibrato) table, 20 bytes per row (stride 0x14). Read by func_music_play_note_ch0(0x3BCA)/ch1(0x3C7D): value = table[ (scores[+13]-1)*20 + tick ] (small 0..3 offsets), ADDED to the channel period in var before OUT, producing subtle vibrato. Row selector = data_music_scores[+0x0D]=5. Inference: amplitude 0..3 on period ~ tens of cents. Not an exact frequency table (period comes from data_music_period_table). Extent unknown (size 0).",
+      "name": "data_music_vibrato_table",
+      "type": "table"
     },
     {
       "address": "0x5000",
