@@ -16,6 +16,9 @@ release/*.rom
 __pycache__/
 *.pyc
 
+# Кэш доказательств utils/analyze (evidence/derived/index.jsonl)
+.analyze/
+
 # Генерируемые mus2inc.py партитуры (источники — music/*.mus)
 roms/musics/synth/rom_data/*.inc
 roms/musics/jackal/rom_data/*_music.inc
