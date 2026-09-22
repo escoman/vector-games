@@ -71,44 +71,45 @@ static void rnd_init(void)
 /* -------------------------- БУФЕР ОГНЯ -------------------------------- */
 
 #define FIRE_W  64
-#define FIRE_H  64
+#define FIRE_H  40
 
 /* 2 точки по 4 бита в одном байте */
 static unsigned char fire_buf[(FIRE_W * FIRE_H) >> 1];
 
-/* Получить цвет точки (x, y), 0..15 */
-static unsigned char get_fire_buf(unsigned char x, unsigned char y)
-{
-    unsigned int index = ((unsigned int)y * FIRE_W + x) >> 1;
-    unsigned char value = fire_buf[index];
+/* Теневая копия буфера: хранит цвет, фактически записанный в VRAM в прошлом
+ * кадре. Позволяет сравнивать в RAM и не трогать VRAM для неизменных блоков.
+ * Обновляется лениво (по одному байту) внутри fire_render — без копирования
+ * всего буфера. */
+static unsigned char prev_buf[(FIRE_W * FIRE_H) >> 1];
 
-    if (x & 1)
-        return value & 0x0F;          /* правая точка */
-    else
-        return value >> 4;            /* левая точка */
-}
+/* Индекс байта в буфере для точки (x, y).
+ * (y*FIRE_W + x) >> 1 == (y << 5) + (x >> 1), т.к. FIRE_W = 64 —
+ * избегаем 16-битного умножения. */
+#define FIRE_IDX(x, y)  (((unsigned int)(y) << 5) + ((x) >> 1))
 
-/* Записать цвет точки (x, y), 0..15 */
-static void put_fire_buf(unsigned char x, unsigned char y,
-                         unsigned char value)
-{
-    unsigned int index = ((unsigned int)y * FIRE_W + x) >> 1;
-    unsigned char cur = fire_buf[index];
+/* Получить цвет точки (x, y), 0..15 (одно чтение памяти):
+ * чётный x — старшая тетрада (>>4), нечётный x — младшая (>>0). */
+#define get_fire_buf(x, y) \
+    ((fire_buf[FIRE_IDX(x, y)] >> (((x) & 1) ? 0 : 4)) & 0x0F)
 
-    if (x & 1)
-        /* Правая точка — младшая тетрада */
-        fire_buf[index] = (cur & 0xF0) | (value & 0x0F);
-    else
-        /* Левая точка — старшая тетрада */
-        fire_buf[index] = (cur & 0x0F) | ((value & 0x0F) << 4);
-}
+/* Записать цвет точки (x, y), 0..15 (read-modify-write, индекс один раз). */
+#define put_fire_buf(x, y, value) \
+    do { \
+        unsigned int  _fi = FIRE_IDX(x, y); \
+        unsigned char _fc = fire_buf[_fi]; \
+        fire_buf[_fi] = ((x) & 1) \
+            ? (unsigned char)((_fc & 0xF0) | ((value) & 0x0F)) \
+            : (unsigned char)((_fc & 0x0F) | (((value) & 0x0F) << 4)); \
+    } while (0)
 
 /* ----------------------- АЛГОРИТМ ОГНЯ -------------------------------
  * Классический алгоритм из fire.html:
  *   1. Верхняя строка (y = 0): случайные очаги — источник огня.
  *   2. Строки y = 1 .. FIRE_H-1: берём пиксель из строки ВЫШЕ (y-1)
- *      со случайным сдвигом x (−1, 0, +1), вычитаем затухание.
- *      В нижней половине — дополнительное затухание (острые вершины).
+ *      со случайным сдвигом x (−1, 0, +1) и корректным переносом, вычитаем
+ *      затухание.
+ *      В ВЕРХНЕЙ половине экрана (y >= FIRE_H/2, т.е. у верхушек пламени) —
+ *      дополнительное затухание (острые вершины).
  *   3. При маппинге y=0 → ofs=0 (низ экрана) огонь растёт снизу вверх.
  * --------------------------------------------------------------- */
 
@@ -116,7 +117,7 @@ static void fire_generate(unsigned char power)
 {
     unsigned char x, y;
     unsigned char above, decay;
-    signed char shift;
+    signed int sx;
 
     /* 1. Верхняя строка — «очаги» пламени (источник у основания) */
     for (x = 0; x < FIRE_W; x++) {
@@ -132,20 +133,27 @@ static void fire_generate(unsigned char power)
 
     /* 2. Огонь поднимается: от строки 0 к строке FIRE_H-1 */
     for (y = 1; y < FIRE_H; y++) {
+        /* Сдвиг индекса ГСЧ на нечётное число между строками.
+         * Иначе на строку уходит ровно 128 значений (кратно 256),
+         * и строки y / y+2 получают идентичные сдвиги для всех столбцов —
+         * вертикальные «каналы» вместо живого пламени (как в fire.html). */
+        rnd_idx += 7;
+
         for (x = 0; x < FIRE_W; x++) {
-            /* Случайный сдвиг −1, 0, +1 */
-            shift = (signed char)(rnd_next() % 3) - 1;
-            if (shift < 0)       shift = FIRE_W - 1;
-            else if (shift >= FIRE_W) shift = 0;
+            /* Случайный сдвиг −1, 0, +1 с корректным переносом по ширине */
+            sx = (signed int)x + ((signed int)(rnd_next() % 3) - 1);
+            if (sx < 0)            sx += FIRE_W;
+            else if (sx >= FIRE_W) sx -= FIRE_W;
 
             above = get_fire_buf(
-                (unsigned char)((signed char)x + shift),
+                (unsigned char)sx,
                 (unsigned char)(y - 1)
             );
 
             decay = rnd_next() & 1;
 
-            if (y < FIRE_H / 2 && (rnd_next() > 178))
+            /* Верхняя половина экрана (верхушки пламени) тухнет быстрее */
+            if (y >= FIRE_H / 2 && (rnd_next() > 178))
                 decay += 1;
 
             put_fire_buf(
@@ -160,14 +168,19 @@ static void fire_generate(unsigned char power)
 /* ----------------------- РЕНДЕРИНГ НА ЭКРАН --------------------------
  * Каждый пиксель буфера 64×64 → блок 4×4 на экране 256×256.
  *
- * Для каждой строки блока (4 строки) записываем один байт в каждую
- * из 4 плоскостей. Байт содержит 2 столбца блока (по 4 пикселя):
- *   биты 7–4: столбцы 0–1 (левая пара), бит 7 = строка 0
- *   биты 3–0: столбцы 2–3 (правая пара), бит 3 = строка 0
+ * Один байт буфера = пара соседних пикселей (старшая тетрада — левый,
+ * младшая — правый) = один блок 4×4. Все 4 строки блока в плоскости
+ * одинаковы, поэтому пишутся одним значением 4 раза.
  *
- * Два пикселя буфера обрабатываются за раз:
- *   byte = (color_left << 4) | color_right
- *   Если цвет = 0x0F (все 4 плоскости активны) → байт = 0xFF.
+ * Оптимизация «теневой буфер»: сравниваем пару пикселей с прошлым кадром
+ * в RAM. Если не изменилась — VRAM не трогаем вообще. Если изменилась —
+ * пишем ТОЛЬКО те плоскости, чей бит в паре пикселей отличается от прошлого
+ * (обычно цвет меняется на ±1, т.е. одна плоскость). Это же чинит прежнее
+ * залипание: когда бит гаснет (bn=0), плоскость перезаписывается нулём.
+ *
+ * Байт плоскости: биты 7–4 — левый пиксель (0xF0), биты 3–0 — правый (0x0F).
+ * byte_val = bn * 0x0F, где bn = (левый_бит<<4) | правый_бит ∈ {0,1,16,17}
+ *   → 0x00 / 0x0F / 0xF0 / 0xFF.
  * --------------------------------------------------------------- */
 
 static void fire_render(void)
@@ -179,47 +192,46 @@ static void fire_render(void)
         0x8000u   /* плоскость 3 (бит 3) */
     };
 
-    unsigned char fx, fy, p, r;
+    unsigned int idx;
 
-    for (fy = 0; fy < FIRE_H; fy++) {
-        for (fx = 0; fx < FIRE_W; fx += 2) {
-            /* Два соседних пикселя буфера */
-            unsigned char cl = get_fire_buf(fx, fy);
-            unsigned char cr = get_fire_buf(fx + 1, fy);
+    for (idx = 0; idx < (unsigned int)((FIRE_W * FIRE_H) >> 1); idx++) {
+        unsigned char cur  = fire_buf[idx];
+        unsigned char prev = prev_buf[idx];
+        unsigned char cl, cr, ocl, ocr, p;
+        unsigned int block_addr;
 
-            if ((cl | cr) == 0)
-                continue;   /* оба пикселя чёрные — пропускаем */
+        if (cur == prev)
+            continue;           /* блок не менялся — VRAM не трогаем */
 
-            /* Адрес блока 4×4 в плоскости:
-             *   VRAM-колонка = sx/8 = fx/2
-             *   col_offset   = (fx/2)*256
-             *   y=0 (источник огня) → низ экрана (ofs=0),
-             *   y=63 (вершины пламени) → верх (ofs≈255).
-             *   ofs = fy*4 + r.
-             *   block_addr = (fx/2)*256 + fy*4. */
-            {
-                unsigned int block_addr =
-                    ((unsigned int)(fx >> 1) << 8)
-                    + (unsigned int)(fy << 2);
+        prev_buf[idx] = cur;    /* ленивое обновление тени (1 байт) */
 
-                for (p = 0; p < 4; p++) {
-                    /* Бит p каждого пикселя → своя плоскость.
-                     * Левый пиксель → биты 7–4, правый → биты 3–0.
-                     * Если бит = 1, все 4 столбца пикселя горят (0xF). */
-                    unsigned char byte_val = (unsigned char)(
-                        ((cl >> p) & 1) * 0xF0
-                        + ((cr >> p) & 1) * 0x0F);
+        cl  = (unsigned char)(cur  >> 4);   /* новая пара: левый / правый */
+        cr  = (unsigned char)(cur  & 0x0F);
+        ocl = (unsigned char)(prev >> 4);   /* старая пара (что на экране) */
+        ocr = (unsigned char)(prev & 0x0F);
 
-                    if (byte_val == 0)
-                        continue;
+        /* idx = fy*32 + col;  col = idx & 31, fy = idx >> 5.
+         * block_addr = col*256 + fy*4 (y=0 — низ экрана). */
+        block_addr = ((unsigned int)(idx & 31) << 8)
+                   + ((unsigned int)((idx >> 5) << 2));
 
-                    for (r = 0; r < 4; r++) {
-                        unsigned int ofs = block_addr + r;
-                        *((unsigned char *)(plane_bases[p] + ofs))
-                            = byte_val;
-                    }
-                }
-            }
+        for (p = 0; p < 4; p++) {
+            unsigned char bn = (unsigned char)(
+                (((cl  >> p) & 1) << 4) | ((cr  >> p) & 1));
+            unsigned char bo = (unsigned char)(
+                (((ocl >> p) & 1) << 4) | ((ocr >> p) & 1));
+            unsigned char *dst;
+            unsigned char byte_val;
+
+            if (bn == bo)
+                continue;       /* эта плоскость не изменилась */
+
+            byte_val = (unsigned char)(bn * 0x0F);
+            dst = (unsigned char *)(plane_bases[p] + block_addr);
+            dst[0] = byte_val;
+            dst[1] = byte_val;
+            dst[2] = byte_val;
+            dst[3] = byte_val;
         }
     }
 }
@@ -228,10 +240,19 @@ static void fire_render(void)
 
 int main(void)
 {
+    unsigned int i;
+
     /* Инициализация: чёрный экран, палитра огня */
-    graph_set_black_palette();
+    gfx_set_black_palette();
     gfx_clear(0);
-    graph_set_palette(fire_palette);
+    gfx_set_bmp_palette(fire_palette);
+
+    /* Экран очищен, поэтому буфер и его теневая копия должны быть нулевыми
+     * (BSS при --no-crt автоматически не обнуляется). */
+    for (i = 0; i < (unsigned int)((FIRE_W * FIRE_H) >> 1); i++) {
+        fire_buf[i] = 0;
+        prev_buf[i] = 0;
+    }
 
     rnd_init();
 
@@ -239,7 +260,7 @@ int main(void)
     for (;;) {
         gfx_next_frame();
 
-        fire_generate(100);
+        fire_generate(153);   /* ~60% очагов, как в fire.html (rand > 0.40) */
         fire_render();
     }
 
