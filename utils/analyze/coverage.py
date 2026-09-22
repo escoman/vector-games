@@ -75,14 +75,24 @@ class CoverageRun:
         self.rdb_only_gaps = []
 
     def to_dict(self):
+        # Машиночитаемый набор (ТЗ §35): seed_rdb читает именно эти ключи,
+        # а не пересчитывает слепые цели самостоятельно.
+        final = self.final
         return {
             "image": [addr_hex(self.image_lo), addr_hex(self.image_hi)],
             "entries": [addr_hex(a) for a in self.entries],
             "rounds": [r.to_dict() for r in self.rounds],
             "iterations": len(self.rounds),
             "converged": self.converged,
+            "fixpoint": self.converged,
             "reason": self.reason,
-            "final": self.final.summary() if self.final else None,
+            "blind_targets": ([addr_hex(a) for a in final.blind_targets]
+                              if final else []),
+            "reachable": ([[addr_hex(a), addr_hex(b)] for a, b in final.code_ranges]
+                          if final else []),
+            "gaps": ([[addr_hex(a), addr_hex(b)] for a, b in final.uncovered_ranges]
+                     if final else []),
+            "final": final.summary() if final else None,
             "gaps_without_rdb": [[addr_hex(a), addr_hex(b)]
                                  for a, b in self.rdb_only_gaps],
         }

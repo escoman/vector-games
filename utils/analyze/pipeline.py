@@ -80,11 +80,17 @@ def build_steps(ctx):
         Step("probe", ["--rom", "{rom}", "--org", "{org}", "--seconds", "1"]),
         Step("coverage", ["--rom", "{rom}", "--org", "{org}", "--rdb", "{rdb}",
                           "--hi", "{hi}", "--entry", "{entry}"]),
-        # 3—4: целостность RDB и проверка «рантайм не подменил образ» (§13, §16).
+        # 3—4: статика и детерминированный посев RDB (ТЗ §36, §37). seed_rdb
+        # идёт в режиме dry-run — план показывается, putup.rdb не меняется.
+        Step("disassembly", ["--rom", "{rom}", "--org", "{org}",
+                             "--entry", "{entry}"]),
+        Step("seed_rdb", ["--rom", "{rom}", "--rdb", "{rdb}", "--org", "{org}",
+                          "--hi", "{hi}", "--entry", "{entry}"]),
+        # 5—6: целостность RDB и проверка «рантайм не подменил образ» (§13, §16).
         Step("rdb_lint", ["--rdb", "{rdb}", "--rom", "{rom}"]),
         Step("memory_diff", ["--rom", "{rom}", "--org", "{org}",
                              "--lo", "{org}", "--hi", "{hi}"]),
-        # 5—9: кандидаты семантики (все — CANDIDATE, не Facts: ТЗ §34).
+        # 7—11: кандидаты семантики (все — CANDIDATE, не Facts: ТЗ §34).
         Step("io_signature", ["--rom", "{rom}", "--org", "{org}",
                               "--entry", "{entry}", "--hi", "{hi}",
                               "--rdb", "{rdb}", "--seconds", "1"]),

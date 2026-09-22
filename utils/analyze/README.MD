@@ -99,9 +99,10 @@ python3 utils/analyze/cli.py <команда> --help
 | модуль | назначение | тип вывода |
 |---|---|---|
 | `probe.py` | каноническая чистая загрузка ROM, базовые факты | Fact (boot OK) |
-| `coverage.py` | покрытие кода, слепые зоны | Fact/Partial |
+| `coverage.py` | покрытие кода, слепые зоны (машинный payload: blind_targets/reachable/gaps/fixpoint) | Fact/Partial |
 | `disassembly.py` | запрос дизасемблера у сервера (без своего декодера) | Evidence |
-| `rdb.py` / `naming.py` | модель RDB; единые шаблоны имён (§28) | библиотека |
+| `seed_rdb.py` | первичный посев RDB: entry → analyze → функции/метки/ссылки до fixpoint | Fact (PASS) / Candidate |
+| `rdb.py` / `naming.py` | модель RDB (включая aliases); единые шаблоны имён (§28) и технические имена затравок | библиотека |
 | `rdb_lint.py` | целостность RDB (пересечения, висячие ссылки, имена) | Findings (rc=1 при находках) |
 | `memory_diff.py` | «рантайм не подменил образ» (§13) | Fact/Findings |
 | `io_signature.py` | порт-сигнатуры I/O | Candidate |
@@ -128,6 +129,70 @@ python3 utils/analyze/cli.py <команда> --help
 | `report_gen.py` | сборка отчёта §29 из JSON-результатов + сводка §30 |
 | `pipeline.py` | дирижёр прогона в одном сеансе |
 | `clear_cache.py` | очистка/прореживание кэша доказательств |
+
+## Первичный анализ и посев RDB (Stage 6.27)
+
+Команда `seed_rdb` выполняет детерминированный **первичный** статический
+анализ ROM и сеёт результат в RDB — без участия AI и без ручных правок.
+Единственный источник семантики lower-level — отладчик: Python **не** имеет
+своего 8080-декодера, CFG-построителя или дизассемблера (архитектурный
+запрет ТЗ §48); все кандидаты рождаются из ответов `debug_analyze_code` и
+`debug_coverage_report`.
+
+**Поток (Primary static analysis → RDB seeding → Coverage fixpoint):**
+
+1. точки входа (по умолчанию `--org`, повторяемо `--entry`) → `function`-кандидат;
+2. `debug_analyze_code` по активным адресам → ссылки: `CALL`/`RST` →
+   `function`, `JMP`/`JCC` → `label` (приоритет: function > label для одного
+   адреса);
+3. `build_plan` — чистая детерминированная функция (сортированные адреса,
+   ссылки, кандидаты; тот же вход → тот же план); существующие объекты
+   RDB **всегда важнее** кандидатов: ни переименования, ни перезаписи (ТЗ §19);
+4. план применяется через `RdbWriter` (единственный канал записи, ТЗ §21),
+   затем пересчёт покрытия (`coverage.py`), слепые цели внутри дыр
+   досеваются метками — и цикл повторяется, пока появляется хоть один новый
+   активный адрес (**fixpoint**, ТЗ §26–§27);
+5. сохраняются только размеры, известные отладчику; иначе `size = 0`
+   («не выдумываем», ТЗ §25).
+
+**Object model (явно, ТЗ §14–§15):**
+
+```text
+ONE ADDRESS = ONE RDB OBJECT   — один адрес, один объект; ветвление внутри
+                                 функции — конфликт, а не новый объект
+MULTIPLE NAMES = ALIASES       — вторичные имена живут в property `aliases`
+                                 (sorted, без дубликатов, первичное имя не
+                                 дублируется), а не в отдельных объектах
+```
+
+`RdbWriter.add_alias/remove_alias/aliases` — API алиасов (ТЗ §29–§30);
+`rdb_lint` следит за дублями/коллизиями алиасов, self/duplicate-ссылками и
+вложенностью объектов (ТЗ §28).
+
+**Evidence vs candidates:** посев порождает только **технические** имена
+(`func_0100`, `lbl_3000`) и помечает каждое доказательство происхождения
+(`seed_source` / `seed_evidence` / `seed_from`). Семантические имена — всегда
+CANDIDATE, Python не повышает их до фактов; `status=PASS` у `seed_rdb`
+означает «механика сошлась к fixpoint», а не «названия верны» (ТЗ §34).
+
+**Dry-run / apply:** по умолчанию `seed_rdb` — **сухой прогон** (ТЗ §20):
+план считается и печатается, RDB не трогается; запись — только с `--apply`
+(атомарный `debug_save_rdb` в конце, ТЗ §22). В `pipeline` шаг `seed_rdb`
+идёт dry-run-ом сразу после `coverage`/`disassembly` (ТЗ §36–§37).
+
+```bash
+# план (ничего не пишем):
+python3 utils/analyze/cli.py seed_rdb --rom <rom> --rdb <rdb> --org 0x0100 --json
+# применить посев:
+python3 utils/analyze/cli.py seed_rdb --rom <rom> --rdb <rdb> --apply
+```
+
+Выход — конверт ТЗ §44: `{module, status, entry_points, functions_added,
+labels_added, links_added, aliases_added, existing_objects, iterations,
+fixpoint, mcp_calls}` плюс `coverage_percent`, `blind_targets`, `conflicts`,
+`skipped`. Ошибки уровня анализа (unknown target, overlap, неизвестный
+размер) — находки в JSON, не крах прогона; `FAILED` только для реальных сбоев
+(MCP недоступен, битый RDB, exception) (ТЗ §45).
 
 ## Кэш доказательств и его очистка
 

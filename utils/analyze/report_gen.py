@@ -29,7 +29,7 @@ from analyze import naming
 SECTIONS = ("Goal", "ROM", "Method", "Findings", "Verified Facts", "Inferences",
             "Hypotheses", "Unknowns", "Limitations", "Recommended Next Steps")
 
-FACT_STATUSES = ("OK", "FACT", "MATCHED", "CLEAN")
+FACT_STATUSES = ("OK", "FACT", "MATCHED", "CLEAN", "PASS")
 CANDIDATE_STATUSES = ("CANDIDATE", "PARTIAL", "DERIVED")
 FAILED_STATUSES = ("MISMATCH", "FAIL", "FAILED", "ERROR", "BLOCKED")
 HIGH_CONFIDENCE = ("high", "medium")
@@ -225,6 +225,29 @@ def rdb_summary(results):
     return {}
 
 
+def seed_summary(results):
+    """Итог посева RDB (ТЗ §46) из результата seed_rdb: только детерминированные числа."""
+    result = results.get("seed_rdb")
+    if not isinstance(result, dict):
+        return {}
+    conflicts = result.get("conflicts") or []
+    out = {
+        "Entry points": result.get("entry_points"),
+        "Functions": result.get("functions_added"),
+        "Labels": result.get("labels_added"),
+        "Links": result.get("links_added"),
+        "Aliases": result.get("aliases_added"),
+        "Existing objects": result.get("existing_objects"),
+        "Coverage %": result.get("coverage_percent"),
+        "Iterations": result.get("iterations"),
+        "Fixpoint": result.get("fixpoint"),
+        "RDB conflicts": len(conflicts) if isinstance(conflicts, list)
+        else result.get("conflicts"),
+        "Status": result.get("status"),
+    }
+    return {key: value for key, value in out.items() if value is not None}
+
+
 def suggestions(buckets, limit=12):
     """Next steps механически из подсказок находок; приоритет — за человеком."""
     seen, out = set(), []
@@ -358,6 +381,14 @@ def render(results, goal=None, method=None, stage=None, title=None,
     lines += ["", "## Result summary", ""]
     summary = rdb_summary(results)
     lines += _table(sorted(summary.items())) or ["_нет RDB-статистики_"]
+    seed = seed_summary(results)
+    if seed:
+        lines += ["", "### Посев RDB (ТЗ §46)", ""]
+        lines += _table(sorted(seed.items()))
+        lines.append("")
+        lines.append("_Числа посева детерминированы: это структурные кандидаты "
+                     "из `debug_analyze_code`/coverage, а не семантические "
+                     "факты (ТЗ §34)._")
     lines += ["", "### Статистика прогона (ТЗ §30)", ""]
     lines += render_statistics(stats)
     refs = evidence_refs(results)

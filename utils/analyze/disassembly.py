@@ -21,7 +21,7 @@ import json
 import sys
 
 from analyze.capabilities import CapabilityProfile
-from analyze.mcp_session import addr_hex, bytes_of, open_session, to_addr
+from analyze.mcp_session import addr_hex, bytes_of, envelope, open_session, to_addr
 
 # Разумный потолок для линейной разборки: серверный AgentLimits = 40000
 # инструкций на изображение.
@@ -414,15 +414,22 @@ def main(argv=None):
             addr_s, _, len_s = args.disassemble.partition(":")
             instructions = static.disassemble_image(to_addr(addr_s) or args.org,
                                                     int(len_s or 0x40, 0))
-            data = [i.to_dict() for i in instructions]
+            data = {"instructions": [i.to_dict() for i in instructions]}
+            verdict = "линейная разборка: %d инструкций" % len(instructions)
         else:
             entries = [to_addr(a) for a in args.entry] or [args.org]
-            data = static.analyze_code(entries).summary()
+            analysis = static.analyze_code(entries)
+            data = analysis.summary()
+            verdict = ("анализ от %s: %d инструкций, %d references"
+                       % (", ".join(addr_hex(a) for a in entries),
+                          analysis.instruction_count, len(analysis.references)))
+        # Конверт обязателен: pipeline классифицирует шаг по status/verdict (§37).
+        data = envelope(
+            data, module="disassembly", session=session, cache=cache,
+            status="OK", verdict=verdict,
+            note="разборка и control flow — из отладчика; модуль не декодирует "
+                 "опкоды и не строит свой CFG (ТЗ §4, §48)")
         print(json.dumps(data, ensure_ascii=False, indent=2 if args.json else None))
-        if not args.json:
-            stats = cache.stats() if cache else {}
-            print("# вызовов MCP: %d, промахов кэша: %s, попаданий: %s"
-                  % (session.total_calls, stats.get("misses"), stats.get("hits")))
     finally:
         session.close()
     return 0

@@ -156,3 +156,51 @@ def validate(name, kind=None):
         problems.append(("warning", "в имени %r есть адресный хвост %r — адрес "
                                     "должен жить в поле address" % (name, digits.group(0)[1:])))
     return problems
+
+
+# ---------------------------------------------------------------------------
+# Технические имена затравок и алиасы (ТЗ Stage 6.27 §31, §15, §16).
+# ---------------------------------------------------------------------------
+
+def technical_function_name(address):
+    """Детерминированное имя функции по адресу: func_1234.
+
+    Не зависит от порядка обнаружения: одно и то же имя на один адрес при
+    любом количестве прогонов (ТЗ §32).
+    """
+    return propose("function", addr=address)
+
+
+def technical_label_name(address):
+    """Детерминированное имя метки по адресу: lbl_1234.
+
+    Префикс `lbl_`, а не `label_`: единый источник истины для имён — этот
+    модуль (TYPE_PREFIX["label"] == "lbl_"), иначе имя не пройдёт validate().
+    """
+    return propose("label", addr=address)
+
+
+def normalize_alias(text):
+    """'Scan Keyboard' -> 'scan_keyboard'; не-ASCII и мусор обрезаются."""
+    return slugify(text, limit=MAX_NAME)
+
+
+def is_valid_alias(alias, kind=None):
+    """Годен ли alias как дополнительное имя объекта.
+
+    Алиас — это семантическое имя (часто без префикса типа), поэтому к нему
+    НЕ применяется обязательный префикс primary-имени. Но форма обязана быть
+    корректной: `[a-z][a-z0-9_]*`, длина <= MAX_NAME. Если алиас всё же
+    начинается с известного префикса и известен тип объекта — префикс обязан
+    типу соответствовать (иначе это имя другого типа, не алиас этого).
+    """
+    if not alias or not BODY_RE.match(alias):
+        return False
+    if len(alias) > MAX_NAME:
+        return False
+    prefix = next((p for p in PREFIX_TYPE if alias.startswith(p)), None)
+    if prefix is not None and kind:
+        expected = TYPE_PREFIX.get((kind or "").strip().lower())
+        if expected is not None and expected != prefix:
+            return False
+    return True

@@ -24,8 +24,33 @@ import json
 import os
 import re
 
-from analyze.mcp_session import addr_hex, to_addr
+from analyze.mcp_session import McpError, addr_hex, to_addr
 from analyze import naming
+
+# Ключ в properties, где живут вторичные имена объекта (ТЗ §15, §29).
+ALIAS_PROP = "aliases"
+
+
+def _parse_aliases(value):
+    """Нормализовать properties["aliases"] в список строк.
+
+    Допускает три вида: отсутствующее значение, список (чтение с диска)
+    и JSON-строку (то, что кладёт set_property через json.dumps). Порядок
+    приводится к детерминированному sorted (ТЗ §32).
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return [text]
+    if isinstance(value, (list, tuple)):
+        return sorted({str(a) for a in value if str(a)})
+    return []
 
 
 class RdbObject:
@@ -76,6 +101,46 @@ class RdbObject:
 
     def get(self, prop, default=None):
         return self.properties.get(prop, default)
+
+    # -- aliases (ТЗ §15, §29) --------------------------------------------
+    # Физический формат — properties["aliases"] (список строк). Вторичные
+    # имена НЕ создают отдельных объектов и никогда не становятся primary.
+    # Старые RDB без этого ключа загружаются как пустой список.
+
+    @property
+    def aliases(self):
+        return self.get_aliases()
+
+    def get_aliases(self):
+        return _parse_aliases(self.properties.get(ALIAS_PROP))
+
+    def has_alias(self, alias):
+        return alias is not None and alias in self.get_aliases()
+
+    def add_alias(self, alias):
+        """Добавить alias в памяти. True, если появился новый.
+
+        Идемпотентно: пустой/равный primary/уже существующий не добавляется,
+        порядок детерминированный (sorted, ТЗ §32).
+        """
+        if not alias or alias == self.name:
+            return False
+        current = self.get_aliases()
+        if alias in current:
+            return False
+        self.properties[ALIAS_PROP] = sorted(set(current + [alias]))
+        return True
+
+    def remove_alias(self, alias):
+        current = self.get_aliases()
+        if alias not in current:
+            return False
+        left = sorted(a for a in current if a != alias)
+        if left:
+            self.properties[ALIAS_PROP] = left
+        else:
+            self.properties.pop(ALIAS_PROP, None)
+        return True
 
     def to_dict(self, hex_addrs=True):
         fmt = addr_hex if hex_addrs else (lambda a: int(a))
@@ -277,7 +342,22 @@ class RdbWriter:
         return self.session.call(tool, args)
 
     def exists(self, address):
-        return self.session.call("debug_get_rdb_object", {"address": to_addr(address)})
+        """Объект по адресу или {} его нет.
+
+        Отладчик на отсутствующий объект отвечает не пустым JSON, а ошибкой
+        (agent_api.cpp: ErrorCode::NotFound; MCP-адаптер приводит её к
+        kind="get_rdb_object_failed" с сообщением "No RDB object at address").
+        Для проверки существования это штатный ответ «нет» — его и возвращаем
+        как {}, но прочие ошибки (таймаут, смерть сервера) пробрасываем.
+        """
+        try:
+            return self.session.call("debug_get_rdb_object",
+                                     {"address": to_addr(address)})
+        except McpError as exc:
+            text = str(exc).lower()
+            if exc.kind == "not_found" or "no rdb object" in text:
+                return {}
+            raise
 
     def ensure_object(self, address, name, type, size=None, comment=None,
                       properties=None, links=None, rename=False):
@@ -342,6 +422,47 @@ class RdbWriter:
     def add_label(self, address, name):
         """Метка-затравка для control flow (ТЗ §10)."""
         return self.ensure_object(address, name, "label")
+
+    # -- aliases (ТЗ §15, §30) -------------------------------------------
+    # Отдельного debugger-API для алиасов нет: используем property-механизм
+    # debug_get_rdb_object → properties.aliases → debug_set_rdb_property.
+
+    def aliases(self, address):
+        obj = self.exists(address)
+        props = (obj or {}).get("properties") or {}
+        return _parse_aliases(props.get(ALIAS_PROP))
+
+    def add_alias(self, address, alias):
+        """Добавить alias к существующему объекту (идемпотентно).
+
+        Первичное имя в aliases не кладётся, дубликаты отбрасываются, порядок
+        детерминированный. Нелигитимный alias — ошибка вызывающего кода.
+        """
+        address = to_addr(address)
+        obj = self.exists(address)
+        if not obj or not obj.get("address"):
+            raise ValueError("нет объекта по адресу %s (alias к несуществующему)"
+                             % addr_hex(address))
+        primary = obj.get("name")
+        if not naming.is_valid_alias(alias, obj.get("type")):
+            raise ValueError("нелигитимный alias %r для %s" % (alias, primary))
+        current = _parse_aliases((obj.get("properties") or {}).get(ALIAS_PROP))
+        if alias == primary or alias in current:
+            return {"address": addr_hex(address), "alias": alias, "added": False}
+        self.set_property(address, ALIAS_PROP, sorted(set(current + [alias])))
+        return {"address": addr_hex(address), "alias": alias, "added": True}
+
+    def remove_alias(self, address, alias):
+        address = to_addr(address)
+        obj = self.exists(address)
+        if not obj or not obj.get("address"):
+            return {"address": addr_hex(address), "alias": alias, "removed": False}
+        current = _parse_aliases((obj.get("properties") or {}).get(ALIAS_PROP))
+        if alias not in current:
+            return {"address": addr_hex(address), "alias": alias, "removed": False}
+        left = sorted(a for a in current if a != alias)
+        self.set_property(address, ALIAS_PROP, left)
+        return {"address": addr_hex(address), "alias": alias, "removed": True}
 
     def save(self):
         out = None if self.dry_run else self.session.call("debug_save_rdb")

@@ -11,6 +11,17 @@
     *_unknown               области, ещё не разобраные (список, не ошибка)
     bad name                имя вне шаблонов naming.py
 
+Дополнительно (ТЗ §28, aliases/links/вложенность):
+
+    duplicate_alias         один алиас в объекте встречается дважды
+    alias_equals_name       алиас совпал с primary name этого же объекта
+    alias_invalid           алиас не проходит шаблон имён для своего типа
+    alias_collision         алиас = чужое primary name или закреплён за 2 объектов
+    duplicate_link          одна и та же ссылка в объекте повторно
+    self_link               объект ссылается на себя
+    function_inside_function  функция целиком внутри другой функции
+    label_inside_unrelated  метка внутри объекта не-кода
+
 Отдельно (ТЗ §12): идентичность объекта против логических подэлементов и
 меток. Отладчик хранит ОДИН объект на адрес, поэтому «подэлементы» (строка
 внутри блока, глиф внутри шрифта) обязаны жить в properties/comment/links,
@@ -115,12 +126,21 @@ def lint_rdb(rdb, image_lo=None, image_hi=None, require_comment=True):
 
     # -- ссылки ------------------------------------------------------------
     known = set(by_addr)
+    # primary name → объект(ы): нужно, чтобы поймать коллизию «алиас = чужое имя».
+    name_owner = {}
     for obj in objects:
+        name_owner.setdefault(obj.name, []).append(obj)
+    for obj in objects:
+        link_counts = {}
         for target in obj.links:
             if target is None:
                 findings.append(Finding("broken_link", "error", obj.address,
                                         "ссылка без адреса", obj.name))
                 continue
+            if target == obj.address:
+                findings.append(Finding("self_link", "error", obj.address,
+                                        "объект ссылается сам на себя", obj.name))
+            link_counts[target] = link_counts.get(target, 0) + 1
             if not (0x0000 <= target <= 0xFFFF):
                 findings.append(Finding("broken_link", "error", obj.address,
                                         "ссылка %s вне адресного пространства"
@@ -129,6 +149,76 @@ def lint_rdb(rdb, image_lo=None, image_hi=None, require_comment=True):
                 findings.append(Finding("unlinked_target", "info", obj.address,
                                         "ссылка на %s — по адресу нет объекта"
                                         % addr_hex(target), obj.name))
+        for target, count in sorted(link_counts.items(),
+                                    key=lambda kv: kv[0] if kv[0] is not None else 0):
+            if count > 1:
+                findings.append(Finding(
+                    "duplicate_link", "warning", obj.address,
+                    "ссылка на %s повторяется %d раз — links уникальны внутри "
+                    "объекта" % (addr_hex(target), count), obj.name))
+
+    # -- aliases (ТЗ §15, §28) --------------------------------------------
+    alias_owner = {}
+    for obj in objects:
+        raw = _raw_alias_list(obj.properties.get("aliases"))
+        counts = {}
+        for alias in raw:
+            counts[alias] = counts.get(alias, 0) + 1
+        for alias, count in sorted(counts.items()):
+            if count > 1:
+                findings.append(Finding(
+                    "duplicate_alias", "warning", obj.address,
+                    "алиас %r встречается %d раз — внутри объекта алиасы "
+                    "уникальны" % (alias, count), obj.name))
+        for alias in obj.get_aliases():
+            if alias == obj.name:
+                findings.append(Finding(
+                    "alias_equals_name", "warning", obj.address,
+                    "алиас %r равен primary name — secondary-имя не должно "
+                    "дублировать основное" % alias, obj.name))
+            elif not naming.is_valid_alias(alias, obj.type):
+                findings.append(Finding(
+                    "alias_invalid", "error", obj.address,
+                    "алиас %r не проходит шаблон имён для типа %s"
+                    % (alias, obj.type), obj.name))
+            alias_owner.setdefault(alias, []).append(obj)
+            for other in name_owner.get(alias, []):
+                if other.address != obj.address:
+                    findings.append(Finding(
+                        "alias_collision", "error", obj.address,
+                        "алиас %r совпадает с primary name объекта по %s"
+                        % (alias, addr_hex(other.address)), obj.name))
+    for alias, owners in sorted(alias_owner.items()):
+        addrs = {o.address for o in owners}
+        if len(addrs) > 1:
+            findings.append(Finding(
+                "alias_collision", "error", min(addrs),
+                "алиас %r закреплён за %d объектами по разным адресам"
+                % (alias, len(addrs)), owners[0].name))
+
+    # -- вложенность объектов (ТЗ §26, §27) -------------------------------
+    sized = [o for o in objects if o.size_known and o.address is not None]
+    for obj in sized:
+        container = None
+        for cand in sized:
+            if cand is obj or not (cand.address < obj.address <= cand.end):
+                continue
+            if container is None or cand.address > container.address:
+                container = cand
+        if container is None:
+            continue
+        if obj.type == "function" and container.type == "function":
+            findings.append(Finding(
+                "function_inside_function", "warning", obj.address,
+                "функция %s лежит внутри %s (%s..%s)"
+                % (obj.name, container.name, addr_hex(container.address),
+                   addr_hex(container.end)), obj.name))
+        elif obj.type == "label" and container.type not in ("function", "code",
+                                                            "label"):
+            findings.append(Finding(
+                "label_inside_unrelated", "info", obj.address,
+                "метка %s внутри несвязанного объекта %s (тип %s)"
+                % (obj.name, container.name, container.type), obj.name))
 
     # -- имена и доказательства -------------------------------------------
     for obj in objects:
@@ -227,6 +317,27 @@ def _histogram(items):
     for item in items:
         out[item] = out.get(item, 0) + 1
     return dict(sorted(out.items()))
+
+
+def _raw_alias_list(value):
+    """Список алиасов как он хранится (дубликаты сохраняются) — для duplicate-проверки.
+
+    Допускает list и JSON-строку; get_aliases() для этого не годится — он
+    схлопывает дубликаты, а линт обязан их увидеть.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return [text]
+    if isinstance(value, (list, tuple)):
+        return [str(a) for a in value]
+    return []
 
 
 def format_table(findings, limit=80):
