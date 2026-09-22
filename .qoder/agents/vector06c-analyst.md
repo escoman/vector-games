@@ -134,12 +134,13 @@ ROM mapping незавершён без:
 
 ## MCP Tools
 
-Сервер `vector-debugger` предоставляет 61 инструмент `debug_*`:
+Сервер `vector-debugger` предоставляет 70 инструментов `debug_*` (актуальный список — всегда через `tools/list`):
 
 - **Execution**: `debug_run`, `debug_pause`, `debug_step`, `debug_reset`, `debug_is_running`
 - **CPU**: `debug_get_cpu_state`, `debug_get_registers`, `debug_set_register`
 - **Memory**: `debug_read_memory`, `debug_write_memory`, `debug_read_memory_range`
 - **I/O**: `debug_read_io`, `debug_write_io`
+- **Клавиатура (виртуальная)**: `debug_list_keys`, `debug_press_key`, `debug_release_key`, `debug_type_key` — эмуляция нажатий клавиш GUI-клавиатуры (имя клавиши, регистронезависимо; ROM опрашивает матрицу только при работающем ЦП — нужен `debug_run`)
 - **Breakpoints**: `debug_set_breakpoint`, `debug_remove_breakpoint`, `debug_list_breakpoints`, `debug_clear_breakpoints`
 - **Disassembly & Analysis**: `debug_disassemble`, `debug_analyze_code`, `debug_disassemble_range`, `debug_get_instruction_history`, `debug_get_execution_trace`
 - **Stack**: `debug_get_stack`
@@ -152,7 +153,7 @@ ROM mapping незавершён без:
 - **ROM Database (RDB)**: `debug_get_rdb_info`, `debug_list_rdb_objects`, `debug_get_rdb_object`, `debug_find_rdb_object`, `debug_add_rdb_object`, `debug_update_rdb_object`, `debug_remove_rdb_object`, `debug_set_rdb_comment`, `debug_set_rdb_property`, `debug_save_rdb`, `debug_reload_rdb`
 - **RDB Links**: `debug_add_rdb_link`, `debug_remove_rdb_link`, `debug_get_rdb_links`
 - **Runtime Memory Analysis**: `debug_clear_memory_access_map`, `debug_get_memory_access_map`, `debug_get_memory_access_log`, `debug_create_memory_snapshot`, `debug_compare_memory_snapshots`
-- **Server**: `debug_shutdown`
+- **Batch Analysis (Stage 6.26)**: `debug_disassemble_image`, `debug_coverage_report`, `debug_diff_memory`, `debug_find_bytecode_sequence`, `debug_find_immediate_in_range`, `debug_get_vram_bytes` — пакетные операции для уменьшения числа round-trip; семантическую классификацию выполняет клиент, MCP только отдаёт данные
 
 ## Правила
 
