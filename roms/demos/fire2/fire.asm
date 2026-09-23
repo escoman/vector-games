@@ -1,4 +1,5 @@
-; fire.asm — огонь 64×40 → 256×256 для Вектора-06Ц.
+; fire.asm — огонь 64×20 → нижняя половина 256×256 для Вектора-06Ц.
+; (Верх экрана свободен под заставку/надпись: 20 строк × 4 = 80 VRAM-строк.)
 ;
 ; Точная реализация алгоритма из main.c (см. main.c.old) на 8080-ассемблере.
 ; Все три функции — __z88dk_callee (вызывающая сторона кладёт аргументы,
@@ -8,8 +9,8 @@
 ;   void fire_generate(unsigned char power)  — генерация кадра огня
 ;   void fire_render(void)                   — вывод на экран (теневой буфер)
 ;
-; fire_buf — «байт на пиксель»: 64*40 = 2560 байт, значение 0..15, строка 64.
-; prev_buf (тень рендера) — упакованная, 1280 байт: 2 точки по 4 бита,
+; fire_buf — «байт на пиксель»: 64*20 = 1280 байт, значение 0..15, строка 64.
+; prev_buf (тень рендера) — упакованная, 640 байт: 2 точки по 4 бита,
 ;   старшая тетрада = левый (чётный x), младшая = правый (нечётный x).
 ; Упаковка в тетрады нужна только для записи в плоскости VRAM — делает fire_render.
 ;
@@ -20,12 +21,13 @@
         PUBLIC  _fire_render
 
 FIRE_W  EQU 64
-FIRE_H  EQU 40
-BUFLEN  EQU FIRE_W * FIRE_H             ; 2560 — fire_buf, 1 пиксель/байт
-PREVLEN EQU (FIRE_W * FIRE_H) >> 1      ; 1280 — упакованная тень prev_buf
+FIRE_H  EQU 20                        ; половина высоты: сверху — заставка
+BUFLEN  EQU FIRE_W * FIRE_H             ; 1280 — fire_buf, 1 пиксель/байт
+PREVLEN EQU (FIRE_W * FIRE_H) >> 1      ; 640 — упакованная тень prev_buf
 ROWW    EQU FIRE_W                      ; 64 пикселя в строке (генератор)
 ROWB    EQU FIRE_W >> 1                 ; 32 VRAM-байта/строка (рендер)
-HALFH   EQU FIRE_H >> 1                 ; 20 — порог доп. затухания
+EXT_STEP EQU 256 / FIRE_H               ; усиление затухания на строку (авто от FIRE_H)
+RNG_LEN EQU 255                         ; период индекса ГСЧ (не кратен 32/64 — убрать сетку)
 
 ; ================================================================
 ; BSS — массивы и рабочие переменные (вне VRAM).
@@ -51,16 +53,16 @@ _fg_x:          defb 0
 _fg_y:          defb 0
 _fg_above:      defb 0
 _fg_decay:      defb 0
+_fg_rowthr:     defb 0                  ; порог доп. затухания (падает с y, пересчит на строку)
 
 ; --- fire_render ---
 _fr_cur_ptr:    defw 0                  ; cur-указатель (HL, грузится/инкрементится в прологе)
 _fr_prev_ptr:   defw 0                  ; prev-указатель (HL, грузится/инкрементится в прологе)
-_fr_cur:        defb 0
-_fr_diff:       defb 0
+_fr_diff:       defb 0                  ; cur ^ prev (какие биты/плоскости грязные)
                                         ; Адрес блока живёт в DE — D = col (0..31),
                                         ; E = fylo (fy*4). Прямые stores в VRAM, SP не
                                         ; перехватываем. Ни _fr_addr, ни _fr_pair не нужны.
-_fr_fy:         defb 0                  ; номер строки (0..39)
+_fr_fy:         defb 0                  ; номер строки (0..FIRE_H-1)
 
         SECTION code_clib
 
@@ -170,14 +172,19 @@ ri_clr_prev:
 
 ; ================================================================
 ; Внутренний rnd_next(): A = rnd_table[rnd_idx++].
-; Портит только HL и флаги (rnd_idx — 8 бит, обёртка автоматическая).
+; Портит только HL и флаги. Обёртка индекса — вруную по модулю RNG_LEN (255),
+; НЕ 256: период 256=8·32 кратен ширине 64 ⇒ была видна периодичность огня.
 ; ================================================================
 _fg_rnd_next:
         lda     _rnd_idx
         lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт адреса = 00
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx        ; rnd_idx++ (8-бит обёртка)
+        mov     l,a             ; HL = &_rnd_table[idx] (старый idx)
+        inr     a               ; next = idx + 1
+        cpi     RNG_LEN
+        jc      fgn_store
+        sui     RNG_LEN         ; ровно 255 → 0 (old<255 ⇒ next≤255)
+fgn_store:
+        sta     _rnd_idx        ; rnd_idx++ по модулю 255
         mov     a,m             ; A = rnd_table[idx]
         ret
 
@@ -236,13 +243,29 @@ fg_seed_next:
         lxi     b,_fire_buf             ; above_base для y=1 = строка 0
         mvi     a,1
         sta     _fg_y
+        mvi     a,255
+        sta     _fg_rowthr              ; y=0 ⇒ порог 255 (доп. затухания нет)
 fg_y_loop:
-        ; rnd_idx += 7 — снять периодичность ГСЧ между строками
+        ; rnd_idx += 7 (mod 255) — снять периодичность ГСЧ между строками
+        ; При RNG_LEN=255 сумма может перевалить за 255 (old≤254 + 7 ≤ 261):
+        ; 8-битное adi теряет 256, а 256 ≡ 1 (mod 255) ⇒ на переносе добавляем 1.
         lda     _rnd_idx
         adi     7
+        jnc     fgb_norm
+        inr     a                   ; было 256+A ⇒ mod 255 = A+1 (A≤5, не переполнит)
+fgb_norm:
+        cpi     RNG_LEN
+        jc      fgb_store
+        sui     RNG_LEN         ; 255..261 → 0..6 (одного вычитания хватает)
+fgb_store:
         sta     _rnd_idx
         xra     a
         sta     _fg_x                   ; x = 0
+        ; порог доп. затухания снижается на EXT_STEP с каждой строкой: у вершины
+        ; пламя гасает почти всегда ⇒ высота подстраивается под FIRE_H автоматически
+        lda     _fg_rowthr
+        sui     EXT_STEP
+        sta     _fg_rowthr
 fg_x_loop:
         ; shift = rnd % 3;  sx = x + shift - 1 (wrap 0..63)
         call    _fg_rnd_next            ; A = rnd (портит A/HL)
@@ -271,15 +294,14 @@ fg_sx_done:
         mov     h,a                     ; HL = &above[sx]
         mov     a,m
         sta     _fg_above
-        ; decay = rnd & 1 (+1 при y>=HALFH и rnd>178)
+        ; decay = rnd & 1; +1 когда 2-й rnd >= _fg_rowthr (порог падает с y ⇒
+        ; пламя догорает ровно к верхней строке при любой FIRE_H — п. 2н)
         call    _fg_rnd_next
         ani     1
         sta     _fg_decay
-        lda     _fg_y
-        cpi     HALFH
-        jc      fg_no_extra
-        call    _fg_rnd_next
-        cpi     179
+        call    _fg_rnd_next            ; A = rnd2
+        lxi     h,_fg_rowthr            ; _fg_rnd_next убил HL — восстановить
+        cmp     m                       ; CY если rnd2 < порог
         jc      fg_no_extra
         lda     _fg_decay
         inr     a
@@ -370,19 +392,18 @@ fr_pair_loop:
         rlc                      ; A = cur_hi << 4
         inx     h
         ora     m                ; A = (cur_hi<<4) | cur_lo  (cur_lo 0..15)
-        sta     _fr_cur
-        mov     b,a              ; B = cur (упакованный)
+        mov     c,a              ; C = cur (упакованный) — живёт во всех 4 плоскостях
         inx     h
         shld    _fr_cur_ptr      ; cur_ptr += 2
         lhld    _fr_prev_ptr     ; HL = prev_ptr (упакованная тень)
         mov     a,m              ; A = prev
         ; diff = cur ^ prev; если 0 → cur == prev, блок не менялся, пропускаем
-        xra     b                ; A = prev ^ cur = diff
+        xra     c                ; A = prev ^ cur = diff
         jz      fr_pair_skip     ; HL ещё = prev_ptr → докрутим prev в skip
 
         sta     _fr_diff
-        ; тень = cur (упакованный) и prev_ptr++ — HL валиден, advance в прологе
-        lda     _fr_cur
+        ; тень = cur (упакованный, регистр C) и prev_ptr++ — HL валиден, advance в прологе
+        mov     a,c
         mov     m,a
         inx     h
         shld    _fr_prev_ptr
@@ -393,14 +414,14 @@ fr_pair_loop:
         jz      fr1_build
         xra     a
         mov     b,a
-        lda     _fr_cur
+        mov     a,c
         ani     10h
         jz      fr0_lo
         mov     a,b
         ori     0F0h
         mov     b,a
 fr0_lo:
-        lda     _fr_cur
+        mov     a,c
         ani     01h
         jz      fr0_wr
         mov     a,b
@@ -427,14 +448,14 @@ fr1_build:
         jz      fr2_build
         xra     a
         mov     b,a
-        lda     _fr_cur
+        mov     a,c
         ani     20h
         jz      fr1_lo
         mov     a,b
         ori     0F0h
         mov     b,a
 fr1_lo:
-        lda     _fr_cur
+        mov     a,c
         ani     02h
         jz      fr1_wr
         mov     a,b
@@ -461,14 +482,14 @@ fr2_build:
         jz      fr3_build
         xra     a
         mov     b,a
-        lda     _fr_cur
+        mov     a,c
         ani     40h
         jz      fr2_lo
         mov     a,b
         ori     0F0h
         mov     b,a
 fr2_lo:
-        lda     _fr_cur
+        mov     a,c
         ani     04h
         jz      fr2_wr
         mov     a,b
@@ -495,14 +516,14 @@ fr3_build:
         jz      fr_pair_count
         xra     a
         mov     b,a
-        lda     _fr_cur
+        mov     a,c
         ani     80h
         jz      fr3_lo
         mov     a,b
         ori     0F0h
         mov     b,a
 fr3_lo:
-        lda     _fr_cur
+        mov     a,c
         ani     08h
         jz      fr3_wr
         mov     a,b

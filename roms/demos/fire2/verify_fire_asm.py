@@ -46,10 +46,12 @@ def _ai(line, symbols, unresolved_zero=False):
 
 v06_emu.assemble_instruction = _ai
 
-FIRE_W, FIRE_H = 64, 40
-FIRELEN = FIRE_W * FIRE_H            # 2560 — fire_buf распакованный (1 пиксель/байт)
-PREVLEN = (FIRE_W * FIRE_H) // 2     # 1280 — упакованная тень prev_buf
+FIRE_W, FIRE_H = 64, 20
+FIRELEN = FIRE_W * FIRE_H            # 1280 — fire_buf распакованный (1 пиксель/байт)
+PREVLEN = (FIRE_W * FIRE_H) // 2     # 640 — упакованная тень prev_buf
 POWER = 153
+EXT_STEP = 256 // FIRE_H           # шаг усиления затухания (авто от высоты, = ASM EQU)
+RNG_LEN = 255                      # период индекса ГСЧ (= ASM EQU; таблица физически 256)
 FRAMES = 6
 SP = 0x7FF0
 PLANES = (0xE000, 0xC000, 0xA000, 0x8000)
@@ -72,7 +74,7 @@ class Ref:
 
     def rnd(self):
         v = self.table[self.idx]
-        self.idx = (self.idx + 1) & 0xFF
+        self.idx = (self.idx + 1) % RNG_LEN
         return v
 
     def get(self, x, y):
@@ -89,7 +91,7 @@ class Ref:
                 cur = self.get(x, 0)
                 self.put(x, 0, cur - 2 if cur > 2 else 0)
         for y in range(1, FIRE_H):
-            self.idx = (self.idx + 7) & 0xFF         # rowbump
+            self.idx = (self.idx + 7) % RNG_LEN         # rowbump
             for x in range(FIRE_W):
                 sx = x + ((self.rnd() % 3) - 1)
                 if sx < 0:
@@ -98,7 +100,8 @@ class Ref:
                     sx -= FIRE_W
                 above = self.get(sx, y - 1)
                 decay = self.rnd() & 1
-                if y >= FIRE_H // 2 and self.rnd() > 178:
+                thr = (255 - y * EXT_STEP) & 0xFF   # порог падает с y ⇒ догорает к верху
+                if self.rnd() >= thr:
                     decay += 1
                 self.put(x, y, above - decay if above > decay else 0)
 
@@ -224,7 +227,7 @@ def main():
     print(f"OK  VRAM: {len(exp)} байт совпадают с полным рендером эталона")
 
     # --- визуальная проверка (яркость по строкам) ---
-    print("\nСредняя яркость по строкам (y=0 — низ/источник, y=39 — верх):")
+    print("\nСредняя яркость по строкам (y=0 — низ/источник, y=19 — верх):")
     for y in range(0, FIRE_H, 4):
         row = []
         for x in range(FIRE_W):

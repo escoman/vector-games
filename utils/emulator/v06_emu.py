@@ -426,7 +426,8 @@ def expr_eval(expr: str, symbols: dict[str,int]) -> int:
     # character literals and symbols are accepted by Python AST below.
     tree = ast.parse(e, mode='eval')
     ops = {ast.Add:operator.add, ast.Sub:operator.sub, ast.Mult:operator.mul,
-           ast.FloorDiv:operator.floordiv, ast.LShift:operator.lshift,
+           ast.FloorDiv:operator.floordiv, ast.Div:operator.floordiv,
+           ast.LShift:operator.lshift,
            ast.RShift:operator.rshift, ast.BitAnd:operator.and_,
            ast.BitOr:operator.or_, ast.BitXor:operator.xor,
            ast.Mod:operator.mod, ast.USub:operator.neg, ast.UAdd:operator.pos,
