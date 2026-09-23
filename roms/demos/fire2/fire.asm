@@ -28,7 +28,7 @@ HALFH   EQU FIRE_H >> 1                 ; 20 — порог доп. затуха
 ; BSS — массивы и рабочие переменные (вне VRAM).
 ; ================================================================
         SECTION bss_clib
-
+        ALIGN 256
 _rnd_table:     defs 256                ; таблица ГСЧ
 _rnd_mod3:      defs 256                ; rnd_mod3[v] = v % 3
 _rnd_idx:       defb 0                  ; индекс ГСЧ (авто-обёртка на 256)
@@ -48,6 +48,7 @@ _fg_srcx:       defb 0
 _fg_value:      defb 0
 _fg_above_ptr:  defw 0
 _fg_dest_ptr:   defw 0
+_fg_merged:     defb 0                  ; старший нибл текущего байта (шаг 1б)
 
 ; --- fire_render ---
 _fr_cur_ptr:    defw 0
@@ -172,12 +173,10 @@ ri_clr_prev:
 ; ================================================================
 _fg_rnd_next:
         lda     _rnd_idx
-        mov     l,a
-        mvi     h,0             ; HL = idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт адреса = 00
+        mov     l,a             ; HL = &_rnd_table[idx]
         inr     a
         sta     _rnd_idx        ; rnd_idx++ (8-бит обёртка)
-        lxi     d,_rnd_table
-        dad     d               ; HL = &_rnd_table[idx]
         mov     a,m             ; A = rnd_table[idx]
         ret
 
@@ -291,51 +290,52 @@ fg_y_loop:
         adi     7
         sta     _rnd_idx
 
-        mvi     c,0
-        mov     a,c
-        sta     _fg_x
+        mvi     b,ROWB          ; шаг 1б: цикл по байтам (2 пикселя за итерацию)
+        xra     a
+        sta     _fg_x           ; _fg_x = чётный x текущего байта
 fg_x_loop:
-        ; случайный сдвиг: rnd_mod3[rnd_next()] → -1 / 0 / +1
-        call    _fg_rnd_next
+        ; ================= ЛЕВЫЙ пиксель (x = _fg_x, чётный) =================
+        ; rnd_next инлайн → mod3 (сдвиг)
+        lda     _rnd_idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
+        mov     l,a             ; HL = &_rnd_table[idx]
+        inr     a
+        sta     _rnd_idx
+        mov     a,m
         mov     e,a
         mvi     d,0
         lxi     h,_rnd_mod3
         dad     d
         mov     a,m             ; 0 / 1 / 2
         cpi     0
-        jnz     fg_shift_not_minus
-        ; sx = x - 1; если x == 0 → sx = FIRE_W-1.
-        ; ВНИМАНИЕ: DCR/INR на 8080 НЕ меняют CY, поэтому проверяем x==0 через ORA.
+        jnz     fgl_shift_notm
         lda     _fg_x
-        ora     a               ; Z = (x == 0), CY = 0
-        jz      fg_shift_wrap
-        dcr     a               ; x > 0 → sx = x - 1
-        jmp     fg_shift_store
-fg_shift_wrap:
-        mvi     a,FIRE_W-1      ; x == 0 → sx = 63
-        jmp     fg_shift_store
-fg_shift_not_minus:
+        ora     a
+        jz      fgl_shift_wrap
+        dcr     a
+        jmp     fgl_shift_st
+fgl_shift_wrap:
+        mvi     a,FIRE_W-1
+        jmp     fgl_shift_st
+fgl_shift_notm:
         cpi     1
-        jnz     fg_shift_plus
-        ; sx = x
+        jnz     fgl_shift_plus
         lda     _fg_x
-        jmp     fg_shift_store
-fg_shift_plus:
-        ; sx = x + 1; if (sx >= FIRE_W) sx -= FIRE_W
+        jmp     fgl_shift_st
+fgl_shift_plus:
         lda     _fg_x
         inr     a
         cpi     FIRE_W
-        jc      fg_shift_store
+        jc      fgl_shift_st
         xra     a
-fg_shift_store:
+fgl_shift_st:
         sta     _fg_srcx
-
         ; above = get_fire_buf(srcx, y-1)
         lhld    _fg_above_ptr
         lda     _fg_srcx
         mov     c,a
         ora     a
-        rar                     ; srcx >> 1
+        rar
         mov     e,a
         mvi     d,0
         dad     d
@@ -343,36 +343,43 @@ fg_shift_store:
         mov     d,a
         lda     _fg_srcx
         ani     1
-        jnz     fg_above_odd
+        jnz     fgl_above_odd
         mov     a,d
         rrc
         rrc
         rrc
         rrc
         ani     15
-        jmp     fg_above_done
-fg_above_odd:
+        jmp     fgl_above_done
+fgl_above_odd:
         mov     a,d
         ani     15
-fg_above_done:
+fgl_above_done:
         sta     _fg_above
-
-        ; decay = rnd_next() & 1
-        call    _fg_rnd_next
+        ; decay = rnd_next() & 1 (+доп. при y>=HALFH)
+        lda     _rnd_idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
+        mov     l,a             ; HL = &_rnd_table[idx]
+        inr     a
+        sta     _rnd_idx
+        mov     a,m
         ani     1
         sta     _fg_decay
-
-        ; if (y >= FIRE_H/2 && rnd_next() > 178) decay += 1
         lda     _fg_y
         cpi     HALFH
-        jc      fg_no_extra
-        call    _fg_rnd_next
+        jc      fgl_no_extra
+        lda     _rnd_idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
+        mov     l,a             ; HL = &_rnd_table[idx]
+        inr     a
+        sta     _rnd_idx
+        mov     a,m
         cpi     179
-        jc      fg_no_extra
+        jc      fgl_no_extra
         lda     _fg_decay
         inr     a
         sta     _fg_decay
-fg_no_extra:
+fgl_no_extra:
         ; value = (above > decay) ? above - decay : 0
         lda     _fg_above
         mov     c,a
@@ -380,47 +387,136 @@ fg_no_extra:
         mov     e,a
         mov     a,c
         cmp     e
-        jc      fg_result_zero
+        jc      fgl_zero
         sub     e
         sta     _fg_value
-        jmp     fg_result_store
-fg_result_zero:
+        jmp     fgl_have
+fgl_zero:
         xra     a
         sta     _fg_value
-fg_result_store:
-        lhld    _fg_dest_ptr
-        lda     _fg_x
-        ani     1
-        jnz     fg_store_odd
+fgl_have:
+        ; сохранить value<<4 как старший нибл текущего байта
         lda     _fg_value
         rlc
         rlc
         rlc
         rlc
-        mov     c,a
-        mov     a,m
-        ani     15
-        ora     c
-        mov     m,a
-        jmp     fg_store_advance
-fg_store_odd:
-        mov     a,m
-        ani     240
-        mov     c,a
-        lda     _fg_value
-        ora     c
-        mov     m,a
-fg_store_advance:
-        lda     _fg_x
-        ani     1
-        jz      fg_no_dest_inc
-        inx     h
-fg_no_dest_inc:
-        shld    _fg_dest_ptr
+        sta     _fg_merged
         lda     _fg_x
         inr     a
-        sta     _fg_x
+        sta     _fg_x           ; теперь _fg_x = нечётный правый пиксель
+
+        ; ================= ПРАВЫЙ пиксель (x = _fg_x, нечётный) =================
+        lda     _rnd_idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
+        mov     l,a             ; HL = &_rnd_table[idx]
+        inr     a
+        sta     _rnd_idx
+        mov     a,m
+        mov     e,a
+        mvi     d,0
+        lxi     h,_rnd_mod3
+        dad     d
+        mov     a,m
+        cpi     0
+        jnz     fgr_shift_notm
+        lda     _fg_x
+        ora     a
+        jz      fgr_shift_wrap
+        dcr     a
+        jmp     fgr_shift_st
+fgr_shift_wrap:
+        mvi     a,FIRE_W-1
+        jmp     fgr_shift_st
+fgr_shift_notm:
+        cpi     1
+        jnz     fgr_shift_plus
+        lda     _fg_x
+        jmp     fgr_shift_st
+fgr_shift_plus:
+        lda     _fg_x
+        inr     a
         cpi     FIRE_W
+        jc      fgr_shift_st
+        xra     a
+fgr_shift_st:
+        sta     _fg_srcx
+        lhld    _fg_above_ptr
+        lda     _fg_srcx
+        mov     c,a
+        ora     a
+        rar
+        mov     e,a
+        mvi     d,0
+        dad     d
+        mov     a,m
+        mov     d,a
+        lda     _fg_srcx
+        ani     1
+        jnz     fgr_above_odd
+        mov     a,d
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     15
+        jmp     fgr_above_done
+fgr_above_odd:
+        mov     a,d
+        ani     15
+fgr_above_done:
+        sta     _fg_above
+        lda     _rnd_idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
+        mov     l,a             ; HL = &_rnd_table[idx]
+        inr     a
+        sta     _rnd_idx
+        mov     a,m
+        ani     1
+        sta     _fg_decay
+        lda     _fg_y
+        cpi     HALFH
+        jc      fgr_no_extra
+        lda     _rnd_idx
+        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
+        mov     l,a             ; HL = &_rnd_table[idx]
+        inr     a
+        sta     _rnd_idx
+        mov     a,m
+        cpi     179
+        jc      fgr_no_extra
+        lda     _fg_decay
+        inr     a
+        sta     _fg_decay
+fgr_no_extra:
+        lda     _fg_above
+        mov     c,a
+        lda     _fg_decay
+        mov     e,a
+        mov     a,c
+        cmp     e
+        jc      fgr_zero
+        sub     e
+        sta     _fg_value
+        jmp     fgr_have
+fgr_zero:
+        xra     a
+        sta     _fg_value
+fgr_have:
+        ; собрать полный байт (merged | младший нибл) и записать ОДНО mov m,a
+        lda     _fg_value
+        ani     15
+        mov     c,a
+        lda     _fg_merged
+        ora     c
+        lhld    _fg_dest_ptr
+        mov     m,a
+        inx     h
+        shld    _fg_dest_ptr
+        lda     _fg_x
+        inr     a               ; следующий чётный x
+        sta     _fg_x
+        dcr     b
         jnz     fg_x_loop
 
         ; следующая строка

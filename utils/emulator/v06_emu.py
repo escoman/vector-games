@@ -574,6 +574,14 @@ class Assembler8080:
                 try: addr=expr_eval(rest,symbols)
                 except: addr=0
                 max_addr=max(max_addr,addr); continue
+            if m in ('align','.align'):
+                # Pad the location counter up to the next multiple of N,
+                # mirroring how the real assembler/linker ALIGN directive
+                # shifts subsequent symbol addresses (keeps parity with ROM).
+                try: n=expr_eval(rest,symbols)
+                except: n=0
+                if n and n > 1: addr=((addr + n - 1)//n)*n
+                max_addr=max(max_addr,addr); continue
             if m in ('equ','.equ'):
                 a=split_args(rest)
                 if len(a)>=2:
