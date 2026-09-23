@@ -47,7 +47,8 @@ def _ai(line, symbols, unresolved_zero=False):
 v06_emu.assemble_instruction = _ai
 
 FIRE_W, FIRE_H = 64, 40
-BUFLEN = (FIRE_W * FIRE_H) // 2      # 1280
+FIRELEN = FIRE_W * FIRE_H            # 2560 — fire_buf распакованный (1 пиксель/байт)
+PREVLEN = (FIRE_W * FIRE_H) // 2     # 1280 — упакованная тень prev_buf
 POWER = 153
 FRAMES = 6
 SP = 0x7FF0
@@ -67,7 +68,7 @@ class Ref:
             if i == 0:
                 break
         self.idx = 0
-        self.fire = [0] * BUFLEN
+        self.fire = [0] * FIRELEN    # распакованный: 1 пиксель/байт
 
     def rnd(self):
         v = self.table[self.idx]
@@ -75,14 +76,10 @@ class Ref:
         return v
 
     def get(self, x, y):
-        b = self.fire[(y << 5) + (x >> 1)]
-        return (b >> 4) & 0xF if (x & 1) == 0 else b & 0xF
+        return self.fire[y * FIRE_W + x] & 0xF
 
     def put(self, x, y, val):
-        idx = (y << 5) + (x >> 1)
-        b = self.fire[idx]
-        self.fire[idx] = ((b & 0xF0) | (val & 0x0F)) if (x & 1) \
-            else ((b & 0x0F) | ((val & 0x0F) << 4))
+        self.fire[y * FIRE_W + x] = val & 0xF
 
     def generate(self, power):
         for x in range(FIRE_W):                      # строка источников y=0
@@ -106,10 +103,36 @@ class Ref:
                 self.put(x, y, above - decay if above > decay else 0)
 
 
+class PackedRef(Ref):
+    """Независимый эталон со СТАРЫМ упакованным представлением (2 пикселя/байт).
+    Тот же алгоритм (generate/rnd унаследованы), только get/put по тетрадам.
+    Кросс-чек: pack(распакованного Ref) обязан ==PackRef — иначе баг представления."""
+
+    def __init__(self):
+        Ref.__init__(self)
+        self.fire = [0] * PREVLEN      # упакованный
+
+    def get(self, x, y):
+        b = self.fire[(y << 5) + (x >> 1)]
+        return (b >> 4) & 0xF if (x & 1) == 0 else b & 0xF
+
+    def put(self, x, y, val):
+        idx = (y << 5) + (x >> 1)
+        b = self.fire[idx]
+        self.fire[idx] = ((b & 0xF0) | (val & 0x0F)) if (x & 1) \
+            else ((b & 0x0F) | ((val & 0x0F) << 4))
+
+
+def pack_fire(fire):
+    """Свернуть распакованный fire (2560) в тетрадные байты (1280)."""
+    return [((fire[2 * i] & 0xF) << 4) | (fire[2 * i + 1] & 0xF)
+            for i in range(len(fire) // 2)]
+
+
 def expected_vram(fire):
-    """Полный рендер fire_buf в VRAM (как fire_render без оптимизаций)."""
+    """Полный рендер распакованного fire_buf в VRAM (упаковка как в fire_render)."""
     vram = {}
-    for idx, cur in enumerate(fire):
+    for idx, cur in enumerate(pack_fire(fire)):
         col, fy = idx & 31, idx >> 5
         block = (col << 8) + (fy << 2)
         cl, cr = cur >> 4, cur & 0xF
@@ -137,6 +160,7 @@ def main():
     a_table, a_mod3 = lab["_rnd_table"], lab["_rnd_mod3"]
 
     ref = Ref()
+    pref = PackedRef()      # независимый упакованный кросс-чек представления
 
     # --- 1) rnd_init ---
     emu.call("_rnd_init", sp=SP, max_steps=3_000_000)
@@ -149,8 +173,8 @@ def main():
     if mod3 != [v % 3 for v in range(256)]:
         print("FAIL rnd_init: rnd_mod3 != v%3")
         return 1
-    fb = list(emu.cpu.mem[a_fire:a_fire + BUFLEN])
-    pb = list(emu.cpu.mem[a_prev:a_prev + BUFLEN])
+    fb = list(emu.cpu.mem[a_fire:a_fire + FIRELEN])
+    pb = list(emu.cpu.mem[a_prev:a_prev + PREVLEN])
     if any(fb) or any(pb):
         print("FAIL rnd_init: fire_buf/prev_buf не обнулены")
         return 1
@@ -160,22 +184,31 @@ def main():
     for frame in range(FRAMES):
         emu.call("_fire_generate", args=(POWER,), sp=SP, max_steps=3_000_000)
         ref.generate(POWER)
-        asm_fire = list(emu.cpu.mem[a_fire:a_fire + BUFLEN])
+        pref.generate(POWER)
+        # кросс-чек: распакованный эталон == упакованный (баг get/put/формата)
+        if pack_fire(ref.fire) != pref.fire:
+            i = first_diff(pack_fire(ref.fire), pref.fire)
+            print(f"FAIL frame {frame}: Ref(unpacked) != PackedRef на байте {i} "
+                  f"— баг представления/алгоритма")
+            return 1
+        asm_fire = list(emu.cpu.mem[a_fire:a_fire + FIRELEN])
         if asm_fire != ref.fire:
             i = first_diff(asm_fire, ref.fire)
-            y, x = (i * 2) // FIRE_W, (i * 2) % FIRE_W
+            y, x = i // FIRE_W, i % FIRE_W
             print(f"FAIL frame {frame}: fire_buf[{i}] (y~{y},x~{x}) "
                   f"asm={asm_fire[i]:02X} ref={ref.fire[i]:02X}")
             return 1
 
         emu.call("_fire_render", sp=SP, max_steps=3_000_000)
-        asm_prev = list(emu.cpu.mem[a_prev:a_prev + BUFLEN])
-        if asm_prev != asm_fire:
-            i = first_diff(asm_prev, asm_fire)
+        # prev_buf — упакованная тень: должна == pack(fire_buf)
+        asm_prev = list(emu.cpu.mem[a_prev:a_prev + PREVLEN])
+        exp_prev = pack_fire(ref.fire)
+        if asm_prev != exp_prev:
+            i = first_diff(asm_prev, exp_prev)
             print(f"FAIL frame {frame}: prev_buf[{i}]={asm_prev[i]:02X} "
-                  f"!= fire_buf[{i}]={asm_fire[i]:02X} (теневой буфер не синхронен)")
+                  f"!= pack(fire_buf)={exp_prev[i]:02X} (тень не синхронна)")
             return 1
-        print(f"OK  frame {frame}: fire_buf == эталон, prev_buf == fire_buf")
+        print(f"OK  frame {frame}: fire_buf == эталон, prev_buf == pack(fire_buf)")
 
     # --- 4) VRAM == полный рендер эталона ---
     exp = expected_vram(ref.fire)
@@ -195,7 +228,7 @@ def main():
     for y in range(0, FIRE_H, 4):
         row = []
         for x in range(FIRE_W):
-            row.append(ref.fire[(y << 5) + (x >> 1)] >> (4 if (x & 1) == 0 else 0) & 0xF)
+            row.append(ref.fire[y * FIRE_W + x] & 0xF)
         avg = sum(row) / len(row)
         bar = "#" * int(avg)
         print(f"  y={y:2d} avg={avg:4.1f} {bar}")

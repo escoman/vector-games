@@ -8,9 +8,10 @@
 ;   void fire_generate(unsigned char power)  — генерация кадра огня
 ;   void fire_render(void)                   — вывод на экран (теневой буфер)
 ;
-; Буфер: 2 точки по 4 бита в одном байте. FIRE_W=64, FIRE_H=40.
-;   размер = (64*40)/2 = 1280 байт, строка = 32 байта.
-;   старшая тетрада = левый (чётный x) пиксель, младшая = правый (нечётный x).
+; fire_buf — «байт на пиксель»: 64*40 = 2560 байт, значение 0..15, строка 64.
+; prev_buf (тень рендера) — упакованная, 1280 байт: 2 точки по 4 бита,
+;   старшая тетрада = левый (чётный x), младшая = правый (нечётный x).
+; Упаковка в тетрады нужна только для записи в плоскости VRAM — делает fire_render.
 ;
 ; Только инструкции Intel 8080 (без jr/djnz, без префиксов CB/DD/ED/FD).
 
@@ -20,8 +21,10 @@
 
 FIRE_W  EQU 64
 FIRE_H  EQU 40
-BUFLEN  EQU (FIRE_W * FIRE_H) >> 1      ; 1280 байт
-ROWB    EQU FIRE_W >> 1                 ; 32 байта на строку
+BUFLEN  EQU FIRE_W * FIRE_H             ; 2560 — fire_buf, 1 пиксель/байт
+PREVLEN EQU (FIRE_W * FIRE_H) >> 1      ; 1280 — упакованная тень prev_buf
+ROWW    EQU FIRE_W                      ; 64 пикселя в строке (генератор)
+ROWB    EQU FIRE_W >> 1                 ; 32 VRAM-байта/строка (рендер)
 HALFH   EQU FIRE_H >> 1                 ; 20 — порог доп. затухания
 
 ; ================================================================
@@ -35,31 +38,29 @@ _rnd_idx:       defb 0                  ; индекс ГСЧ (авто-обёр
 _rnd_seed:      defw 0                  ; 16-битное семя LCG
 _rnd_tmp:       defb 0
 
-_fire_buf:      defs BUFLEN             ; текущий кадр (упакованные тетрады)
-_prev_buf:      defs BUFLEN             ; теневая копия (что уже в VRAM)
+_fire_buf:      defs BUFLEN             ; текущий кадр (байт на пиксель, 0..15)
+_prev_buf:      defs PREVLEN            ; теневая копия рендера (упакованные тетрады)
 
 ; --- fire_generate ---
+; Указатели строк живут в регистрах весь цикл (пункт 1д):
+;   DE = dest (пишемый пиксель), BC = above_base (base строки y-1).
+;   _fg_rnd_next портит лишь A/HL ⇒ BC/DE переживают вызовы ГСЧ.
+;   Ни _fg_above_ptr, ни _fg_srcx, ни _fg_dest_ptr не нужны.
 _fg_power:      defb 0
 _fg_x:          defb 0
 _fg_y:          defb 0
 _fg_above:      defb 0
 _fg_decay:      defb 0
-_fg_srcx:       defb 0
-_fg_value:      defb 0
-_fg_above_ptr:  defw 0
-_fg_dest_ptr:   defw 0
-_fg_merged:     defb 0                  ; старший нибл текущего байта (шаг 1б)
 
 ; --- fire_render ---
-_fr_cur_ptr:    defw 0
-_fr_prev_ptr:   defw 0
+_fr_cur_ptr:    defw 0                  ; cur-указатель (HL, грузится/инкрементится в прологе)
+_fr_prev_ptr:   defw 0                  ; prev-указатель (HL, грузится/инкрементится в прологе)
 _fr_cur:        defb 0
-_fr_prev:       defb 0
 _fr_diff:       defb 0
-_fr_addr:       defw 0                  ; H = col, L = fy*4
-_fr_pair:       defb 0                  ; счётчик байтов в строке (32)
+                                        ; Адрес блока живёт в DE — D = col (0..31),
+                                        ; E = fylo (fy*4). Прямые stores в VRAM, SP не
+                                        ; перехватываем. Ни _fr_addr, ни _fr_pair не нужны.
 _fr_fy:         defb 0                  ; номер строки (0..39)
-_fr_saved_sp:   defw 0
 
         SECTION code_clib
 
@@ -153,7 +154,7 @@ ri_clr_fire:
         jnz     ri_clr_fire
 
         lxi     h,_prev_buf
-        lxi     d,BUFLEN
+        lxi     d,PREVLEN
 ri_clr_prev:
         mvi     m,0
         inx     h
@@ -182,7 +183,8 @@ _fg_rnd_next:
 
 ; ================================================================
 ; void fire_generate(unsigned char power)  __z88dk_callee
-; Точный алгоритм из main.c; доступ к упакованному буферу инлайнится.
+; Точный алгоритм из main.c; доступ к распакованному буферу инлайнится,
+; указатели строк — в DE (dest) и BC (above_base), без lhld/shld на пиксель.
 ; ================================================================
 _fire_generate:
         push    bc
@@ -191,347 +193,134 @@ _fire_generate:
         mov     a,m
         sta     _fg_power       ; power
 
-        ; ---- строка источников y=0 ----
-        lxi     h,_fire_buf
-        shld    _fg_dest_ptr
+        ; ---- строка источников y=0 (распакованная: 1 пиксель/байт) ----
+        ; DE = dest (пиксель строки 0), B = x. _fg_rnd_next портит лишь A/HL.
+        lxi     d,_fire_buf
         mvi     b,0             ; B = x
 fg_seed_loop:
-        call    _fg_rnd_next
-        sta     _fg_value
         lda     _fg_power
         mov     c,a
-        lda     _fg_value
-        cmp     c
-        jc      fg_seed_hot     ; rnd < power → 15
-        ; иначе: rnd_next() > 128 ?
-        call    _fg_rnd_next
+        call    _fg_rnd_next            ; A = rnd1
+        cmp     c                       ; rnd1 < power ?
+        jc      fg_seed_hot
+        call    _fg_rnd_next            ; A = rnd2
         cpi     129
-        jc      fg_seed_keep    ; rnd <= 128 → оставить
-        ; current > 2 ? current-2 : 0
-        lhld    _fg_dest_ptr
-        mov     a,m
-        mov     d,a
-        mov     a,b
-        ani     1
-        jnz     fg_seed_cur_odd
-        mov     a,d
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     15
-        jmp     fg_seed_cur_have
-fg_seed_cur_odd:
-        mov     a,d
-        ani     15
-fg_seed_cur_have:
+        jc      fg_seed_next            ; rnd2 <= 128 → оставить значение
+        ldax    d                       ; A = cur
         cpi     3
         jc      fg_seed_zero
-        sui     2
-        sta     _fg_value
-        jmp     fg_seed_store
+        sui     2                       ; cur - 2
+        jmp     fg_seed_w
 fg_seed_zero:
         xra     a
-        sta     _fg_value
-        jmp     fg_seed_store
+fg_seed_w:
+        stax    d                       ; cur = value
+        jmp     fg_seed_next
 fg_seed_hot:
         mvi     a,15
-        sta     _fg_value
-        jmp     fg_seed_store
-fg_seed_keep:
-        jmp     fg_seed_advance
-fg_seed_store:
-        lhld    _fg_dest_ptr
-        mov     a,b
-        ani     1
-        jnz     fg_seed_store_odd
-        lda     _fg_value
-        rlc
-        rlc
-        rlc
-        rlc
-        mov     c,a
-        mov     a,m
-        ani     15
-        ora     c
-        mov     m,a
-        jmp     fg_seed_advance
-fg_seed_store_odd:
-        mov     a,m
-        ani     240
-        mov     c,a
-        lda     _fg_value
-        ora     c
-        mov     m,a
-fg_seed_advance:
-        mov     a,b
-        ani     1
-        jz      fg_seed_no_ptr_inc
-        lhld    _fg_dest_ptr
-        inx     h
-        shld    _fg_dest_ptr
-fg_seed_no_ptr_inc:
+        stax    d                       ; = 15
+fg_seed_next:
+        inx     d                       ; dest++ (распакованно: +1 на пиксель)
         inr     b
         mov     a,b
         cpi     FIRE_W
         jnz     fg_seed_loop
 
-        ; ---- строки y = 1 .. FIRE_H-1 ----
-        lxi     h,_fire_buf
-        shld    _fg_above_ptr
-        lxi     h,_fire_buf+ROWB
-        shld    _fg_dest_ptr
-        mvi     b,1
-        mov     a,b
+        ; ---- строки y = 1 .. FIRE_H-1 (распакованные) ----
+        ; Регистры на весь цикл строк (пункт 1д):
+        ;   DE = dest       — пишемый пиксель строки y, +1 на пиксель
+        ;   BC = above_base — base предыдущей строки y-1 (_fire_buf+(y-1)*64),
+        ;                     constant внутри строки, +64 на строку.
+        ; _fg_rnd_next портит только A/HL ⇒ BC/DE переживают вызовы ГСЧ,
+        ; поэтому above-адрес собирается как HL = BC + sx без lhld/shld.
+        lxi     b,_fire_buf             ; above_base для y=1 = строка 0
+        mvi     a,1
         sta     _fg_y
 fg_y_loop:
         ; rnd_idx += 7 — снять периодичность ГСЧ между строками
         lda     _rnd_idx
         adi     7
         sta     _rnd_idx
-
-        mvi     b,ROWB          ; шаг 1б: цикл по байтам (2 пикселя за итерацию)
         xra     a
-        sta     _fg_x           ; _fg_x = чётный x текущего байта
+        sta     _fg_x                   ; x = 0
 fg_x_loop:
-        ; ================= ЛЕВЫЙ пиксель (x = _fg_x, чётный) =================
-        ; rnd_next инлайн → mod3 (сдвиг)
-        lda     _rnd_idx
-        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx
-        mov     a,m
-        mov     e,a
-        mvi     d,0
-        lxi     h,_rnd_mod3
-        dad     d
-        mov     a,m             ; 0 / 1 / 2
-        cpi     0
-        jnz     fgl_shift_notm
+        ; shift = rnd % 3;  sx = x + shift - 1 (wrap 0..63)
+        call    _fg_rnd_next            ; A = rnd (портит A/HL)
+        lxi     h,_rnd_mod3             ; ALIGN 256 ⇒ мл. байт 00
+        mov     l,a                     ; HL = &_rnd_mod3[rnd]
+        mov     a,m                     ; A = shift ∈ {0,1,2}
+        mov     h,a                     ; H = shift (L больше не нужен)
         lda     _fg_x
-        ora     a
-        jz      fgl_shift_wrap
-        dcr     a
-        jmp     fgl_shift_st
-fgl_shift_wrap:
-        mvi     a,FIRE_W-1
-        jmp     fgl_shift_st
-fgl_shift_notm:
-        cpi     1
-        jnz     fgl_shift_plus
-        lda     _fg_x
-        jmp     fgl_shift_st
-fgl_shift_plus:
-        lda     _fg_x
-        inr     a
+        add     h                       ; A = x + shift
+        sui     1                       ; A = x + shift - 1 (CY если x+shift==0)
+        jc      fg_sx_wrap63
         cpi     FIRE_W
-        jc      fgl_shift_st
-        xra     a
-fgl_shift_st:
-        sta     _fg_srcx
-        ; above = get_fire_buf(srcx, y-1)
-        lhld    _fg_above_ptr
-        lda     _fg_srcx
-        mov     c,a
-        ora     a
-        rar
-        mov     e,a
-        mvi     d,0
-        dad     d
+        jz      fg_sx_wrap0
+        jmp     fg_sx_done
+fg_sx_wrap63:
+        mvi     a,FIRE_W-1              ; 63
+        jmp     fg_sx_done
+fg_sx_wrap0:
+        xra     a                       ; 0
+fg_sx_done:
+        ; above = *(above_base + sx) = *(BC + A);  HL := BC + sx
+        add     c                       ; A = sx + above_base_lo
+        mov     l,a
+        mov     a,b
+        aci     0                       ; старший байт + перенос
+        mov     h,a                     ; HL = &above[sx]
         mov     a,m
-        mov     d,a
-        lda     _fg_srcx
-        ani     1
-        jnz     fgl_above_odd
-        mov     a,d
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     15
-        jmp     fgl_above_done
-fgl_above_odd:
-        mov     a,d
-        ani     15
-fgl_above_done:
         sta     _fg_above
-        ; decay = rnd_next() & 1 (+доп. при y>=HALFH)
-        lda     _rnd_idx
-        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx
-        mov     a,m
+        ; decay = rnd & 1 (+1 при y>=HALFH и rnd>178)
+        call    _fg_rnd_next
         ani     1
         sta     _fg_decay
         lda     _fg_y
         cpi     HALFH
-        jc      fgl_no_extra
-        lda     _rnd_idx
-        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx
-        mov     a,m
+        jc      fg_no_extra
+        call    _fg_rnd_next
         cpi     179
-        jc      fgl_no_extra
+        jc      fg_no_extra
         lda     _fg_decay
         inr     a
         sta     _fg_decay
-fgl_no_extra:
-        ; value = (above > decay) ? above - decay : 0
+fg_no_extra:
+        ; value = above > decay ? above - decay : 0  (HL свободен — temps в H/L)
         lda     _fg_above
-        mov     c,a
+        mov     l,a                     ; L = above
         lda     _fg_decay
-        mov     e,a
-        mov     a,c
-        cmp     e
-        jc      fgl_zero
-        sub     e
-        sta     _fg_value
-        jmp     fgl_have
-fgl_zero:
+        mov     h,a                     ; H = decay
+        mov     a,l                     ; A = above
+        cmp     h                       ; above vs decay
+        jc      fg_x_zero
+        sub     h                       ; above - decay
+        jmp     fg_x_store
+fg_x_zero:
         xra     a
-        sta     _fg_value
-fgl_have:
-        ; сохранить value<<4 как старший нибл текущего байта
-        lda     _fg_value
-        rlc
-        rlc
-        rlc
-        rlc
-        sta     _fg_merged
+fg_x_store:
+        stax    d                       ; *dest = value
+        inx     d                       ; dest++
         lda     _fg_x
         inr     a
-        sta     _fg_x           ; теперь _fg_x = нечётный правый пиксель
-
-        ; ================= ПРАВЫЙ пиксель (x = _fg_x, нечётный) =================
-        lda     _rnd_idx
-        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx
-        mov     a,m
-        mov     e,a
-        mvi     d,0
-        lxi     h,_rnd_mod3
-        dad     d
-        mov     a,m
-        cpi     0
-        jnz     fgr_shift_notm
-        lda     _fg_x
-        ora     a
-        jz      fgr_shift_wrap
-        dcr     a
-        jmp     fgr_shift_st
-fgr_shift_wrap:
-        mvi     a,FIRE_W-1
-        jmp     fgr_shift_st
-fgr_shift_notm:
-        cpi     1
-        jnz     fgr_shift_plus
-        lda     _fg_x
-        jmp     fgr_shift_st
-fgr_shift_plus:
-        lda     _fg_x
-        inr     a
-        cpi     FIRE_W
-        jc      fgr_shift_st
-        xra     a
-fgr_shift_st:
-        sta     _fg_srcx
-        lhld    _fg_above_ptr
-        lda     _fg_srcx
-        mov     c,a
-        ora     a
-        rar
-        mov     e,a
-        mvi     d,0
-        dad     d
-        mov     a,m
-        mov     d,a
-        lda     _fg_srcx
-        ani     1
-        jnz     fgr_above_odd
-        mov     a,d
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     15
-        jmp     fgr_above_done
-fgr_above_odd:
-        mov     a,d
-        ani     15
-fgr_above_done:
-        sta     _fg_above
-        lda     _rnd_idx
-        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx
-        mov     a,m
-        ani     1
-        sta     _fg_decay
-        lda     _fg_y
-        cpi     HALFH
-        jc      fgr_no_extra
-        lda     _rnd_idx
-        lxi     h,_rnd_table    ; ALIGN 256 ⇒ мл. байт = 00, DE не портируется
-        mov     l,a             ; HL = &_rnd_table[idx]
-        inr     a
-        sta     _rnd_idx
-        mov     a,m
-        cpi     179
-        jc      fgr_no_extra
-        lda     _fg_decay
-        inr     a
-        sta     _fg_decay
-fgr_no_extra:
-        lda     _fg_above
-        mov     c,a
-        lda     _fg_decay
-        mov     e,a
-        mov     a,c
-        cmp     e
-        jc      fgr_zero
-        sub     e
-        sta     _fg_value
-        jmp     fgr_have
-fgr_zero:
-        xra     a
-        sta     _fg_value
-fgr_have:
-        ; собрать полный байт (merged | младший нибл) и записать ОДНО mov m,a
-        lda     _fg_value
-        ani     15
-        mov     c,a
-        lda     _fg_merged
-        ora     c
-        lhld    _fg_dest_ptr
-        mov     m,a
-        inx     h
-        shld    _fg_dest_ptr
-        lda     _fg_x
-        inr     a               ; следующий чётный x
         sta     _fg_x
-        dcr     b
+        cpi     FIRE_W
         jnz     fg_x_loop
 
-        ; следующая строка
-        lhld    _fg_dest_ptr
-        lxi     d,0-ROWB        ; -32: строка, которую только что закончили
-        dad     d
-        shld    _fg_above_ptr
-        lxi     d,ROWB          ; +32: следующая целевая строка
-        dad     d
-        shld    _fg_dest_ptr
+        ; следующая строка: DE уже на базе следующей; above_base (BC) += 64
         lda     _fg_y
         inr     a
         sta     _fg_y
         cpi     FIRE_H
-        jnz     fg_y_loop
+        jz      fg_gend
+        mov     a,c
+        adi     ROWW                    ; above_base_lo += 64
+        mov     c,a
+        jnc     fg_no_carry
+        inr     b
+fg_no_carry:
+        jmp     fg_y_loop
+
+fg_gend:
 
         pop     bc
         pop     de              ; адрес возврата
@@ -547,7 +336,8 @@ fgr_have:
 ;   cur == prev → блок не менялся, VRAM не трогаем.
 ;   иначе: prev_buf[idx] = cur; diff = cur ^ prev.
 ;   Для каждой плоскости p (0..3): если diff & mask_p — пишем 4 одинаковых
-;   байта byte_val (из текущего цвета) через PUSH BC ×2 (SP-hijack).
+;   байта byte_val (из текущего цвета) прямыми stores (mov m,a / inx h).
+;   SP не перехватываем → прерывания не запрещаем (di/ei не нужны).
 ;   Маски плоскостей: 0=11h, 1=22h, 2=44h, 3=88h
 ;   (бит 4+p — левый пиксель, бит p — правый).
 ;
@@ -555,11 +345,6 @@ fgr_have:
 ; Базы плоскостей: E000 / C000 / A000 / 8000.
 ; ================================================================
 _fire_render:
-        di
-
-        lxi     h,0
-        dad     sp
-        shld    _fr_saved_sp
         push    bc
         push    de
         push    hl
@@ -568,42 +353,39 @@ _fire_render:
         shld    _fr_cur_ptr
         lxi     h,_prev_buf
         shld    _fr_prev_ptr
+        ; Адрес блока в DE: D = col = 0, E = fylo = fy*4 (прямые stores пишут
+        ; ВВЕРХ block..block+3). SP не трогаем → прерывания не запрещаем.
+        mvi     d,0
+        mvi     e,0
         xra     a
-        sta     _fr_addr+1      ; H = col = 0
         sta     _fr_fy
-        mvi     a,4
-        sta     _fr_addr        ; L = fy*4 + 4: SP-hijack пишет ВНИЗ,
-                                ; поэтому SP = block_addr+4 → байты block..block+3
 
-fr_y_loop:
-        mvi     a,ROWB
-        sta     _fr_pair
 fr_pair_loop:
+        ; cur: упаковать 2 распакованных пикселя (_fire_buf) в тетрады
         lhld    _fr_cur_ptr
-        mov     a,m
+        mov     a,m              ; A = cur_hi (чётный пиксель)
+        rlc
+        rlc
+        rlc
+        rlc                      ; A = cur_hi << 4
+        inx     h
+        ora     m                ; A = (cur_hi<<4) | cur_lo  (cur_lo 0..15)
         sta     _fr_cur
-        lhld    _fr_prev_ptr
-        mov     a,m
-        sta     _fr_prev
+        mov     b,a              ; B = cur (упакованный)
+        inx     h
+        shld    _fr_cur_ptr      ; cur_ptr += 2
+        lhld    _fr_prev_ptr     ; HL = prev_ptr (упакованная тень)
+        mov     a,m              ; A = prev
+        ; diff = cur ^ prev; если 0 → cur == prev, блок не менялся, пропускаем
+        xra     b                ; A = prev ^ cur = diff
+        jz      fr_pair_skip     ; HL ещё = prev_ptr → докрутим prev в skip
 
-        ; cur == prev → пропуск блока (VRAM не трогаем)
-        lhld    _fr_cur_ptr
-        mov     a,m
-        lhld    _fr_prev_ptr
-        cmp     m
-        jz      fr_pair_next
-
-        ; diff = cur ^ prev — по сохранённым значениям, ДО перезаписи тени
-        lda     _fr_cur
-        mov     b,a
-        lda     _fr_prev
-        xra     b
         sta     _fr_diff
-
-        ; prev_buf[idx] = cur (ленивое обновление тени)
-        lhld    _fr_prev_ptr
+        ; тень = cur (упакованный) и prev_ptr++ — HL валиден, advance в прологе
         lda     _fr_cur
         mov     m,a
+        inx     h
+        shld    _fr_prev_ptr
 
         ; ---- плоскость 0: маска 11h, база E000 ----
         lda     _fr_diff
@@ -625,14 +407,18 @@ fr0_lo:
         ori     0Fh
         mov     b,a
 fr0_wr:
-        mov     c,b             ; C = byte_val (B уже собран; A здесь не reliably)
-        lhld    _fr_addr
-        mvi     a,0E0h
-        add     h
+        mvi     a,0E0h          ; адрес блока = (база+col)<<8 | fylo
+        add     d
         mov     h,a
-        sphl
-        push    bc
-        push    bc
+        mov     l,e
+        mov     a,b             ; A = byte_val (B держит byte_val)
+        mov     m,a             ; [block+0]
+        inx     h
+        mov     m,a             ; [block+1]
+        inx     h
+        mov     m,a             ; [block+2]
+        inx     h
+        mov     m,a             ; [block+3]
 
         ; ---- плоскость 1: маска 22h, база C000 ----
 fr1_build:
@@ -655,14 +441,18 @@ fr1_lo:
         ori     0Fh
         mov     b,a
 fr1_wr:
-        mov     c,b             ; C = byte_val
-        lhld    _fr_addr
         mvi     a,0C0h
-        add     h
+        add     d
         mov     h,a
-        sphl
-        push    bc
-        push    bc
+        mov     l,e
+        mov     a,b
+        mov     m,a
+        inx     h
+        mov     m,a
+        inx     h
+        mov     m,a
+        inx     h
+        mov     m,a
 
         ; ---- плоскость 2: маска 44h, база A000 ----
 fr2_build:
@@ -685,20 +475,24 @@ fr2_lo:
         ori     0Fh
         mov     b,a
 fr2_wr:
-        mov     c,b             ; C = byte_val
-        lhld    _fr_addr
         mvi     a,0A0h
-        add     h
+        add     d
         mov     h,a
-        sphl
-        push    bc
-        push    bc
+        mov     l,e
+        mov     a,b
+        mov     m,a
+        inx     h
+        mov     m,a
+        inx     h
+        mov     m,a
+        inx     h
+        mov     m,a
 
         ; ---- плоскость 3: маска 88h, база 8000 ----
 fr3_build:
         lda     _fr_diff
         ani     88h
-        jz      fr_pair_next
+        jz      fr_pair_count
         xra     a
         mov     b,a
         lda     _fr_cur
@@ -715,54 +509,44 @@ fr3_lo:
         ori     0Fh
         mov     b,a
 fr3_wr:
-        mov     c,b             ; C = byte_val
-        lhld    _fr_addr
         mvi     a,80h
-        add     h
+        add     d
         mov     h,a
-        sphl
-        push    bc
-        push    bc
+        mov     l,e
+        mov     a,b
+        mov     m,a
+        inx     h
+        mov     m,a
+        inx     h
+        mov     m,a
+        inx     h
+        mov     m,a
 
-fr_pair_next:
-        lhld    _fr_cur_ptr
-        inx     h
-        shld    _fr_cur_ptr
-        lhld    _fr_prev_ptr
-        inx     h
-        shld    _fr_prev_ptr
-        lhld    _fr_addr
-        inr     h               ; col++
-        shld    _fr_addr
-        lda     _fr_pair
-        dcr     a
-        sta     _fr_pair
+fr_pair_count:
+        inr     d               ; col++ (адрес следующего байта = +256 → мл. байт не тронут)
+        mov     a,d
+        cpi     ROWB            ; 32 байта строки обработаны?
         jnz     fr_pair_loop
 
-        ; конец строки: col = 0, fy*4 += 4
-        lhld    _fr_addr
-        mvi     h,0
-        mov     a,l
+        ; конец строки: col = 0, fylo += 4, fy++
+        mvi     d,0
+        mov     a,e
         adi     4
-        mov     l,a
-        shld    _fr_addr
+        mov     e,a
         lda     _fr_fy
         inr     a
         sta     _fr_fy
         cpi     FIRE_H
-        jnz     fr_y_loop
+        jnz     fr_pair_loop
 
-        ; восстановить SP и кадр сохранённых регистров
-        lhld    _fr_saved_sp
-        dcx     h
-        dcx     h
-        dcx     h
-        dcx     h
-        dcx     h
-        dcx     h
-        sphl
         pop     hl
         pop     de
         pop     bc
-        ei
         ret
+
+; сюда прыгает «cur == prev» (diff == 0): cur уже увеличен в прологе, HL всё ещё
+; = prev_ptr — докручиваем prev и уходим на общий счётчик/адрес.
+fr_pair_skip:
+        inx     h
+        shld    _fr_prev_ptr     ; prev_ptr++
+        jmp     fr_pair_count
