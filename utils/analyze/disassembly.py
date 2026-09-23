@@ -30,6 +30,10 @@ MAX_IMAGE_INSTRUCTIONS = 40000
 MAX_COVERAGE_INSTRUCTIONS = 10000
 # Размер чанка при деградации disassemble_image → disassemble_range.
 FALLBACK_CHUNK = 4096
+# Серверный предел на длину списка `addresses` в debug_analyze_code /
+# debug_coverage_report (AgentLimits). При превышении адаптер режет вход на
+# чанки и склеивает результаты — иначе `'addresses' count exceeds limit`.
+ANALYZE_ADDRESS_LIMIT = 256
 
 
 class Instruction:
@@ -204,7 +208,10 @@ class StaticAnalysis:
         """Анализ достижимого кода от одной или нескольких точек входа.
 
         Форму параметров (`start_address` / `addresses`) подбирает
-        CapabilityProfile — вызывающий передаёт просто список адресов.
+        CapabilityProfile — вызывающий передаёт просто список адресов. Список
+        длиннее серверного предела `ANALYZE_ADDRESS_LIMIT` режется на чанки,
+        результаты склеиваются (объединение достижимого кода), чтобы не
+        упираться в `'addresses' count exceeds limit`.
         """
         if isinstance(entries, (int, str)):
             entries = [entries]
@@ -212,6 +219,16 @@ class StaticAnalysis:
         if not addrs:
             raise ValueError("нужна хотя бы одна точка входа")
         form = self.caps.analyze_code_form()
+        uses_addresses = form != "start_address" and (
+            form in ("both", "either") or len(addrs) > 1)
+        if uses_addresses and len(addrs) > ANALYZE_ADDRESS_LIMIT:
+            parts = [self._analyze_chunk(chunk, form, max_instructions)
+                     for chunk in _chunks(addrs, ANALYZE_ADDRESS_LIMIT)]
+            return _merge_code_analyses(parts, addrs)
+        return self._analyze_chunk(addrs, form, max_instructions)
+
+    def _analyze_chunk(self, addrs, form, max_instructions):
+        """Один вызов debug_analyze_code (≤ ANALYZE_ADDRESS_LIMIT адресов)."""
         args = {"max_instructions": int(max_instructions)}
         tool = "debug_analyze_code"
         if form in ("both", "either") or len(addrs) > 1:
@@ -232,22 +249,31 @@ class StaticAnalysis:
         `analyze_code` (только множеством адресов, без разборки).
         """
         if self.caps.has("debug_coverage_report"):
-            args = {}
             addrs = [to_addr(a) for a in (entries if isinstance(entries, (list, tuple)) else [entries])]
-            if len(addrs) == 1:
-                args["start_address"] = addrs[0]
-            else:
-                args["addresses"] = addrs
-            if image_lo is not None and image_hi is not None:
-                args["range_start"] = to_addr(image_lo)
-                args["range_length"] = to_addr(image_hi) - to_addr(image_lo) + 1
-            args["max_instructions"] = min(int(max_instructions),
-                                          MAX_COVERAGE_INSTRUCTIONS)
-            payload, _ = self._evidence("debug_coverage_report", args,
-                                        source="IMAGE", timeout=self.timeout)
-            return CoverageReport(payload, self.caps)
+            if len(addrs) > ANALYZE_ADDRESS_LIMIT:
+                parts = [self._coverage_chunk(chunk, image_lo, image_hi,
+                                              max_instructions)
+                         for chunk in _chunks(addrs, ANALYZE_ADDRESS_LIMIT)]
+                return _merge_coverage_reports(parts, image_lo, image_hi, self.caps)
+            return self._coverage_chunk(addrs, image_lo, image_hi, max_instructions)
         analysis = self.analyze_code(entries, max_instructions)
         return CoverageReport.from_analysis(analysis, image_lo, image_hi)
+
+    def _coverage_chunk(self, addrs, image_lo, image_hi, max_instructions):
+        """Один вызов debug_coverage_report (≤ ANALYZE_ADDRESS_LIMIT адресов)."""
+        args = {}
+        if len(addrs) == 1:
+            args["start_address"] = addrs[0]
+        else:
+            args["addresses"] = addrs
+        if image_lo is not None and image_hi is not None:
+            args["range_start"] = to_addr(image_lo)
+            args["range_length"] = to_addr(image_hi) - to_addr(image_lo) + 1
+        args["max_instructions"] = min(int(max_instructions),
+                                      MAX_COVERAGE_INSTRUCTIONS)
+        payload, _ = self._evidence("debug_coverage_report", args,
+                                    source="IMAGE", timeout=self.timeout)
+        return CoverageReport(payload, self.caps)
 
     # -- общий путь через кэш ---------------------------------------------
 
@@ -389,6 +415,89 @@ def subtract(span, intervals):
     if cursor <= hi:
         out.append((cursor, hi))
     return out
+
+
+def _chunks(seq, n):
+    """Режет последовательность на куски по `n` (для серверных лимитов)."""
+    seq = list(seq)
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
+
+def _merge_code_analyses(parts, entries):
+    """Склеивает несколько CodeAnalysis в один (объединение достижимого кода).
+
+    Инструкции дедуплицируются по адресу, ссылки — по (from,to,type),
+    диапазоны пересчитываются `merge`. Чистая арифметика множеств (ТЗ §8):
+    никакого своего CFG.
+    """
+    tool = parts[0].source_tool if parts else "debug_analyze_code"
+    merged = CodeAnalysis(entries, {}, tool)
+    instr, refs, ref_seen = {}, [], set()
+    ranges, conflicts = [], []
+    truncated = False
+    for p in parts:
+        for i in p.instructions:
+            instr[i.address] = i
+        for r in p.references:
+            key = (r["from"], r["to"], r["type"])
+            if key not in ref_seen:
+                ref_seen.add(key)
+                refs.append(r)
+        ranges.extend(p.ranges)
+        conflicts.extend(p.conflicts)
+        truncated = truncated or p.truncated
+    merged.instructions = [instr[a] for a in sorted(instr)]
+    merged.references = refs
+    merged.ranges = merge(ranges)
+    merged.conflicts = conflicts
+    merged.instruction_count = len(merged.instructions)
+    merged.code_bytes = sum(i.size for i in merged.instructions)
+    merged.truncated = truncated
+    return merged
+
+
+def _merge_coverage_reports(parts, image_lo, image_hi, caps):
+    """Склеивает несколько CoverageReport: объединение code_ranges, пересчёт
+    uncovered/процента против образа. Слепые цели — объединение; `candidates()`
+    всё равно фильтрует их по пересчитанным uncovered_ranges."""
+    lo, hi = to_addr(image_lo), to_addr(image_hi)
+    code_ranges, branch_targets, bt_seen, blind = [], [], set(), []
+    truncated = False
+    for p in parts:
+        code_ranges.extend(p.code_ranges)
+        for b in p.branch_targets:
+            key = (b["from"], b["to"], b["type"])
+            if key not in bt_seen:
+                bt_seen.add(key)
+                branch_targets.append(b)
+        blind.extend(p.uncovered_branch_targets)
+        if lo is None and p.image_lo is not None:
+            lo = p.image_lo
+        if hi is None and p.image_hi is not None:
+            hi = p.image_hi
+        truncated = truncated or bool(p.stats.get("truncated"))
+    merged_code = merge(code_ranges)
+    uncovered = subtract((lo, hi), merged_code) if (lo is not None and hi is not None) else []
+    code_bytes = sum(e - s + 1 for s, e in merged_code)
+    image_bytes = (hi - lo + 1) if (lo is not None and hi is not None) else None
+    blind_uniq = sorted({b for b in blind if b is not None})
+    payload = {
+        "image": {"start": addr_hex(lo) if lo is not None else None,
+                  "end": addr_hex(hi) if hi is not None else None},
+        "code_ranges": [{"start": addr_hex(a), "end": addr_hex(b)} for a, b in merged_code],
+        "uncovered_ranges": [{"start": addr_hex(a), "end": addr_hex(b)} for a, b in uncovered],
+        "branch_targets": [{"from": (addr_hex(b["from"]) if b["from"] is not None else None),
+                            "to": (addr_hex(b["to"]) if b["to"] is not None else None),
+                            "type": b["type"]} for b in branch_targets],
+        "uncovered_branch_targets": [addr_hex(b) for b in blind_uniq],
+        "stats": {"instruction_count": None, "code_bytes": code_bytes,
+                  "image_bytes": image_bytes,
+                  "coverage_percent": (round(100.0 * code_bytes / image_bytes, 2)
+                                       if image_bytes else None),
+                  "truncated": truncated},
+    }
+    return CoverageReport(payload, caps)
 
 
 def main(argv=None):
