@@ -141,8 +141,10 @@ class Step(object):
         return out
 
     def effective_argv(self, ctx):
-        """argv + режимные флаги для mutating-stage (ТЗ §24—§25, §4.2)."""
-        argv = self.argv(ctx)
+        """argv + режимные флаги для mutating-stage (ТЗ §24—§25, §4.2)
+        + переопределения из конфига (`stage_args`, key по имени стадии)."""
+        argv = apply_stage_args(self.argv(ctx),
+                                getattr(ctx, "stage_args", {}).get(self.key))
         if self.mutates_rdb:
             if ctx.dry_run:
                 argv += ["--dry-run"]
@@ -303,6 +305,10 @@ def expand_only(stages, selected_keys):
 class Ctx(object):
     """Параметры прогона, подставляемые в шаги (он же PipelineContext, ТЗ §33)."""
 
+    # переопределение флагов стадий из конфига (--stage-arg); пустой dict =
+    # модули идут со своими дефолтами
+    stage_args = {}
+
     def placeholders(self):
         expand = {
             "rom": self.rom, "rdb": self.rdb, "org": self.org,
@@ -327,6 +333,48 @@ def module_main(module):
     if name in sys.modules:
         return importlib.reload(sys.modules[name]).main
     return importlib.import_module(name).main
+
+
+def apply_stage_args(argv, overrides):
+    """Переписать флаги стадии значениями из конфига (`stage_args`).
+
+    Значение:
+      * `None` / `true` — булев флаг: добавляется, если его ещё нет;
+      * список — повторный флаг (`action="append"`, напр. `--key`): флаг
+        дописывается по разу на каждый элемент (`--key A --key B`);
+      * скаляр — значение флага: существующий флаг получает новое значение
+        на месте (с пробелом или `=`), иначе флаг дописывается.
+    Так `"--max-depth": "12"` не оставляет в argv двух толкований.
+    """
+    for flag, value in sorted((overrides or {}).items()):
+        if value is None or value is True:
+            if not any(a == flag or a.startswith(flag + "=") for a in argv):
+                argv.append(flag)
+            continue
+        if isinstance(value, (list, tuple)):
+            argv += _spread_repeated(flag, value)
+            continue
+        replaced = False
+        for i, a in enumerate(argv):
+            if a == flag and i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                argv[i + 1] = str(value)
+                replaced = True
+                break
+            if a.startswith(flag + "="):
+                argv[i] = "%s=%s" % (flag, value)
+                replaced = True
+                break
+        if not replaced:
+            argv += [flag, str(value)]
+    return argv
+
+
+def _spread_repeated(flag, values):
+    """Токены для повторного флага: [flag, v1, flag, v2, …]."""
+    out = []
+    for value in values:
+        out += [flag, str(value)]
+    return out
 
 
 class StepError(Exception):
@@ -805,11 +853,23 @@ def main(argv=None):
                          % ", ".join(sorted(unknown_keys)))
     ctx.persistence.update(cfg_persist)
 
+    # stage_args: {стадия: {флаг: значение}} — «поглубже» из конфига ROMа,
+    # без разрастания CLI. Ключи проверяются на реальность стадии.
+    cfg_stage_args = cfg.get("stage_args") or {}
+    if not isinstance(cfg_stage_args, dict):
+        raise SystemExit("конфиг: stage_args — не объект JSON (ожидается "
+                         "{стадия: {флаг: значение}})")
+    ctx.stage_args = cfg_stage_args
+
     size = os.path.getsize(args.rom) if os.path.exists(args.rom) else 0
     if not ctx.hi:
         ctx.hi = "0x%04X" % (to_addr(args.org) + size - 1)
 
     steps = toposort(build_steps(ctx))
+    unknown_stages = sorted(set(ctx.stage_args) - {s.key for s in steps})
+    if unknown_stages:
+        print("конфиг: stage_args для неизвестных стадий: %s"
+              % ", ".join(unknown_stages), file=sys.stderr)
     cfg_stages = cfg.get("stages")
     if cfg_stages:
         allowed = set(cfg_stages)

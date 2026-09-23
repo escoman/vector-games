@@ -103,7 +103,7 @@ python3 utils/analyze/cli.py pipeline \
 | `--clean` | удалить только checkpoint (`pipeline_state.json`); RDB/ROM/отчёты не трогаются |
 | `--only a,b` (повторяемо) | прогнать отдельные stages; предки подтягиваются автоматически |
 | `--from` / `--until` | срез канонического порядка (включительно) |
-| `--config FILE` | JSON-конфиг: разрешённые stages + persistence-политика |
+| `--config FILE` | JSON-конфиг: разрешённые stages + persistence-политика + `stage_args` (переопределение флагов стадии, напр. `{"seed_rdb": {"--max-depth": "12"}}` — «поглубже» без CLI) |
 | `--annotations FILE` | stage `apply_annotations` с JSON-аннотациями (см. ниже) |
 | `--reports DIR` | куда писать `pipeline.md`/`pipeline.json`/checkpoint (по умолчанию = `--results`) |
 | `--list` | показать topo-порядок stages и выйти |

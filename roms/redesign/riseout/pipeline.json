@@ -1,5 +1,35 @@
 {
- "note": "Профиль pipeline для run_pipeline.sh (ТЗ Launcher §5/§14/§31). Формат — JSON, не YAML: сознательное решение stdlib-only (ТЗ Pipeline §47); 'pipeline.yaml' из ТЗ Launcher реализуется как pipeline.json. riseout — свежий ROM без .rdb: он родится первым debug_save_rdb внутри seed_rdb. Ключи: persistence (политика SAVE→VERIFY→CHECKPOINT), stages (фильтр разрешённых stages; отсутствие = все).",
+ "note": "Профиль pipeline для run_pipeline.sh (ТЗ Launcher §5/§14/§31). Формат — JSON, не YAML: сознательное решение stdlib-only (ТЗ Pipeline §47); 'pipeline.yaml' из ТЗ Launcher реализуется как pipeline.json. riseout — свежий ROM без .rdb: он родится первым debug_save_rdb внутри seed_rdb. Ключи: persistence (политика SAVE→VERIFY→CHECKPOINT), stages (фильтр разрешённых stages; отсутствие = все), stage_args (переопределение флагов стадии: {стадия: {флаг: значение}}; null/true — булев флаг, список — повторный флаг вроде --key). Здесь stage_args разворачивает МАКСИМАЛЬНОЕ автоматизированное исследование: глубокий посев RDB + длинная рантайм-симуляция с нажатием клавиш там, где модуль её поддерживает.",
+ "stage_args": {
+  "seed_rdb": {
+   "--max-depth": "12",
+   "--max-instructions": "100000"
+  },
+  "probe": {
+   "--seconds": "10",
+   "--snapshot": true,
+   "--key": ["0.5:ENTER", "1.5:SPACE", "3:LEFT", "3.5:RIGHT", "4:UP", "4.5:DOWN", "6:SPACE", "8:ENTER"]
+  },
+  "io_signature": {
+   "--seconds": "10"
+  },
+  "memory_diff": {
+   "--run-seconds": "10"
+  },
+  "abi_scan": {
+   "--limit": "32",
+   "--run": "4",
+   "--key": ["0.5:ENTER", "2:SPACE", "4:LEFT", "5:RIGHT"]
+  },
+  "table_shape": {
+   "--runtime": true,
+   "--limit": "200"
+  },
+  "strings_scan": {
+   "--allow-ya": true,
+   "--min-len": "3"
+  }
+ },
  "persistence": {
   "max_unsaved_objects": 10,
   "max_checkpoint_seconds": 300,

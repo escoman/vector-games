@@ -448,24 +448,40 @@ def main(argv=None):
         run_for(session, cache, rom=args.rom, org=args.org, seconds=args.run,
                 keys=parse_key_specs(args.key))
         rdb = Rdb.load(args.rdb) if args.rdb else Rdb.from_session(session)
+
+        def skip(reason):
+            """Строки нет в RDB: стадия неприменима к этому ROM.
+
+            Для pipeline это SKIPPED (конверт в stdout, код 0), а не падение:
+            отсутствие кредит-строки — свойство ROM, а не ошибка анализа.
+            Для человека без --json — прежнее сообщение и код 2.
+            """
+            print(reason, file=sys.stderr)
+            if args.json:
+                payload = {"module": "vram_credits",
+                           "status": "SKIPPED", "verdict": reason,
+                           "string": args.string,
+                           "rom": os.path.basename(args.rom)}
+                payload.update(session_fields(session))
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+                return 0
+            return 2
+
         # `--string` принимает и адрес, и имя объекта: адрес удобнее, имя не
         # разъезжается при правке RDB.
         try:
             address = to_addr(args.string)
         except ValueError:
-            named = rdb.by_name(args.string)
-            obj = named[0] if isinstance(named, list) and named else named
+            named = rdb.by_name(args.string) or ()
+            obj = named[0] if named else None
             if obj is None:
-                print("в RDB нет объекта с именем %s, а адрес из строки не "
-                      "читается" % args.string, file=sys.stderr)
-                return 2
+                return skip("в RDB нет объекта с именем %s, а адрес из строки "
+                            "не читается" % args.string)
             address = obj.address
         else:
             obj = rdb.at(address) or rdb.by_addr(address)
         if obj is None:
-            print("в RDB нет объекта по адресу %s" % addr_hex(address),
-                  file=sys.stderr)
-            return 2
+            return skip("в RDB нет объекта по адресу %s" % addr_hex(address))
         verifier = VramCreditsVerifier(session, cache,
                                        ImageSource(args.rom, args.org), rdb)
         result = verifier.predict(obj, buffer_lo=to_addr(args.buffer[0]),

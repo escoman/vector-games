@@ -376,6 +376,54 @@ class PipelineDagTest(unittest.TestCase):
         self.assertNotIn("--apply", ro.effective_argv(make_ctx()))
 
 
+class StageArgsTest(unittest.TestCase):
+    """stage_args из конфига: «поглубже» без разрастания CLI."""
+
+    def test_replace_existing_value(self):
+        argv = ["--max-depth", "6", "--rom", "x.rom"]
+        pipeline.apply_stage_args(argv, {"--max-depth": "12"})
+        self.assertEqual(argv.count("--max-depth"), 1)
+        self.assertEqual(argv[argv.index("--max-depth") + 1], "12")
+
+    def test_append_missing_value(self):
+        argv = ["--rom", "x.rom"]
+        pipeline.apply_stage_args(argv, {"--max-instructions": "100000"})
+        self.assertEqual(argv[-2:], ["--max-instructions", "100000"])
+
+    def test_equals_form_replaced(self):
+        argv = ["--min-len=4"]
+        pipeline.apply_stage_args(argv, {"--min-len": "3"})
+        self.assertEqual(argv, ["--min-len=3"])
+
+    def test_bool_flag_added_once(self):
+        argv = ["--runtime"]
+        pipeline.apply_stage_args(argv, {"--runtime": None, "--force": True})
+        self.assertEqual(argv.count("--runtime"), 1)
+        self.assertIn("--force", argv)
+
+    def test_list_value_repeats_flag(self):
+        # --key это action="append": список должен дать флаг по разу на элемент
+        argv = ["--rom", "x.rom"]
+        pipeline.apply_stage_args(argv, {"--key": ["0.5:SPACE", "1:LEFT"]})
+        self.assertEqual(argv,
+                         ["--rom", "x.rom", "--key", "0.5:SPACE",
+                          "--key", "1:LEFT"])
+
+    def test_effective_argv_wires_stage_args(self):
+        step = pipeline.Step("seed_rdb",
+                             ["--rom", "{rom}", "--max-depth", "6"],
+                             mutates_rdb=True)
+        ctx = make_ctx(stage_args={"seed_rdb": {"--max-depth": "12"}})
+        argv = step.effective_argv(ctx)
+        self.assertEqual(argv[argv.index("--max-depth") + 1], "12")
+        self.assertEqual(argv.count("--max-depth"), 1)
+        self.assertIn("--apply", argv)           # режимные флаги на месте
+        # чужая стадия не получает ничего (--json добавляет сам Step.argv)
+        self.assertEqual(step.effective_argv(make_ctx()),
+                         ["--json", "--rom", "/tmp/fake.rom", "--max-depth", "6",
+                          "--apply", "--save-every", "10"])
+
+
 # ---------------------------------------------------------------------------
 # Прогон main() на FakeSession: basic / safety / persistence / resume / dry-run
 # ---------------------------------------------------------------------------

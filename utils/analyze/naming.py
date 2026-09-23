@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import re
 
+from analyze.mcp_session import to_addr
+
 # type в RDB (строчными, как их хранит отладчик) → обязательный префикс имени.
 TYPE_PREFIX = {
     "function": "func_",
@@ -93,7 +95,9 @@ def propose(kind, hint=None, addr=None, unknown=False):
     prefix = prefix_for(kind)
     body = slugify(hint)
     if not body and addr is not None:
-        body = "%04X" % (int(addr) & 0xFFFF)
+        # addr бывает строкой MCP ("0x1F49") — int() на ней падает;
+        # to_addr — единственное место перевода таких форм (ТЗ §9).
+        body = "%04X" % (to_addr(addr) & 0xFFFF)
         body = body.lower()
     if not body:
         body = "item"
