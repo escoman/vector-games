@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from analyze import naming
@@ -140,14 +141,20 @@ class CoverageEngine:
     def fixpoint(self, entries, image_lo, image_hi, rdb_path=None, writer=None,
                  max_rounds=MAX_ROUNDS, save=True, dry_run=False, log=None):
         """add Label → analyze → пересчёт, пока покрытие не закроется."""
-        rdb = Rdb.load(rdb_path) if rdb_path else Rdb.from_session(self.session)
+        # RDB-файл может ещё не родиться (свежий ROM без sidecar: riseout-
+        # сценарий, решение §55) — тогда читаем живой RDB из отладчика,
+        # как делает seed_rdb.
+        rdb = (Rdb.load(rdb_path)
+               if rdb_path and os.path.isfile(rdb_path)
+               else Rdb.from_session(self.session))
         writer = writer or RdbWriter(self.session, dry_run=dry_run)
         run = CoverageRun(image_lo, image_hi, entries)
         seen = set()
         for index in range(1, int(max_rounds) + 1):
             report = self.report(entries, image_lo, image_hi)
-            rdb = Rdb.load(rdb_path) if rdb_path and not dry_run else rdb_after(
-                rdb, writer)
+            rdb = (Rdb.load(rdb_path)
+                   if rdb_path and not dry_run and os.path.isfile(rdb_path)
+                   else rdb_after(rdb, writer))
             cand = [a for a in self.candidates(report, rdb) if a not in seen]
             run.rdb_only_gaps = self.gaps_against_rdb(report, rdb)
             seeded = []
@@ -250,7 +257,8 @@ def main(argv=None):
             data = run.to_dict()
         else:
             report = engine.report(entries, lo, hi)
-            rdb = (Rdb.load(args.rdb) if args.rdb
+            rdb = (Rdb.load(args.rdb)
+                   if args.rdb and os.path.isfile(args.rdb)
                    else Rdb.from_session(session))
             data = {
                 "report": report.summary(),

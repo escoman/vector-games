@@ -46,7 +46,7 @@ import json
 import os
 import sys
 
-from analyze import naming
+from analyze import naming, pipeline_state
 from analyze.coverage import CoverageEngine, rdb_after
 from analyze.disassembly import StaticAnalysis
 from analyze.mcp_session import addr_hex, envelope, open_session, to_addr
@@ -237,30 +237,91 @@ def _build_links(analysis, rdb, claimed, entry_addrs, opts):
     return links
 
 
-def apply_plan(writer, plan, opts=None):
+class BatchSaver(object):
+    """Каждые `every` внесённых изменений — save и checkpoint (ТЗ-§4.2, §4.4).
+
+    Pipeline обязан гарантировать `max_unsaved_objects <= 10`, а посев — один
+    из самых «толстых» mutating-этапов. Saver ничего не знает о MCP: он только
+    дёргает `writer.save()` (debug_save_rdb) и просит pipeline подтвердить
+    состояние checkpoint_active(). Без --save-every (every=0) — выключен.
+    """
+
+    def __init__(self, writer, every, log=None):
+        self.writer = writer
+        self.every = max(0, int(every))
+        self.log = log
+        self.applied = 0        # всего изменений с начала посева
+        self.since_save = 0     # изменений с последнего save
+        self.batches = 0
+        self.saves = 0
+
+    def note(self, changes=1, pending=0):
+        """Зарегистрировать внесённое изменение; при достижении лимита — flush."""
+        if not self.every:
+            return False
+        self.applied += changes
+        self.since_save += changes
+        if self.since_save >= self.every:
+            return self.flush(pending)
+        return False
+
+    def flush(self, pending=0):
+        """save → checkpoint; True, если что-то сохранили."""
+        if not self.every or not self.since_save:
+            return False
+        self.batches += 1
+        self.writer.save()
+        self.saves += 1
+        self.since_save = 0
+        pipeline_state.checkpoint_active(
+            current_stage="seed_rdb", current_batch=self.batches,
+            processed_objects=self.applied,
+            pending_objects=int(pending or 0), status="checkpoint")
+        if self.log:
+            self.log("batch %d: сохранено после %d изменений (%d в ожидании)" % (
+                self.batches, self.applied, int(pending or 0)))
+        return True
+
+
+def apply_plan(writer, plan, opts=None, saver=None):
     """Выполнить план через `RdbWriter` (идемпотентно). Возвращает счётчики.
 
     Сухой прогон (`writer.dry_run`) считает то же самое, ничего не меняя:
     `ensure_object` читает состояние, но `_do` не шлёт запись.
+    `saver` (BatchSaver) отмечает каждое внесённое изменение, чтобы делать
+    save+checkpoint пачками не больше `max_unsaved_objects` (ТЗ-§4.2).
     """
     opts = opts or SeedOptions()
     counts = {"functions_added": 0, "labels_added": 0, "links_added": 0,
               "aliases_added": 0}
+    items = (["function"] * len(plan.get("functions", []))
+             + ["label"] * len(plan.get("labels", []))
+             + ["link"] * len(plan.get("links", [])))
+    left = {"pending": len(items)}
+
+    def note(changed):
+        left["pending"] -= 1
+        if saver is not None:
+            saver.note(1 if changed else 0, left["pending"])
+
     for rec in plan.get("functions", []):
         result = writer.ensure_object(rec["address"], rec["name"], rec["type"],
                                       size=rec.get("size") or None,
                                       properties=rec.get("evidence"))
         if result.get("created"):
             counts["functions_added"] += 1
+        note(True)
     for rec in plan.get("labels", []):
         result = writer.ensure_object(rec["address"], rec["name"], rec["type"],
                                       size=rec.get("size") or None,
                                       properties=rec.get("evidence"))
         if result.get("created"):
             counts["labels_added"] += 1
+        note(True)
     for link in plan.get("links", []):
         writer.add_link(link["source"], link["target"])
         counts["links_added"] += 1
+        note(True)
     return counts
 
 
@@ -272,12 +333,13 @@ class SeedRdb(object):
     """
 
     def __init__(self, session, static=None, coverage=None, opts=None,
-                 max_instructions=DEFAULT_MAX_INSTRUCTIONS):
+                 max_instructions=DEFAULT_MAX_INSTRUCTIONS, saver=None):
         self.session = session
         self.static = static or StaticAnalysis(session)
         self.coverage = coverage or CoverageEngine(session, static=self.static)
         self.opts = opts or SeedOptions()
         self.max_instructions = int(max_instructions)
+        self.saver = saver
 
     def run(self, entries, image_lo, image_hi, rdb, writer,
             max_depth=DEFAULT_MAX_DEPTH, log=None):
@@ -297,7 +359,7 @@ class SeedRdb(object):
             iterations = index
             analysis = self.static.analyze_code(active, self.max_instructions)
             plan = build_plan(active, analysis, rdb_model, self.opts)
-            counts = apply_plan(writer, plan, self.opts)
+            counts = apply_plan(writer, plan, self.opts, saver=self.saver)
             for key in totals:
                 totals[key] += counts[key]
             for rec in plan["functions"]:
@@ -327,6 +389,8 @@ class SeedRdb(object):
                     totals["labels_added"] += 1
                     seen_labels.add(address)
                     blind_seeded.append(address)
+                if self.saver is not None:
+                    self.saver.note(1, len(blind) - blind.index(address) - 1)
             rdb_model = rdb_after(rdb_model, writer)
 
             discovered = (set(seen_functions) | set(seen_labels)
@@ -393,6 +457,10 @@ def main(argv=None):
                         help="записать изменения (по умолчанию только dry-run)")
     parser.add_argument("--dry-run", action="store_true",
                         help="только показать план (это и так режим по умолчанию)")
+    parser.add_argument("--save-every", type=int, default=0,
+                        help="при --apply: каждые N внесённых изменений делать "
+                             "debug_save_rdb и подтверждать checkpoint (0 — один "
+                             "итоговый save; так просит pipeline, ТЗ-§4.2)")
     parser.add_argument("--no-functions", action="store_true")
     parser.add_argument("--no-labels", action="store_true")
     parser.add_argument("--no-links", action="store_true")
@@ -416,19 +484,38 @@ def main(argv=None):
     try:
         static = StaticAnalysis(session, cache)
         coverage = CoverageEngine(session, cache, static=static)
-        rdb = Rdb.load(args.rdb) if args.rdb else Rdb.from_session(session)
+        if args.rdb and os.path.isfile(args.rdb):
+            rdb = Rdb.load(args.rdb)
+        else:
+            # Файла ещё нет (свежий ROM без .rdb — riseout-сценарий) или путь
+            # не задан: состояние даёт сам отладчик, он же при save создаст файл.
+            rdb = Rdb.from_session(session)
         writer = RdbWriter(session, dry_run=dry_run)
         opts = SeedOptions(functions=not args.no_functions,
                            labels=not args.no_labels,
                            links=not args.no_links,
                            force=args.force,
                            update_existing=args.update_existing)
+        saver = None if dry_run else BatchSaver(
+            writer, args.save_every,
+            log=lambda m: print("# " + m, file=sys.stderr))
         engine = SeedRdb(session, static=static, coverage=coverage, opts=opts,
-                         max_instructions=args.max_instructions)
+                         max_instructions=args.max_instructions, saver=saver)
         result = engine.run(entries, lo, hi, rdb, writer, max_depth=args.max_depth,
                             log=lambda m: print("# " + m, file=sys.stderr))
         if not dry_run:
             writer.save()
+            # Итоговый save оставил RDB полностью сохранённым. Если посев шёл
+            # пачками (--save-every), доливаем незакрытую пачку и подтверждаем
+            # состояние checkpoint-ом: хэш перечитывается с диска (ТЗ-§6—§8).
+            if saver is not None:
+                saver.flush(0)
+                pipeline_state.checkpoint_active(
+                    current_stage="seed_rdb", current_batch=saver.batches,
+                    processed_objects=saver.applied, pending_objects=0,
+                    status="checkpoint")
+            result["batches"] = saver.batches if saver else 0
+            result["saves"] = (saver.saves if saver else 0) + 1
         status = "PASS" if result["fixpoint"] else "CANDIDATE"
         verdict = ("dry-run: functions %d, labels %d, links %d, существующих %d, "
                    "итераций %d" % (result["functions_added"],

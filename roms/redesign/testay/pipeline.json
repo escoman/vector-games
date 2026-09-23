@@ -1,0 +1,10 @@
+{
+ "note": "Профиль pipeline для run_pipeline.sh (ТЗ Launcher §5/§14/§31). Формат — JSON, не YAML: сознательное решение stdlib-only (ТЗ Pipeline §47); 'pipeline.yaml' из ТЗ Launcher реализуется как pipeline.json. Ключи: persistence (политика SAVE→VERIFY→CHECKPOINT), stages (фильтр разрешённых stages; отсутствие = все).",
+ "persistence": {
+  "max_unsaved_objects": 10,
+  "max_checkpoint_seconds": 300,
+  "save_after_stage": true,
+  "verify_after_save": true,
+  "checkpoint_after_save": true
+ }
+}

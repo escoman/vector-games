@@ -10,6 +10,8 @@ CLI `v06c-asm-export` разрешён как внешний инструмен�
     rdb / naming                                  модель RDB и шаблоны имён
     disassembly / coverage / probe                статика и рантайм-доказательства
     rdb_lint / memory_diff / io_signature / ...   детерминированные анализаторы
+    seed_rdb / apply_annotations                  детерминированное наполнение RDB
+    pipeline / pipeline_state                     стандартный исполнитель и checkpoint
     report_gen                                    сборка отчёта
 
 Python собирает кандидатов и доказательства; семантику назначает AI (ТЗ §2,

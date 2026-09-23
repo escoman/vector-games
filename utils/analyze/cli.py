@@ -23,7 +23,8 @@ if UTILS not in sys.path:
 
 # Команда → модуль. Совпадает с именами файлов пакета.
 COMMANDS = [
-    "probe", "disassembly", "coverage", "seed_rdb", "rdb_lint", "memory_diff",
+    "probe", "disassembly", "coverage", "seed_rdb", "apply_annotations",
+    "rdb_lint", "memory_diff",
     "io_signature", "abi_scan", "strings_scan", "table_shape", "glyph_scan",
     "vram_credits", "export_asm", "symbolic_operand_lint", "syntax_check",
     "roundtrip_verify", "measure_sizes", "toolchain_lint", "music2midi",

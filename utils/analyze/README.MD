@@ -44,9 +44,41 @@
 
 ## Быстрый старт: один прогон
 
-`pipeline.py` — единственный «дирижёр»: поднимает **один длинный MCP-сеанс**
-(§3/§4) и прогоняет в нём все модули по порядку, складывая JSON-результаты,
-статистику §30 и отчёт §29.
+Стандартный вход — launcher [`run_pipeline.sh`](run_pipeline.sh) (ТЗ Standard
+Pipeline Launcher). ROM выбирается **по короткому профилю**, пути ROM/RDB/config
+launcher резолвит сам:
+
+```bash
+./utils/analyze/run_pipeline.sh putup            # apply-прогон профиля putup
+./utils/analyze/run_pipeline.sh riseout --resume # продолжить после прерывания
+./utils/analyze/run_pipeline.sh testay --dry-run --verbose
+```
+
+Профили (`riseout` / `putup` / `testay`) — единственное место, где launcher
+знает про конкретный ROM (таблица в начале скрипта). Добавить новую ROM = одна
+запись в таблице + `roms/redesign/<rom>/pipeline.json`; `pipeline.py` не
+трогается (§30). Все флаги после имени профиля уходят в `pipeline.py` **без
+изменений** — launcher их не интерпретирует (§3/§4/§20): `--apply`,
+`--dry-run`, `--resume`, `--clean`, `--only`, `--from`, `--until`, `--verbose`
+и любые другие переключатели пайплайна.
+
+Обратная совместимость: если первый аргумент — путь к `*.rom`/`*.ROM`/`*.bin`,
+launcher работает в режиме явного пути (config не подключается):
+
+```bash
+./utils/analyze/run_pipeline.sh roms/redesign/putup/src/putup.rom --dry-run
+```
+
+Перед запуском launcher выводит сводку `ROM / RDB / CONFIG / ARGS`
+(в stderr — чтобы stdout остался чистым под `--json`) и проверяет обязательные
+файлы. Отсутствующий `pipeline.json` профиля или ROM — ошибка без запуска
+пайплайна; **отсутствующий RDB ошибкой не является** (свежий образ родит его
+первым `debug_save_rdb` внутри `seed_rdb`). Коды выхода launcher'а: `0` = код
+`pipeline.py`, `1` = usage/нет python3, `2` = неизвестный профиль, `3` = нет
+обязательного файла. Ctrl-C (`SIGINT`) пробрасывается в `pipeline.py`
+нетронутым (controlled shutdown/checkpoint). Проверки — `test_launcher.py`.
+
+Эквивалентный ручной запуск со всеми параметрами:
 
 ```bash
 cd /home/alexey/Projects/vector-games
@@ -64,17 +96,27 @@ python3 utils/analyze/cli.py pipeline \
 
 | флаг | смысл |
 |---|---|
-| `--only <шаг>` (повторяемо) | прогнать отдельные шаги (например `--only probe --only rdb_lint`) |
-| `--list` | показать порядок шагов и выйти |
+| *(без флагов)* | **apply**: мутации RDB разрешены, `seed_rdb` реально сеет и сохраняет |
+| `--dry-run` | строго read-only: ни одной мутации RDB и ни одного `debug_save_rdb` |
+| `--apply` | явный apply (семантически = дефолт; конфликт с `--dry-run` — ошибка) |
+| `--resume` | продолжить с последнего подтверждённого checkpoint (валидация ROM/RDB/capabilities — до любого анализа) |
+| `--clean` | удалить только checkpoint (`pipeline_state.json`); RDB/ROM/отчёты не трогаются |
+| `--only a,b` (повторяемо) | прогнать отдельные stages; предки подтягиваются автоматически |
+| `--from` / `--until` | срез канонического порядка (включительно) |
+| `--config FILE` | JSON-конфиг: разрешённые stages + persistence-политика |
+| `--annotations FILE` | stage `apply_annotations` с JSON-аннотациями (см. ниже) |
+| `--reports DIR` | куда писать `pipeline.md`/`pipeline.json`/checkpoint (по умолчанию = `--results`) |
+| `--list` | показать topo-порядок stages и выйти |
 | `--runtime` | разрешить модулям читать RUNTIME-байты через MCP (нужно `music2midi` с runtime-источником) |
 | `--glyph-address` | адрес блока глифов; без него шаг `glyph_scan` пропускается (адрес ROM-специфичен) |
 | `--no-cache` | не использовать и не писать кэш доказательств |
 | `--spec` | `music_spec.json` для шага `music2midi`; без него шаг пропускается |
 
-Выход — сводка `{steps, succeeded, failed, exit_nonzero, total_mcp_calls,
-wall_ms, cache, statistics, report, results}`. Код возврата `0`, если ни один
-шаг не упал (ненулевой код линтера — это находка, не крах: он идёт в
-`exit_nonzero`, а не в `failed`).
+Выход — сводка `{steps, succeeded, failed, skipped, exit_nonzero, status,
+mode, total_mcp_calls, wall_ms, cache, statistics, report, results,
+checkpoint, pipeline_report, pipeline_json}`. Код возврата `0`, если ни один
+stage не упал и не было фатальной остановки (ненулевой код линтера — это
+находка, не крах: он идёт в `exit_nonzero`, а не в `failed`).
 
 ## Точка входа `cli.py`
 
@@ -101,7 +143,8 @@ python3 utils/analyze/cli.py <команда> --help
 | `probe.py` | каноническая чистая загрузка ROM, базовые факты | Fact (boot OK) |
 | `coverage.py` | покрытие кода, слепые зоны (машинный payload: blind_targets/reachable/gaps/fixpoint) | Fact/Partial |
 | `disassembly.py` | запрос дизасемблера у сервера (без своего декодера) | Evidence |
-| `seed_rdb.py` | первичный посев RDB: entry → analyze → функции/метки/ссылки до fixpoint | Fact (PASS) / Candidate |
+| `seed_rdb.py` | первичный посев RDB: entry → analyze → функции/метки/ссылки до fixpoint; `--apply --save-every N` — пачки с save+checkpoint | Fact (PASS) / Candidate |
+| `apply_annotations.py` | нанесение JSON-аннотаций на RDB (валидация до первого изменения, идемпотентно, пачками) | Fact (PASS) / Candidate |
 | `rdb.py` / `naming.py` | модель RDB (включая aliases); единые шаблоны имён (§28) и технические имена затравок | библиотека |
 | `rdb_lint.py` | целостность RDB (пересечения, висячие ссылки, имена) | Findings (rc=1 при находках) |
 | `memory_diff.py` | «рантайм не подменил образ» (§13) | Fact/Findings |
@@ -127,7 +170,8 @@ python3 utils/analyze/cli.py <команда> --help
 |---|---|
 | `music2midi.py` | ROM-байтокод → MIDI по `music_spec.json` |
 | `report_gen.py` | сборка отчёта §29 из JSON-результатов + сводка §30 |
-| `pipeline.py` | дирижёр прогона в одном сеансе |
+| `pipeline.py` | стандартный исполнитель: stages, DAG, persistence, resume |
+| `pipeline_state.py` | checkpoint (атомарная запись), verify сохранённого RDB, валидация resume |
 | `clear_cache.py` | очистка/прореживание кэша доказательств |
 
 ## Первичный анализ и посев RDB (Stage 6.27)
@@ -193,6 +237,113 @@ fixpoint, mcp_calls}` плюс `coverage_percent`, `blind_targets`, `conflicts`,
 `skipped`. Ошибки уровня анализа (unknown target, overlap, неизвестный
 размер) — находки в JSON, не крах прогона; `FAILED` только для реальных сбоев
 (MCP недоступен, битый RDB, exception) (ТЗ §45).
+
+## Стандартный pipeline (ТЗ Standard ROM Analysis Pipeline)
+
+`pipeline.py` — стандартный исполнитель: декларативные **stages** с DAG-
+зависимостями, RDB-persistence (SAVE → VERIFY → CHECKPOINT),
+checkpoint/resume, dry-run/apply, таксономия ошибок, отчёты прогона.
+ROM-специфики в нём нет (§46): какие stages и адреса — решает TZ.md/config.
+
+### Модель stages и DAG
+
+Каждый stage — модуль пакета (`Step` historic name) с `depends_on` и
+`mutates_rdb`. Результат — `StageResult`: `SUCCESS / SKIPPED / PARTIAL /
+FAILED / BLOCKED` (CANDIDATE-статус модуля = PARTIAL, не отказ; BLOCKED —
+предок в отказе, §22). Порядок — стабильная topo-сортировка с тай-брейком
+по объявлению, поэтому совпадает с прежним линейным:
+
+| stage | depends_on | мутирует RDB | optional |
+|---|---|---|---|
+| probe | — | – | |
+| coverage, disassembly, memory_diff, music2midi | probe | – | music2midi: есть `--spec` |
+| seed_rdb | coverage, disassembly | **да** | |
+| rdb_lint, io_signature, abi_scan, strings_scan, table_shape, measure_sizes | seed_rdb | – | |
+| glyph_scan | seed_rdb | – | `--glyph-address` |
+| vram_credits | strings_scan | – | |
+| apply_annotations | seed_rdb | **да** | `--annotations` |
+| export_asm | rdb_lint (+apply_annotations, когда включён) | – | |
+| toolchain_lint, symbolic_operand_lint, syntax_check | export_asm | – | |
+| roundtrip_verify | syntax_check | – | |
+
+### Persistence: SAVE → VERIFY → CHECKPOINT
+
+RDB на диске — persistent state анализа. После каждого mutating-stage:
+`debug_save_rdb` (единственный разрешённый способ записи; `*.rdb` руками не
+правим) → verify (файл существует, ненулевой, читается, счёт объектов
+совпадает с живым `debug_get_rdb_info`) → атомарный checkpoint. Read-only
+stage получает только checkpoint — «stage завершён» без записи в
+`pipeline_state.json` не считается. Не больше `max_unsaved_objects=10`
+несохранённых изменений: `seed_rdb`/`apply_annotations` режут свою работу на
+пачки через `--save-every 10` и после каждого batch сами зовут save +
+`pipeline_state.checkpoint_active()` (хук registered pipeline-ом; вне
+pipeline — no-op). Промежуточный checkpoint принудительно, если stage идёт
+дольше `max_checkpoint_seconds=300`. Fail verify — фатал (`RDB_CORRUPTED` /
+`SAVE_VERIFY_FAILED`): сохранённые батчи никогда не откатываются из-за
+отказа более позднего stage (§31).
+
+Политика переопределяется `--config` (JSON; YAML сознательно не
+ поддерживаем — stdlib-only): `persistence: {max_unsaved_objects,
+ max_checkpoint_seconds, save_after_stage, verify_after_save,
+ checkpoint_after_save}`, `stages: [разрешённые имена]`.
+
+### Формат checkpoint и resume
+
+`pipeline_state.json` (version 1) лежит в `--reports`; пишется атомарно:
+`.tmp` → flush+fsync → rename — после kill файл либо старый корректный,
+либо новый корректный. Ключи: rom/rom_sha256, rdb/rdb_sha256,
+last_completed_stage, completed_stages, current_stage, current_batch,
+processed_objects, pending_objects, checkpoint_time (ISO UTC), rdb_objects,
+rdb_links, status, dry_run.
+
+`--resume` валидирует **до любого анализа**: checkpoint читаем →
+ROM sha256 (`ROM_MISMATCH`) → RDB sha256 (`RDB_CHANGED_OUTSIDE_PIPELINE`,
+`RDB_MISSING`) → capabilities (`REQUIRED_CAPABILITY_MISSING`). Завершённые
+stages пропускаются, но checkpointу не верятся на слово (§9): нужен
+артефакт `results/<key>.json` и число объектов в RDB >= подтверждённого.
+Прерванный stage перезапускается с нуля — apply идемпотентен; подтверждённые
+батчи не пере-применяются. `--clean` удаляет только checkpoint.
+
+### Режимы и безопасность
+
+Дефолт — **apply** (решение пользователя): мутации разрешены, `seed_rdb`
+реально сеет. `--dry-run` — строго read-only: guard на `session.call`
+блокирует весь список `RDB_MUTATING_TOOLS` (object/link/alias/comment/
+save); даже если модуль проглотит нарушение в свой except, сигнал остаётся
+на сеансе и прогон останавливается с `DRY_RUN_VIOLATION`; после dry-run
+sha256 RDB обязан совпадать с допрогонным. Ошибки: fatal
+(`ROM_MISMATCH, RDB_CORRUPTED, MCP_UNAVAILABLE, REQUIRED_CAPABILITY_MISSING,
+CHECKPOINT_CORRUPTED, SAVE_VERIFY_FAILED, …`) — STOP с кодом и nonzero rc;
+recoverable (`MCP_TIMEOUT, MCP_DISCONNECTED, STEP_EXCEPTION`) — до 3
+повторов с backoff 1/2/4 c только для read-only stages (mutator
+перезапускается целиком через `--resume`). Смерть сервера — один
+переподъём сеанса на прогон с пере-`debug_load_rom`.
+
+### Отчёты прогона
+
+`reports/pipeline.md` — человекочитаемый отчёт *о прогоне* (ROM/SHA256/
+режим/resume/старт/финиш/итог + таблица stages + ошибки);
+`reports/pipeline.json` — машиночитаемый (version 1, статусы, длительности,
+дельты MCP по stage, история checkpoint-ов). Отчёт *о ROM* (`--out`,
+`report_gen`) и `statistics.json` — прежние, они не заменяются.
+
+### Аннотации: `apply_annotations.py`
+
+Вход — JSON `{"objects": [{"address", "name", "type", "size", "comment",
+"properties", "aliases", "links": [{"to", "kind"}]}]}`. До первого
+MCP-mutating вызова файл целиком валидируется (диапазон ROM, тип,
+`naming.validate`, самосогласованность ссылок); любая ошибка — FAILED
+конверт и ноль мутаций. Применение — `RdbWriter` (N отдельных `debug_*`-
+вызовов; пакетный API не имитируем, но при появлении
+`debug_apply_rdb_batch` в профиле возможностей модуль перейдёт на него сам).
+Повтор того же файла не создаёт дублей (идемпотентность §12).
+
+### E2E-правило (обязательное)
+
+Интеграционные тесты **никогда** не трогают tracked RDB (`putup.rdb`,
+`TESTAY.rdb`, `clrs.rdb`): фикстура копируется во временный каталог,
+прогон идёт по копии, после — проверка `git diff -- roms/` пуст.
+Отсутствующий опциональный ROM (`riseout`) — SKIP, не FAIL.
 
 ## Кэш доказательств и его очистка
 
@@ -265,14 +416,24 @@ ROM. Общие методы в `tools/` не дублируются.
 ```bash
 # юнит-тесты (без эмулятора, быстрые, всегда проходят):
 python3 utils/analyze/tests/test_units.py
+# юниты стандартного pipeline (FakeSession; checkpoint/DAG/persistence/resume/
+# safety/dry-run/идемпотентность):
+python3 utils/analyze/tests/test_pipeline.py
 # интеграция на реальных ROM (boot сервера; скипается без v06c-mcp):
 python3 utils/analyze/tests/test_integration.py
-# + полный прогон pipeline на putup как критерий приёмки (§35, ~30 c):
+# launcher run_pipeline.sh (ТЗ Launcher §35: профили, пути, forward аргументов,
+# exit-коды, отсутствующие файлы, SIGINT — на stub-репозитории, без сервера):
+python3 utils/analyze/tests/test_launcher.py
+# + полные E2E-прогоны pipeline на ВРЕМЕННЫХ КОПИЯХ rom/rdb как критерий
+#   приёмки (§56: kill→resume, apply-детерминизм, riseout-условно; ~мин):
 V06C_ANALYZE_E2E=1 python3 utils/analyze/tests/test_integration.py
 ```
 
 Юниты покрывают чистые функции: шаблоны имён, ключ/конверт кэша, классификацию
 статусов и сводку отчёта, подстановку плейсхолдеров и порядок шагов `pipeline`,
-расположение/срезание кэша в `clear_cache`, разбор адреса и общий конверт.
+checkpoint-механику (`pipeline_state`), атомарность записи, валидацию resume,
+dry-run guard и DAG на FakeSession, расположение/срезание кэша в `clear_cache`,
+разбор адреса и общий конверт.
 Интеграция проверяет контракт конверта на `putup.rom` и `TESTAY.ROM` в одном
-общем сеансе и то, что кандидат не повышается до факта (§34).
+общем сеансе и то, что кандидат не повышается до факта (§34); E2E-прогоны
+работают только с копиями фикстур во временных каталогах.
