@@ -87,16 +87,29 @@ busy-wait `OUT 1C / IN 1B`, BP не достигается). Промежуто�
 ## Stage 1. Карта памяти, активность чтения/записи
 
 Полностью делает `run_pipeline.sh` (стадии `probe`, `disassembly`, `memory_diff`,
-`coverage`). Отчёт `./reports/Stage1.md` собирается из `pipeline.md`
-(`report_gen.py`): Verified Facts / Inferences / Limitations. Руками ничего не
-переснимается.
+`coverage`). Отчёт `./reports/Stage1.md` собирается из JSON-результатов прогона
+`report_gen.py` — **обязательно с фильтром по модулям стадии**; без `--modules`
+генератор подмешивает общий разбор вызовов со всего сеанса, и Stage1.md станет
+неотличимым от отчётов других стадий (это уже приводило к «клонам»):
+
+```bash
+report_gen.py --results .scratch/pipeline/riseout \
+  --modules probe,disassembly,coverage,memory_diff,io_signature \
+  --stage 1 --title "Stage 1. Карта памяти и активность чтения/записи (riseout.rom)" \
+  --out reports/Stage1.md
+```
+
+Verified Facts / Inferences / Limitations. Руками ничего не переснимается.
 
 ## Stage 2. Посев RDB, линт, покрытие до fixpoint
 
 Делает `run_pipeline.sh` (`seed_rdb → rdb_lint → coverage`). Здесь **создаётся
 `src/riseout.rdb`**. Объекты получают только технические имена (`func_0100`,
 `data_3b00`), `size = 0`, если отладчик не дал размер; один адрес — один объект
-(AFTER.md §5), вторые имена — в `properties.aliases`. Отчёт `./reports/Stage2.md`.
+(AFTER.md §5), вторые имена — в `properties.aliases`. Отчёт `./reports/Stage2.md`
+генерировать тем же `report_gen.py` с фильтром
+`--modules seed_rdb,rdb_lint,coverage --stage 2` (см. Stage 1 про обязательность
+`--modules`).
 
 ## Stage 3. Подробное исследование функций (семантика — за ИИ)
 
@@ -150,7 +163,8 @@ Python дал кандидатов — ИИ называет. Для каждо�
 символьные имена там, где адрес совпал с началом RDB-объекта (иначе hex,
 внутри функций `loc_XXXX`), и побайтовая сверка ROM→ASM→бинарь (`0 расхождений =
 Fact`). ИИ лишь дополняет имена/комментарии в RDB до финального экспорта.
-Отчёт `./reports/Stage8.md`.
+Отчёт `./reports/Stage8.md` генерировать `report_gen.py` с фильтром
+`--modules export_asm,toolchain_lint,symbolic_operand_lint,syntax_check,roundtrip_verify,measure_sizes --stage 8`.
 
 ## Stage 9. Карты уровней
 
@@ -238,6 +252,16 @@ Fact`). ИИ лишь дополняет имена/комментарии в RD
   значительную часть 4/7/9/10 механикой. Затем ИИ добирает Level C (семантику,
   имена, таблицы, карты) и Stage 11a/11b (обе обязательны — экспорт двух MIDI).
 - Порядок ручных этапов: 3 → 4 → 5 → 6 → 7 → 9 → 10 → 11a → 11b → 12.
+- **Правила исполнения (обязательны для исполнителя, чтобы не зациклиться):**
+  1. **Один Stage = один заход.** Ручные этапы идут строго последовательно,
+     **нельзя** делегировать пачку Stage одному агенту/под-агенту за раз. Каждый
+     этап — отдельный проход и отдельный `reports/StageN.md`.
+  2. **Сохранять RDB инкрементально.** Каждую пачку правок (имена/комментарии/
+     `params`/связи) сразу фиксировать `debug_save_rdb` и проверять сохранение;
+     не копить все правки до конца этапа. Единственный канал записи —
+     `debug_save_rdb` (`.rdb` руками не править).
+  3. **Отчёты стадий — только через `report_gen.py --modules <модули стадии>`**
+     (карта модулей в Stage 1/2/8 выше). Иначе `StageN.md` выглядят одинаково.
 - После ручных правок RDB — пересобрать экспорт/round-trip (`run_pipeline.sh
   riseout --resume` либо `--only export_asm`+зависимые).
 
