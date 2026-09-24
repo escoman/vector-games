@@ -19,7 +19,8 @@
     "x_right": 128,
     "stop_dy": 52,
     "menu_y0": 32,
-    "rle_y": 16
+    "rle_y": 16,
+    "rle_x": 32
   },
   "bg_index": 0,
   "colors": {
