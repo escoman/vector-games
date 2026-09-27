@@ -39,14 +39,11 @@ roundtrip_verify → measure_sizes`.
   досевает функции/метки/ссылки до fixpoint и в конце вызывает `debug_save_rdb`.
   Ручной «холодный старт» больше не нужен: launcher и pipeline сами держат порядок
   «не открывать `--rdb`, пока файла нет», а отсутствующий `.rdb` — не ошибка.
-- **Facts (проверяемо байт-в-байт):** memory map, покрытие, линт целостности RDB,
-  round-trip сборки ROM→ASM→бинарь→ROM, снапшоты.
-- **Candidates (с пометкой, решает ИИ):** ABI-параметры (`abi_scan`),
-  KOI8/ASCII-строки (`strings_scan`), формы таблиц (`table_shape`),
-  порт-сигнатуры I/O (`io_signature`), глифы (`glyph_scan`),
-  VRAM-предсказание (`vram_credits`).
-- **Отчёты:** `.scratch/pipeline/riseout/pipeline.md` + атомарный чекпоинт
-  `pipeline_state.json` (с `--resume`).
+- **Сырые результаты:** JSON каждой стадии в `.scratch/pipeline/riseout/` +
+  `statistics.json` + отчёт прогона `pipeline.md` + атомарный чекпоинт
+  `pipeline_state.json` (с `--resume`). Всё это — единственный источник
+  сводного механического отчёта Stage 1; отдельных отчётов по поднаборам
+  стадий больше не делается.
 
 Профильный `pipeline.json` разворачивает **максимальное** автоматическое
 исследование через `stage_args` (переопределение флагов любой стадии без
@@ -59,7 +56,7 @@ RAM-патчей и функций, чем короткий простой.
 **Где автоматика упирается (и дальше только ИИ):** статическое покрытие сходится
 на достижимом из entry (у riseout — ~44 %, остальное графика/таблицы и, вероятно,
 банки); `table_shape`/`vram_credits`/`music2midi` молчат, пока ИИ не занесёт в RDB
-таблицы, строки-кредиты и музыкальные спеки (Stage 7, 9a, 9b ниже).
+таблицы, строки-кредиты и музыкальные спеки (Stage 6, 9a, 9b ниже).
 
 ## Stage 0'. Принципы и разделение ответственности
 
@@ -84,65 +81,85 @@ busy-wait `OUT 1C / IN 1B`, BP не достигается). Промежуто�
 `./reports/StageN.md`; RDB — `./src/riseout.rdb`; ASM — `./asm/`; спеки —
 `./tools/`; готовые MIDI — `./riseout_title.mid`, `./riseout_level.mid`.
 
-## Stage 1. Карта памяти, активность чтения/записи
+## Stage 1. Механические факты: карта памяти, посев RDB, экспорт и round-trip
 
-Полностью делает `run_pipeline.sh` (стадии `probe`, `disassembly`, `memory_diff`,
-`coverage`). Отчёт `./reports/Stage1.md` собирается из JSON-результатов прогона
-`report_gen.py` — **обязательно с фильтром по модулям стадии**; без `--modules`
-генератор подмешивает общий разбор вызовов со всего сеанса, и Stage1.md станет
-неотличимым от отчётов других стадий (это уже приводило к «клонам»):
+Объединяет прежние Stage 1, 2 и 8 в один: они питались результатами одного и того
+же прогона Stage 0, а раздельные отчёты на их основе выходили клонами друг друга.
+Полностью делает `run_pipeline.sh` (`probe → coverage → disassembly → seed_rdb →
+rdb_lint → memory_diff → io_signature → export_asm → toolchain_lint →
+symbolic_operand_lint → syntax_check → roundtrip_verify → measure_sizes`).
+
+Отчёт `./reports/Stage1.md` — один сводный, генерируется `report_gen.py` по
+**всем** JSON-результатам прогона (сводный отчёт намеренно включает все стадии
+прогона — фильтр по модулям больше не нужен и не поддерживается):
 
 ```bash
-report_gen.py --results .scratch/pipeline/riseout \
-  --modules probe,disassembly,coverage,memory_diff,io_signature \
-  --stage 1 --title "Stage 1. Карта памяти и активность чтения/записи (riseout.rom)" \
-  --out reports/Stage1.md
+PYTHONPATH=utils python3 -m analyze.report_gen \
+  --results .scratch/pipeline/riseout \
+  --statistics .scratch/pipeline/riseout/statistics.json \
+  --stage 1 --title "Stage 1. Механические факты (riseout.rom)" \
+  --out roms/redesign/riseout/reports/Stage1.md
 ```
 
+Что фиксирует отчёт:
+
+- **Карта памяти и активность чтения/записи** (`probe`, `disassembly`, `coverage`,
+  `memory_diff`, `io_signature`): entry `0x0100`, RAM-патчи относительно образа,
+  порт-сигнатуры IN/OUT из трассы и из статики;
+- **Посев RDB до fixpoint** (`seed_rdb → rdb_lint → coverage`): здесь **создаётся
+  `src/riseout.rdb`**; объекты получают только технические имена (`func_0100`,
+  `data_3b00`), `size = 0`, если отладчик не дал размер; один адрес — один объект
+  (AFTER.md §5), вторые имена — в `properties.aliases`;
+- **Экспорт в ASM и побайтовый round-trip** (`export_asm → toolchain_lint →
+  symbolic_operand_lint → syntax_check → roundtrip_verify`): экспорт через
+  `v06c-asm-export` в формате z88dk (`DEFB/DEFW/DEFM`, `INCBIN`, метки без точки),
+  символьные имена там, где адрес совпал с началом RDB-объекта (иначе hex,
+  внутри функций `loc_XXXX`); `0 расхождений = Fact`. Это же **правило
+  символьных имён экспорта** действует и на Stage 8;
+- **Candidates (с пометкой, решает ИИ):** ABI-параметры (`abi_scan`),
+  KOI8/ASCII-строки (`strings_scan`), формы таблиц (`table_shape`),
+  порт-сигнатуры I/O (`io_signature`), глифы (`glyph_scan`),
+  VRAM-предсказание (`vram_credits`), размеры объектов (`measure_sizes`).
+
 Verified Facts / Inferences / Limitations. Руками ничего не переснимается.
+Round-trip — сквозной контракт: после каждой пачки ручных правок RDB
+(Stage 2–9b) пересобирать экспорт (`utils/analyze/run_pipeline.sh riseout
+--from export_asm`; `--resume` после правок вне pipeline не проходит — защита
+`RDB_CHANGED_OUTSIDE_PIPELINE`) и обновлять этот отчёт —
+байт-в-байт идентичность обязана сохраняться вплоть до Stage 10.
 
-## Stage 2. Посев RDB, линт, покрытие до fixpoint
-
-Делает `run_pipeline.sh` (`seed_rdb → rdb_lint → coverage`). Здесь **создаётся
-`src/riseout.rdb`**. Объекты получают только технические имена (`func_0100`,
-`data_3b00`), `size = 0`, если отладчик не дал размер; один адрес — один объект
-(AFTER.md §5), вторые имена — в `properties.aliases`. Отчёт `./reports/Stage2.md`
-генерировать тем же `report_gen.py` с фильтром
-`--modules seed_rdb,rdb_lint,coverage --stage 2` (см. Stage 1 про обязательность
-`--modules`).
-
-## Stage 3. Подробное исследование функций (семантика — за ИИ)
+## Stage 2. Подробное исследование функций (семантика — за ИИ)
 
 Python дал кандидатов — ИИ называет. Для каждой функции из RDB: осмысленное имя
 (снимает `_unknown`), комментарий-назначение (русский текст), свойства
 `params`/`reads`/`writes`/`calls`; связи `debug_add_rdb_link`
 (function→function/data/music/interrupt). Сохранение RDB — только
-`debug_save_rdb`, не правкой JSON на диске. Отчёт `./reports/Stage3.md`.
+`debug_save_rdb`, не правкой JSON на диске. Отчёт `./reports/Stage2.md`.
 
-## Stage 4. Параметры функций
+## Stage 3. Параметры функций
 
 Кандидатов ABI даёт `abi_scan` (`--all --limit …`). ИИ подтверждает/переименовывает
 и пишет в RDB `properties.params` (рег/стек/накопитель, размер, семантика).
-Отчёт `./reports/Stage4.md`.
+Отчёт `./reports/Stage3.md`.
 
-## Stage 5. Прерывания
+## Stage 4. Прерывания
 
 Векторы: `0x0008/0x0010/0x0018/0x0020` (RST 0/8/16/24), `0x0038` (RST 32),
 `0x003C` INTERPT (`docs/VECTOR_VERIFIED.md`). Особое внимание — `RST 7`
 (аппаратный VBlank 50 Гц): кадровый тикер, потенциальный драйвер звука/анимации.
 Порт-сигнатуры из `io_signature` совмещаются с адресами обработчиков; каждый
-обработчик — объект `func_irq_*` с комментарием. Отчёт `./reports/Stage5.md`.
+обработчик — объект `func_irq_*` с комментарием. Отчёт `./reports/Stage4.md`.
 
-## Stage 6. Главный игровой цикл
+## Stage 5. Главный игровой цикл
 
 На старте — заставка `HIT BUTTON OR SPACE KEY`. Найти цикл опроса клавиатуры
 (порт `KEYSTROB`/`KEYDATA`) → `lbl_title_key_poll`; пройти код после нажатия
 (инициализация уровня → игровой цикл) → `func_main_game_loop`. Шаг за шагом
 (десятки итераций) выявить игровые переменные и зафиксировать в RDB: `var_score`,
 `var_lives`, `var_level`, `var_speed`, `var_player_x` и т.п.
-Отчёт `./reports/Stage6.md`.
+Отчёт `./reports/Stage5.md`.
 
-## Stage 7. Вывод текста на экран
+## Stage 6. Вывод текста на экран
 
 Строки-кандидатов находит `strings_scan` (в ROM уже видны, напр.: `^LEVEL COMPLETE^`
 @0x1BE5, `RISE OUT^2!!` @0x1C9A, `^ READY ^` @0x223A, `^ GAME OVER ^…` @0x2256,
@@ -153,20 +170,9 @@ Python дал кандидатов — ИИ называет. Для каждо�
 растровую сетку подтвердить `glyph_scan` (PNG на адресе блока), предсказание
 картинки сверить с реальностью `vram_credits` (`MATCHED` = рендерится как
 предсказано, иначе `MISMATCH` — разбирается ИИ). Задача выполнена, когда найдены
-глифы всех строк. Отчёт `./reports/Stage7.md`.
+глифы всех строк. Отчёт `./reports/Stage6.md`.
 
-## Stage 8. Экспорт функций в ASM и round-trip
-
-Делает `run_pipeline.sh` (`export_asm` → `toolchain_lint` →
-`symbolic_operand_lint` → `syntax_check` → `roundtrip_verify`): экспорт через
-`v06c-asm-export` в формате z88dk (`DEFB/DEFW/DEFM`, `INCBIN`, метки без точки),
-символьные имена там, где адрес совпал с началом RDB-объекта (иначе hex,
-внутри функций `loc_XXXX`), и побайтовая сверка ROM→ASM→бинарь (`0 расхождений =
-Fact`). ИИ лишь дополняет имена/комментарии в RDB до финального экспорта.
-Отчёт `./reports/Stage8.md` генерировать `report_gen.py` с фильтром
-`--modules export_asm,toolchain_lint,symbolic_operand_lint,syntax_check,roundtrip_verify,measure_sizes --stage 8`.
-
-## Stage 9. Карты уровней
+## Stage 7. Карты уровней
 
 Из строк `LEVEL COMPLETE`/`MORE LEVELS IN`/`LEVEL: 1`/`SELECT SPEED LEVEL` видно,
 что уровней несколько и они перебираются по кругу (аркада «уходи с уровня наверх»:
@@ -177,19 +183,19 @@ Fact`). ИИ лишь дополняет имена/комментарии в RD
 Создать `data_level_01 … data_level_NN`, помня «один адрес — один объект»: если
 база совпадает с первой картой, `data_level_01` не плодится, первые `stride` байт
 описывает комментарий `data_level_maps`. Границы/размеры подтвердить `table_shape`
-и `measure_sizes`. Отчёт `./reports/Stage9.md`.
+и `measure_sizes`. Отчёт `./reports/Stage7.md`.
 
-## Stage 10. Выгрузка данных в ASM
+## Stage 8. Выгрузка данных в ASM
 
 Для каждого data-объекта RDB — файл `./asm/<имя>.asm` (z88dk). ROM-backed
 (`data_*`/`str_*`/`music_*`, таблицы указателей) — фактические байты (`DEFB` по
 8/16, `DEFW` для слов, `DEFM`+явный терминатор `0x00`/`0xFF`); RAM-backed
 (`var_*`, runtime-буферы, векторы, растр `0x6000…`) — только EQU/метки, без байтов.
-В таблицах указателей — символьные имена по правилу Stage 8. Крупные блоки
+В таблицах указателей — символьные имена по правилу Stage 1. Крупные блоки
 (глифы/логотипы/паттерны) допустимо выгружать `INCBIN asm/bin/<имя>.bin` (бинарь —
-прямой `debug_read_memory_range`, без пост-обработки). Отчёт `./reports/Stage10.md`.
+прямой `debug_read_memory_range`, без пост-обработки). Отчёт `./reports/Stage8.md`.
 
-## Stage 11a. Мелодия ЗАСТАВКИ → `riseout_title.mid`
+## Stage 9a. Мелодия ЗАСТАВКИ → `riseout_title.mid`
 
 1) Драйвер: `RST 7` (VBlank ~50 Гц) или явный тикер в цикле `HIT BUTTON OR SPACE
    KEY`; функция, пишущая в звуковые порты (0x09/0x0A/0x0B — каналы/строб VI53;
@@ -210,29 +216,29 @@ Fact`). ИИ лишь дополняет имена/комментарии в RD
    `schema/title/rom/org/output/format/ppq/tempo/note_offset/rest_code/velocity`,
    `provenance.facts_from`, `tracks[]` (`name/address/length/source`
    `image|runtime`/`midi_channel/gm_program/step_ticks/expect` — дамп кодов,
-   сверяется побайтово). Markdown-спека: `./reports/Stage11a_music_spec.md`.
+   сверяется побайтово). Markdown-спека: `./reports/Stage9a_music_spec.md`.
 6) MIDI: `music2midi --spec tools/music_spec_title.json -o riseout_title.mid
    --rom src/riseout.rom` (с `--runtime`, если дорожка читается из RAM — ROM должен
    работать на заставке). Обновить связи RDB (`func_music_driver_title` ↔
    `data_music_*` ↔ `var_music_ptr_*`) и комментарий «код → частота», `debug_save_rdb`.
 7) Критерий приёмки: MIDI открывается, ноты/длительности соответствуют слуху,
-   `expect`-дампы совпали. Отчёт `./reports/Stage11a.md`.
+   `expect`-дампы совпали. Отчёт `./reports/Stage9a.md`.
 
-## Stage 11b. Мелодия УРОВНЯ → `riseout_level.mid`
+## Stage 9b. Мелодия УРОВНЯ → `riseout_level.mid`
 
-Аналог 11a для внутриигровой мелодии. Отличия: найти переключение «заставка →
+Аналог 9a для внутриигровой мелодии. Отличия: найти переключение «заставка →
 уровень» (смена базы/таблицы указателей либо `var_music_track_index`, либо загрузка
 «уровневого» трека в RAM). `func_music_driver_level` — та же функция или её второй
 экземпляр (если адрес тот же — алиас через `properties.aliases`, «один адрес — один
 объект»). Новый набор `data_music_track_level_NN` (возможно другой stride/длина),
 `data_music_scores_level`, `var_music_ptr_level_NN`; формат ноты сверяется заново
 только по таблице периодов и темпу. Спека `./tools/music_spec_level.json`
-(`output` = `../riseout_level.mid`), `./reports/Stage11b_music_spec.md`, MIDI через
+(`output` = `../riseout_level.mid`), `./reports/Stage9b_music_spec.md`, MIDI через
 `music2midi --runtime` (партитура уровня разворачивается в RAM по ходу игры — нужен
 живой эмулятор на уровне). Критерий: MIDI открывается; `title` vs `level` слышно
-разными; `expect`-дампы сошлись. Отчёт `./reports/Stage11b.md`.
+разными; `expect`-дампы сошлись. Отчёт `./reports/Stage9b.md`.
 
-## Stage 12. Сборка нового `RISEOUT_NEW.ROM` из `./asm/`
+## Stage 10. Сборка нового `RISEOUT_NEW.ROM` из `./asm/`
 
 1) Мастер компоновки `asm/riseout_new.asm` + генератор `tools/gen_layout.py`
    раскладывает объекты RDB по адресам
@@ -244,14 +250,14 @@ Fact`). ИИ лишь дополняет имена/комментарии в RD
    пространством); байт-в-байт идентичность — достаточный, но не обязательный
    критерий.
 4) Проверка поведения через MCP (boot-регистры, заставка, SPACE→игра, HUD/VRAM,
-   порты звука 0x09/0x0A/0x0B). Отчёт `./reports/Stage12.md`.
+   порты звука 0x09/0x0A/0x0B). Отчёт `./reports/Stage10.md`.
 
 ## Приоритеты и порядок
 
-- **Stage 0 (`run_pipeline.sh`) — точка входа**: он закрывает Stage 1, 2, 8 и
-  значительную часть 4/7/9/10 механикой. Затем ИИ добирает Level C (семантику,
-  имена, таблицы, карты) и Stage 11a/11b (обе обязательны — экспорт двух MIDI).
-- Порядок ручных этапов: 3 → 4 → 5 → 6 → 7 → 9 → 10 → 11a → 11b → 12.
+- **Stage 0 (`run_pipeline.sh`) — точка входа**: он механикой закрывает весь
+  Stage 1 и значительную часть 3/6/7/8. Затем ИИ добирает Level C (семантику,
+  имена, таблицы, карты) и Stage 9a/9b (обе обязательны — экспорт двух MIDI).
+- Порядок ручных этапов: 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9a → 9b → 10.
 - **Правила исполнения (обязательны для исполнителя, чтобы не зациклиться):**
   1. **Один Stage = один заход.** Ручные этапы идут строго последовательно,
      **нельзя** делегировать пачку Stage одному агенту/под-агенту за раз. Каждый
@@ -260,10 +266,12 @@ Fact`). ИИ лишь дополняет имена/комментарии в RD
      `params`/связи) сразу фиксировать `debug_save_rdb` и проверять сохранение;
      не копить все правки до конца этапа. Единственный канал записи —
      `debug_save_rdb` (`.rdb` руками не править).
-  3. **Отчёты стадий — только через `report_gen.py --modules <модули стадии>`**
-     (карта модулей в Stage 1/2/8 выше). Иначе `StageN.md` выглядят одинаково.
+  3. **Механический Stage 1 — отчёт только через `report_gen.py`** по всем
+     результатам прогона (команда в Stage 1). Ручные этапы 2–8 пишут
+     `reports/StageN.md` ИИ-текстом, ссылаясь на JSON прогона; факты руками
+     не переснимаются.
 - После ручных правок RDB — пересобрать экспорт/round-trip (`run_pipeline.sh
-  riseout --resume` либо `--only export_asm`+зависимые).
+  riseout --from export_asm`) и обновить Stage1.md.
 
 ## Итоговые артефакты, которые должны существовать на выходе
 
@@ -272,16 +280,16 @@ roms/redesign/riseout/
 ├── TZ.md                              (этот файл)
 ├── pipeline.json                      (профиль запуска: stage_args, persistence)
 ├── Makefile
-├── riseout_title.mid                  (Stage 11a)
-├── riseout_level.mid                  (Stage 11b)
+├── riseout_title.mid                  (Stage 9a)
+├── riseout_level.mid                  (Stage 9b)
 ├── src/
 │   ├── riseout.rom                    (исходник)
-│   ├── riseout.rdb                    (рождается Stage 0; финал — после Stage 12)
-│   └── RISEOUT_NEW.ROM                (Stage 12)
+│   ├── riseout.rdb                    (рождается Stage 0; финал — после Stage 10)
+│   └── RISEOUT_NEW.ROM                (Stage 10)
 ├── reports/
-│   ├── Stage1.md … Stage12.md
-│   ├── Stage11a_music_spec.md
-│   └── Stage11b_music_spec.md
+│   ├── Stage1.md … Stage10.md
+│   ├── Stage9a_music_spec.md
+│   └── Stage9b_music_spec.md
 ├── asm/                               (экспортированные функции и данные)
 │   ├── riseout_new.asm                (мастер компоновки)
 │   ├── func_*.asm, data_*.asm, str_*.asm, music_*.asm, var_*.asm
@@ -290,6 +298,6 @@ roms/redesign/riseout/
     ├── gen_layout.py
     ├── sizes.json                     (для measure_sizes)
     ├── measure_order.json
-    ├── music_spec_title.json          (Stage 11a)
-    └── music_spec_level.json          (Stage 11b)
+    ├── music_spec_title.json          (Stage 9a)
+    └── music_spec_level.json          (Stage 9b)
 ```
