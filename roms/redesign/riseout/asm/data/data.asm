@@ -75,7 +75,7 @@ str_msg_level_complete:
 	defb	5Eh,4Ch,45h,56h,45h,4Ch,20h,43h
 	defb	4Fh,4Dh,50h,4Ch,45h,54h,45h,5Eh
 
-; Сообщение «BONUS:  000» (11, без 00); запись 1 в data_msg_records, dst=0x7363; разряды бонуса затираются кодом уровня; переносит func_copy_record_entries
+; Сообщение «BONUS: 000» (11, без 00); запись 1 в data_msg_records, dst=0x7363; разряды бонуса затираются кодом уровня; переносит func_copy_record_entries
 str_msg_bonus:
 	defb	42h,4Fh,4Eh,55h,53h,3Ah,20h,20h
 	defb	30h,30h,30h
@@ -90,7 +90,7 @@ str_msg_keyword_label:
 	defb	4Bh,45h,59h,57h,4Fh,52h,44h,3Ah
 	defb	22h
 
-; Сообщение «^ GOOD  LUCK ^» (14, без 00); запись 4 в data_msg_records, dst=0x7422; печатается 1 записью из 0x1D1F (@0x1C6A, B=01)
+; Сообщение «^ GOOD LUCK ^» (14, без 00); запись 4 в data_msg_records, dst=0x7422; печатается 1 записью из 0x1D1F (@0x1C6A, B=01)
 str_msg_good_luck:
 	defb	5Eh,20h,47h,4Fh,4Fh,44h,20h,20h
 	defb	4Ch,55h,43h,4Bh,20h,5Eh
@@ -105,7 +105,7 @@ str_msg_completed:
 	defb	43h,4Fh,4Dh,50h,4Ch,45h,54h,45h
 	defb	44h,5Eh
 
-; Сообщение «* SECRET KEYS  *» (16, без 00); запись 7 в data_msg_records @0x1CE2, dst=0x7381; переносит func_copy_record_entries @0x1E5D в буфер сообщений
+; Сообщение «* SECRET KEYS *» (16, без 00); запись 7 в data_msg_records @0x1CE2, dst=0x7381; переносит func_copy_record_entries @0x1E5D в буфер сообщений
 str_msg_secret_keys:
 	defb	2Ah,20h,53h,45h,43h,52h,45h,54h
 	defb	20h,4Bh,45h,59h,53h,20h,20h,2Ah
@@ -115,7 +115,7 @@ str_msg_level_inc:
 	defb	4Ch,45h,56h,45h,4Ch,20h,49h,4Eh
 	defb	43h,3Ah,43h,54h,52h,4Ch,5Eh,23h
 
-; Сообщение «MEN   INC:CTRL^» + код 22 (16, без 00); запись 9 в data_msg_records @0x1CE2, dst=0x73C1; переносит func_copy_record_entries @0x1E5D
+; Сообщение «MEN INC:CTRL^» + код 22 (16, без 00); запись 9 в data_msg_records @0x1CE2, dst=0x73C1; переносит func_copy_record_entries @0x1E5D
 str_msg_men_inc:
 	defb	4Dh,45h,4Eh,20h,20h,20h,49h,4Eh
 	defb	43h,3Ah,43h,54h,52h,4Ch,5Eh,22h
@@ -162,7 +162,7 @@ str_game_over:
 	defb	5Eh,20h,47h,41h,4Dh,45h,20h,4Fh
 	defb	56h,45h,52h,20h,5Eh
 
-; In-code литерал «HIGH SCORE:    00:» (18 байт, без терминатора); единственный источник — LXI H,2363 при 0x228A в func_game_over_high_score, LXI D,71C8, LXI B,0011 — в RAM 0x71C8 копируются первые 17 байт, завершающее «:» остаётся неиспользованным
+; In-code литерал «HIGH SCORE: 00:» (18 байт, без терминатора); единственный источник — LXI H,2363 при 0x228A в func_game_over_high_score, LXI D,71C8, LXI B,0011 — в RAM 0x71C8 копируются первые 17 байт, завершающее «:» остаётся неиспользованным
 str_high_score:
 	defb	48h,49h,47h,48h,20h,53h,43h,4Fh
 	defb	52h,45h,3Ah,20h,20h,20h,20h,30h
@@ -172,7 +172,7 @@ str_high_score:
 str_player_label:
 	defb	50h,4Ch,41h,59h,45h,52h,5Eh
 
-; Строка статуса «SCORE:    00 MEN: 5 LEVEL: 1» (28+00, лежит в потоке кода после RET @0x24B1); рисуется напрямую: LXI H,24B2; LXI D,0002; CALL func_draw_text_record @0x249E в func_init_title_screen; значения позже затираются побайтово
+; Строка статуса «SCORE: 00 MEN: 5 LEVEL: 1» (28+00, лежит в потоке кода после RET @0x24B1); рисуется напрямую: LXI H,24B2; LXI D,0002; CALL func_draw_text_record @0x249E в func_init_title_screen; значения позже затираются побайтово
 str_hud_status:
 	defb	53h,43h,4Fh,52h,45h,3Ah,20h,20h
 	defb	20h,20h,30h,30h,20h,4Dh,45h,4Eh
@@ -282,6 +282,44 @@ str_menu_high:
 ; Меню «SPEED» (5+00); печатается 3 раза: LXI D,0F12; LXI H,2D15; MVI B,03; цикл CALL func_draw_text_record_safe @0x2CB7 (шаг по строке +2)
 str_menu_speed:
 	defb	53h,50h,45h,45h,44h,00h
+
+; Таблица периодов тонального таймера КР580ВИ53 (music). Монтируется на HL тремя загрузками LXI H,301Ch: @0x2DDC (voice1 worker 0x2D94), @0x2F5C (voice2 worker 0x2F34), @0x2FD2 (voice3 worker 0x2FA6). Адресация: слово = [HL + 2*code], code = байт дорожки без бита 7 (подготовка индекса: RAL, затем DAD B). Объём 182 байт = 91 слово, последнее слово (индекс 90) занимает 0x30D0..0x30D1; правая граница подтверждена тем, что индекс 91 читался бы из 0x30D2, а там лежит база 3-го голоса трека #2, то есть таблица туда не заходит. Ненулевых слов 87; НУЛЕВЫЕ индексы 0, 56, 66, 90 = РЕСТ: worker после ADD M (@0x2DF8 / 0x2F78 / 0x2FEE) выполняет ORA A / JNZ и уходит в ветку тишины (gate-команда с E=0, RET без перезагрузки делителя). Дорожки заставки используют рест-код 0x38 = 56. Индекс 55 = 1 — служебное значение (124800 Гц), в дорожках заставки не встречается. СТРУКТУРА БЛОЧНАЯ, это не равномерная хроматическая лесенка: 1..20 диатонический ряд E3..C6, 21..31 и 32..46 альтерационные банки, 47..54 басовый банк (F2,C#3,D#3,G2,A2,B2,C3,D3), 57..65 басовые альтерации, 67..78 полный хроматический ряд C1..B1, 79..89 высокий регистр (2228..3782 Гц). РАВНОТЕМПЕРИРОВАННОСТЬ: ряд 67..78 — строго ET, |cents| max 0.45; period[i] = round(K / 2^(i/12)) сходится с max|dP| = 0 при K = 3816 и f_таймера = 1 497 600 Гц (= 50·768·312/8, docs/VECTOR_VERIFIED.md §8.3/§11.1). При номинальных 1 500 000 Гц тот же ряд дал бы K = 3822 (ожидаемое из ТЗ ~3822) — значит таблица вычислена от 1 497 600 Гц, а 1.5 МГц есть округление. Диатонический банк 1..20 ET-точной не является: отклонения до +-22.5 ц (напр. индекс 12, период 256 -> 487.50 Гц вместо B4 493.88 = -22.5 ц). ПОЭТОМУ единый note_offset «код + константа = MIDI-нота» неприменим (индексы->MIDI дают 40 различных смещений; -43 справедливо только для ряда 67..78). КОД -> ЧАСТОТА: port_value = 12 × period[i] (масштабирование в 0x024B/0x0258..0x0261), f = 1 497 600 / port_value = 124 800 / period Гц. УРОВЕНЬ (Stage 9b): таблица ОДНА на все треки — в дескрипторах загрузчика 0x2E2E указателя таблицы нет, она монтируется константой LXI H,301Ch в теле самих воркеров, поэтому трек #2 (уровень) использует её же (алиасы data_note_freq_table_shared / data_note_freq_table_level). Подтверждено живьём: чтение RAM 0x301C..0x30D1 на экране уровня совпало слово в слово со снимком заставки и с ROM-образом; в I/O-трассе уровня значения счётчика 0x27D8=10200 и 0x2F7C=12156 равны 12×850 (период кода 54) и 12×1013 (период кода 52), и оба кода присутствуют в дорожке уровня. Дорожка уровня использует индексы 2..65 — нулевых слов среди них нет, то есть рестов на уровне нет.
+data_note_freq_table_title:
+	defb	00h,00h,0F5h,02h,0D3h,02h,7Ch,02h
+	defb	35h,02h,0FCh,01h,0DAh,01h,0AAh,01h
+	defb	7Dh,01h,67h,01h,3Ch,01h,1Ch,01h
+	defb	00h,01h,0EFh,00h,0D5h,00h,0BEh,00h
+	defb	0B2h,00h,0A0h,00h,8Fh,00h,7Eh,00h
+	defb	78h,00h,2Dh,01h,15h,02h,0Dh,01h
+	defb	55h,01h,0C7h,00h,0E1h,00h,91h,01h
+	defb	0C2h,01h,17h,02h,59h,02h,0A3h,02h
+	defb	0A9h,00h,96h,00h,86h,00h,6Ah,00h
+	defb	5Fh,00h,59h,00h,50h,00h,47h,00h
+	defb	3Fh,00h,3Ch,00h,71h,00h,64h,00h
+	defb	55h,00h,4Bh,00h,43h,00h,96h,05h
+	defb	84h,03h,22h,03h,0FAh,04h,6Fh,04h
+	defb	0F5h,03h,0BAh,03h,52h,03h,01h,00h
+	defb	00h,00h,74h,07h,0A4h,06h,0EAh,05h
+	defb	95h,05h,09h,07h,44h,06h,45h,05h
+	defb	0B2h,04h,2Fh,04h,00h,00h,0E8h,0Eh
+	defb	12h,0Eh,48h,0Dh,89h,0Ch,0D5h,0Bh
+	defb	2Bh,0Bh,8Ah,0Ah,0F3h,09h,64h,09h
+	defb	0DDh,08h,5Eh,08h,0E5h,07h,38h,00h
+	defb	35h,00h,32h,00h,2Fh,00h,2Dh,00h
+	defb	2Ah,00h,28h,00h,26h,00h,23h,00h
+	defb	21h,00h,20h,00h,00h,00h
+
+; Партитура 3-го голоса (voice3; КР580ВИ53 счётчик 2, данные OUT 0x09, CW 0xB6) трека УРОВНЯ — единственный звучащий голос уровня. База задана напрямую LXI D,30D2h @0x2E72 внутри data_music_scores_level (трек #2 загрузчика func_music_load_track 0x2E2E). 64 кода + терминатор цикла 00h @0x3112 = 65 байт; 0x3113 — свободный байт, с 0x3114 начинается data_glyph_block. Формат тот же, что у заставки: код = индекс слова-периода в data_note_freq_table_title 0x301C (LXI H,301Ch @0x2FD2 в воркере 0x2FA6 — та же таблица, отдельной «уровневой» нет); 00h = переход к базе; бит7=1 = холд; 0xE0..0xEF = inline-команда только у v1. Все коды уровня лежат в 2..65, бит7 не встречается, слова 0000h нет → на уровне нет ни холдов, ни команд, ни рестов. Живые подтверждения: (1) RAM 0x30D2..0x3112 побайтово == ROM-образ (source=image, «развёртки в RAM» как в ТЗ не происходит); (2) указатель чтения [0x7DDC] наблюдался внутри 0x30D2..0x3112 и возвращался к базе после 00h; (3) в I/O-трассе игрового сеанса встречаются записи ТОЛЬКО в порт 0x09. Базы v1/v2 = 0x3112 — это байт-терминатор, то есть заглушка: даже при ненулевом гейте эти голоса молчали бы.
+data_music_track_level_03:
+	defb	35h,03h,32h,03h,35h,03h,32h,03h
+	defb	35h,03h,32h,03h,35h,32h,40h,33h
+	defb	41h,02h,2Fh,02h,41h,02h,2Fh,02h
+	defb	41h,02h,2Fh,02h,41h,2Fh,3Fh,32h
+	defb	40h,31h,3Eh,31h,40h,31h,3Eh,31h
+	defb	40h,31h,3Eh,31h,40h,31h,3Eh,31h
+	defb	32h,36h,3Ah,36h,32h,36h,3Ah,36h
+	defb	32h,36h,40h,36h,33h,36h,34h,36h
+	defb	00h
 
 ; Шрифт 8x8: 128 глифов по 8 байт, адрес = 0x3114+8*код, байт0 = верхняя строка, MSB = левый пиксель; копируется в RAM 0x6000 и 0x6400 (LXI H,3114 / LXI D,6000 / LXI B,0400 / CALL 017C @0x2B32 и @0x23C6); func_render_glyph_vram читает 0x6007+8*код вниз (DCX H) при росте адреса VRAM
 data_glyph_block:
@@ -1151,6 +1189,143 @@ data_level_maps:
 	defb	0FAh,01h,0FAh,0B1h,0F2h,55h,82h,5Fh
 	defb	58h,82h,52h
 
+; Дорожка 2-го голоса (voice2; КР580ВИ53 счётчик 1, данные в OUT 0x0A, CW 0x76) трека ЗАСТАВКИ. База — LXI B,4CC4h @0x2E49 внутри data_music_scores_title (трек #1 загрузчика func_music_load_track @0x2E2E), прямая 16-битная константа, без stride/таблицы указателей. Чтение в RAM по var_music_ptr_title_02 @0x7DD2 (на живом экране заставки = 0x4CF2). Поток 351 байт, терминатор 0x00. Формат кода общий (см. data_music_track_title_01), но inline-команд 0xE0..0xEF НЕТ (worker 0x2F34 не проверяет старший ниббл): бит7=0 -> нота на 2 шага, бит7=1 -> холд (ниббл × 2 шага, ANI 0F / RAL / STA 7DD4 @0x2F9F), 0x00 -> цикл. РЕСТ = код 0x38, его слово таблицы = 0 (ветка MVI A,09 / MVI E,00 / CALL 2F30 @0x2F80 — gate cmd9 с E=0). Холд-коды в потоке: 0xF1, 0xF2. Сумма длительностей = ровно 800 шагов = 48.00 с, как у v1 и v3. Artikуляция: гейт 0x1F ([0x7DD8]) -> cmd9 @0x0397 при установленном бите 4 уходит в JNZ 02B8, то есть CW НЕ пишется -> легато (звучание на всю ступеньку), в отличие от стаккато voice1.
+data_music_track_title_02:
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
+	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
+	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
+	defb	01h,0F1h,38h,0F1h,01h,38h,0F2h,01h
+	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,01h,38h
+	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
+	defb	01h,0F1h,38h,0F1h,34h,38h,0F2h,34h
+	defb	0F1h,38h,0F1h,34h,38h,0F2h,34h,0F1h
+	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
+	defb	0F1h,33h,38h,0F2h,33h,0F1h,38h,0F1h
+	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
+	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
+	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
+	defb	01h,0F1h,38h,0F1h,34h,38h,0F2h,34h
+	defb	0F1h,38h,0F1h,34h,38h,0F2h,34h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,33h,38h
+	defb	0F2h,33h,0F1h,38h,0F1h,33h,38h,0F2h
+	defb	33h,0F1h,38h,0F1h,01h,38h,0F2h,01h
+	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,33h,38h
+	defb	0F2h,33h,0F1h,38h,0F1h,33h,38h,0F2h
+	defb	33h,0F1h,38h,0F1h,40h,38h,0F2h,40h
+	defb	0F1h,38h,0F1h,40h,38h,0F2h,40h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,33h,38h
+	defb	0F2h,33h,0F1h,38h,0F1h,33h,38h,0F2h
+	defb	33h,0F1h,38h,0F1h,40h,38h,0F2h,40h
+	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,00h
+
+; Дорожка 1-го голоса (voice1; КР580ВИ53 счётчик 0, данные в OUT 0x0B, CW 0x36) трека ЗАСТАВКИ. База задана напрямую LXI H,4E23h @0x2E46 внутри data_music_scores_title (дескриптор трека #1 загрузчика func_music_load_track @0x2E2E) — без таблицы указателей и без stride. В RAM читается по var_music_ptr_title_01 @0x7DC7 (на живом экране «HIT BUTTON OR SPACE KEY» = 0x4E58). Поток 401 байт, терминатор 0x00 в конце. ФОРМАТ КОДА (тот же алфавит, что у v2/v3): бит7=0 и код<>0 -> индекс data_note_freq_table_title, ступенька 2 шага; бит7=1 -> ХОЛД: (младший ниббл × 2) шагов, тональная защёлка не перезаписывается (ANI 0F / RAL / STA 7DC9 @0x2E27) — нота продлевается; 0x00 -> ЦИКЛ к базе, 0 шагов, байт обрабатывается в том же шаге; 0xE0..0xEF -> inline-команда cmdC с E=(ниббл<<1) (ANI F0 / CPI E0 @0x2DB3), 0 шагов — только у voice1. Сумма длительностей = ровно 800 шагов = 48.00 с (1 шаг = 3 VBlank-тика по 20 мс) — независимая сходимость с v2 и v3, поэтому разбор формата считается подтверждённым. Artikуляция: гейт-код 0x1F ([0x7DCD]) -> cmd8 @0x0332 -> one-shot 3 кадра ([0x03CD]=0x0C от [0x7DD6]) -> нота звучит 1 шаг из 2, то есть стаккато.
+data_music_track_title_01:
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	3Bh,0F1h,34h,3Bh,3Bh,0F1h,34h,0F1h
+	defb	3Bh,3Bh,34h,3Bh,3Bh,0F1h,34h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	3Bh,0F1h,34h,3Bh,3Bh,0F1h,34h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	00h
+
+; Дорожка 3-го голоса (voice3; КР580ВИ53 счётчик 2, данные в OUT 0x09, CW 0xB6) трека ЗАСТАВКИ. База — LXI D,4FB4h @0x2E4C внутри data_music_scores_title (трек #1 загрузчика func_music_load_track @0x2E2E), прямая константа. Чтение в RAM по var_music_ptr_title_03 @0x7DDC (на экране заставки = 0x4FD8). Поток 259 байт, терминатор 0x00. Формат кода общий (см. data_music_track_title_01), inline-команд нет: бит7=0 -> нота 2 шага, бит7=1 -> холд (ниббл × 2, ANI 0F / RAL / STA 7DDE @0x3015), 0x00 -> цикл. РЕСТ = код 0x38 (слово таблицы 0; ветка MVI A,0A / MVI E,00 / CALL 2F30 @0x2FF6). Холд-коды: 0xF1, 0xF3, 0xF5, 0xF7, 0xFF. Сумма длительностей = ровно 800 шагов = 48.00 с, независимо от v1/v3. Artikуляция: гейт [0x7DE0]=0x0E -> старший бит 4 сброшен и ниббл 14 >= 3 -> A=0x00 -> CALL 0310 -> ANI 04 -> JZ 0298, то есть перезагрузка делителя БЕЗ записи CW -> легато с ре-тригом. Особенность worker'а: @0x2FAE стоит LXI H,7DC4h / INR M — собственный счётчик шагов на каждый вызов.
+data_music_track_title_03:
+	defb	38h,0F3h,38h,0F3h,38h,0F3h,38h,0F3h
+	defb	38h,0F3h,38h,0F3h,38h,0F3h,38h,0F3h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h
+	defb	11h,0F7h,11h,0F5h,38h,11h,12h,0Fh
+	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
+	defb	0Fh,1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h
+	defb	11h,0F5h,38h,11h,10h,0F7h,14h,0F7h
+	defb	12h,0FFh,12h,0Fh,1Ah,12h,0Fh,1Ah
+	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+	defb	1Ah,0F1h,11h,0F7h,11h,0F5h,38h,11h
+	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h
+	defb	11h,0F7h,11h,0F5h,38h,11h,10h,0F7h
+	defb	14h,0F7h,12h,0FFh,12h,0Fh,1Ah,12h
+	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
+	defb	12h,0Fh,1Ah,0F1h,11h,0Eh,0Ch,11h
+	defb	0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
+	defb	11h,0Eh,0Ch,0F1h,10h,0Dh,0Bh,10h
+	defb	0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
+	defb	10h,0Dh,0Bh,0F1h,0Fh,0F7h,10h,20h
+	defb	11h,21h,21h,0F3h,12h,0Fh,1Ah,12h
+	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
+	defb	12h,0Fh,1Ah,0F1h,11h,0Eh,0Ch,11h
+	defb	0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
+	defb	11h,0Eh,0Ch,0F1h,10h,0Dh,0Bh,10h
+	defb	0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
+	defb	10h,0Dh,0Bh,0F1h,0Fh,0F7h,14h,0F7h
+	defb	12h,0FFh,00h
+
 ; Uncovered ROM bytes — neither code nor an RDB object
 gap_0122:
 	defb	7Eh,0C9h
@@ -1442,38 +1617,8 @@ gap_2D0E:
 	defb	0Bh,13h
 
 ; Uncovered ROM bytes — neither code nor an RDB object
-gap_301C:
-	defb	00h,00h,0F5h,02h,0D3h,02h,7Ch,02h
-	defb	35h,02h,0FCh,01h,0DAh,01h,0AAh,01h
-	defb	7Dh,01h,67h,01h,3Ch,01h,1Ch,01h
-	defb	00h,01h,0EFh,00h,0D5h,00h,0BEh,00h
-	defb	0B2h,00h,0A0h,00h,8Fh,00h,7Eh,00h
-	defb	78h,00h,2Dh,01h,15h,02h,0Dh,01h
-	defb	55h,01h,0C7h,00h,0E1h,00h,91h,01h
-	defb	0C2h,01h,17h,02h,59h,02h,0A3h,02h
-	defb	0A9h,00h,96h,00h,86h,00h,6Ah,00h
-	defb	5Fh,00h,59h,00h,50h,00h,47h,00h
-	defb	3Fh,00h,3Ch,00h,71h,00h,64h,00h
-	defb	55h,00h,4Bh,00h,43h,00h,96h,05h
-	defb	84h,03h,22h,03h,0FAh,04h,6Fh,04h
-	defb	0F5h,03h,0BAh,03h,52h,03h,01h,00h
-	defb	00h,00h,74h,07h,0A4h,06h,0EAh,05h
-	defb	95h,05h,09h,07h,44h,06h,45h,05h
-	defb	0B2h,04h,2Fh,04h,00h,00h,0E8h,0Eh
-	defb	12h,0Eh,48h,0Dh,89h,0Ch,0D5h,0Bh
-	defb	2Bh,0Bh,8Ah,0Ah,0F3h,09h,64h,09h
-	defb	0DDh,08h,5Eh,08h,0E5h,07h,38h,00h
-	defb	35h,00h,32h,00h,2Fh,00h,2Dh,00h
-	defb	2Ah,00h,28h,00h,26h,00h,23h,00h
-	defb	21h,00h,20h,00h,00h,00h,35h,03h
-	defb	32h,03h,35h,03h,32h,03h,35h,03h
-	defb	32h,03h,35h,32h,40h,33h,41h,02h
-	defb	2Fh,02h,41h,02h,2Fh,02h,41h,02h
-	defb	2Fh,02h,41h,2Fh,3Fh,32h,40h,31h
-	defb	3Eh,31h,40h,31h,3Eh,31h,40h,31h
-	defb	3Eh,31h,40h,31h,3Eh,31h,32h,36h
-	defb	3Ah,36h,32h,36h,3Ah,36h,32h,36h
-	defb	40h,36h,33h,36h,34h,36h,00h,00h
+gap_3113:
+	defb	00h
 
 ; Uncovered ROM bytes — neither code nor an RDB object
 gap_4BE7:
@@ -1504,133 +1649,10 @@ gap_4BE7:
 	defb	1Fh,0F0h,07h,0FEh,3Fh,0F0h,18h,00h
 	defb	0C7h,0FFh,0FEh,0Fh,0F0h,03h,0FCh,1Fh
 	defb	0E0h,18h,00h,61h,20h,44h,45h,0Dh
-	defb	09h,50h,4Fh,50h,20h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
-	defb	01h,0F1h,38h,0F1h,01h,38h,0F2h,01h
-	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
-	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
-	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
-	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
-	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
-	defb	0F1h,34h,38h,0F2h,34h,0F1h,38h,0F1h
-	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,33h
-	defb	38h,0F2h,33h,0F1h,38h,0F1h,33h,38h
-	defb	0F2h,33h,0F1h,38h,0F1h,01h,38h,0F2h
-	defb	01h,0F1h,38h,0F1h,01h,38h,0F2h,01h
-	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
-	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
-	defb	0F1h,34h,38h,0F2h,34h,0F1h,38h,0F1h
-	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
-	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
-	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
-	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
-	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
-	defb	0F1h,40h,38h,0F2h,40h,0F1h,38h,0F1h
-	defb	40h,38h,0F2h,40h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
-	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
-	defb	0F1h,40h,38h,0F2h,40h,0F1h,38h,0F1h
-	defb	33h,38h,0F2h,33h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,00h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,3Bh,0F1h,34h,3Bh
-	defb	3Bh,0F1h,34h,0F1h,3Bh,3Bh,34h,3Bh
-	defb	3Bh,0F1h,34h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,3Bh,0F1h,34h,3Bh
-	defb	3Bh,0F1h,34h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,00h,38h,0F3h,38h
-	defb	0F3h,38h,0F3h,38h,0F3h,38h,0F3h,38h
-	defb	0F3h,38h,0F3h,38h,0F3h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,12h,0Fh,1Ah
-	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
-	defb	1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h,11h
-	defb	0F5h,38h,11h,12h,0Fh,1Ah,12h,0Fh
-	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
-	defb	0Fh,1Ah,0F1h,11h,0F7h,11h,0F5h,38h
-	defb	11h,10h,0F7h,14h,0F7h,12h,0FFh,12h
-	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
-	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h,11h
-	defb	0F7h,11h,0F5h,38h,11h,12h,0Fh,1Ah
-	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
-	defb	1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h,11h
-	defb	0F5h,38h,11h,10h,0F7h,14h,0F7h,12h
-	defb	0FFh,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
-	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
-	defb	0F1h,11h,0Eh,0Ch,11h,0Eh,0Ch,11h
-	defb	0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
-	defb	0F1h,10h,0Dh,0Bh,10h,0Dh,0Bh,10h
-	defb	0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
-	defb	0F1h,0Fh,0F7h,10h,20h,11h,21h,21h
-	defb	0F3h,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
-	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
-	defb	0F1h,11h,0Eh,0Ch,11h,0Eh,0Ch,11h
-	defb	0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
-	defb	0F1h,10h,0Dh,0Bh,10h,0Dh,0Bh,10h
-	defb	0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
-	defb	0F1h,0Fh,0F7h,14h,0F7h,12h,0FFh,00h
+	defb	09h,50h,4Fh,50h,20h
+
+; Uncovered ROM bytes — neither code nor an RDB object
+gap_50B7:
 	defb	00h,0C3h,88h,0C4h,0C3h,0E8h,0E6h,01h
 	defb	0CAh,4Bh,0E7h,3Ah,1Eh,0DBh,0A7h,0CAh
 	defb	4Bh,0E7h,26h,00h,3Ah,0B9h,0E8h,0B4h

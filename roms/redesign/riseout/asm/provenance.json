@@ -9,18 +9,18 @@
     "origin": "0x0100",
     "mapping_entry_point": "0x0000",
     "rom_sha256": "c265014b3db42ccc3454c8c9e6a1d9cb47f43e00c373f494ece1b47f675a6991",
-    "objects": 479,
-    "links": 374,
+    "objects": 493,
+    "links": 405,
     "code_ranges": 29,
-    "data_ranges": 53,
-    "warnings": 64,
+    "data_ranges": 58,
+    "warnings": 68,
     "errors": 0,
     "conflicts": 0,
     "unresolved_references": 0,
     "coverage": {
       "rom_bytes": 20480,
       "code_bytes": 10060,
-      "data_bytes": 7744,
+      "data_bytes": 9002,
       "instruction_count": 5181,
       "outside_window_dropped": 256,
       "uncovered": [
@@ -193,11 +193,15 @@
           "end": "0x2D0F"
         },
         {
-          "start": "0x301C",
+          "start": "0x3113",
           "end": "0x3113"
         },
         {
           "start": "0x4BE7",
+          "end": "0x4CC3"
+        },
+        {
+          "start": "0x50B7",
           "end": "0x50FF"
         }
       ],

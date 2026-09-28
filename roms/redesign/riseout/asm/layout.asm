@@ -189,7 +189,7 @@ lbl_01f6:
 	mvi	a,01h
 	sta	var_field_dirty_flag
 	ret
-; Диспетчер звуковых команд КР580ВИ53: PUSH H; PUSH D; PUSH PSW; LXI H,0217; ANI 0F; ADD A; CALL 03D2 — индексация таблицы из 16 адресов переходов; MOV D,M; INX H; MOV H,M; MOV L,D; PCHL. Все команды завершаются общим возвратом в 0x02B8 (POP PSW; POP D; POP H; RET); команда 7 уходит в подтаблицу 0x02E0 (её обработчик 0x02B5). Обработчики пишут порт 0x08 (управляемое слово 0x36/0x76/0xB6) и порты счётчиков 0x09/0x0A/0x0B (масштаб периода x7 в 0x0258), хранят лажи в RAM 0x03C7..0x03D1, делают bit-bang OUT 0x00 в 0x037E. Около 60 вызовов из кода (звуки игры и мелодии); прямо из ISR не вызывается, но дёргается из музыкального хука 0x2EFB через wrapper func_sound_cmd_call (0x2F30). Stage 3 (параметры): A=код команды (0..15) и E=параметр команды; HL/DE/PSW сохраняются и восстанавливаются, то есть не аргументы. Кандидаты input B/C/D/H/L отвергнуты: PUSH H / PUSH D / PUSH PSW @0x0206..0x0209 — сохранение контекста, HL перезадаётся внутренним LXI H,0217h @0x020B; «доказательства» через STAX B получены сканером на ошибочно раскодированных байтах таблицы переходов 0x0217..0x0236 (таблица слов). Кандидат memory_argument STA 0x03C7 — рабочая область команд (лажи), а не приём аргумента; STA 0x25E7 фантомный — паттерн 32 E7 25 в 0x0100..0x50FF не найден (0 совпадений, debug_find_bytecode_sequence), по адресу 0x25E7 в реальности стоит SHLD 0827h.
+; Диспетчер звуковых команд КР580ВИ53: PUSH H; PUSH D; PUSH PSW; LXI H,0217; ANI 0F; ADD A; CALL 03D2 — индексация таблицы из 16 адресов переходов; MOV D,M; INX H; MOV H,M; MOV L,D; PCHL. Все команды завершаются общим возвратом в 0x02B8 (POP PSW; POP D; POP H; RET); команда 7 уходит в подтаблицу 0x02E0 (её обработчик 0x02B5). Обработчики пишут порт 0x08 (управляемое слово 0x36/0x76/0xB6) и порты счётчиков 0x09/0x0A/0x0B, хранят лажи в RAM 0x03C7..0x03D1, делают bit-bang OUT 0x00 в 0x037E. Около 60 вызовов из кода (звуки игры и мелодии); прямо из ISR не вызывается, но дёргается из музыкального хука 0x2EFB через wrapper func_sound_cmd_call (0x2F30). Stage 3 (параметры): A=код команды (0..15) и E=параметр команды; HL/DE/PSW сохраняются и восстанавливаются, то есть не аргументы. Кандидаты input B/C/D/H/L отвергнуты: PUSH H / PUSH D / PUSH PSW @0x0206..0x0209 — сохранение контекста, HL перезадаётся внутренним LXI H,0217h @0x020B; «доказательства» через STAX B получены сканером на ошибочно раскодированных байтах таблицы переходов 0x0217..0x0236 (таблица слов). Кандидат memory_argument STA 0x03C7 — рабочая область команд (лажи), а не приём аргумента; STA 0x25E7 фантомный — паттерн 32 E7 25 в 0x0100..0x50FF не найден (0 совпадений, debug_find_bytecode_sequence), по адресу 0x25E7 в реальности стоит SHLD 0827h. ИСПРАВЛЕНО (Stage 9a): ранее здесь значилось «масштаб периода x7 в 0x0258» — это неверно, масштабирование ×12. Факт: последовательность @0x0258..0x0261 = DAD H; MOV E,L; MOV D,H; DAD H; DAD D; DAD H, то есть HL -> HL*2 -> (DE)=HL*2 -> HL*4 -> +HL*2 = HL*6 -> HL*2 = ×12 от периода; ENTRY-точка 0x024B вызывает её после чтения слова из data_note_freq_table_title @0x301C. Живое подтверждение трассой на заставке: код дорожки 0x33 -> период 1135 (0x046F) -> HL=0x3534=13620 = 12*1135 -> OUT 0x0B,0x34 и OUT 0x0B,0x35 (seq 19536200/19536202). Частота: f = 1 497 600 Гц / 12 / period = 124800/period Гц; для снятого случая 124800/1135 = 109.96 Гц = A2 (440 Гц·2^-3.5).
 func_sound_cmd_dispatch:
 	push	h
 	push	d
@@ -3752,7 +3752,7 @@ str_msg_level_complete:
 gap_1CF5:
 	defb	63h,73h,0Bh
 
-; Сообщение «BONUS:  000» (11, без 00); запись 1 в data_msg_records, dst=0x7363; разряды бонуса затираются кодом уровня; переносит func_copy_record_entries
+; Сообщение «BONUS: 000» (11, без 00); запись 1 в data_msg_records, dst=0x7363; разряды бонуса затираются кодом уровня; переносит func_copy_record_entries
 str_msg_bonus:
 	defb	42h,4Fh,4Eh,55h,53h,3Ah,20h,20h
 	defb	30h,30h,30h
@@ -3779,7 +3779,7 @@ str_msg_keyword_label:
 gap_1D1F:
 	defb	22h,74h,0Eh
 
-; Сообщение «^ GOOD  LUCK ^» (14, без 00); запись 4 в data_msg_records, dst=0x7422; печатается 1 записью из 0x1D1F (@0x1C6A, B=01)
+; Сообщение «^ GOOD LUCK ^» (14, без 00); запись 4 в data_msg_records, dst=0x7422; печатается 1 записью из 0x1D1F (@0x1C6A, B=01)
 str_msg_good_luck:
 	defb	5Eh,20h,47h,4Fh,4Fh,44h,20h,20h
 	defb	4Ch,55h,43h,4Bh,20h,5Eh
@@ -3806,7 +3806,7 @@ str_msg_completed:
 gap_1D4D:
 	defb	81h,73h,10h
 
-; Сообщение «* SECRET KEYS  *» (16, без 00); запись 7 в data_msg_records @0x1CE2, dst=0x7381; переносит func_copy_record_entries @0x1E5D в буфер сообщений
+; Сообщение «* SECRET KEYS *» (16, без 00); запись 7 в data_msg_records @0x1CE2, dst=0x7381; переносит func_copy_record_entries @0x1E5D в буфер сообщений
 str_msg_secret_keys:
 	defb	2Ah,20h,53h,45h,43h,52h,45h,54h
 	defb	20h,4Bh,45h,59h,53h,20h,20h,2Ah
@@ -3824,7 +3824,7 @@ str_msg_level_inc:
 gap_1D73:
 	defb	0C1h,73h,10h
 
-; Сообщение «MEN   INC:CTRL^» + код 22 (16, без 00); запись 9 в data_msg_records @0x1CE2, dst=0x73C1; переносит func_copy_record_entries @0x1E5D
+; Сообщение «MEN INC:CTRL^» + код 22 (16, без 00); запись 9 в data_msg_records @0x1CE2, dst=0x73C1; переносит func_copy_record_entries @0x1E5D
 str_msg_men_inc:
 	defb	4Dh,45h,4Eh,20h,20h,20h,49h,4Eh
 	defb	43h,3Ah,43h,54h,52h,4Ch,5Eh,22h
@@ -4054,7 +4054,7 @@ gap_1F99:
 	defb	03h,03h,00h,00h,01h,01h,01h,00h
 	defb	01h,01h,03h,00h
 
-; Старт нового уровня: CALL 2343 (очистка ячеек); CALL 24CF (кодирование клеток в глифы); LHLD 7C65 / A=H / CALL 17FF — вывод цифры LEVEL; перенос буфера поля 0x7040.. в текстовую страницу 0x5440 длиной 0x2C0 (CALL 017C); CALL 2034 (поиск стартовой клетки игрока), CALL 20EC (очистка параметров прокрутки), CALL 238F (поиск строки игрока); [0x7C0B]=8; уточнение Stage 5: [0x7DBC] — индекс текущего игрока/слота (var_player_turn_slot) а НЕ уровень скорости, по нему читается [0x7C88+slot] (var_speed) -> [0x7C6A]=(4-speed)*4 и [0x7D91+slot] -> [0x7C07] (var_control_line); [0x7DBE]=0x0305 (темп мелодии); команды 0x0206: A=07/E=B8; при [0x7C86]!=0 вывод строки «LEVEL» (CALL 2D1B) и символа в 0x5434; XRA A / CALL 1751 — обнуление счёта, CALL 17CF — вывод «MEN». Вызывается из func_player_session @0x0962.
+; Старт нового уровня: CALL 2343 (очистка ячеек); CALL 24CF (кодирование клеток в глифы); LHLD 7C65 / A=H / CALL 17FF — вывод цифры LEVEL; перенос буфера поля 0x7040.. в текстовую страницу 0x5440 длиной 0x2C0 (CALL 017C); CALL 2034 (поиск стартовой клетки игрока), CALL 20EC (очистка параметров прокрутки), CALL 238F (поиск строки игрока); [0x7C0B]=8; уточнение Stage 5: [0x7DBC] — индекс текущего игрока/слота (var_player_turn_slot) а НЕ уровень скорости, по нему читается [0x7C88+slot] (var_speed) -> [0x7C6A]=(4-speed)*4 и [0x7D91+slot] -> [0x7C07] (var_control_line); темп мелодии: LXI H,0305 @0x1FF7 / SHLD 7DBE @0x1FFA => [0x7DBE]=05 (младший байт = собственно темп уровня), [0x7DBF]=03 (старший байт константы 0x0305, к музыке отношения не имеет); команды 0x0206: A=07/E=B8; при [0x7C86]!=0 вывод строки «LEVEL» (CALL 2D1B) и символа в 0x5434; XRA A / CALL 1751 — обнуление счёта, CALL 17CF — вывод «MEN». Вызывается из func_player_session @0x0962. Stage 9b: именно здесь задаётся темп УРОВНЕВОЙ мелодии. Единственный читатель [0x7DBE] — дескриптор трека #2 (LDA 7DBE @0x2E8B внутри data_music_scores_level), который переносит его в [0x7DC3] (STA 7DC3 @0x2EB4 в общем хвосте func_music_load_track). Наблюдение вживую: после CALL 1FAD -> MVI A,02 / CALL 2D7A в [0x7DC3]=5 (на заставке было 3) => шаг = 5 кадров VBlank = 100 мс, нота = 2 шага = 200 мс. Значение константное, от номера уровня не зависит.
 func_start_new_level:
 	call	func_clear_cells_and_text
 	call	func_level_loader
@@ -4090,7 +4090,7 @@ func_start_new_level:
 	mov	a,m
 	sta	var_control_line
 	lxi	h,0305h
-	shld	7dbeh
+	shld	var_music_tempo_level
 	mvi	a,07h
 	mvi	e,0b8h
 	call	func_sound_cmd_dispatch
@@ -4562,7 +4562,7 @@ str_game_over:
 	defb	5Eh,20h,47h,41h,4Dh,45h,20h,4Fh
 	defb	56h,45h,52h,20h,5Eh
 
-; In-code литерал «HIGH SCORE:    00:» (18 байт, без терминатора); единственный источник — LXI H,2363 при 0x228A в func_game_over_high_score, LXI D,71C8, LXI B,0011 — в RAM 0x71C8 копируются первые 17 байт, завершающее «:» остаётся неиспользованным
+; In-code литерал «HIGH SCORE: 00:» (18 байт, без терминатора); единственный источник — LXI H,2363 при 0x228A в func_game_over_high_score, LXI D,71C8, LXI B,0011 — в RAM 0x71C8 копируются первые 17 байт, завершающее «:» остаётся неиспользованным
 str_high_score:
 	defb	48h,49h,47h,48h,20h,53h,43h,4Fh
 	defb	52h,45h,3Ah,20h,20h,20h,20h,30h
@@ -4727,7 +4727,7 @@ label_2498:
 	mvi	a,05h
 	sta	var_lives
 	ret
-; Строка статуса «SCORE:    00 MEN: 5 LEVEL: 1» (28+00, лежит в потоке кода после RET @0x24B1); рисуется напрямую: LXI H,24B2; LXI D,0002; CALL func_draw_text_record @0x249E в func_init_title_screen; значения позже затираются побайтово
+; Строка статуса «SCORE: 00 MEN: 5 LEVEL: 1» (28+00, лежит в потоке кода после RET @0x24B1); рисуется напрямую: LXI H,24B2; LXI D,0002; CALL func_draw_text_record @0x249E в func_init_title_screen; значения позже затираются побайтово
 str_hud_status:
 	defb	53h,43h,4Fh,52h,45h,3Ah,20h,20h
 	defb	20h,20h,30h,30h,20h,4Dh,45h,4Eh
@@ -5997,7 +5997,8 @@ func_music_start:
 	sta	7de1h
 	sta	var_music_step_counter
 	ret
-label_2D94:
+; Сервис нотного шага голоса 1 (тон-генератор КР580ВИ53 канала 0, порт данных 0x0B). Вызывается из func_irq_music_step 0x2EFB (CALL 0x2D94 @0x2F17) один раз на шаг музыки; шаг = [0x7DC3] кадров VBlank (~50 Гц, RST 7): делитель [0x7DCB], перезагрузка из [0x7DC3] (на заставке =3). Гейт-параметр [0x7DCD]=0x1F; если 0 — голос выключен (LDA 7DCD / ORA A / RZ @0x2D94..0x2D96). Счётчик ступеньки [0x7DC9] (DCR M @0x2D9C, RNZ @0x2D9D) при обнулении перезаписывается константой MVI A,02 @0x2D9E (2 шага) и читается байт потока по [0x7DC7]. Разбор кода: 0x00 = цикл к базе [0x7DC5] плюс INR [0x7DE2] (@0x2DA9..0x2DB2); (код&0xF0)==0xE0 (@0x2DB3) = inline-команда cmdC E=(код&0x0F)*2 (@0x2DC2), байт съедается БЕЗ временнóго слота; бит7=1 (@0x2DD4 ANI 80 / JNZ 0x2E27) = ХОЛД, ступенька = (код&0x0F)*2 шагов (@0x2E27..0x2E2A), тональная защёлка не меняется; иначе код = индекс 16-битного слова-периода в таблице 0x301C (LXI H,301Ch @0x2DDC, смещение = код*2 через RAL/DAD B @0x2DE7..0x2DF5). Если lo+hi == 0 (ADD M @0x2DF8, ORA A/JNZ @0x2DFC) — РЕСТ: cmd8 E=0 (@0x2E04) и RET без перезагрузки делителя; иначе cmd8 E=[0x7DCD] (@0x2E0E), затем запись защёлки cmd0 lo / cmd1 hi (@0x2E14/@0x2E1A) и хвост cmdD E=[0x7DCF]=9 (@0x2E23; cmdD = nop @0x02A8, инертен). Вывод в порты: cmd0/cmd1 -> CALL 0x024B -> OUT 0x0B,lo; OUT 0x0B,hi (@0x0252/@0x0255), значение = 12*период (масштаб x12 @0x0258..0x0262); cmd8 с E=0 -> CALL 0x02F4 -> OUT 0x08,CW 0x36 (@0x02F9/@0x02FB). Живая трасса на заставке (I/O-трейс): код 0x33 -> период 1135 -> 12*1135 = 13620 = 0x3534 -> OUT 0x0B 0x34, OUT 0x0B 0x35; f = 1497600/13620 = 109.96 Гц = A2. Артикуляция: у cmd8 бит4 параметра 0x1F взведён -> ветка 0x034A ставит one-shot [0x03CF]=[0x03D1]=(([0x03CD]>>2)&0x3E)+1 = 3 кадра (в [0x03CD] лежит 0x0C из [0x7DD6]); func_irq_sound_one_shot 0x035E (из func_irq_frame_service 0x04F7, CALL 0x035E @0x054D) по истечении пишет CW — канал замолкает, нота звучит 1 шаг из 2 (стаккато). УРОВЕНЬ (Stage 9b): ЭТОТ воркер на уровне НЕ ЗВУЧИТ. Дескриптор трека #2 обнуляет гейт (XRA A / STA 7DCD @0x2E75..0x2E76), поэтому первые же LDA 7DCD / ORA A / RZ @0x2D94..0x2D96 возвращают управление, не доходя до разбора кода; база потока [0x7DC5]=[0x7DC7]=0x3112 — это байт-терминатор 00h (data_music_track_level_01), то есть даже при ненулевом гейте поток нулевой длины. Живые наблюдения на экране уровня: [0x7DCD]=0, [0x7DC7]=0x3112 (указатель не двигается ни на байт), в I/O-трассе записей в порт 0x0B от музыки нет. Темп на уровне влияет только на частоту вызова шага ([0x7DC3]=5), воркер при этом не выполняется.
+func_music_voice1_service:
 	lda	7dcdh
 	ora	a
 	rz
@@ -6006,7 +6007,7 @@ label_2D94:
 	rnz
 	mvi	a,02h
 	mov	m,a
-	lhld	7dc7h
+	lhld	var_music_ptr_title_01
 label_2DA4:
 	mov	a,m
 	ora	a
@@ -6029,12 +6030,12 @@ label_2DB3:
 	mvi	a,0ch
 	call	func_music_sound_cmd
 	inx	h
-	shld	7dc7h
+	shld	var_music_ptr_title_01
 	jmp	label_2DA4
 label_2DCC:
 	mov	a,m
 	inx	h
-	shld	7dc7h
+	shld	var_music_ptr_title_01
 	sta	var_scratch_word
 	ani	80h
 	lda	var_scratch_word
@@ -6088,7 +6089,7 @@ label_2E27:
 	ral
 	sta	7dc9h
 	ret
-; Загрузка музыкального трека №A: сначала глушит канал командой ВИ53 A=08, E=1F (CALL func_music_sound_cmd 0x2F30); далее по номеру трека устанавливает указатели трёх голосов и параметры: A=1 → ROM 0x4E23 / 0x4CC4 / 0x4FB4 (заставка), A=2 → 0x3112 / 0x3112 / 0x30D2 (уровень, короткие потоки рядом с логотипом 0x3114), A=3 → 0x4E63 / 0x4CFC / 0x4FE4 (финал); темпы/длины в [0x7DCD], [0x7DD8], [0x7DE0], [0x7DD6], [0x7DCF]; для A=2 добавочное значение из [0x7DBE], для A=3 — из [0x7DBF]. Общий хвост 0x2EB4 раскладывает HL/BC/DE в пары [0x7DC5]/[0x7DC7], [0x7DD0]/[0x7DD2], [0x7DDA]/[0x7DDC], выставляет флаги запуска [0x7DCB]/[0x7DC9]/[0x7DD4]/[0x7DDE], [0x7DC4]=0 и гасит каналы командами 0x0C/0x0D (через 0x2F30). Порты 0x08/0x09/0x0A/0x0B затрагивает только через func_sound_cmd_dispatch (0x0206). Из ISR не вызывается — запускается из контекста инициализации и смены состояния игры.
+; Загрузка музыкального трека №A: сначала глушит канал командой ВИ53 A=08, E=1F (CALL func_music_sound_cmd 0x2F30); далее по номеру трека устанавливает указатели трёх голосов и параметры: A=1 → ROM 0x4E23 / 0x4CC4 / 0x4FB4 (заставка), A=2 → 0x3112 / 0x3112 / 0x30D2 (уровень, короткие потоки рядом с логотипом 0x3114), A=3 → 0x4E63 / 0x4CFC / 0x4FE4 (финал); темпы/длины в [0x7DCD], [0x7DD8], [0x7DE0], [0x7DD6], [0x7DCF]; для A=2 добавочное значение из [0x7DBE], для A=3 — из [0x7DBF]. Общий хвост 0x2EB4 раскладывает HL/BC/DE в пары [0x7DC5]/[0x7DC7], [0x7DD0]/[0x7DD2], [0x7DDA]/[0x7DDC], выставляет флаги запуска [0x7DCB]/[0x7DC9]/[0x7DD4]/[0x7DDE], [0x7DC4]=0 и гасит каналы командами 0x0C/0x0D (через 0x2F30). Порты 0x08/0x09/0x0A/0x0B затрагивает только через func_sound_cmd_dispatch (0x0206). Из ISR не вызывается — запускается из контекста инициализации и смены состояния игры. Stage 9b (живой прогон, переключение заставка→уровень). Разбор номера трека — НЕ таблица указателей, а три зашитых в тело блока (CPI 01/02/03 @0x2E37..0x2E43); дескрипторы: трек #1 = data_music_scores_title 0x2E46, трек #2 = data_music_scores_level 0x2E6C, трек #3 = 0x2E91 (финал, не анализировался). Останов на входе (0x2D7A, A=02h) и на возврате из загрузчика (0x2D8C) дал HL=0x3112 (база voice1), BC=0x3112 (база voice2), DE=0x30D2 (база voice3) — ровно трек #2; после возврата [0x7DC5]=[0x7DC7]=0x3112, [0x7DD0]=[0x7DD2]=0x3112, [0x7DDA]=[0x7DDC]=0x30D2, [0x7DC3]=5, гейты [0x7DCD]=0 и [0x7DD8]=0 (voice1/voice2 выключены), [0x7DE0]=0x0A (гейт voice3; на заставке было 0x0E). Никакой нотный поток в RAM не разворачивается: базы 0x30D2/0x3112 — это адрес ROM-образа, прочитан прямо из карты памяти (source=image).
 func_music_load_track:
 	push	psw
 	mvi	a,08h
@@ -6096,12 +6097,13 @@ func_music_load_track:
 	call	func_music_sound_cmd
 	pop	psw
 	cpi	01h
-	jz	lbl_2e46
+	jz	data_music_scores_title
 	cpi	02h
-	jz	lbl_2e6c
+	jz	data_music_scores_level
 	cpi	03h
 	jz	lbl_2e91
-lbl_2e46:
+; Тройка баз дорожек ЗАСТАВОЧНОГО музыкального трека (№1) — операнды трёх LXI внутри func_music_load_track: LXI H,4E23 @0x2E46 (голос 1, ВИ53 канал 0), LXI B,4CC4 @0x2E49 (голос 2, канал 1), LXI D,4FB4 @0x2E4C (голос 3, канал 2). Это и есть способ адресации партитуры: база лежит в RAM-парах [0x7DC5]/[0x7DD0]/[0x7DDA], текущий указатель чтения — в [0x7DC7]/[0x7DD2]/[0x7DDC]; шаг дорожки увеличивает указатель, код 0x00 в потоке = возврат к базе. Таблицы указателей нет, шаг (stride) тоже: базы зашиты непосредственными 16-битными смещениями, каждый голос читает свой непрерывный поток байтов-кодов. Адрес — также цель ветвления JZ 0x2E39 (выбор трека по номеру A==1). Доказательство, что на заставке играет именно этот трек: RAM живого сеанса [0x7DC5..6]=0x4E23, [0x7DD0..D1]=0x4CC4, [0x7DDA..DB]=0x4FB4. Ранее здесь был label lbl_2e46 (seed: jcc 0x2E39) — имя сохранено в properties.aliases.
+data_music_scores_title:
 	lxi	h,4e23h
 	lxi	b,4cc4h
 	lxi	d,4fb4h
@@ -6116,7 +6118,8 @@ lbl_2e46:
 	sta	7dcfh
 	lda	7dbdh
 	jmp	label_2EB4
-lbl_2e6c:
+; Дескриптор трека #2 (УРОВЕНЬ) загрузчика func_music_load_track 0x2E2E; вход по CPI 02h / JZ 2E6C @0x2E3E (A=номер трека, приходит из func_music_start 0x2D7A). 9 байт LXI-троек баз голосов: v1 LXI H,3112h @0x2E6C, v2 LXI B,3112h @0x2E6F, v3 LXI D,30D2h @0x2E72. Хвост 0x2E75..0x2E90: XRA A / STA 7DCD / STA 7DD8 — гейты v1 и v2 = 0, оба голоса выключены (ранний выход LDA/ORA/RZ в 0x2D94 и 0x2F34); MVI A,0Ah / STA 7DE0 — гейт v3 = 10 (у заставки было 0Eh); MVI A,0Ch / STA 7DD6 и MVI A,09h / STA 7DCF — те же служебные параметры, что у заставки; LDA 7DBE @0x2E8B — темп уровня; JMP 2EB4 @0x2E8E — общая установка баз/указателей. Живое подтверждение (BP 0x2D8C func_music_start на экране уровня, A=02h): HL=0x3112, BC=0x3112, DE=0x30D2; по RAM [0x7DDA]=0x30D2, [0x7DE0]=0Ah, [0x7DCD]=[0x7DD8]=0, [0x7DC3]=5.
+data_music_scores_level:
 	lxi	h,3112h
 	lxi	b,3112h
 	lxi	d,30d2h
@@ -6129,7 +6132,7 @@ lbl_2e6c:
 	sta	7dd6h
 	mvi	a,09h
 	sta	7dcfh
-	lda	7dbeh
+	lda	var_music_tempo_level
 	jmp	label_2EB4
 lbl_2e91:
 	lxi	h,4e63h
@@ -6146,9 +6149,9 @@ lbl_2e91:
 	sta	7dcfh
 	lda	7dbfh
 label_2EB4:
-	sta	7dc3h
+	sta	var_music_tempo_frames
 	shld	7dc5h
-	shld	7dc7h
+	shld	var_music_ptr_title_01
 	push	h
 	mov	l,c
 	mov	h,b
@@ -6157,13 +6160,13 @@ label_2EB4:
 	push	h
 	mov	l,c
 	mov	h,b
-	shld	7dd2h
+	shld	var_music_ptr_title_02
 	pop	h
 	xchg
 	shld	7ddah
 	xchg
 	xchg
-	shld	7ddch
+	shld	var_music_ptr_title_03
 	xchg
 	mvi	a,01h
 	sta	7dcbh
@@ -6182,7 +6185,7 @@ label_2EB4:
 	call	func_music_sound_cmd
 	ei
 	ret
-; Шаг воспроизведения фоновой мелодии в контексте кадрового прерывания: входит не по вектору, а из func_irq_vblank_dispatcher через самопатч-слот CALL 0x04EE (там JP 0x2EFB, записанный func_music_start 0x2D7A; func_music_stop 0x2D72 возвращает C9=RET). Делитель темпа [0x7DCB] с перезагрузкой из [0x7DC3] и страж шага [0x7DE1]; при обнулении делителя — CALL 0x2D94, CALL 0x2F34, CALL 0x2FA6 (три сервисы нотного шага, их тела — вне покрытия Stage 4). Сам портов не трогает, звук уходит в КР580ВИ53 (0x08..0x0B) через func_music_sound_cmd 0x2F30 -> func_sound_cmd_dispatch 0x0206. DI перед RET на 0x2F07 и 0x2F2E (обратно прерывания включает EI @0x04EC диспетчера).
+; Кадровый тикер (ШАГАТЕЛЬ) фоновой музыки — и на заставке, и в игре; для экрана «HIT BUTTON OR SPACE KEY» это и есть драйвер заставки (алиас func_music_driver_title), для геймплея — драйвер уровня (алиас func_music_driver_level); ОБЪЕКТ ОДИН, потому что адрес один (0x2EFB) — переключение мелодии делает не другая функция, а загрузчик трека func_music_load_track 0x2E2E. Входит не по вектору: RST 7 -> 0x0038 = JMP 0x04D6 func_irq_vblank_dispatcher -> CALL 0x04EE @0x04E1 -> самомодифицируемый слот 0x04EE = C3 FB 2E (JP 0x2EFB, смонтирован func_music_start 0x2D7A; func_music_stop 0x2D72 возвращает C9=RET). Динамическое подтверждение на живом сеансе заставки: остан в 0x2EFB, [SP]=0x04E4 — адрес возврата ровно этого CALL; ниже на стеке кадр RST 7. Темп: делитель [0x7DCB] с перезагрузкой из [0x7DC3], страж шага [0x7DE1]; шАГ = [0x7DC3] тиков VBlank (~50 Гц); заставка [0x7DC3]=3 -> шаг 60 мс, базовая ступенька ноты = 2 шага = 120 мс. При обнулении делителя — вызовы воркеров голосов (уточнено Stage 9b по дизассемблированию 0x2EFB): CALL 0x2D94 func_music_voice1_service @0x2F17, CALL 0x2F34 func_music_voice2_service @0x2F1A, CALL 0x2FA6 func_music_voice3_service @0x2F1D (адрес 0x2F23 — это STA 7DCB, а не вызов; в более ранней пометке значился неверно). Затем LDA 7DC3 @0x2F20 / STA 7DCB @0x2F23 — перезагрузка делителя. Сам портов не трогает: запись в КР580ВИ53 (0x08 управляющее слово, 0x09/0x0A/0x0B счётчики) идёт через CALL 0x2F30 func_music_sound_cmd -> 0x0206 func_sound_cmd_dispatch по таблице переходов 0x0217. DI перед RET @0x2F07 и @0x2F2E (прерывания обратно включает EI @0x04EC диспетчера). Переключение мелодии заставка/игра — сменой загружаемого трека (func_music_load_track 0x2E2E), а не другой функцией. КОД -> ЧАСТОТА: байт дорожки (без бита 7) = индекс слова-периода period[i] в data_note_freq_table_shared 0x301C; port_value = 12 × period[i]; f = 1 497 600 / port_value = 124 800 / period Гц. УРОВЕНЬ (Stage 9b, ЗАКРЫТО живым прогоном — прежний пункт I1): сеанс debug_load_rom -> SPACE x4 (меню заставки var_menu_state 0 -> 1 -> 2) -> остан в func_music_start 0x2D7A с A=02h, стек [0x00F8]=0x0967/[0x00FA]=0x091C (путь 0x08EF -> CNZ 095C -> CALL 1FAD -> MVI A,02 -> CALL 2D7A); после загрузки трека (#0x2D8C) HL=BC=0x3112, DE=0x30D2, [0x7DC3]=5. Затем BP на 0x2EFB во время геймплея: PC=0x2EFB, SP=0x00E4, [SP]=0x04E4 — тот же адрес возврата CALL 0x04EE, в нижних кадрах стека 0x096A/0x091C (дроп-узел уровня). То есть игровой сеанс крутит мелодии через ДЕСКРИПТОР-ТРЕК #2 и ровно этот же драйвер 0x2EFB. Темп уровня [0x7DC3]=5 -> шаг 100 мс, нота 200 мс.
 func_irq_music_step:
 	push	psw
 	lda	7dcbh
@@ -6201,10 +6204,10 @@ label_2F09:
 	jnz	label_2F2A
 	dcr	a
 	sta	7de1h
-	call	label_2D94
-	call	label_2F34
-	call	label_2FA6
-	lda	7dc3h
+	call	func_music_voice1_service
+	call	func_music_voice2_service
+	call	func_music_voice3_service
+	lda	var_music_tempo_frames
 	sta	7dcbh
 	xra	a
 	sta	7de1h
@@ -6215,11 +6218,12 @@ label_2F2A:
 	pop	psw
 	di
 	ret
-; Обёртка вызова диспетчера звуковых команд КР580ВИ53: CALL 0x0206; RET. A — номер команды, E — параметр. Используется только кодом загрузки мелодии (CALL @0x2E33, @0x2EED, @0x2EF6). Порты 0x08/0x09/0x0A/0x0B трогает внутри func_sound_cmd_dispatch.
+; Обёртка вызова диспетчера звуковых команд КР580ВИ53: CALL 0x0206; RET. A — номер команды, E — параметр. Порты 0x08/0x09/0x0A/0x0B трогает внутри func_sound_cmd_dispatch. УТОЧНЕНО (Stage 9a): прежняя формулировка «используется только кодом загрузки мелодии» неверна. debug_find_immediate_in_range(0x2D94..0x301B, operand=2F30h) даёт 17 совпадений, перечислено 16 адресов, из них 13 лежат ВНУТРИ трёх музыкальных worker'ов, то это путь портов на КАЖДОМ шаге музыки: voice1 (0x2D94, размер 154) — CALL @0x2DC2, 0x2E04, 0x2E0E, 0x2E14, 0x2E1A, 0x2E23; voice2 (0x2F34, размер 114) — @0x2F84, 0x2F8E, 0x2F95, 0x2F9B; voice3 (0x2FA6, размер 118) — @0x2FFA, 0x3004, 0x300B. И только 3 вызова принадлежат загрузчику трека (0x2E33, 0x2EED, 0x2EF6). Живым трассированием на экране «HIT BUTTON OR SPACE KEY» подтверждено, что эти вызовы приводят к реальным OUT в порт 0x0B (например OUT 0x0B,0x34 и OUT 0x0B,0x35 для кода дорожки 0x33).
 func_music_sound_cmd:
 	call	func_sound_cmd_dispatch
 	ret
-label_2F34:
+; Сервис нотного шага голоса 2 (тон-генератор КР580ВИ53 канала 1, порт данных 0x0A). Вызывается из func_irq_music_step 0x2EFB (CALL 0x2F34 @0x2F1A — уточнение Stage 9b по дизассемблированию 0x2EFB: в более ранней пометке значился адрес 0x2F1D, а это вызов voice3); шаг = [0x7DC3] кадров VBlank (на заставке =3). Гейт-параметр [0x7DD8]=0x1F, 0 = голос выключен (@0x2F34..0x2F38 LDA 7DD8 / ORA A / RZ). Счётчик ступеньки [0x7DD4] (@0x2F39 DCR M / RNZ), по обнулении = MVI A,02 @0x2F3E (2 шага), байт потока по [0x7DD2], 0x00 = цикл к базе [0x7DD0] (@0x2F49). Указатель шагает сразу (INX H / SHLD 7DD2 @0x2F4D/0x2F4E) — inline-команд здесь НЕТ (проверка ANI F0/CPI E0 есть только у голоса 1): бит7=1 (@0x2F54 ANI 80 / JNZ 0x2F9F) = ХОЛД, ступенька = (код&0x0F)*2 шагов; иначе код = индекс слова-периода в таблице 0x301C (LXI H,301Ch @0x2F5C, смещение = код*2 через RAL/DAD B). lo+hi==0 (@0x2F78 ADD M, @0x2F7C ORA A/JNZ) — РЕСТ: cmd9 E=0 (@0x2F80..0x2F84) -> OUT 0x08,CW 0x76 (ветка 0x0302: бит1 установлен -> MVI A,76/OUT 08 @0x0307/0x0309), делитель не перезагружается. Иначе нота: cmd9 E=[0x7DD8] (@0x2F88..0x2F8E) — у cmd9 (0x0397) бит4 параметра 0x1F взведён, поэтому команда уходит в JNZ 0x02B8 и НИЧЕГО не делает (легато, без one-shot); затем cmd2 lo (@0x2F92..0x2F95) и cmd3 hi (@0x2F99..0x2F9C) -> STA 0x03C9/0x03CA + CALL 0x0277 -> OUT 0x0A,lo; OUT 0x0A,hi со значением 12*период (масштаб x12 @0x0258..0x0262). Хвостовой команды (как cmdD у голоса 1) нет. Факт по RAM живого сеанса: [0x7DD0..0x7DD1]=0x4CC4 (база дорожки заставки), [0x7DD2..0x7DD3]=0x4CF2 (указатель внутри дампа), [0x03C9..0x03CA]=0x02F5=757 -> период кода 0x01 (E3, 164.86 Гц). УРОВЕНЬ (Stage 9b): ЭТОТ воркер на уровне НЕ ЗВУЧИТ. Дескриптор трека #2 обнуляет гейт (STA 7DD8 @0x2E78), первые LDA 7DD8 / ORA A / RZ @0x2F34..0x2F38 возвращают управление; база потока [0x7DD0]=[0x7DD2]=0x3112 = байт-терминатор 00h (data_music_track_level_01, тот же адрес, что у voice1 — потому объект один). Живые наблюдения на экране уровня: [0x7DD8]=0, [0x7DD2]=0x3112 стоит на месте, в I/O-трассе геймплея записей в порт 0x0A от музыки нет.
+func_music_voice2_service:
 	lda	7dd8h
 	ora	a
 	rz
@@ -6228,7 +6232,7 @@ label_2F34:
 	rnz
 	mvi	a,02h
 	mov	m,a
-	lhld	7dd2h
+	lhld	var_music_ptr_title_02
 	mov	a,m
 	ora	a
 	jnz	label_2F4D
@@ -6236,7 +6240,7 @@ label_2F34:
 	mov	a,m
 label_2F4D:
 	inx	h
-	shld	7dd2h
+	shld	var_music_ptr_title_02
 	sta	var_scratch_word
 	ani	80h
 	lda	var_scratch_word
@@ -6285,7 +6289,8 @@ label_2F9F:
 	ral
 	sta	7dd4h
 	ret
-label_2FA6:
+; Сервис нотного шага голоса 3 (тон-генератор КР580ВИ53 канала 2, порт данных 0x09; и на заставке, и на уровне — ведущая мелодия). Вызывается из func_irq_music_step 0x2EFB (CALL 0x2FA6 @0x2F1D; уточнение Stage 9b по дизассемблированию 0x2EFB: вызовы воркеров стоят @0x2F17 voice1, @0x2F1A voice2, @0x2F1D voice3 — в более ранней пометке значился адрес 0x2F23, а это STA 7DCB); шаг = [0x7DC3] кадров VBlank (заставка 3, уровень 5). Гейт-параметр [0x7DE0] (заставка 0x0E, уровень 0x0A), 0 = голос выключен (@0x2FA6..0x2FAA LDA 7DE0 / ORA A / RZ). Побочно: @0x2FAB..0x2FAE увеличивает на 1 счётчик [0x7DC4] при каждом шаге музыки (загрузчик трека обнуляет его). Счётчик ступеньки [0x7DDE] (@0x2FAF DCR M / RNZ), по обнулении = MVI A,02 @0x2FB4 (2 шага), байт потока по [0x7DDC], 0x00 = цикл к базе [0x7DDA] (@0x2FBF). Указатель шагает сразу (INX H / SHLD 7DDC @0x2FC3/0x2FC4); inline-команд нет (ANI F0/CPI E0 только у голоса 1): бит7=1 (@0x2FCA ANI 80 / JNZ 0x3015) = ХОЛД, ступенька = (код&0x0F)*2 шагов (@0x3015..0x3018); иначе код = индекс слова-периода в таблице 0x301C (LXI H,301Ch @0x2FD2, смещение = код*2 через RAL/DAD B @0x2FDD..0x2FEB). lo+hi==0 (@0x2FEE ADD M, @0x2FF2 ORA A/JNZ) — РЕСТ: cmdA E=0 (@0x2FF6..0x2FFA) -> A=0x0F -> CALL 0x0310, бит2 установлен -> OUT 0x08,CW 0xB6 (@0x0315/0x0317), делитель не перезагружается. Иначе нота: cmdA E=[0x7DE0] (@0x2FFE..0x3004) — для 0x0E бит4 сброшен, ниббл 14 >= 3 -> A=0x00 -> CALL 0x0310, бит2 сброшен -> JZ 0x0298, т.е. делитель перезагружается без управляющего слова (легато-ретриггер, без one-shot); затем cmd4 lo (@0x3008..0x300B) и cmd5 hi (@0x300F..0x3011) -> STA 0x03CB/0x03CC + CALL 0x0298 -> OUT 0x09,lo; OUT 0x09,hi со значением 12*период (масштаб x12 @0x0258..0x0262). Хвостовой команды нет. Факт по RAM живого сеанса заставки: [0x7DDA..0x7DDB]=0x4FB4 (база дорожки), [0x7DDC..0x7DDD]=0x4FD8 (указатель внутри дампа), [0x03CB..0x03CC]=0x08DD=2269 -> период кода 0x4C (A1, 55.00 Гц). УРОВЕНЬ (Stage 9b): на уровне ЭТОТ воркер — единственный звучащий голос: дескриптор трека #2 обнуляет гейты voice1/voice2 (@0x2E75..0x2E79), а свой гейт ставит в 0x0A (@0x2E7C..0x2E80); база дорожки [0x7DDA]=0x30D2, длина 65 (data_music_track_level_03). Живое подтверждение: в I/O-трассе игрового сеанса присутствуют записи только в порт 0x09 (например OUT 0x09,0xD8 / OUT 0x09,0x27 = 0x27D8 = 10200 = 12×850 = код 54), темп [0x7DC3]=5 -> нота 2 шага = 200 мс; указатель [0x7DDC] наблюдался в 0x3111 и 0x30D2 (возврат на базу).
+func_music_voice3_service:
 	lda	7de0h
 	ora	a
 	rz
@@ -6296,7 +6301,7 @@ label_2FA6:
 	rnz
 	mvi	a,02h
 	mov	m,a
-	lhld	7ddch
+	lhld	var_music_ptr_title_03
 	mov	a,m
 	ora	a
 	jnz	label_2FC3
@@ -6304,7 +6309,7 @@ label_2FA6:
 	mov	a,m
 label_2FC3:
 	inx	h
-	shld	7ddch
+	shld	var_music_ptr_title_03
 	sta	var_scratch_word
 	ani	80h
 	lda	var_scratch_word
@@ -6353,8 +6358,8 @@ label_3015:
 	ral
 	sta	7ddeh
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_301C:
+; Таблица периодов тонального таймера КР580ВИ53 (music). Монтируется на HL тремя загрузками LXI H,301Ch: @0x2DDC (voice1 worker 0x2D94), @0x2F5C (voice2 worker 0x2F34), @0x2FD2 (voice3 worker 0x2FA6). Адресация: слово = [HL + 2*code], code = байт дорожки без бита 7 (подготовка индекса: RAL, затем DAD B). Объём 182 байт = 91 слово, последнее слово (индекс 90) занимает 0x30D0..0x30D1; правая граница подтверждена тем, что индекс 91 читался бы из 0x30D2, а там лежит база 3-го голоса трека #2, то есть таблица туда не заходит. Ненулевых слов 87; НУЛЕВЫЕ индексы 0, 56, 66, 90 = РЕСТ: worker после ADD M (@0x2DF8 / 0x2F78 / 0x2FEE) выполняет ORA A / JNZ и уходит в ветку тишины (gate-команда с E=0, RET без перезагрузки делителя). Дорожки заставки используют рест-код 0x38 = 56. Индекс 55 = 1 — служебное значение (124800 Гц), в дорожках заставки не встречается. СТРУКТУРА БЛОЧНАЯ, это не равномерная хроматическая лесенка: 1..20 диатонический ряд E3..C6, 21..31 и 32..46 альтерационные банки, 47..54 басовый банк (F2,C#3,D#3,G2,A2,B2,C3,D3), 57..65 басовые альтерации, 67..78 полный хроматический ряд C1..B1, 79..89 высокий регистр (2228..3782 Гц). РАВНОТЕМПЕРИРОВАННОСТЬ: ряд 67..78 — строго ET, |cents| max 0.45; period[i] = round(K / 2^(i/12)) сходится с max|dP| = 0 при K = 3816 и f_таймера = 1 497 600 Гц (= 50·768·312/8, docs/VECTOR_VERIFIED.md §8.3/§11.1). При номинальных 1 500 000 Гц тот же ряд дал бы K = 3822 (ожидаемое из ТЗ ~3822) — значит таблица вычислена от 1 497 600 Гц, а 1.5 МГц есть округление. Диатонический банк 1..20 ET-точной не является: отклонения до +-22.5 ц (напр. индекс 12, период 256 -> 487.50 Гц вместо B4 493.88 = -22.5 ц). ПОЭТОМУ единый note_offset «код + константа = MIDI-нота» неприменим (индексы->MIDI дают 40 различных смещений; -43 справедливо только для ряда 67..78). КОД -> ЧАСТОТА: port_value = 12 × period[i] (масштабирование в 0x024B/0x0258..0x0261), f = 1 497 600 / port_value = 124 800 / period Гц. УРОВЕНЬ (Stage 9b): таблица ОДНА на все треки — в дескрипторах загрузчика 0x2E2E указателя таблицы нет, она монтируется константой LXI H,301Ch в теле самих воркеров, поэтому трек #2 (уровень) использует её же (алиасы data_note_freq_table_shared / data_note_freq_table_level). Подтверждено живьём: чтение RAM 0x301C..0x30D1 на экране уровня совпало слово в слово со снимком заставки и с ROM-образом; в I/O-трассе уровня значения счётчика 0x27D8=10200 и 0x2F7C=12156 равны 12×850 (период кода 54) и 12×1013 (период кода 52), и оба кода присутствуют в дорожке уровня. Дорожка уровня использует индексы 2..65 — нулевых слов среди них нет, то есть рестов на уровне нет.
+data_note_freq_table_title:
 	defb	00h,00h,0F5h,02h,0D3h,02h,7Ch,02h
 	defb	35h,02h,0FCh,01h,0DAh,01h,0AAh,01h
 	defb	7Dh,01h,67h,01h,3Ch,01h,1Ch,01h
@@ -6377,15 +6382,23 @@ gap_301C:
 	defb	0DDh,08h,5Eh,08h,0E5h,07h,38h,00h
 	defb	35h,00h,32h,00h,2Fh,00h,2Dh,00h
 	defb	2Ah,00h,28h,00h,26h,00h,23h,00h
-	defb	21h,00h,20h,00h,00h,00h,35h,03h
-	defb	32h,03h,35h,03h,32h,03h,35h,03h
-	defb	32h,03h,35h,32h,40h,33h,41h,02h
-	defb	2Fh,02h,41h,02h,2Fh,02h,41h,02h
-	defb	2Fh,02h,41h,2Fh,3Fh,32h,40h,31h
-	defb	3Eh,31h,40h,31h,3Eh,31h,40h,31h
-	defb	3Eh,31h,40h,31h,3Eh,31h,32h,36h
-	defb	3Ah,36h,32h,36h,3Ah,36h,32h,36h
-	defb	40h,36h,33h,36h,34h,36h,00h,00h
+	defb	21h,00h,20h,00h,00h,00h
+
+; Партитура 3-го голоса (voice3; КР580ВИ53 счётчик 2, данные OUT 0x09, CW 0xB6) трека УРОВНЯ — единственный звучащий голос уровня. База задана напрямую LXI D,30D2h @0x2E72 внутри data_music_scores_level (трек #2 загрузчика func_music_load_track 0x2E2E). 64 кода + терминатор цикла 00h @0x3112 = 65 байт; 0x3113 — свободный байт, с 0x3114 начинается data_glyph_block. Формат тот же, что у заставки: код = индекс слова-периода в data_note_freq_table_title 0x301C (LXI H,301Ch @0x2FD2 в воркере 0x2FA6 — та же таблица, отдельной «уровневой» нет); 00h = переход к базе; бит7=1 = холд; 0xE0..0xEF = inline-команда только у v1. Все коды уровня лежат в 2..65, бит7 не встречается, слова 0000h нет → на уровне нет ни холдов, ни команд, ни рестов. Живые подтверждения: (1) RAM 0x30D2..0x3112 побайтово == ROM-образ (source=image, «развёртки в RAM» как в ТЗ не происходит); (2) указатель чтения [0x7DDC] наблюдался внутри 0x30D2..0x3112 и возвращался к базе после 00h; (3) в I/O-трассе игрового сеанса встречаются записи ТОЛЬКО в порт 0x09. Базы v1/v2 = 0x3112 — это байт-терминатор, то есть заглушка: даже при ненулевом гейте эти голоса молчали бы.
+data_music_track_level_03:
+	defb	35h,03h,32h,03h,35h,03h,32h,03h
+	defb	35h,03h,32h,03h,35h,32h,40h,33h
+	defb	41h,02h,2Fh,02h,41h,02h,2Fh,02h
+	defb	41h,02h,2Fh,02h,41h,2Fh,3Fh,32h
+	defb	40h,31h,3Eh,31h,40h,31h,3Eh,31h
+	defb	40h,31h,3Eh,31h,40h,31h,3Eh,31h
+	defb	32h,36h,3Ah,36h,32h,36h,3Ah,36h
+	defb	32h,36h,40h,36h,33h,36h,34h,36h
+	defb	00h
+
+; Uncovered ROM bytes — neither code nor an RDB object
+gap_3113:
+	defb	00h
 
 ; Шрифт 8x8: 128 глифов по 8 байт, адрес = 0x3114+8*код, байт0 = верхняя строка, MSB = левый пиксель; копируется в RAM 0x6000 и 0x6400 (LXI H,3114 / LXI D,6000 / LXI B,0400 / CALL 017C @0x2B32 и @0x23C6); func_render_glyph_vram читает 0x6007+8*код вниз (DCX H) при росте адреса VRAM
 data_glyph_block:
@@ -7284,133 +7297,147 @@ gap_4BE7:
 	defb	1Fh,0F0h,07h,0FEh,3Fh,0F0h,18h,00h
 	defb	0C7h,0FFh,0FEh,0Fh,0F0h,03h,0FCh,1Fh
 	defb	0E0h,18h,00h,61h,20h,44h,45h,0Dh
-	defb	09h,50h,4Fh,50h,20h,38h,0F1h,01h
+	defb	09h,50h,4Fh,50h,20h
+
+; Дорожка 2-го голоса (voice2; КР580ВИ53 счётчик 1, данные в OUT 0x0A, CW 0x76) трека ЗАСТАВКИ. База — LXI B,4CC4h @0x2E49 внутри data_music_scores_title (трек #1 загрузчика func_music_load_track @0x2E2E), прямая 16-битная константа, без stride/таблицы указателей. Чтение в RAM по var_music_ptr_title_02 @0x7DD2 (на живом экране заставки = 0x4CF2). Поток 351 байт, терминатор 0x00. Формат кода общий (см. data_music_track_title_01), но inline-команд 0xE0..0xEF НЕТ (worker 0x2F34 не проверяет старший ниббл): бит7=0 -> нота на 2 шага, бит7=1 -> холд (ниббл × 2 шага, ANI 0F / RAL / STA 7DD4 @0x2F9F), 0x00 -> цикл. РЕСТ = код 0x38, его слово таблицы = 0 (ветка MVI A,09 / MVI E,00 / CALL 2F30 @0x2F80 — gate cmd9 с E=0). Холд-коды в потоке: 0xF1, 0xF2. Сумма длительностей = ровно 800 шагов = 48.00 с, как у v1 и v3. Artikуляция: гейт 0x1F ([0x7DD8]) -> cmd9 @0x0397 при установленном бите 4 уходит в JNZ 02B8, то есть CW НЕ пишется -> легато (звучание на всю ступеньку), в отличие от стаккато voice1.
+data_music_track_title_02:
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
 	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
 	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
 	defb	01h,0F1h,38h,0F1h,01h,38h,0F2h,01h
 	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
 	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
 	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,01h,38h
+	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
+	defb	01h,0F1h,38h,0F1h,34h,38h,0F2h,34h
+	defb	0F1h,38h,0F1h,34h,38h,0F2h,34h,0F1h
+	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
+	defb	0F1h,33h,38h,0F2h,33h,0F1h,38h,0F1h
 	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
 	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
+	defb	0F2h,01h,0F1h,38h,0F1h,01h,38h,0F2h
+	defb	01h,0F1h,38h,0F1h,34h,38h,0F2h,34h
+	defb	0F1h,38h,0F1h,34h,38h,0F2h,34h,0F1h
 	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
-	defb	0F1h,34h,38h,0F2h,34h,0F1h,38h,0F1h
-	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,33h
-	defb	38h,0F2h,33h,0F1h,38h,0F1h,33h,38h
-	defb	0F2h,33h,0F1h,38h,0F1h,01h,38h,0F2h
-	defb	01h,0F1h,38h,0F1h,01h,38h,0F2h,01h
-	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
-	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
-	defb	0F1h,34h,38h,0F2h,34h,0F1h,38h,0F1h
-	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
-	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
 	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
-	defb	01h,38h,0F2h,01h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,33h,38h
+	defb	0F2h,33h,0F1h,38h,0F1h,33h,38h,0F2h
+	defb	33h,0F1h,38h,0F1h,01h,38h,0F2h,01h
+	defb	0F1h,38h,0F1h,01h,38h,0F2h,01h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,33h,38h
+	defb	0F2h,33h,0F1h,38h,0F1h,33h,38h,0F2h
+	defb	33h,0F1h,38h,0F1h,40h,38h,0F2h,40h
+	defb	0F1h,38h,0F1h,40h,38h,0F2h,40h,0F1h
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,38h,0F1h
+	defb	34h,38h,0F2h,34h,0F1h,38h,0F1h,34h
+	defb	38h,0F2h,34h,0F1h,38h,0F1h,33h,38h
+	defb	0F2h,33h,0F1h,38h,0F1h,33h,38h,0F2h
+	defb	33h,0F1h,38h,0F1h,40h,38h,0F2h,40h
 	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
-	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
-	defb	0F1h,40h,38h,0F2h,40h,0F1h,38h,0F1h
-	defb	40h,38h,0F2h,40h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,38h,0F1h,34h,38h,0F2h
-	defb	34h,0F1h,38h,0F1h,34h,38h,0F2h,34h
-	defb	0F1h,38h,0F1h,33h,38h,0F2h,33h,0F1h
-	defb	38h,0F1h,33h,38h,0F2h,33h,0F1h,38h
-	defb	0F1h,40h,38h,0F2h,40h,0F1h,38h,0F1h
-	defb	33h,38h,0F2h,33h,0F1h,38h,0F1h,01h
-	defb	38h,0F2h,01h,0F1h,38h,0F1h,01h,38h
-	defb	0F2h,01h,0F1h,00h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,3Bh,0F1h,34h,3Bh
-	defb	3Bh,0F1h,34h,0F1h,3Bh,3Bh,34h,3Bh
-	defb	3Bh,0F1h,34h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,32h,0F1h,36h,32h
-	defb	32h,0F1h,36h,0F1h,32h,32h,36h,32h
-	defb	32h,0F1h,36h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,2Fh,2Fh,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,3Bh,0F1h,34h,3Bh
-	defb	3Bh,0F1h,34h,0F1h,2Fh,0F1h,35h,2Fh
-	defb	2Fh,0F1h,35h,0F1h,33h,0F1h,30h,33h
-	defb	33h,0F1h,30h,0F1h,33h,33h,30h,33h
-	defb	33h,0F1h,30h,0F1h,00h,38h,0F3h,38h
-	defb	0F3h,38h,0F3h,38h,0F3h,38h,0F3h,38h
-	defb	0F3h,38h,0F3h,38h,0F3h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,4Ch,38h,38h
-	defb	0F1h,3Dh,38h,3Bh,38h,12h,0Fh,1Ah
+	defb	38h,0F1h,01h,38h,0F2h,01h,0F1h,38h
+	defb	0F1h,01h,38h,0F2h,01h,0F1h,00h
+
+; Дорожка 1-го голоса (voice1; КР580ВИ53 счётчик 0, данные в OUT 0x0B, CW 0x36) трека ЗАСТАВКИ. База задана напрямую LXI H,4E23h @0x2E46 внутри data_music_scores_title (дескриптор трека #1 загрузчика func_music_load_track @0x2E2E) — без таблицы указателей и без stride. В RAM читается по var_music_ptr_title_01 @0x7DC7 (на живом экране «HIT BUTTON OR SPACE KEY» = 0x4E58). Поток 401 байт, терминатор 0x00 в конце. ФОРМАТ КОДА (тот же алфавит, что у v2/v3): бит7=0 и код<>0 -> индекс data_note_freq_table_title, ступенька 2 шага; бит7=1 -> ХОЛД: (младший ниббл × 2) шагов, тональная защёлка не перезаписывается (ANI 0F / RAL / STA 7DC9 @0x2E27) — нота продлевается; 0x00 -> ЦИКЛ к базе, 0 шагов, байт обрабатывается в том же шаге; 0xE0..0xEF -> inline-команда cmdC с E=(ниббл<<1) (ANI F0 / CPI E0 @0x2DB3), 0 шагов — только у voice1. Сумма длительностей = ровно 800 шагов = 48.00 с (1 шаг = 3 VBlank-тика по 20 мс) — независимая сходимость с v2 и v3, поэтому разбор формата считается подтверждённым. Artikуляция: гейт-код 0x1F ([0x7DCD]) -> cmd8 @0x0332 -> one-shot 3 кадра ([0x03CD]=0x0C от [0x7DD6]) -> нота звучит 1 шаг из 2, то есть стаккато.
+data_music_track_title_01:
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	3Bh,0F1h,34h,3Bh,3Bh,0F1h,34h,0F1h
+	defb	3Bh,3Bh,34h,3Bh,3Bh,0F1h,34h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	32h,0F1h,36h,32h,32h,0F1h,36h,0F1h
+	defb	32h,32h,36h,32h,32h,0F1h,36h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	2Fh,2Fh,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	3Bh,0F1h,34h,3Bh,3Bh,0F1h,34h,0F1h
+	defb	2Fh,0F1h,35h,2Fh,2Fh,0F1h,35h,0F1h
+	defb	33h,0F1h,30h,33h,33h,0F1h,30h,0F1h
+	defb	33h,33h,30h,33h,33h,0F1h,30h,0F1h
+	defb	00h
+
+; Дорожка 3-го голоса (voice3; КР580ВИ53 счётчик 2, данные в OUT 0x09, CW 0xB6) трека ЗАСТАВКИ. База — LXI D,4FB4h @0x2E4C внутри data_music_scores_title (трек #1 загрузчика func_music_load_track @0x2E2E), прямая константа. Чтение в RAM по var_music_ptr_title_03 @0x7DDC (на экране заставки = 0x4FD8). Поток 259 байт, терминатор 0x00. Формат кода общий (см. data_music_track_title_01), inline-команд нет: бит7=0 -> нота 2 шага, бит7=1 -> холд (ниббл × 2, ANI 0F / RAL / STA 7DDE @0x3015), 0x00 -> цикл. РЕСТ = код 0x38 (слово таблицы 0; ветка MVI A,0A / MVI E,00 / CALL 2F30 @0x2FF6). Холд-коды: 0xF1, 0xF3, 0xF5, 0xF7, 0xFF. Сумма длительностей = ровно 800 шагов = 48.00 с, независимо от v1/v3. Artikуляция: гейт [0x7DE0]=0x0E -> старший бит 4 сброшен и ниббл 14 >= 3 -> A=0x00 -> CALL 0310 -> ANI 04 -> JZ 0298, то есть перезагрузка делителя БЕЗ записи CW -> легато с ре-тригом. Особенность worker'а: @0x2FAE стоит LXI H,7DC4h / INR M — собственный счётчик шагов на каждый вызов.
+data_music_track_title_03:
+	defb	38h,0F3h,38h,0F3h,38h,0F3h,38h,0F3h
+	defb	38h,0F3h,38h,0F3h,38h,0F3h,38h,0F3h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+	defb	4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
 	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
-	defb	1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h,11h
-	defb	0F5h,38h,11h,12h,0Fh,1Ah,12h,0Fh
+	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h
+	defb	11h,0F7h,11h,0F5h,38h,11h,12h,0Fh
 	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
-	defb	0Fh,1Ah,0F1h,11h,0F7h,11h,0F5h,38h
-	defb	11h,10h,0F7h,14h,0F7h,12h,0FFh,12h
-	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
-	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h,11h
-	defb	0F7h,11h,0F5h,38h,11h,12h,0Fh,1Ah
+	defb	0Fh,1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h
+	defb	11h,0F5h,38h,11h,10h,0F7h,14h,0F7h
+	defb	12h,0FFh,12h,0Fh,1Ah,12h,0Fh,1Ah
 	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
-	defb	1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h,11h
-	defb	0F5h,38h,11h,10h,0F7h,14h,0F7h,12h
-	defb	0FFh,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
+	defb	1Ah,0F1h,11h,0F7h,11h,0F5h,38h,11h
+	defb	12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+	defb	1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h
+	defb	11h,0F7h,11h,0F5h,38h,11h,10h,0F7h
+	defb	14h,0F7h,12h,0FFh,12h,0Fh,1Ah,12h
 	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
-	defb	0F1h,11h,0Eh,0Ch,11h,0Eh,0Ch,11h
+	defb	12h,0Fh,1Ah,0F1h,11h,0Eh,0Ch,11h
 	defb	0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
-	defb	0F1h,10h,0Dh,0Bh,10h,0Dh,0Bh,10h
+	defb	11h,0Eh,0Ch,0F1h,10h,0Dh,0Bh,10h
 	defb	0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
-	defb	0F1h,0Fh,0F7h,10h,20h,11h,21h,21h
-	defb	0F3h,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
+	defb	10h,0Dh,0Bh,0F1h,0Fh,0F7h,10h,20h
+	defb	11h,21h,21h,0F3h,12h,0Fh,1Ah,12h
 	defb	0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
-	defb	0F1h,11h,0Eh,0Ch,11h,0Eh,0Ch,11h
+	defb	12h,0Fh,1Ah,0F1h,11h,0Eh,0Ch,11h
 	defb	0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
-	defb	0F1h,10h,0Dh,0Bh,10h,0Dh,0Bh,10h
+	defb	11h,0Eh,0Ch,0F1h,10h,0Dh,0Bh,10h
 	defb	0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
-	defb	0F1h,0Fh,0F7h,14h,0F7h,12h,0FFh,00h
+	defb	10h,0Dh,0Bh,0F1h,0Fh,0F7h,14h,0F7h
+	defb	12h,0FFh,00h
+
+; Uncovered ROM bytes — neither code nor an RDB object
+gap_50B7:
 	defb	00h,0C3h,88h,0C4h,0C3h,0E8h,0E6h,01h
 	defb	0CAh,4Bh,0E7h,3Ah,1Eh,0DBh,0A7h,0CAh
 	defb	4Bh,0E7h,26h,00h,3Ah,0B9h,0E8h,0B4h
@@ -7431,6 +7458,7 @@ lbl_1946	equ	1946h
 lbl_19ae	equ	19AEh
 lbl_23a5	equ	23A5h
 lbl_271b	equ	271Bh
+data_music_track_level_01	equ	3112h
 data_level_02	equ	36AAh
 data_level_03	equ	3775h
 data_level_04	equ	38B4h
@@ -7484,5 +7512,10 @@ var_slot_level_table	equ	7DABh
 var_slot_lives_table	equ	7DAFh
 var_slot_score_table	equ	7DB3h
 var_player_turn_slot	equ	7DBCh
+var_music_tempo_level	equ	7DBEh
+var_music_tempo_frames	equ	7DC3h
+var_music_ptr_title_01	equ	7DC7h
+var_music_ptr_title_02	equ	7DD2h
+var_music_ptr_title_03	equ	7DDCh
 var_music_step_counter	equ	7DE2h
 var_attract_strobe_latch	equ	7DF2h
