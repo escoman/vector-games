@@ -23,13 +23,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import struct
 import sys
 
 from analyze.mcp_session import addr_hex, bytes_of, open_session, to_addr
 
-SUPPORTED_ENCODINGS = ("note_code",)
+SUPPORTED_ENCODINGS = ("note_code", "period_table")
 # Коды, которые спецификация обязана объяснить явно: старший бит в 8080-ных
 # нотно-табличных форматах обычно означает разветвление, а не высоту тона.
 DEFAULT_CODE_MASK = 0x7F
@@ -169,8 +170,107 @@ def validate_codes(track, codes, spec):
     return bad
 
 
+def period_events(track, codes, spec):
+    """period_table: код дорожки = индекс слова-периода тонального таймера.
+
+    Высота не считается по формуле "код + note_offset": таблица периодов в
+    ROM блочная (диатонические и хроматические банки, разные регистры), поэтому
+    нота = ближайшее равнотемперированное звучание f = timer_hz/(prescale*period).
+    Всё остальное (шаги, длительности, гейт, коды цикла/команд) задаёт спека:
+
+      loop_code                -> цикл к базе, 0 шагов;
+      command_prefix/mask      -> inline-команда, 0 шагов (проверяется раньше холда);
+      бит 7 = 1                -> холд: (младший ниббл * hold_steps_per_nibble)
+                                 шагов, тональная защёлка не меняется (нота
+                                 продлевается, а не начинается заново);
+      rest_rule=table_word_zero-> слово таблицы = 0 -> тишина на slot_steps шагов;
+      иначе                    -> нота на slot_steps шагов.
+
+    gate_steps > 0 укрупняет звучание (короткая нота, как у one-shot гейта
+    КР580ВИ53), 0 = легато до конца склейки нота+холды.
+    """
+    table = spec.get("pitch_table") or {}
+    words = table.get("words")
+    if not words:
+        raise SystemExit("encoding=period_table требует pitch_table.words в спецификации")
+    name = track.get("name") or "?"
+    prescale = num(table.get("prescale"), 1)
+    timer_hz = num(table.get("timer_hz"), 1500000)
+    a4 = float(table.get("a4_hz", 440))
+    if prescale <= 0 or timer_hz <= 0 or a4 <= 0:
+        raise SystemExit("pitch_table: prescale/timer_hz/a4_hz должны быть > 0")
+    ppq = num(spec.get("ppq"), 192)
+    step_ticks = num(track.get("step_ticks", spec.get("step_ticks")), ppq // 4)
+    velocity = num(track.get("velocity", spec.get("velocity")), 100)
+    channel = num(track.get("midi_channel"), 0)
+    slot = num(track.get("slot_steps", spec.get("slot_steps")), 1)
+    hold_unit = num(track.get("hold_steps_per_nibble",
+                              spec.get("hold_steps_per_nibble")), slot)
+    loop_code = num(track.get("loop_code", spec.get("loop_code")), 0)
+    gate = num(track.get("gate_steps", spec.get("gate_steps")), 0)
+    rule = track.get("rest_rule", spec.get("rest_rule", "table_word_zero"))
+    if rule != "table_word_zero":
+        raise SystemExit("дорожка %s: неизвестный rest_rule %r" % (name, rule))
+    prefix = (num(track["command_prefix"])
+              if track.get("command_prefix") is not None else None)
+    pmask = num(track.get("command_mask", "0xF0")) if prefix is not None else None
+
+    def note_of(period):
+        rel = 12.0 * math.log2((timer_hz / (prescale * period)) / a4)
+        return 69 + int(round(rel))
+
+    segments, position, current = [], 0, None
+    for index, code in enumerate(codes):
+        if code == loop_code:
+            continue                                  # 0 шагов, переход к базе
+        if prefix is not None and (code & pmask) == prefix:
+            continue                                  # inline-команда, 0 шагов
+        if code & 0x80:                               # холд: защёлка та же
+            duration = (code & 0x0F) * hold_unit
+            if current is None:
+                current = {"start": position, "note": None, "steps": duration}
+                segments.append(current)
+            else:
+                current["steps"] += duration           # лига-склейка к предыдущей
+            position += duration
+            continue
+        if code >= len(words):
+            raise SystemExit("дорожка %s: шаг %d, код %d вне таблицы периодов "
+                             "(%d слов) — расширьте pitch_table или разберите "
+                             "формат" % (name, index, code, len(words)))
+        period = words[code]
+        note = None if period == 0 else note_of(period)
+        if note is not None and not 0 <= note <= 127:
+            raise SystemExit("дорожка %s: шаг %d (период %d) даёт MIDI-ноту %d "
+                             "вне 0..127 — проверьте timer_hz/prescale/a4_hz"
+                             % (name, index, period, note))
+        current = {"start": position, "note": note, "steps": slot}
+        segments.append(current)
+        position += slot
+
+    events = []
+    program = track.get("gm_program")
+    if program is not None:
+        events.append((0, -1, bytes([0xC0 | channel, num(program) & 0x7F])))
+    for segment in segments:
+        if segment["note"] is None:
+            continue
+        sounding = (segment["steps"] if gate <= 0 else min(gate, segment["steps"]))
+        events.append((segment["start"] * step_ticks, 1,
+                       bytes([0x90 | channel, segment["note"], velocity])))
+        events.append(((segment["start"] + sounding) * step_ticks, 0,
+                       bytes([0x80 | channel, segment["note"], 0])))
+    return events
+
+
 def events_for_track(track, codes, spec):
     """Коды → note on/off. Порядок note_off раньше note_on в одном тике."""
+    encoding = track.get("encoding", spec.get("encoding", "note_code"))
+    if encoding not in SUPPORTED_ENCODINGS:
+        raise SystemExit("дорожка %s: неизвестная encoding %r (годятся %s)"
+                         % (track.get("name"), encoding, SUPPORTED_ENCODINGS))
+    if encoding == "period_table":
+        return period_events(track, codes, spec)
     ppq = num(spec.get("ppq"), 192)
     step_ticks = num(track.get("step_ticks", spec.get("step_ticks")), ppq // 4)
     note_offset = num(track.get("note_offset", spec.get("note_offset")), 0)

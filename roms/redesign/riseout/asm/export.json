@@ -1,0 +1,24 @@
+{
+  "rom": "riseout.rom",
+  "rom_size": 20480,
+  "origin": "0x0100",
+  "mapping_entry_point": "0x0000",
+  "rom_sha256": "c265014b3db42ccc3454c8c9e6a1d9cb47f43e00c373f494ece1b47f675a6991",
+  "objects": 479,
+  "links": 374,
+  "code_ranges": 29,
+  "data_ranges": 53,
+  "warnings": 64,
+  "errors": 0,
+  "conflicts": 0,
+  "unresolved_references": 0,
+  "coverage": {
+    "rom_bytes": 20480,
+    "code_bytes": 10060,
+    "data_bytes": 7744,
+    "instruction_count": 5181,
+    "outside_window_dropped": 256,
+    "uncovered": [{"start": "0x0122", "end": "0x0123"}, {"start": "0x016C", "end": "0x017B"}, {"start": "0x01A3", "end": "0x01A3"}, {"start": "0x01D5", "end": "0x01E4"}, {"start": "0x0217", "end": "0x035D"}, {"start": "0x0397", "end": "0x03D1"}, {"start": "0x0418", "end": "0x041C"}, {"start": "0x04EF", "end": "0x04F0"}, {"start": "0x066A", "end": "0x071D"}, {"start": "0x0720", "end": "0x0720"}, {"start": "0x0829", "end": "0x0829"}, {"start": "0x082C", "end": "0x0862"}, {"start": "0x089B", "end": "0x08A2"}, {"start": "0x0DE9", "end": "0x0DEA"}, {"start": "0x125C", "end": "0x12BB"}, {"start": "0x1CF5", "end": "0x1CF7"}, {"start": "0x1D03", "end": "0x1D05"}, {"start": "0x1D13", "end": "0x1D15"}, {"start": "0x1D1F", "end": "0x1D21"}, {"start": "0x1D30", "end": "0x1D32"}, {"start": "0x1D40", "end": "0x1D42"}, {"start": "0x1D4D", "end": "0x1D4F"}, {"start": "0x1D60", "end": "0x1D62"}, {"start": "0x1D73", "end": "0x1D75"}, {"start": "0x1D86", "end": "0x1D88"}, {"start": "0x1D97", "end": "0x1D99"}, {"start": "0x1E9C", "end": "0x1F48"}, {"start": "0x1F99", "end": "0x1FAC"}, {"start": "0x248F", "end": "0x2497"}, {"start": "0x27D1", "end": "0x27E0"}, {"start": "0x284A", "end": "0x2892"}, {"start": "0x2A74", "end": "0x2A7B"}, {"start": "0x2B9B", "end": "0x2B9C"}, {"start": "0x2BB5", "end": "0x2BB6"}, {"start": "0x2BC7", "end": "0x2BC8"}, {"start": "0x2BCD", "end": "0x2BCE"}, {"start": "0x2BDD", "end": "0x2BDE"}, {"start": "0x2BE5", "end": "0x2BE6"}, {"start": "0x2CF0", "end": "0x2CF1"}, {"start": "0x2CFF", "end": "0x2D00"}, {"start": "0x2D05", "end": "0x2D06"}, {"start": "0x2D0E", "end": "0x2D0F"}, {"start": "0x301C", "end": "0x3113"}, {"start": "0x4BE7", "end": "0x50FF"}],
+    "complete": false
+  }
+}

@@ -29,6 +29,7 @@ import _bootstrap  # noqa: F401  (кладёт utils/ в sys.path)
 from analyze import naming, evidence_cache, report_gen, pipeline, clear_cache
 from analyze.evidence_cache import EvidenceCache, normalize_args, _norm_scalar
 from analyze import mcp_session
+from analyze import porttrace2midi as pt
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +461,51 @@ class EnvelopeTest(unittest.TestCase):
     def test_requires_dict(self):
         with self.assertRaises(SystemExit):
             mcp_session.envelope(["not", "a", "dict"], module="m")
+
+
+class PorttraceTest(unittest.TestCase):
+    """Чистая логика порт-трасса -> ноты (без эмулятора)."""
+
+    @staticmethod
+    def _out(port, val):
+        return {"type": "out", "port": port, "value": val}
+
+    def test_lo_hi_pair_becomes_pitch(self):
+        # 0x34,0x35 -> 0x3534=13620 -> f=1497600/13620=109.96 -> MIDI 45 (A2)
+        frames = [[self._out(0x0B, 0x34), self._out(0x0B, 0x35)]]
+        notes = pt.vi53_parse(frames)
+        self.assertEqual(notes[0], [(0, 13620, 45)])
+
+    def test_in_ignoring_non_out(self):
+        frames = [[{"type": "in", "port": 0x0B, "value": 0x34}]]
+        self.assertEqual(pt.vi53_parse(frames)[0], [])
+
+    def test_consecutive_same_value_collapses(self):
+        load = [self._out(0x0B, 0x34), self._out(0x0B, 0x35)]
+        frames = [load, load[:], load[:]]          # то же значение 3 раза
+        self.assertEqual(len(pt.vi53_parse(frames)[0]), 1)
+
+    def test_byte_order_lsb_first(self):
+        # обратный порядок даёт другое 16-битное значение
+        frames = [[self._out(0x0A, 0x7C), self._out(0x0A, 0x17)]]
+        notes = pt.vi53_parse(frames)
+        self.assertEqual(notes[1][0][1], 0x177C)
+
+    def test_detect_loop_finds_period(self):
+        prog = [[self._out(0x0B, 0x34), self._out(0x0B, 0x35)], [], [], [],
+                [self._out(0x0B, 0x30), self._out(0x0B, 0x2A)], [], [], []]
+        frames = [b for _ in range(3) for b in [list(x) for x in prog]]
+        loop = pt.detect_loop(frames, min_period=4, min_repeats=2)
+        self.assertIsNotNone(loop)
+        self.assertEqual(loop[1], 8)
+
+    def test_build_midi_smf_header(self):
+        frames = [[self._out(0x0B, 0x34), self._out(0x0B, 0x35)],
+                  [self._out(0x08, 0x36)],
+                  [self._out(0x0B, 0x30), self._out(0x0B, 0x2A)]]
+        smf, summ = pt.build_midi(frames)
+        self.assertEqual(smf[:4], b"MThd")
+        self.assertGreater(summ["sounding_frames"], 0)
 
 
 if __name__ == "__main__":
