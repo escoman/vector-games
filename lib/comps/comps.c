@@ -128,8 +128,8 @@ unsigned char controller_run(controller_t *ctrl)
                 /* Переключить фокус на новый */
                 ctrl->items[ctrl->active]->focus_toggle(
                     ctrl->items[ctrl->active]);
-                /* Отобразить курсор нового активного */
-                ctrl->items[ctrl->active]->draw_content(
+                /* Отобразить курсор нового активного (контент уже на экране) */
+                ctrl->items[ctrl->active]->draw_cursor(
                     ctrl->items[ctrl->active]);
             } else if (key == 27) {  /* ESC — выход */
                 return 27;
@@ -141,13 +141,12 @@ unsigned char controller_run(controller_t *ctrl)
                     if (res == 1) handled = 1; /* обработано */
                 }
                 if (!handled) {
-                    /* Передать активному компоненту */
+                    /* Передать активному компоненту. Он сам выполняет
+                     * минимальную перерисовку: весь контент при изменении
+                     * текста/прокрутки, либо только курсор при навигации. */
                     if (ctrl->items[ctrl->active]->handle_key(
                             ctrl->items[ctrl->active], key))
                         return key;
-                    /* Перерисовать только содержимое */
-                    ctrl->items[ctrl->active]->draw_content(
-                        ctrl->items[ctrl->active]);
                 }
             }
         }

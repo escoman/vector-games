@@ -57,17 +57,16 @@ int main(void)
 
     /* Заголовок */
     gfx_print(0, 0, "EDIT / TEXTAREA TEST", 1);
-    gfx_print(0, 8, "______________________", 1);
 
     /* Edit-поля (однострочные) */
     edit_init(&name_field, name_buf, sizeof(name_buf) - 1,
-              20, 1, 20, "NAME");
+              30, 0, 20, "NAME");
     edit_init(&score_field, score_buf, sizeof(score_buf) - 1,
-              20, 1, 60, "SCORE");
+              20, 0, 60, "SCORE");
 
     /* Textarea (многострочное, 3 видимые строки) */
     textarea_init(&note_area, note_buf, sizeof(note_buf) - 1,
-                  20, 5, 1, 100, "NOTES");
+                  20, 5, 0, 100, "NOTES");
 
     /* Контроллер */
     controller_init(&ctrl);

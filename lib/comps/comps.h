@@ -16,6 +16,7 @@
 typedef struct component_s {
     void (*draw)(struct component_s *c, unsigned char active);
     void (*draw_content)(struct component_s *c);
+    void (*draw_cursor)(struct component_s *c);  /* только курсор */
     unsigned char (*handle_key)(struct component_s *c, unsigned char key);
     void (*focus_toggle)(struct component_s *c);  /* инверсия label */
 } component_t;
@@ -81,6 +82,7 @@ void textarea_init(textarea_t *ta, char *buf, unsigned int max_len,
 /* Реализации интерфейса component_t (вызываются через контроллер). */
 void textarea_draw(component_t *c, unsigned char active);
 void textarea_draw_content(component_t *c);
+void textarea_draw_cursor(component_t *c);
 unsigned char textarea_handle_key(component_t *c, unsigned char key);
 void textarea_focus_toggle(component_t *c);
 

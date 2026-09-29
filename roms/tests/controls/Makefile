@@ -7,7 +7,7 @@ TARGET = controls.rom
 
 SRCS = $(LIB)/sys/startup.asm $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/clr.asm \
-       $(LIB)/gfx/pr.asm \
+       $(LIB)/gfx/pr.asm $(LIB)/gfx/fstride.asm \
        $(LIB)/kbd/kbdscan.asm $(LIB)/kbd/keyboard.c \
        $(LIB)/comps/comps.c $(LIB)/comps/textarea.c \
        main.c
