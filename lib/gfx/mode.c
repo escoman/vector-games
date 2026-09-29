@@ -29,6 +29,12 @@ const gfx_mode_t gfx_modes[] = {
 
 unsigned char gfx_current_mode = 0;  /* аппаратный режим при старте */
 
+/* Маска активных плоскостей текущего режима (bit0→E000, bit1→C000,
+ * bit2→A000, bit3→8000). Читается из pr.asm (draw_char), чтобы не
+ * писать/стирать плоскости, отсутствующие в режиме. По умолчанию —
+ * режим 0 (все 4 плоскости). */
+unsigned char gfx_active_planes = 0x0F;
+
 /* ------------------------ Переключение режима ----------------------- */
 
 /* asm-функции из v06pal.asm и clr.asm */
@@ -38,6 +44,7 @@ extern void v06_set_palette_asm(const unsigned char *pal);
 void gfx_set_mode(unsigned char mode)
 {
     gfx_current_mode = mode;
+    gfx_active_planes = gfx_modes[mode].plane_mask;
 
     if (gfx_modes[mode].width_div8 > 32) {
         /* 512x256: ПИА + скролл 0xFF */

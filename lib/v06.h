@@ -81,6 +81,7 @@ typedef struct {
 
 extern const gfx_mode_t gfx_modes[];
 extern unsigned char gfx_current_mode;
+extern unsigned char gfx_active_planes;  /* маска активных плоскостей текущего режима */
 
 /* Режимы и очистка */
 extern void gfx_set_mode(unsigned char mode);
