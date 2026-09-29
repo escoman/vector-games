@@ -235,6 +235,24 @@ _write_tile:
 
 ## 6. Этапы TZ2
 
+### Stage R0. Перенос asm-дерева оригинала в remake/ и вынос данных в inc/
+- Копия asm-дерева: `remake/main.asm` (`org 0100h` + `include layout.asm`),
+  `remake/layout.asm` — address-ordered экспорт из `../asm/` (Stage 10),
+  `remake/code/`, `remake/data/` — read-only views с комментариями по функциям.
+- Чистые данные вынесены в `inc/` генератором `tools/split_data.py`:
+  глифы (`glyph_block.inc`, `glyph_mode_table.inc`), карты уровней
+  (`level_01.inc` .. `level_20.inc` — **каждый уровень в отдельном файле**,
+  нарезка по `data_level_map_offsets`), партитуры (`music_note_freq.inc`,
+  `music_track_title_01/02/03.inc`, `music_track_level_03.inc`). В
+  `layout.asm` блоки заменены на `include`, equ-алиасы `data_level_02..20`
+  из хвоста сняты (метки стали настоящими в inc/).
+- `remake/Makefile`: `z80asm -b -m=8080_strict` (флаги Stage 10), `make full`
+  → `verify` (побайтовая сверка с `src/riseout.rom`) + deploy.
+- **Accept:** `byte diffs=0`; заставка в MCP совпадает с оригиналом (точечная
+  надпись, 7 записей, 2 кредит-полосы, звёзды). R0 — **базовая точка**: с R1
+  побайтовый контракт осознанно ломается (см. Рамку), сверка дальше — по
+  наблюдаемому поведению.
+
 ### Stage R1. Каркас сборки на ASM игры
 - `remake/Makefile` на `zcc +vector06c --no-crt` + `z80asm`, **без `$(LIB)` в
   `SRCS`**: свои `boot_riseout.asm` (crt0-часть: `SP`, вектора, ISR) и
@@ -246,6 +264,8 @@ _write_tile:
   очищен, ни одного предупреждения эмулятора.
 
 ### Stage R2. Перенос примитивов из ROM
+- Материал переноса — уже лежащий в remake/ `layout.asm` и views `code/`,
+  `data/`; вынесенные в `inc/` блоки данных повторно не переносятся.
 - Ports по инвентарю §2.1: `font_riseout.asm`, `text_riseout.asm`,
   `gfx_overlay_riseout.asm`, `gfx_field_riseout.asm`, `snd_riseout.asm`,
   `kbd_riseout.asm` + `data_*` (шрифт, таблицы плоскостей/масок, партитуры).
@@ -305,7 +325,13 @@ roms/redesign/riseout/
 ├── asm/, reports/, tools/   (вход TZ — без изменений)
 ├── src/                     (эталон: riseout.rom, riseout.rdb — не правятся)
 └── remake/
-    ├── main.c               attract_screen() + game_loop() — только логика
+    ├── main.asm           org 0100h + include layout.asm (R0)
+    ├── layout.asm         address-ordered экспорт, данные вынесены в inc/ (R0)
+    ├── code/, data/       read-only views оригинала (R0)
+    ├── inc/               glyph_block.inc, glyph_mode_table.inc,
+    │                      level_01.inc..level_20.inc, music_*.inc (R0)
+    ├── tools/split_data.py генератор inc/ из ../asm/layout.asm (R0)
+    ├── main.c             attract_screen() + game_loop() — только логика
     ├── level.c              чтение карт/спавн (логика поверх данных)
     ├── boot_riseout.asm     crt0-часть + ISR (палитра, rows, скролл, звук)
     ├── font_riseout.asm     рендер глифов 8x8 в бит-плоскости
@@ -316,7 +342,8 @@ roms/redesign/riseout/
     ├── kbd_riseout.asm      строб rows, декод, кольцо клавиш
     ├── data_*.asm/.h        шрифт, карты, партитуры, таблицы
     ├── inc/riseout.h        прототипы ASM-швов игры (НЕ v06.h)
-    ├── Makefile             zcc/sccz80 + z80asm, без $(LIB), make full → deploy
+    ├── Makefile             R0: z80asm + verify; с R1: + zcc/sccz80, без $(LIB),
+    │                        make full → deploy
     └── (отчёт) ../reports/TZ2.md
 ```
 

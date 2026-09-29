@@ -1,0 +1,35 @@
+; Дорожка 3-го голоса (voice3; КР580ВИ53 счётчик 2, данные в OUT 0x09, CW 0xB6) трека ЗАСТАВКИ. База — LXI D,4FB4h @0x2E4C внутри data_music_scores_title (трек #1 загрузчика func_music_load_track @0x2E2E), прямая константа. Чтение в RAM по var_music_ptr_title_03 @0x7DDC (на экране заставки = 0x4FD8). Поток 259 байт, терминатор 0x00. Формат кода общий (см. data_music_track_title_01), inline-команд нет: бит7=0 -> нота 2 шага, бит7=1 -> холд (ниббл × 2, ANI 0F / RAL / STA 7DDE @0x3015), 0x00 -> цикл. РЕСТ = код 0x38 (слово таблицы 0; ветка MVI A,0A / MVI E,00 / CALL 2F30 @0x2FF6). Холд-коды: 0xF1, 0xF3, 0xF5, 0xF7, 0xFF. Сумма длительностей = ровно 800 шагов = 48.00 с, независимо от v1/v3. Artikуляция: гейт [0x7DE0]=0x0E -> старший бит 4 сброшен и ниббл 14 >= 3 -> A=0x00 -> CALL 0310 -> ANI 04 -> JZ 0298, то есть перезагрузка делителя БЕЗ записи CW -> легато с ре-тригом. Особенность worker'а: @0x2FAE стоит LXI H,7DC4h / INR M — собственный счётчик шагов на каждый вызов.
+data_music_track_title_03:
+        defb    38h,0F3h,38h,0F3h,38h,0F3h,38h,0F3h
+        defb    38h,0F3h,38h,0F3h,38h,0F3h,38h,0F3h
+        defb    4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+        defb    4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+        defb    4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+        defb    4Ch,38h,38h,0F1h,3Dh,38h,3Bh,38h
+        defb    12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+        defb    1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h
+        defb    11h,0F7h,11h,0F5h,38h,11h,12h,0Fh
+        defb    1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,12h
+        defb    0Fh,1Ah,12h,0Fh,1Ah,0F1h,11h,0F7h
+        defb    11h,0F5h,38h,11h,10h,0F7h,14h,0F7h
+        defb    12h,0FFh,12h,0Fh,1Ah,12h,0Fh,1Ah
+        defb    12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+        defb    1Ah,0F1h,11h,0F7h,11h,0F5h,38h,11h
+        defb    12h,0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh
+        defb    1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah,0F1h
+        defb    11h,0F7h,11h,0F5h,38h,11h,10h,0F7h
+        defb    14h,0F7h,12h,0FFh,12h,0Fh,1Ah,12h
+        defb    0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
+        defb    12h,0Fh,1Ah,0F1h,11h,0Eh,0Ch,11h
+        defb    0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
+        defb    11h,0Eh,0Ch,0F1h,10h,0Dh,0Bh,10h
+        defb    0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
+        defb    10h,0Dh,0Bh,0F1h,0Fh,0F7h,10h,20h
+        defb    11h,21h,21h,0F3h,12h,0Fh,1Ah,12h
+        defb    0Fh,1Ah,12h,0Fh,1Ah,12h,0Fh,1Ah
+        defb    12h,0Fh,1Ah,0F1h,11h,0Eh,0Ch,11h
+        defb    0Eh,0Ch,11h,0Eh,0Ch,11h,0Eh,0Ch
+        defb    11h,0Eh,0Ch,0F1h,10h,0Dh,0Bh,10h
+        defb    0Dh,0Bh,10h,0Dh,0Bh,10h,0Dh,0Bh
+        defb    10h,0Dh,0Bh,0F1h,0Fh,0F7h,14h,0F7h
+        defb    12h,0FFh,00h
