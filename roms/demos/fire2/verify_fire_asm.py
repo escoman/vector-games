@@ -168,9 +168,18 @@ def main():
     # --- 1) rnd_init ---
     emu.call("_rnd_init", sp=SP, max_steps=3_000_000)
     tbl = list(emu.cpu.mem[a_table:a_table + 256])
-    if tbl != ref.table:
-        i = first_diff(tbl, ref.table)
+    # Инлайн-ГСЧ (п. 1а): таблица расширена до 512 — [255..509] = копия [0..254]
+    # для линейного обхода (inx h) без mod-255. Индекс 255 в ASM = table[0],
+    # а ref.table[255] (LCG) никогда не читается (период 255) ⇒ сверяем [0..254].
+    if tbl[:255] != ref.table[:255]:
+        i = first_diff(tbl[:255], ref.table[:255])
         print(f"FAIL rnd_init: rnd_table[{i}] asm={tbl[i]:02X} ref={ref.table[i]:02X}")
+        return 1
+    ext = list(emu.cpu.mem[a_table + 255:a_table + 510])
+    if ext != ref.table[:255]:
+        i = first_diff(ext, ref.table[:255])
+        print(f"FAIL rnd_init: расширение rnd_table[255+{i}] asm={ext[i]:02X} "
+              f"ref={ref.table[i]:02X}")
         return 1
     mod3 = list(emu.cpu.mem[a_mod3:a_mod3 + 256])
     if mod3 != [v % 3 for v in range(256)]:
@@ -181,7 +190,7 @@ def main():
     if any(fb) or any(pb):
         print("FAIL rnd_init: fire_buf/prev_buf не обнулены")
         return 1
-    print("OK  rnd_init: rnd_table[256], rnd_mod3[256], буферы обнулены")
+    print("OK  rnd_init: rnd_table[512] (LCG+расширение), rnd_mod3[256], буферы обнулены")
 
     # --- 2..3) покадровая сверка ---
     for frame in range(FRAMES):

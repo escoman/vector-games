@@ -34,12 +34,13 @@ RNG_LEN EQU 255                         ; период индекса ГСЧ (н
 ; ================================================================
         SECTION bss_clib
         ALIGN 256
-_rnd_table:     defs 256                ; таблица ГСЧ
+_rnd_table:     defs 512                ; ГСЧ: LCG[0..255] + копия[0..254] в [255..509]
 _rnd_mod3:      defs 256                ; rnd_mod3[v] = v % 3
 _rnd_idx:       defb 0                  ; индекс ГСЧ (авто-обёртка на 256)
 _rnd_seed:      defw 0                  ; 16-битное семя LCG
 _rnd_tmp:       defb 0
 
+        ALIGN 64                        ; п. 1б: dest 64-выровнен ⇒ мл. 6 бит E = x
 _fire_buf:      defs BUFLEN             ; текущий кадр (байт на пиксель, 0..15)
 _prev_buf:      defs PREVLEN            ; теневая копия рендера (упакованные тетрады)
 
@@ -49,7 +50,6 @@ _prev_buf:      defs PREVLEN            ; теневая копия рендер
 ;   _fg_rnd_next портит лишь A/HL ⇒ BC/DE переживают вызовы ГСЧ.
 ;   Ни _fg_above_ptr, ни _fg_srcx, ни _fg_dest_ptr не нужны.
 _fg_power:      defb 0
-_fg_x:          defb 0
 _fg_y:          defb 0
 _fg_above:      defb 0
 _fg_decay:      defb 0
@@ -121,6 +121,23 @@ ri_loop:
         mov     a,c
         ora     a
         jnz     ri_loop
+
+        ; Расширение таблицы: table[255..509] = table[0..254]. Период ГСЧ 255,
+        ; поэтому table[255+k] = table[k]; это даёт инлайн-ГСЧ в fire_generate
+        ; линейный обход (inx h) без mod-255 обёртки на каждый пиксель. Хвост
+        ; покрывает максимум строки: idx≤254 + 192 чтения = индекс ≤445 < 510.
+        lxi     h,_rnd_table            ; src = &table[0]
+        lxi     d,_rnd_table+255        ; dst = &table[255]
+        lxi     b,255                   ; счётчик копии
+ri_ext:
+        mov     a,m
+        stax    d
+        inx     h
+        inx     d
+        dcx     b
+        mov     a,b
+        ora     c
+        jnz     ri_ext
 
         ; rnd_mod3[v] = v % 3, v = 0..255
         lxi     h,_rnd_mod3
@@ -259,21 +276,31 @@ fgb_norm:
         sui     RNG_LEN         ; 255..261 → 0..6 (одного вычитания хватает)
 fgb_store:
         sta     _rnd_idx
-        xra     a
-        sta     _fg_x                   ; x = 0
+        ; x = 0 неявно: DE на входе в fg_y_loop = база строки (64-выровн.) ⇒ E&63 = 0
         ; порог доп. затухания снижается на EXT_STEP с каждой строкой: у вершины
         ; пламя гасает почти всегда ⇒ высота подстраивается под FIRE_H автоматически
         lda     _fg_rowthr
         sui     EXT_STEP
         sta     _fg_rowthr
+        ; Инлайн-ГСЧ (п. 1а): указатель на расширенную таблицу живёт на стеке.
+        ; Чтение = pop h / mov a,m / inx h / push h (33 T) вместо call
+        ; _fg_rnd_next (97 T). SP не перехватываем ⇒ DI/EI не нужны, ISR не мешает.
+        lda     _rnd_idx
+        lxi     h,_rnd_table            ; ALIGN 256 ⇒ H = страница таблицы
+        mov     l,a                     ; HL = &_rnd_table[idx] (idx ≤ 254)
+        push    h                       ; указатель ГСЧ на стек (баланс в цикле)
 fg_x_loop:
         ; shift = rnd % 3;  sx = x + shift - 1 (wrap 0..63)
-        call    _fg_rnd_next            ; A = rnd (портит A/HL)
+        pop     h                       ; инлайн-ГСЧ: A = *ptr++
+        mov     a,m
+        inx     h
+        push    h
         lxi     h,_rnd_mod3             ; ALIGN 256 ⇒ мл. байт 00
         mov     l,a                     ; HL = &_rnd_mod3[rnd]
         mov     a,m                     ; A = shift ∈ {0,1,2}
         mov     h,a                     ; H = shift (L больше не нужен)
-        lda     _fg_x
+        mov     a,e                     ; A = dest_lo
+        ani     63                      ; x = E & 63 (fire_buf 64-выровн., п. 1б)
         add     h                       ; A = x + shift
         sui     1                       ; A = x + shift - 1 (CY если x+shift==0)
         jc      fg_sx_wrap63
@@ -296,11 +323,17 @@ fg_sx_done:
         sta     _fg_above
         ; decay = rnd & 1; +1 когда 2-й rnd >= _fg_rowthr (порог падает с y ⇒
         ; пламя догорает ровно к верхней строке при любой FIRE_H — п. 2н)
-        call    _fg_rnd_next
+        pop     h                       ; инлайн-ГСЧ: A = rnd (decay)
+        mov     a,m
+        inx     h
+        push    h
         ani     1
         sta     _fg_decay
-        call    _fg_rnd_next            ; A = rnd2
-        lxi     h,_fg_rowthr            ; _fg_rnd_next убил HL — восстановить
+        pop     h                       ; инлайн-ГСЧ: A = rnd2
+        mov     a,m
+        inx     h
+        push    h
+        lxi     h,_fg_rowthr            ; HL снова scratch после push h
         cmp     m                       ; CY если rnd2 < порог
         jc      fg_no_extra
         lda     _fg_decay
@@ -321,12 +354,26 @@ fg_x_zero:
         xra     a
 fg_x_store:
         stax    d                       ; *dest = value
-        inx     d                       ; dest++
-        lda     _fg_x
-        inr     a
-        sta     _fg_x
-        cpi     FIRE_W
+        inx     d                       ; dest++ ⇒ E&63 = след. x (0 после x=63)
+        mov     a,e
+        ani     63                      ; x = E & 63; 0 ⇒ строка готова (п. 1б)
         jnz     fg_x_loop
+
+        ; Конец строки: снять указатель ГСЧ со стека и догнать _rnd_idx
+        ; (+192 = 64 пикселя × 3 чтения); инлайн-чтения двигали только стек,
+        ; сама переменная _rnd_idx не менялась. 254+192<510 ⇒ одного sui хватает.
+        inx     sp
+        inx     sp
+        lda     _rnd_idx
+        adi     192
+        jnc     fg_ri_nc
+        inr     a                       ; 8-бит перенос: +256 ≡ +1 (mod 255)
+fg_ri_nc:
+        cpi     RNG_LEN
+        jc      fg_ri_st
+        sui     RNG_LEN
+fg_ri_st:
+        sta     _rnd_idx
 
         ; следующая строка: DE уже на базе следующей; above_base (BC) += 64
         lda     _fg_y
