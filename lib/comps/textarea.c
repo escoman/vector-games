@@ -155,6 +155,21 @@ static void redraw_char_at(const textarea_t *ta, unsigned char pos)
 /* Плоскость монохромного режима 256x256 (бит 0 цвета → 0xE000). */
 #define FRAME_PLANE 0xE000u
 
+/* Кэш последнего нарисованного индикатора прокрутки (см. draw_scrollbar):
+ * колонка правой границы, её верхний ряд и границы бегунка [sb_t0, sb_t1).
+ * 0xFF — «на экране просто граница», перерисовать обязательно. */
+static unsigned char sb_col = 0xFF;
+static unsigned char sb_top;
+static unsigned char sb_t0, sb_t1;
+
+/* Вход/выход расчёта бегунка — тоже в статиках (см. комментарий у
+ * textarea_handle_key: на кадре с десятком побайтовых локальных sccz80
+ * путается в смещениях). */
+static unsigned char gs_top, gs_bot;          /* ряды рамки            */
+static unsigned char gs_lines, gs_vscroll;    /* видимых строк / окно  */
+static unsigned char gs_total;                /* строк текста всего    */
+static unsigned char gs_t0, gs_t1;            /* бегунок [t0, t1)      */
+
 /* Рисует прямоугольную рамку, ограничивающую поле ввода, линиями
  * через gfx_fill_stride (вместо символов '_' и '|'). Рамка охватывает
  * столбцы ta->x .. ta->x+width+1 и строки (ta->y+10) .. (ta->y+17+lines*8).
@@ -169,6 +184,9 @@ static void draw_frame(const textarea_t *ta)
     unsigned char ybot = (unsigned char)(ta->y + 17 + ta->lines * 8);
     unsigned char vcount = (unsigned char)(ybot - ytop + 1);
 
+    /* Правая граница теперь «принадлежит» индикатору прокрутки. */
+    sb_col = 0xFF;
+
     /* Левая граница: пиксель X = cx0*8 (бит 7), шаг -1 по строкам. */
     gfx_fill_stride((unsigned int)(FRAME_PLANE + (unsigned int)cx0 * 256
                                    + (255 - ytop)), 0x80, 0xFFFFu, vcount);
@@ -181,6 +199,101 @@ static void draw_frame(const textarea_t *ta)
                                    + (255 - ytop)), 0xFF, 0x100u, ncols);
     gfx_fill_stride((unsigned int)(FRAME_PLANE + (unsigned int)cx0 * 256
                                    + (255 - ybot)), 0xFF, 0x100u, ncols);
+}
+
+/* Индикатор положения видимого окна внутри всего текста — «скроллбар»
+ * на правой ограничивающей полосе рамки.
+ *
+ * Колонка cx1 — служебный столбец между последним знаком текста и
+ * границей, поверх текста индикатор не попадает. Граница поля занимает
+ * бит 0 байта (пиксель X = cx1*8+7), и чтобы бегунок не лежал вплотную
+ * к ограничивающему прямоугольнику, вокруг него оставлен зазор в 1 пиксель:
+ *   бит 0    — линия правой границы (её индикатор не трогает);
+ *   бит 1    — зазор до границы;
+ *   биты 2..4 — сам бегунок (3 пикселя шириной);
+ *   ряды ytop+1 и ybot-1 — зазор до верхней и нижней линий рамки,
+ *                  бегунок ходит в пределах ytop+2 .. ybot-2.
+ *   трек    — 1 пиксель (0x01) на всю высоту между линиями рамки;
+ *   бегунок — 3 пикселя (биты 2..4) вместе с пикселем границы:
+ *             высота = доля видимых строк,
+ *             положение = насколько окно прокручено вниз.
+ * Когда текст целиком влезает в поле, бегунок занимает весь трек.
+ * У однострочного edit прокрутка горизонтальная — индикатор не рисуется.
+ *
+ * Дешевле, чем кажется: если бегунок никуда не сдвинулся, VRAM не трогается
+ * вовсе, иначе нажатие, не изменившее окно, стоило бы ~48 записей вместо
+ * 1-2 перерисованных символов.
+ *
+ * Кэш предполагает, что между перерисовками индикатора в эти пиксели больше
+ * никто не пишет; любая перерисовка рамки (draw_frame) кэш сбрасывает. */
+
+/* Зазоры индикатора: 1 пиксель до линий рамки сверху/снизу и 1 пиксель
+ * (бит 1) до линии границы справа. */
+#define SB_ROW0 2                 /* первый ряд бегунка: ytop + SB_ROW0  */
+#define SB_THUMB 0x1C             /* биты 2..4                            */
+#define SB_TRACK 0x01             /* бит 0 — он же граница, им и чистим   */
+/* Что реально пишем в ряд бегунка: gfx_fill_stride заменяет байт целиком,
+ * поэтому пиксель границы (бит 0) приходится дописывать, иначе бегунок её
+ * сотрёт. Бит 1 при этом остаётся нулевым — тот самый зазор до границы. */
+#define SB_ON   (unsigned char)(SB_TRACK | SB_THUMB)
+
+/* Считает границы бегунка в gs_t0/gs_t1 (ряды пикселей, gs_t1 исключая). */
+static void scrollbar_thumb(void)
+{
+    /* Рядов доступно: между ytop+1 и ybot-1 (зазоры) — на 2 меньше,
+     * чем расстояние между линиями минус их собственные ряды. */
+    unsigned int h = (unsigned int)(gs_bot - gs_top - 1 - SB_ROW0);
+    unsigned int vis = gs_lines;
+    unsigned int total = gs_total;
+    unsigned int thumb;
+
+    if (total <= vis) {
+        gs_t0 = (unsigned char)(gs_top + SB_ROW0);
+        gs_t1 = (unsigned char)(gs_bot - 1);
+        return;
+    }
+    thumb = (h * vis + total - 1) / total;        /* высота бегунка, рядов */
+    if (thumb < 3) thumb = 3;
+    if (thumb > h) thumb = h;
+    gs_t0 = (unsigned char)(gs_top + SB_ROW0 +
+                            ((h - thumb) * gs_vscroll) / (total - vis));
+    gs_t1 = (unsigned char)(gs_t0 + (unsigned char)thumb);
+}
+
+static void draw_scrollbar(const textarea_t *ta)
+{
+    unsigned char cx1 = (unsigned char)(ta->x + ta->width + 1);
+    unsigned char ytop = (unsigned char)(ta->y + 10);
+    unsigned char ybot = (unsigned char)(ta->y + 17 + ta->lines * 8);
+
+    if (ta->lines <= 1) return;
+
+    gs_top = ytop;
+    gs_bot = ybot;
+    gs_lines = ta->lines;
+    gs_vscroll = ta->vscroll;
+    /* Строк всего, включая ту, где встанет курсор после конца текста. */
+    gs_total = (unsigned char)(str_len(ta->buf) / ta->width + 1);
+    scrollbar_thumb();
+
+    if (sb_col == cx1 && sb_top == ytop &&
+        sb_t0 == gs_t0 && sb_t1 == gs_t1)
+        return;
+    sb_col = cx1;
+    sb_top = ytop;
+    sb_t0 = gs_t0;
+    sb_t1 = gs_t1;
+
+    /* Шаг 0xFFFF = -1: строки идут вниз экрана по убыванию адреса.
+     * Сначала трек значением SB_TRACK: оно же восстанавливает пиксель
+     * границы (бит 0) и стирает прежний бегунок ниже/выше нового. */
+    gfx_fill_stride((unsigned int)(FRAME_PLANE + (unsigned int)cx1 * 256
+                                   + (255 - (unsigned char)(ytop + SB_ROW0))),
+                    SB_TRACK, 0xFFFFu,
+                    (unsigned char)(ybot - ytop - 1 - SB_ROW0));
+    gfx_fill_stride((unsigned int)(FRAME_PLANE + (unsigned int)cx1 * 256
+                                   + (255 - gs_t0)),
+                    SB_ON, 0xFFFFu, (unsigned char)(gs_t1 - gs_t0));
 }
 
 /* Корректировка прокрутки: удерживать курсор в видимой области */
@@ -277,6 +390,7 @@ void textarea_draw(component_t *c, unsigned char active)
     /* Содержимое; курсор — только у активного компонента */
     adjust_scroll(ta);
     draw_visible(ta);
+    draw_scrollbar(ta);
 
     if (active)
         textarea_draw_cursor(c);
@@ -291,6 +405,7 @@ void textarea_draw_content(component_t *c)
     textarea_draw_count++;
     adjust_scroll(ta);
     draw_visible(ta);
+    draw_scrollbar(ta);
 
     /* Курсор — ПОСЛЕ текста (иначе следующая строка его затирает) */
     textarea_draw_cursor(c);
@@ -413,6 +528,9 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
     if (content_changed && ta->scroll == ed_old_scroll &&
         ta->vscroll == ed_old_vscroll) {
         redraw_range(ta, ed_from, ed_to);
+        /* Длина текста могла измениться и без сдвига окна — у индикатора
+         * прокрутки изменилась бы только высота бегунка. */
+        draw_scrollbar(ta);
         textarea_draw_cursor(c);
     } else if (content_changed || ta->scroll != ed_old_scroll ||
                ta->vscroll != ed_old_vscroll) {
