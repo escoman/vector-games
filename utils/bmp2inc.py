@@ -325,13 +325,21 @@ def format_array(f, name, data, per_line=16):
 
 
 def main():
-    USAGE = f"Использование: {sys.argv[0]} [--bg-index N] <файл.bmp>"
+    USAGE = f"Использование: {sys.argv[0]} [--bg-index N] [--no-opt] <файл.bmp>"
     if len(sys.argv) < 2:
         print(USAGE, file=sys.stderr)
         sys.exit(1)
 
     bg_index = None
+    no_opt = False
     args = [a for a in sys.argv[1:]]
+    # --no-opt: сохранить палитру BMP как есть (identity), без оптимизации
+    # перестановкой. Нужно, когда картинка делит аппаратную палитру с другим
+    # изображением (напр. заставка и огонь в fire) — индексы RLE должны
+    # остаться равными исходным индексам BMP.
+    if '--no-opt' in args:
+        no_opt = True
+        args.remove('--no-opt')
     if '--bg-index' in args:
         i = args.index('--bg-index')
         if i + 1 >= len(args):
@@ -368,26 +376,30 @@ def main():
         print(f"    точек {total:6d}: индексы [{old}], цвет 0x{vb:02X}")
 
     identity = list(range(16))
-    greedy = greedy_perm(grouped, pin=bg_index)
-    pinned = frozenset({bg_index}) if bg_index is not None else frozenset()
-    candidates = []
-    # «как есть» допустимо только когда пин ему не мешает (нет пина или
-    # pin==0: в identity perm[0]==0 уже выполняется).
-    if bg_index is None or bg_index == 0:
-        candidates.append(("палитра BMP как есть", identity, False))
-    candidates += [
-        ("жадное по частоте, перестановки внутри классов", greedy, True),
-        ("жадное по частоте, свободные перестановки", greedy, False),
-    ]
-    best_perm, best_size, best_name = None, None, None
-    for name, seed, cls in candidates:
-        print(f"  поиск: {name}")
-        perm, size = local_search(seed, masks, cls, plane_len, pinned=pinned)
-        if best_size is None or size < best_size:
-            best_perm, best_size, best_name = perm, size, name
+    if no_opt:
+        perm = identity
+        print("  --no-opt: палитра BMP как есть (identity), без поиска")
+    else:
+        greedy = greedy_perm(grouped, pin=bg_index)
+        pinned = frozenset({bg_index}) if bg_index is not None else frozenset()
+        candidates = []
+        # «как есть» допустимо только когда пин ему не мешает (нет пина или
+        # pin==0: в identity perm[0]==0 уже выполняется).
+        if bg_index is None or bg_index == 0:
+            candidates.append(("палитра BMP как есть", identity, False))
+        candidates += [
+            ("жадное по частоте, перестановки внутри классов", greedy, True),
+            ("жадное по частоте, свободные перестановки", greedy, False),
+        ]
+        best_perm, best_size, best_name = None, None, None
+        for name, seed, cls in candidates:
+            print(f"  поиск: {name}")
+            p, size = local_search(seed, masks, cls, plane_len, pinned=pinned)
+            if best_size is None or size < best_size:
+                best_perm, best_size, best_name = p, size, name
 
-    perm = best_perm
-    print(f"  лучший вариант: {best_name}, RLE {best_size} байт")
+        perm = best_perm
+        print(f"  лучший вариант: {best_name}, RLE {best_size} байт")
 
     new_pal = [0] * 16
     for old in active:
