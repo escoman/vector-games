@@ -60,13 +60,13 @@ int main(void)
 
     /* Edit-поля (однострочные) */
     edit_init(&name_field, name_buf, sizeof(name_buf) - 1,
-              30, 0, 20, "NAME");
+              14, 0, 20, "NAME");
     edit_init(&score_field, score_buf, sizeof(score_buf) - 1,
-              20, 0, 60, "SCORE");
+              14, 16, 20, "SCORE");
 
     /* Textarea (многострочное, 3 видимые строки) */
     textarea_init(&note_area, note_buf, sizeof(note_buf) - 1,
-                  20, 5, 0, 100, "NOTES");
+                  30, 5, 0, 60, "NOTES");
 
     /* Контроллер */
     controller_init(&ctrl);

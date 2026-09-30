@@ -9,9 +9,27 @@
 #include "v06.h"
 
 extern unsigned int textarea_draw_count;
+extern unsigned int textarea_redraw_chars;
 extern unsigned char kbd_rows[8];
 extern unsigned char kbd_shift_state;
 extern unsigned char kbd_port_c_raw;
+
+/* Отладка: число в фиксированной позиции, 4 цифры с ведущими нулями.
+ * Столбец 25..30 — вместе с тегом влезает в 32 колонки экрана. */
+static void dbg_num(unsigned char x, unsigned char y, char tag,
+                    unsigned int n)
+{
+    char db[8];
+
+    db[0] = tag;
+    db[1] = ':';
+    db[2] = (char)('0' + (n / 1000) % 10);
+    db[3] = (char)('0' + (n / 100) % 10);
+    db[4] = (char)('0' + (n / 10) % 10);
+    db[5] = (char)('0' + n % 10);
+    db[6] = 0;
+    gfx_print(x, y, db, 1);
+}
 
 void controller_init(controller_t *ctrl)
 {
@@ -47,6 +65,7 @@ unsigned char controller_run(controller_t *ctrl)
         {
             static unsigned char dbg_key_prev = 0xFF;
             static unsigned int dbg_dc_prev = 0xFFFF;
+            static unsigned int dbg_rc_prev = 0xFFFF;
             static unsigned char dbg_rows_prev[8];
             unsigned char rows_changed = 0;
             {
@@ -59,15 +78,7 @@ unsigned char controller_run(controller_t *ctrl)
                 }
             }
             if (key != dbg_key_prev) {
-                char db[6];
-                unsigned char dp = 0;
-                db[dp++] = 'K';
-                db[dp++] = ':';
-                if (key >= 100) db[dp++] = '0' + (key / 100);
-                if (key >= 10)  db[dp++] = '0' + ((key / 10) % 10);
-                db[dp++] = '0' + (key % 10);
-                db[dp] = 0;
-                gfx_print(27, 248, db, 1);
+                dbg_num(25, 248, 'K', key);
                 dbg_key_prev = key;
                 rows_changed = 1;
             }
@@ -86,18 +97,15 @@ unsigned char controller_run(controller_t *ctrl)
                 gfx_print(0, 240, rb, 1);
             }
             if (textarea_draw_count != dbg_dc_prev) {
-                char db[8];
-                unsigned char dp = 0;
-                unsigned int n = textarea_draw_count;
-                db[dp++] = 'D';
-                db[dp++] = ':';
-                if (n >= 1000) db[dp++] = '0' + (n / 1000);
-                if (n >= 100)  db[dp++] = '0' + ((n / 100) % 10);
-                if (n >= 10)   db[dp++] = '0' + ((n / 10) % 10);
-                db[dp++] = '0' + (n % 10);
-                db[dp] = 0;
-                gfx_print(27, 232, db, 1);
+                dbg_num(25, 232, 'D', textarea_draw_count);
                 dbg_dc_prev = textarea_draw_count;
+            }
+            /* Сколько символов стоила последняя перерисовка активного поля:
+             * 1-2 при вводе/удалении в конце строки, вся область — при
+             * сдвиге прокрутки. */
+            if (textarea_redraw_chars != dbg_rc_prev) {
+                dbg_num(25, 216, 'N', textarea_redraw_chars);
+                dbg_rc_prev = textarea_redraw_chars;
             }
             /* Отладка: сырой порт C (01h) — поиск бита СС */
             {
@@ -110,7 +118,7 @@ unsigned char controller_run(controller_t *ctrl)
                     sb[2] = "0123456789ABCDEF"[(v >> 4) & 0xF];
                     sb[3] = "0123456789ABCDEF"[v & 0xF];
                     sb[4] = 0;
-                    gfx_print(27, 224, sb, 1);
+                    gfx_print(25, 224, sb, 1);
                     dbg_pc_prev = kbd_port_c_raw;
                 }
             }
