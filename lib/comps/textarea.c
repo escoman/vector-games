@@ -7,7 +7,9 @@
  *
  * Внешний буфер, навигация стрелками, вставка/удаление символов.
  * Рамка рисуется линиями через gfx_fill_stride, заголовок (label).
- * Курсор — тонкая линия 1 пиксель в межстрочном промежутке (не глиф).
+ * Курсор — линия 1 пиксель высотой в пустом ряду под глифом (не глиф).
+ * Высота строки текста — TA_ROW_H пикселей, а не 8: ряду курсора нужно
+ * своё место, иначе он затирает нижние пиксели глифов.
  * Перерисовка минимальная: сдвинутый «хвост» строки, а не вся область
  * (см. redraw_range).
  */
@@ -15,6 +17,36 @@
 #include "comps.h"
 #include "v06.h"
 #include <string.h>
+
+/* Плоскость монохромного режима 256x256 (бит 0 цвета → 0xE000). */
+#define FRAME_PLANE 0xE000u
+
+/* Вертикальная раскладка текста поля.
+ *
+ * Глиф 8x8, шаг строки — TA_ROW_H = 10: 8 рядов глифа, ряд под ним —
+ * курсор (сплошная линия шириной в ячейку), ещё один ряд остаётся пустым
+ * до следующей строки. При шаге 8 строки шли вплотную, и курсор ложился
+ * на нижний ряд собственного глифа — у '_' и ',' там нарисованные пиксели,
+ * они затирались.
+ *
+ * Отсчёт от ta->y (верх метки): ta->y+10 — верхняя линия рамки, ta->y+14 —
+ * первая строка текста, нижняя линия — на 3 ряда ниже последнего глифа
+ * (тот же отступ, что сверху). Однострочный edit от шага строки не
+ * зависит: его рамка осталась прежней (ta->y+10 .. ta->y+25), курсор лишь
+ * переехал на ряд под глиф. */
+#define TA_ROW_H 10         /* шаг строки текста, пикселей                  */
+#define TA_TEXT_Y0 14       /* 1-я строка текста относительно ta->y         */
+#define TA_CURSOR_ROW 8     /* ряд курсора внутри строки (под рядом глифа) */
+#define TA_FRAME_PAD 11     /* 7 (низ глифа) + 3 пустых ряда + линия рамки */
+
+/* Верхняя строка глифа видимой строки vrow (0 — первая в окне). */
+#define TA_TEXT_ROW(ta, vrow) \
+    ((unsigned char)((ta)->y + TA_TEXT_Y0 + (unsigned char)(vrow) * TA_ROW_H))
+
+/* Нижняя линия рамки поля. */
+#define TA_FRAME_BOT(ta) \
+    ((unsigned char)((ta)->y + TA_TEXT_Y0 \
+                     + (unsigned char)((ta)->lines - 1) * TA_ROW_H + TA_FRAME_PAD))
 
 /* Буфер одной выводимой строки: максимум 32 колонки + терминатор. */
 static unsigned char draw_buf[34];
@@ -43,10 +75,12 @@ static void invert_chars(unsigned char col, unsigned char row,
     }
 }
 
-/* Длина строки (без \0) */
-static unsigned char str_len(const char *s)
+/* Длина строки (без \0). Возвращает unsigned int: буфер поля ввода может
+ * быть длиннее 255 символов, байтовый счётчик давал бы длину по модулю
+ * 256 (256 символов — «пусто»), и правка такого текста затирала начало. */
+static unsigned int str_len(const char *s)
 {
-    unsigned char n = 0;
+    unsigned int n = 0;
     while (*s++) n++;
     return n;
 }
@@ -67,15 +101,16 @@ static unsigned char label_len(const char *s)
     return n;
 }
 
-/* Рисует/стирает курсор — тонкую горизонтальную линию высотой 1 пиксель
- * в колонке col строки text_row. Курсор занимает нижнюю строку ячейки
- * (text_row+7) — межстрочный промежуток, поэтому следующую строку текста
- * он не задевает. val=0xFF — нарисовать, val=0x00 — стереть. */
+/* Рисует/стирает курсор — горизонтальную линию высотой 1 пиксель (на всю
+ * ширину ячейки) в колонке col строки текста text_row. Курсор занимает
+ * пустой ряд под глифом (text_row+TA_CURSOR_ROW), до следующей строки
+ * остаётся ещё ряд — ни нижний ряд своего глифа, ни соседняя строка не
+ * затираются. val=0xFF — нарисовать, val=0x00 — стереть. */
 static void put_cursor_block(unsigned char col, unsigned char text_row,
                              unsigned char val)
 {
     unsigned int addr = 0xE000 + (unsigned int)col * 256
-                        + (255 - (text_row + 7));
+                        + (255 - (text_row + TA_CURSOR_ROW));
     *((volatile unsigned char *)addr) = val;
 }
 
@@ -87,19 +122,39 @@ static void draw_cursor(unsigned char col, unsigned char text_row)
 
 /* Печатает n ячеек, начиная с плоской позиции src, в экранную позицию
  * (col, row): символы строки, а всё, что за концом строки — пробелы.
- * Пробелы затирают и курсор, и прежний хвост. Один gfx_print на
- * непрерывный участок строки — дешевле, по символу на ячейку. */
-static void draw_cells(const textarea_t *ta, unsigned char src,
+ * Пробелы затирают прежний хвост строки; ряд курсора чистится отдельно
+ * (gfx_fill_stride ниже). Один gfx_print на непрерывный участок строки —
+ * дешевле, по символу на ячейку. */
+static void draw_cells(const textarea_t *ta, unsigned int src,
                        unsigned char col, unsigned char row,
                        unsigned char n)
 {
-    unsigned char slen = str_len(ta->buf);
-    unsigned char i;
+    const char *p = ta->buf + src;
+    unsigned int slen = str_len(ta->buf);
+    unsigned int rem;
+    unsigned char nch, i;
 
-    for (i = 0; i < n; i++)
-        draw_buf[i] = (src + i < slen) ? ta->buf[src + i] : ' ';
+    /* Символов строки в участке не больше n (ячейки ≤ 32), поэтому дальше
+     * всё считается байтом: два простых цикла вместо 16-битного сравнения
+     * на каждый символ. */
+    rem = (src < slen) ? slen - src : 0;
+    nch = (rem > n) ? n : (unsigned char)rem;
+
+    for (i = 0; i < nch; i++)
+        draw_buf[i] = p[i];
+    for (; i < n; i++)
+        draw_buf[i] = ' ';
     draw_buf[n] = 0;
     gfx_print(col, row, (const char *)draw_buf, 1);
+    /* Курсор живёт в ряду под глифом — до шага строки 10 он попадал в
+     * нижний ряд ячейки и стирался вместе с перерисовкой ячейки gfx_print.
+     * Теперь ряд курсора ячейке не принадлежит, поэтому любая перерисовка
+     * обязана стереть курсор, который на этих колонках мог лежать, иначе
+     * подчёркивания накапливаются при движении курсора по тексту. Живой
+     * курсор рисуется после перерисовки (см. textarea_draw_content). */
+    gfx_fill_stride((unsigned int)(FRAME_PLANE + (unsigned int)col * 256
+                                   + (255 - (unsigned char)(row + TA_CURSOR_ROW))),
+                    0x00, 0x0100u, n);
     textarea_redraw_chars += n;
 }
 
@@ -108,18 +163,18 @@ static void draw_cells(const textarea_t *ta, unsigned char src,
  * участком — уже на новой строке). Ячейки левее from не трогаются, так
  * что вставка/удаление в конце строки стоит 1-2 символа вместо всей
  * области; при вставке в середине — только сдвинутый хвост. */
-static void redraw_range(const textarea_t *ta, unsigned char from,
-                         unsigned char to)
+static void redraw_range(const textarea_t *ta, unsigned int from,
+                         unsigned int to)
 {
-    unsigned char vis_start, vis_end;
-    unsigned char pos;
+    unsigned int vis_start, vis_end;
+    unsigned int pos;
 
     if (ta->lines <= 1) {
         vis_start = ta->scroll;
-        vis_end = (unsigned char)(ta->scroll + ta->width);
+        vis_end = ta->scroll + ta->width;
     } else {
-        vis_start = (unsigned char)(ta->vscroll * ta->width);
-        vis_end = (unsigned char)(vis_start + ta->width * ta->lines);
+        vis_start = (unsigned int)ta->vscroll * ta->width;
+        vis_end = vis_start + (unsigned int)ta->width * ta->lines;
     }
     if (from < vis_start) from = vis_start;
     if (to > vis_end) to = vis_end;
@@ -130,30 +185,27 @@ static void redraw_range(const textarea_t *ta, unsigned char from,
 
         if (ta->lines <= 1) {
             vcol = (unsigned char)(pos - ta->scroll);
-            row = (unsigned char)(ta->y + 14);
+            row = TA_TEXT_ROW(ta, 0);
         } else {
-            unsigned char line = (unsigned char)(pos / ta->width);
+            unsigned int line = pos / ta->width;
             vcol = (unsigned char)(pos - line * ta->width);
-            row = (unsigned char)(ta->y + 14 + (line - ta->vscroll) * 8);
+            row = TA_TEXT_ROW(ta, line - ta->vscroll);
         }
         n = (unsigned char)(ta->width - vcol);        /* до конца строки */
-        if ((unsigned char)(to - pos) < n)
+        if (to - pos < n)
             n = (unsigned char)(to - pos);
         draw_cells(ta, pos, (unsigned char)(ta->x + 1 + vcol), row, n);
-        pos = (unsigned char)(pos + n);
+        pos = pos + n;
     }
 }
 
-/* Перерисовывает один символ контента по плоской позиции pos — тем самым
- * восстанавливает ячейку, поверх которой был курсор (фактически стирает
- * его). Рисует только видимые позиции; невидимые (за прокруткой) пропускает. */
-static void redraw_char_at(const textarea_t *ta, unsigned char pos)
+/* Перерисовывает один символ контента по плоской позиции pos — восстанавливает
+ * ячейку, под которой был курсор (и сам курсор: draw_cells чистит его ряд).
+ * Рисует только видимые позиции; невидимые (за прокруткой) пропускает. */
+static void redraw_char_at(const textarea_t *ta, unsigned int pos)
 {
-    redraw_range(ta, pos, (unsigned char)(pos + 1));
+    redraw_range(ta, pos, pos + 1);
 }
-
-/* Плоскость монохромного режима 256x256 (бит 0 цвета → 0xE000). */
-#define FRAME_PLANE 0xE000u
 
 /* Кэш последнего нарисованного индикатора прокрутки (см. draw_scrollbar):
  * колонка правой границы, её верхний ряд и границы бегунка [sb_t0, sb_t1).
@@ -166,13 +218,14 @@ static unsigned char sb_t0, sb_t1;
  * textarea_handle_key: на кадре с десятком побайтовых локальных sccz80
  * путается в смещениях). */
 static unsigned char gs_top, gs_bot;          /* ряды рамки            */
-static unsigned char gs_lines, gs_vscroll;    /* видимых строк / окно  */
-static unsigned char gs_total;                /* строк текста всего    */
+static unsigned char gs_lines;                /* видимых строк         */
+static unsigned int  gs_vscroll;              /* первая видимая строка */
+static unsigned int  gs_total;                /* строк текста всего    */
 static unsigned char gs_t0, gs_t1;            /* бегунок [t0, t1)      */
 
 /* Рисует прямоугольную рамку, ограничивающую поле ввода, линиями
  * через gfx_fill_stride (вместо символов '_' и '|'). Рамка охватывает
- * столбцы ta->x .. ta->x+width+1 и строки (ta->y+10) .. (ta->y+17+lines*8).
+ * столбцы ta->x .. ta->x+width+1 и строки (ta->y+10) .. TA_FRAME_BOT.
  * Сначала вертикальные линии, затем горизонтальные — так углы
  * перекрываются сплошным байтом 0xFF. */
 static void draw_frame(const textarea_t *ta)
@@ -181,7 +234,7 @@ static void draw_frame(const textarea_t *ta)
     unsigned char cx1 = (unsigned char)(ta->x + ta->width + 1);
     unsigned char ncols = (unsigned char)(ta->width + 2);
     unsigned char ytop = (unsigned char)(ta->y + 10);
-    unsigned char ybot = (unsigned char)(ta->y + 17 + ta->lines * 8);
+    unsigned char ybot = TA_FRAME_BOT(ta);
     unsigned char vcount = (unsigned char)(ybot - ytop + 1);
 
     /* Правая граница теперь «принадлежит» индикатору прокрутки. */
@@ -245,18 +298,33 @@ static void scrollbar_thumb(void)
     unsigned int h = (unsigned int)(gs_bot - gs_top - 1 - SB_ROW0);
     unsigned int vis = gs_lines;
     unsigned int total = gs_total;
-    unsigned int thumb;
+    unsigned int thumb, p, d, v;
 
     if (total <= vis) {
         gs_t0 = (unsigned char)(gs_top + SB_ROW0);
         gs_t1 = (unsigned char)(gs_bot - 1);
         return;
     }
-    thumb = (h * vis + total - 1) / total;        /* высота бегунка, рядов */
+    /* Высота бегунка пропорциональна доле видимого текста. Округление
+     * вверх — как и было, но без «+ total - 1»: та сумма переполнила бы
+     * 16 бит на длинном тексте. Здесь h*vis ≤ 252*255 заведомо влезает,
+     * а thumb*total ≤ h*vis, значит и проверка остатка безопасна. */
+    p = h * vis;
+    thumb = p / total;
+    if (thumb * total < p)
+        thumb++;
     if (thumb < 3) thumb = 3;
     if (thumb > h) thumb = h;
-    gs_t0 = (unsigned char)(gs_top + SB_ROW0 +
-                            ((h - thumb) * gs_vscroll) / (total - vis));
+
+    /* Позиция: (h - thumb) * vscroll / (total - vis). Произведение
+     * переполняет 16 бит, когда строк текста больше нескольких сотен,
+     * а 32-битная арифметика на Z80 слишком дорога. Дробь нормализуем
+     * сдвигом: знаменатель ≤ 255, тогда произведение влезает, а
+     * монотонность и оба крайних положения бегунка сохраняются. */
+    d = total - vis;
+    v = gs_vscroll;
+    while (d > 255) { d >>= 1; v >>= 1; }
+    gs_t0 = (unsigned char)(gs_top + SB_ROW0 + ((h - thumb) * v) / d);
     gs_t1 = (unsigned char)(gs_t0 + (unsigned char)thumb);
 }
 
@@ -264,7 +332,7 @@ static void draw_scrollbar(const textarea_t *ta)
 {
     unsigned char cx1 = (unsigned char)(ta->x + ta->width + 1);
     unsigned char ytop = (unsigned char)(ta->y + 10);
-    unsigned char ybot = (unsigned char)(ta->y + 17 + ta->lines * 8);
+    unsigned char ybot = TA_FRAME_BOT(ta);
 
     if (ta->lines <= 1) return;
 
@@ -273,7 +341,7 @@ static void draw_scrollbar(const textarea_t *ta)
     gs_lines = ta->lines;
     gs_vscroll = ta->vscroll;
     /* Строк всего, включая ту, где встанет курсор после конца текста. */
-    gs_total = (unsigned char)(str_len(ta->buf) / ta->width + 1);
+    gs_total = str_len(ta->buf) / ta->width + 1;
     scrollbar_thumb();
 
     if (sb_col == cx1 && sb_top == ytop &&
@@ -307,7 +375,7 @@ static void adjust_scroll(textarea_t *ta)
             ta->scroll = ta->cur_col - ta->width + 1;
     } else {
         /* Textarea: вертикальная прокрутка */
-        unsigned char cur_line = ta->cur_col / ta->width;
+        unsigned int cur_line = ta->cur_col / ta->width;
         if (cur_line < ta->vscroll)
             ta->vscroll = cur_line;
         if (cur_line >= ta->vscroll + ta->lines)
@@ -324,13 +392,13 @@ static void draw_visible(const textarea_t *ta)
     if (ta->lines <= 1) {
         /* ---- Edit: одна строка ---- */
         draw_cells(ta, ta->scroll, (unsigned char)(ta->x + 1),
-                   (unsigned char)(ta->y + 14), ta->width);
+                   TA_TEXT_ROW(ta, 0), ta->width);
     } else {
         /* ---- Textarea: все видимые строки ---- */
         for (row = 0; row < ta->lines; row++)
-            draw_cells(ta, (unsigned char)((ta->vscroll + row) * ta->width),
+            draw_cells(ta, (unsigned int)(ta->vscroll + row) * ta->width,
                        (unsigned char)(ta->x + 1),
-                       (unsigned char)(ta->y + 14 + row * 8), ta->width);
+                       TA_TEXT_ROW(ta, row), ta->width);
     }
 }
 
@@ -420,17 +488,16 @@ void textarea_draw_cursor(component_t *c)
     if (ta->lines <= 1) {
         /* ---- Edit: одна строка ---- */
         unsigned char scr_col = (unsigned char)(ta->cur_col - ta->scroll);
-        draw_cursor((unsigned char)(ta->x + scr_col + 1),
-                    (unsigned char)(ta->y + 14));
+        draw_cursor((unsigned char)(ta->x + scr_col + 1), TA_TEXT_ROW(ta, 0));
     } else {
         /* ---- Textarea: курсор только в видимой строке ---- */
-        unsigned char cur_line = ta->cur_col / ta->width;
+        unsigned int cur_line = ta->cur_col / ta->width;
         unsigned char cur_vcol = (unsigned char)(ta->cur_col % ta->width);
         if (cur_line >= ta->vscroll &&
             cur_line < ta->vscroll + ta->lines) {
             unsigned char vrow = (unsigned char)(cur_line - ta->vscroll);
             draw_cursor((unsigned char)(ta->x + cur_vcol + 1),
-                        (unsigned char)(ta->y + 14 + vrow * 8));
+                        TA_TEXT_ROW(ta, vrow));
         }
     }
 }
@@ -453,17 +520,17 @@ void textarea_focus_toggle(component_t *c)
  * у textarea_handle_key их набиралось с десяток, и на таком кадре
  * sccz80 путается в смещениях (читает old_cur из ячейки указателя ta,
  * отчего правая граница участка получается мусорной). */
-static unsigned char ed_slen;          /* длина строки ДО правки      */
-static unsigned char ed_to;            /* длина строки ПОСЛЕ правки   */
-static unsigned char ed_old_cur;       /* позиция курсора ДО правки   */
-static unsigned char ed_old_scroll;
-static unsigned char ed_old_vscroll;
-static unsigned char ed_from;          /* первая изменённая ячейка    */
+static unsigned int ed_slen;           /* длина строки ДО правки      */
+static unsigned int ed_to;             /* длина строки ПОСЛЕ правки   */
+static unsigned int ed_old_cur;        /* позиция курсора ДО правки   */
+static unsigned int ed_old_scroll;
+static unsigned int ed_old_vscroll;
+static unsigned int ed_from;           /* первая изменённая ячейка    */
 
 unsigned char textarea_handle_key(component_t *c, unsigned char key)
 {
     textarea_t *ta = (textarea_t *)c;
-    unsigned char i;
+    unsigned int i;
     unsigned char content_changed = 0;
 
     if (key == 27)  /* АП2 — выход */
@@ -504,7 +571,7 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
                 ta->buf[i] = ta->buf[i - 1];
             ta->buf[ta->cur_col] = to_upper((char)key);
             ta->cur_col++;
-            ed_to = (unsigned char)(ed_slen + 1);
+            ed_to = ed_slen + 1;
             content_changed = 1;
         }
     }
@@ -523,7 +590,7 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
      *    дорисовать вставленный символ);
      *  - ячейки за старым курсором (стереть сам курсор). */
     if (ed_old_cur >= ed_to)
-        ed_to = (unsigned char)(ed_old_cur + 1);
+        ed_to = ed_old_cur + 1;
 
     if (content_changed && ta->scroll == ed_old_scroll &&
         ta->vscroll == ed_old_vscroll) {

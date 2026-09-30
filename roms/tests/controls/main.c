@@ -17,7 +17,7 @@ static const unsigned char pal[2] = {
 
 static char name_buf[32];
 static char score_buf[64];
-static char note_buf[128];
+static char note_buf[300];
 
 static textarea_t name_field;
 static textarea_t score_field;
@@ -56,17 +56,17 @@ int main(void)
     gfx_clear(0);
 
     /* Заголовок */
-    gfx_print(0, 0, "EDIT / TEXTAREA TEST", 1);
+    gfx_print(0, 0, "DEMO: CONTROLS", 1);
 
     /* Edit-поля (однострочные) */
     edit_init(&name_field, name_buf, sizeof(name_buf) - 1,
               14, 0, 20, "NAME");
     edit_init(&score_field, score_buf, sizeof(score_buf) - 1,
-              14, 16, 20, "SCORE");
+              13, 17, 20, "SCORE");
 
     /* Textarea (многострочное, 3 видимые строки) */
     textarea_init(&note_area, note_buf, sizeof(note_buf) - 1,
-                  30, 5, 0, 60, "NOTES");
+                  30, 3, 0, 60, "NOTES");
 
     /* Контроллер */
     controller_init(&ctrl);

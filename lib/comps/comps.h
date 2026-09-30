@@ -52,16 +52,25 @@ unsigned char controller_run(controller_t *ctrl);
  * Два режима:
  *   lines == 1 → edit (однострочный, горизонтальная прокрутка)
  *   lines > 1  → textarea (многострочный, перенос по ширине)
- * Данные хранятся во внешнем буфере (caller owns memory). */
+ * Данные хранятся во внешнем буфере (caller owns memory).
+ *
+ * Позиции и длины — 16 битами: буфер может быть длиннее 255 символов.
+ * Байтовые счётчики раньше давали длину по модулю 256 (256 символов —
+ * «пустое» поле), курсор не доставал за 255-ю позицию, а охранка
+ * `len < max_len` переставала работать и затирала терминатор. Геометрия
+ * (width, lines, x, y) остаётся байтовой — она ограничена экраном.
+ *
+ * Строки текста идут с шагом 10 пикселей (не 8): 8 рядов глифа, ряд
+ * курсора под ним и пустой ряд до следующей строки — см. textarea_init. */
 typedef struct {
     component_t base;           /* MUST BE FIRST */
     char *buf;                  /* внешний буфер (0-термин.) */
     unsigned int max_len;       /* макс. длина строки (без \0) */
-    unsigned char cur_col;      /* плоская позиция курсора (0..strlen) */
-    unsigned char scroll;       /* edit: первый видимый столбец */
+    unsigned int cur_col;       /* плоская позиция курсора (0..strlen) */
+    unsigned int scroll;        /* edit: первый видимый столбец */
     unsigned char width;        /* ширина области (символов, без рамки) */
     unsigned char lines;        /* 1 = edit, >1 = textarea */
-    unsigned char vscroll;      /* textarea: первая видимая строка */
+    unsigned int vscroll;       /* textarea: первая видимая строка */
     unsigned char x, y;         /* позиция label (col, pixel row) */
     const char *label;          /* заголовок поля */
 } textarea_t;
@@ -73,7 +82,18 @@ void edit_init(textarea_t *ta, char *buf, unsigned int max_len,
                const char *label);
 
 /* Textarea — многострочное поле ввода с переносом по ширине.
- * lines — количество видимых строк. Стрелки ←/→/↑/↓. */
+ * lines — количество видимых строк. Стрелки ←/→/↑/↓.
+ *
+ * Раскладка по высоте (от ta->y — верх строки метки, всё в пикселях):
+ *   ta->y            метка (её инверсия захватывает ряд на 1 выше)
+ *   ta->y+10         верхняя линия рамки
+ *   ta->y+14+k*10    k-я строка текста: её глиф занимает ряды +0..+7,
+ *                    +8 — курсор, +9 пустой, +10 — следующая строка
+ *   ta->y+25+(lines-1)*10   нижняя линия рамки
+ * То есть поле занимает 25 + (lines-1)*10 строк: у edit (lines=1) это 25,
+ * как и раньше; у textarea раньше было 17+lines*8 — при шаге 10 поле
+ * вырастает на 2 ряда на каждую лишнюю строку, при расстановке
+ * компонентов по экрану это учитывай. */
 void textarea_init(textarea_t *ta, char *buf, unsigned int max_len,
                    unsigned char width, unsigned char lines,
                    unsigned char x, unsigned char y,
