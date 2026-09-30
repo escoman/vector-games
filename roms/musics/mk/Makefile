@@ -10,6 +10,7 @@ BMP2INC = ../../../utils/bmp2inc.py
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/unpack/rle.asm \
+       $(LIB)/gfx/pr.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
        fire.asm main.c
 
