@@ -199,12 +199,24 @@ static void redraw_range(const textarea_t *ta, unsigned int from,
     }
 }
 
-/* Перерисовывает один символ контента по плоской позиции pos — восстанавливает
- * ячейку, под которой был курсор (и сам курсор: draw_cells чистит его ряд).
- * Рисует только видимые позиции; невидимые (за прокруткой) пропускает. */
-static void redraw_char_at(const textarea_t *ta, unsigned int pos)
+/* Стирает курсор (1 пиксель) в плоской позиции pos простым занулением его
+ * байта. Курсор лежит в пустом ряду под глифом (TA_ROW_H=10 при высоте
+ * глифа 8) и букв не задевает, поэтому перерисовка символа, с которого
+ * курсор ушёл, не нужна. Невидимые позиции (за прокруткой) пропускаются. */
+static void erase_cursor_at(const textarea_t *ta, unsigned int pos)
 {
-    redraw_range(ta, pos, pos + 1);
+    if (ta->lines <= 1) {
+        unsigned int vc = pos - ta->scroll;
+        if (vc < ta->width)
+            put_cursor_block((unsigned char)(ta->x + 1 + vc),
+                             TA_TEXT_ROW(ta, 0), 0x00);
+    } else {
+        unsigned int line = pos / ta->width;
+        unsigned char vcol = (unsigned char)(pos % ta->width);
+        if (line >= ta->vscroll && line < ta->vscroll + ta->lines)
+            put_cursor_block((unsigned char)(ta->x + 1 + vcol),
+                             TA_TEXT_ROW(ta, line - ta->vscroll), 0x00);
+    }
 }
 
 /* Кэш последнего нарисованного индикатора прокрутки (см. draw_scrollbar):
@@ -507,10 +519,10 @@ void textarea_focus_toggle(component_t *c)
     textarea_t *ta = (textarea_t *)c;
     unsigned char llen = label_len(ta->label);
 
-    /* Скрыть курсор: восстановить ячейку, поверх которой он был
-     * (курсор живёт в пределах своей ячейки, следующую строку не трогает). */
-    textarea_redraw_chars = 0;   /* переключение фокуса стоит 1 ячейку */
-    redraw_char_at(ta, ta->cur_col);
+    /* Скрыть курсор: он лежит в пустом ряду под глифом и букв не задевает,
+     * поэтому достаточно занулить его байт — перерисовка символа не нужна. */
+    textarea_redraw_chars = 0;   /* переключение фокуса не перерисовывает ячейки */
+    erase_cursor_at(ta, ta->cur_col);
 
     /* Инверсия label */
     invert_chars(ta->x, (unsigned char)(ta->y - 1), llen);
@@ -603,9 +615,9 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
                ta->vscroll != ed_old_vscroll) {
         textarea_draw_content(c);
     } else if (ta->cur_col != ed_old_cur) {
-        /* Движение только курсора: восстановить ячейку под старым курсором
-         * (она же его стирает) и нарисовать курсор на новом месте. */
-        redraw_char_at(ta, ed_old_cur);
+        /* Движение только курсора: занулить байт старого курсора (буквы он
+         * не задевает) и нарисовать курсор на новом месте. */
+        erase_cursor_at(ta, ed_old_cur);
         textarea_draw_cursor(c);
     }
 

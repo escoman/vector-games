@@ -2,7 +2,8 @@
  * comps.c — контроллер UI-компонентов для Вектора-06Ц.
  *
  * Управляет набором компонентов: первичная отрисовка, навигация
- * TAB между компонентами, передача клавиш активному.
+ * TAB (вперёд) и СС+TAB (назад) между компонентами, передача клавиш
+ * активному.
  */
 
 #include "comps.h"
@@ -125,14 +126,23 @@ unsigned char controller_run(controller_t *ctrl)
         }
 
         if (key != key_prev && key != 0) {
-            if (key == 7) {  /* TAB — переключение */
+            if (key == 7) {  /* TAB — переключение (СС+TAB — назад) */
                 /* Переключить фокус (инверсия label) */
                 ctrl->items[ctrl->active]->focus_toggle(
                     ctrl->items[ctrl->active]);
-                /* Следующий */
-                ctrl->active++;
-                if (ctrl->active >= ctrl->count)
-                    ctrl->active = 0;
+                /* СС+ТАБ — на предыдущий, иначе на следующий.
+                 * СС читается из порта C (бит 5) отдельно от матрицы,
+                 * поэтому kbd_shift_state валиден в момент опроса TAB. */
+                if (kbd_shift_state) {
+                    if (ctrl->active == 0)
+                        ctrl->active = ctrl->count - 1;
+                    else
+                        ctrl->active--;
+                } else {
+                    ctrl->active++;
+                    if (ctrl->active >= ctrl->count)
+                        ctrl->active = 0;
+                }
                 /* Переключить фокус на новый */
                 ctrl->items[ctrl->active]->focus_toggle(
                     ctrl->items[ctrl->active]);
