@@ -47,6 +47,8 @@ def main():
                     help='семплы из внешней библиотеки NAME')
     ap.add_argument('--shared-lib', action='store_true',
                     help='генерировать библиотеку: .h + .c')
+    ap.add_argument('--compress', action='store_true',
+                    help='сжать байткод потоков ZX0 (music_csong_t)')
     ap.add_argument('--verify', action='store_true',
                     help='сравнить .mus с исходным TXT')
     args = ap.parse_args()
@@ -118,6 +120,8 @@ def main():
             mus2inc_args += ['--use-shared', args.use_shared]
         if args.shared_lib:
             mus2inc_args += ['--shared-lib']
+        if args.compress:
+            mus2inc_args += ['--compress']
         if args.allow_len_mismatch:
             mus2inc_args += ['--allow-len-mismatch']
 
@@ -130,6 +134,7 @@ def main():
                                 action='store_true')
         mus2inc_ap.add_argument('--shared-lib', action='store_true')
         mus2inc_ap.add_argument('--use-shared', metavar='NAME')
+        mus2inc_ap.add_argument('--compress', action='store_true')
         mus2inc_ap.add_argument('--self-test', action='store_true')
         m_args = mus2inc_ap.parse_args(mus2inc_args[1:])
 

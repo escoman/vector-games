@@ -38,6 +38,7 @@ def generate(cfg, out):
     layout = cfg['layout']
     colors = cfg['colors']
     credits = cfg['credits']
+    compress = cfg.get('compress', False)
     title_dx = cfg.get('title_dx', 0)
     menu_y0 = layout.get('menu_y0', 8)
     rle_y = layout.get('rle_y', 0)
@@ -100,6 +101,20 @@ static void play_song(const music_song_t *song, unsigned char loop)
 }
 
 ''')
+
+    # --- Сжатые треки: таблица music_csong_t + общий буфер распаковки ---
+    if compress:
+        w('/* Сжатые треки: таблица music_csong_t и общий буфер распаковки.\n')
+        w('   Буфер берётся из кучи (heap_alloc) — она стартует сразу за\n')
+        w('   концом образа ROM (__tail) и не доходит до видеопамяти. */\n')
+        w('static const music_csong_t * const csongs[] = {\n')
+        for i in range(0, n, 4):
+            chunk = [f'&{t["file"]}_music_csong' for t in tracks[i:i + 4]]
+            comma = ',' if i + 4 < n else ''
+            w('    ' + ', '.join(chunk) + comma + '\n')
+        w('};\n')
+        w('#define NTRACKS ((unsigned char)(sizeof(csongs) / sizeof(csongs[0])))\n')
+        w('static unsigned char *song_buf;   /* 0 = буфер не выделен */\n\n')
 
     # --- menu_lines[] ---
     w('static const struct {\n')
@@ -194,6 +209,23 @@ static void show_menu(unsigned char selected)
         key_check = f"((key >= '1' && key <= '9') || (key >= 'a' && key <= '{max_alpha}'))"
         track_calc = f"track = (key <= '9') ? (key - '1') : (key - 'a' + 9);"
 
+    alloc_block = ''
+    if compress:
+        alloc_block = '''
+    /* Буфер распаковки — один на все песни, под самый длинный трек.
+       heap_alloc стартует сразу за концом образа ROM (__tail) и вернёт 0,
+       если трек не влезает до видеопамяти (heap_top=0x8000) — тогда музыка
+       молчит, но память экрана не портится (см. проверку song_buf). */
+    {
+        unsigned int maxsz = 0u;
+        unsigned char i;
+        for (i = 0u; i < NTRACKS; ++i)
+            if (csongs[i]->unpack_size > maxsz)
+                maxsz = csongs[i]->unpack_size;
+        song_buf = (unsigned char *)heap_alloc(maxsz);
+    }
+'''
+
     w(f'''/* ------------------------------- main -------------------------------- */
 
 int main(void)
@@ -209,7 +241,7 @@ int main(void)
     gfx_rle_expand(title_bmp_screen_rle, {rle_x}u, {rle_y}u);
     show_menu_full(100);
     gfx_set_bmp_palette(title_bmp_palette);
-
+{alloc_block}
     play_song(&nes_drums_song, 0);
 
     unsigned char track;
@@ -224,27 +256,34 @@ int main(void)
                 show_menu(100);
             }} else if ({key_check}) {{
                 {track_calc}
-                const music_song_t *songs[] = {{
 ''')
 
-    # Songs array (4 per line)
-    for i in range(0, n, 4):
-        chunk = [f'&{t["file"]}_music_song' for t in tracks[i:i+4]]
-        line = ', '.join(chunk)
-        comma = ',' if i + 4 < n else ''
-        w(f'                    {line}{comma}\n')
-
-    w(f'''                }};
+    if compress:
+        w('''                if (song_buf)
+                    play_song(music_load_compressed(csongs[track], song_buf), 0);
+                show_menu(track+1);
+''')
+    else:
+        w('                const music_song_t *songs[] = {\n')
+        # Songs array (4 per line)
+        for i in range(0, n, 4):
+            chunk = [f'&{t["file"]}_music_song' for t in tracks[i:i+4]]
+            line = ', '.join(chunk)
+            comma = ',' if i + 4 < n else ''
+            w(f'                    {line}{comma}\n')
+        w('''                };
                 play_song(songs[track], 0);
                 show_menu(track+1);
-            }}
-        }}
+''')
+
+    w('''            }
+        }
         prev_key = key;
-    }}
+    }
 
     music_stop();
     return 0;
-}}
+}
 ''')
 
 
@@ -252,10 +291,16 @@ def main():
     p = argparse.ArgumentParser(description='Generate main.c from rom.json')
     p.add_argument('rom_json', help='path to rom.json')
     p.add_argument('-o', '--output', default='main.c', help='output file')
+    p.add_argument('--compress', action='store_true',
+                   help='треки — сжатые music_csong_t: выделять буфер из кучи'
+                   ' и распаковывать перед игрой (music_load_compressed)')
     args = p.parse_args()
 
     with open(args.rom_json, 'r', encoding='utf-8') as f:
         cfg = json.load(f)
+
+    if args.compress:
+        cfg['compress'] = True
 
     # Читает ширину BMP для авто-центрирования
     if 'title_bmp_width' not in cfg:

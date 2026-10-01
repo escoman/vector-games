@@ -70,6 +70,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import zx0   # сборочный компрессор ZX0 (utils/zx0.py) для --compress
+
 MUS_END = 0x00
 MUS_REST = 0x60
 MUS_LEN_BASE = 0xE0   # E0..E7 = L1..L128 (однобайтовая команда состояния)
@@ -521,6 +524,10 @@ def main():
     ap.add_argument('--use-shared', metavar='NAME',
                     help='использовать семплы из внешней библиотеки NAME'
                     ' (включает NAME.h, без локальных семплов)')
+    ap.add_argument('--compress', action='store_true',
+                    help='сжать потоки байткода (s0|s1|s2|dr) одним блобом'
+                    ' ZX0 и выдать music_csong_t вместо music_song_t;'
+                    ' рантайм распаковывает его в ОЗУ (music_load_compressed)')
     ap.add_argument('--self-test', action='store_true',
                     help='проверить однобайтовое кодирование L и октавы,'
                     ' выйти')
@@ -533,6 +540,9 @@ def main():
         ap.error('не указан файл партитуры .mus')
     if args.shared_lib and args.use_shared:
         ap.error('--shared-lib и --use-shared несовместимы')
+    if args.compress and args.shared_lib:
+        ap.error('--compress и --shared-lib несовместимы'
+                 ' (общая библиотека семплов не сжимается)')
 
     fname = args.mus
     out = args.output or os.path.splitext(fname)[0] + '.inc'
@@ -664,10 +674,12 @@ def main():
                             st=not is_shared_lib))
     ch_names = (('score0', 's0'), ('score1', 's1'),
                 ('score2', 's2'), ('drums', 'dr'))
-    for key, suffix in ch_names:
-        if key in enabled and not is_shared_lib:
-            parts.append(cbytes(f'{name}_{suffix}', streams[key].bytes,
-                                st=not is_shared_lib))
+    is_compress = args.compress and not is_shared_lib
+    if not is_compress:
+        for key, suffix in ch_names:
+            if key in enabled and not is_shared_lib:
+                parts.append(cbytes(f'{name}_{suffix}', streams[key].bytes,
+                                    st=not is_shared_lib))
     if sample_arrays:
         table = ', '.join(f'{name}_smp{i}' if i in sample_arrays else '0'
                           for i in range(16))
@@ -679,17 +691,42 @@ def main():
         samples_field = f'{args.use_shared}_samples'
     else:
         samples_field = '0'
-    if is_shared_lib:
-        ch_vals = '0, 0, 0, 0'
+
+    if is_compress:
+        # Все четыре потока (каждый завершается MUS_END, даже выключенный)
+        # склеиваются s0|s1|s2|dr и сжимаются одним блобом ZX0. Несжатые
+        # длины потоков идут отдельным массивом — по ним рантайм расставит
+        # указатели внутри распакованного буфера (см. music_load_compressed).
+        blob = bytearray()
+        lens = []
+        for key, _suffix in ch_names:
+            data = bytes(streams[key].bytes)
+            lens.append(len(data))
+            blob += data
+        packed = zx0.compress(bytes(blob))
+        unpack_size = len(blob)
+        parts.append(cbytes(f'{name}_blob', packed))
+        lens_str = ', '.join(f'{n}u' for n in lens)
+        parts.append(f'static const unsigned int {name}_streamlen[4] = {{'
+                     f'\n    {lens_str}\n}};')
+        parts.append(f'static const music_csong_t {name}_csong = {{')
+        parts.append(f'    {tempo_num}u, {tempo_den}u, {song_len}u,'
+                     f' {unpack_size}u,')
+        parts.append(f'    {name}_streamlen, {name}_blob,')
+        parts.append(f'    {samples_field}')
+        parts.append('};')
     else:
-        ch_vals = ', '.join(f'{name}_{sfx}' if key in enabled
-                            else '0' for key, sfx in ch_names)
-    song_kw = 'const' if is_shared_lib else 'static const'
-    parts.append(f'{song_kw} music_song_t {name}_song = {{')
-    parts.append(f'    {tempo_num}u, {tempo_den}u, {song_len}u,')
-    parts.append(f'    {ch_vals},')
-    parts.append(f'    {samples_field}')
-    parts.append('};')
+        if is_shared_lib:
+            ch_vals = '0, 0, 0, 0'
+        else:
+            ch_vals = ', '.join(f'{name}_{sfx}' if key in enabled
+                                else '0' for key, sfx in ch_names)
+        song_kw = 'const' if is_shared_lib else 'static const'
+        parts.append(f'{song_kw} music_song_t {name}_song = {{')
+        parts.append(f'    {tempo_num}u, {tempo_den}u, {song_len}u,')
+        parts.append(f'    {ch_vals},')
+        parts.append(f'    {samples_field}')
+        parts.append('};')
 
     if is_shared_lib:
         guard = re.sub(r'[^A-Z0-9]', '_',
@@ -732,6 +769,10 @@ def main():
         print(f'  {key:7s}: событий {st.events:3d}, байткод'
               f' {len(st.bytes):4d} байт{off}')
     print(f'  семплы: {", ".join(str(i) for i in sorted(sample_arrays)) or "нет"}')
+    if is_compress:
+        pct = 100.0 * len(packed) / unpack_size if unpack_size else 0.0
+        print(f'  ZX0: {unpack_size} байт байткода -> {len(packed)}'
+              f' ({pct:.1f}%), распаковка в ОЗУ через music_load_compressed')
 
 
 if __name__ == '__main__':

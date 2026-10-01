@@ -12,6 +12,10 @@ TARGET = supermario.rom
 SONGS  = track_0 track_1 track_2 track_3 track_5 track_6 track_7 \
          track_8 track_9 track_10 track_11 track_13 track_17
 
+# Партитуры треков сжимаются ZX0 и распаковываются в ОЗУ перед игрой
+# (см. ../soundtracks/soundtrack.mk).
+COMPRESS = 1
+
 .PHONY: full
 full: clean all deploy
 

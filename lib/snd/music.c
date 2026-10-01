@@ -194,6 +194,38 @@ void music_set_data(const music_song_t *song)
     music_stop();
 }
 
+#ifdef MUSIC_COMPRESSED
+/* RAM-копия песни: заполняется распакованными потоками. g_song хранит
+ * указатель на неё, поэтому копия статическая и живёт весь сеанс. */
+static music_song_t g_ram_song;
+
+/* Распаковать сжатую песню cs в буфер buf и вернуть RAM-копию
+ * music_song_t, готовую для music_set_data(). Потоки указывают внутрь
+ * buf: s0=buf, s1=buf+stream_len[0], s2 и dr — дальше по длинам. Байткод
+ * позиционно-независим, правка адресов не нужна. Одновременно играет
+ * одна песня — buf переиспользуется между вызовами. */
+const music_song_t *music_load_compressed(const music_csong_t *cs,
+                                          unsigned char *buf)
+{
+    unsigned int off;
+
+    zx0_decompress(cs->blob, buf);
+    g_ram_song.tempo_num = cs->tempo_num;
+    g_ram_song.tempo_den = cs->tempo_den;
+    g_ram_song.length    = cs->length;
+    off = 0u;
+    g_ram_song.s0 = buf;
+    off += cs->stream_len[0];
+    g_ram_song.s1 = buf + off;
+    off += cs->stream_len[1];
+    g_ram_song.s2 = buf + off;
+    off += cs->stream_len[2];
+    g_ram_song.dr = buf + off;
+    g_ram_song.samples = cs->samples;
+    return &g_ram_song;
+}
+#endif /* MUSIC_COMPRESSED */
+
 /* Совместимость: запуск на «своём» устройстве вывода, выбранном флагом
  * сборки. В AY-only ROM мелодия идёт на AY, иначе — на КР580ВИ53
  * (ударные на Tape Out), как прежний режим по умолчанию. */

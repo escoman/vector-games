@@ -295,6 +295,30 @@ typedef struct {
     const unsigned char * const *samples;
 } music_song_t;
 
+/* Сжатая песня (MUSIC_COMPRESSED): четыре потока байткода (s0|s1|s2|dr)
+ * лежат в ROM одним ZX0-блобом и распаковываются в ОЗУ перед игрой.
+ * music_load_compressed() распаковывает blob в буфер и собирает из него
+ * обычную music_song_t, потоки которой указывают внутрь буфера:
+ *   s0 = buf, s1 = buf+stream_len[0], s2 = +stream_len[1], dr = +stream_len[2].
+ * Байткод позиционно-независим (MUS_JMP — относительный прыжок назад),
+ * поэтому распакованные потоки играются напрямую, без правки адресов.
+ * Семплы ударных остаются в ROM (samples) — dr лишь ссылается на них. */
+typedef struct {
+    unsigned int tempo_num;
+    unsigned int tempo_den;
+    unsigned int  length;              /* длина в тиках (справочно)      */
+    unsigned int  unpack_size;         /* байт после распаковки (s0+..+dr)*/
+    const unsigned int *stream_len;    /* [4]: длины s0,s1,s2,dr несжатые */
+    const unsigned char *blob;         /* ZX0-поток (без заголовка)       */
+    const unsigned char * const *samples;
+} music_csong_t;
+
+/* Распаковщик ZX0 «standard» (lib/unpack/zx0.asm). src — сжатый поток,
+ * dst — буфер размером не меньше исходных данных; длину результата
+ * декодер не знает (конец — маркер EOF в потоке), её хранит вызывающий.
+ * Стандартное соглашение: стек чистит вызывающий. */
+extern void zx0_decompress(const unsigned char *src, unsigned char *dst);
+
 extern void music_set_data(const music_song_t *song);
 extern void music_start(void);
 extern void music_pause(void);
@@ -310,6 +334,15 @@ extern void music_start_vi53(void);
 extern void music_start_ay(void);
 extern void music_use_vi53(void);
 extern void music_use_ay(void);
+
+/* Распаковать сжатую песню в буфер и вернуть готовую music_song_t
+ * (RAM-копия внутри music.c). buf должен вмещать cs->unpack_size байт;
+ * обычно его берут из кучи (heap_alloc) — она стартует сразу за концом
+ * образа ROM (__tail). Одновременно играет одна песня, поэтому буфер
+ * переиспользуют: выделяют один раз под самый длинный трек. Результат
+ * передают в music_set_data()/play_song(). */
+extern const music_song_t *music_load_compressed(const music_csong_t *cs,
+                                                 unsigned char *buf);
 
 /* Диагностика */
 extern volatile unsigned long diag_irq_count;

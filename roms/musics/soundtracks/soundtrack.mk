@@ -40,18 +40,39 @@ ZFLAGS_AY   = $(ZFLAGS_BASE) -DMUSIC_AY_DRUMS_AY -Ca-DMUSIC_AY_DRUMS_AY
 # AY-вариант — тот же проект, суффикс _ay в имени ROM.
 TARGET_AY   = $(TARGET:.rom=_ay.rom)
 
+# --- Сжатие партитур ZX0 (опционально; включает проект: COMPRESS = 1) -----
+# Треки хранятся в ROM одним сжатым блобом (music_csong_t) и распаковываются
+# в ОЗУ за концом образа (куча от __tail, heap.c) перед игрой. Добавляет
+# распаковщик zx0.asm и кучу heap.c, определяет MUSIC_COMPRESSED для music.c
+# и передаёт --compress генераторам .inc и main.c. Переключение COMPRESS
+# требует make clean (main.c/.inc не пересоздаются сами).
+COMPRESS ?= 0
+TXT2INC_FLAGS  =
+GEN_MAIN_FLAGS =
+MUSIC_RAM_CHECK = @:
+ifeq ($(COMPRESS),1)
+SRCS_COMMON   += $(LIB)/unpack/zx0.asm $(LIB)/mem/heap.c
+ZFLAGS_BASE   += -DMUSIC_COMPRESSED
+TXT2INC_FLAGS += --compress
+GEN_MAIN_FLAGS += --compress
+# Сборочный guard: распакованная партитура должна влезать в ОЗУ между
+# концом образа (__tail) и видеопамятью (0x8000). Падает сборку при
+# переполнении — раньше, чем heap_alloc вернёт 0 в рантайме.
+MUSIC_RAM_CHECK = @python3 $(PROJECT_ROOT)utils/check_music_ram.py $@ $(INCS)
+endif
+
 .PHONY: all clean
 
 all: $(TARGET) $(TARGET_AY)
 
 # Генерация main.c из rom.json
 main.c: $(ROM_JSON) $(GEN_MAIN)
-	python3 $(GEN_MAIN) $(ROM_JSON) -o $@
+	python3 $(GEN_MAIN) $(ROM_JSON) -o $@ $(GEN_MAIN_FLAGS)
 
 # Конвертация музыки: txt → inc
 rom_data/%_music.inc: music_txt/%.txt $(SOUNDTRACKS)/nes_drums.h $(TXT2INC)
 	@mkdir -p rom_data
-	python3 $(TXT2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch
+	python3 $(TXT2INC) $< -o $@ --name $*_music --use-shared nes_drums --allow-len-mismatch $(TXT2INC_FLAGS)
 
 # Заставка: bmp → inc. --bg-index фиксирует фон (из rom.json) на нулевом индексе.
 rom_data/title_bmp.inc: rom_data/title.bmp $(BMP2INC)
@@ -61,6 +82,7 @@ rom_data/title_bmp.inc: rom_data/title.bmp $(BMP2INC)
 $(TARGET): $(SRCS) $(INCS) rom_data/title_bmp.inc
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) $(SRCS) -o $@
+	$(MUSIC_RAM_CHECK)
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
@@ -68,6 +90,7 @@ $(TARGET): $(SRCS) $(INCS) rom_data/title_bmp.inc
 $(TARGET_AY): $(SRCS_AY) $(INCS) rom_data/title_bmp.inc
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS_AY) $(SRCS_AY) -o $@
+	$(MUSIC_RAM_CHECK)
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
