@@ -350,11 +350,24 @@ extern void kbd_scan_now(void);                 /* снимок в ISR          
 extern unsigned char kbd_read(void);            /* декод. последний снимок*/
 extern void kbd_wait_key(unsigned char key);    /* ждать нажатия         */
 
-/* Коды клавиш, которым матричная таблица z88dk не назначила код (строка 1,
- * колонки 0 и 1: «влево-вверх» и «СТР»). Лежат выше ASCII и кодов Ф1-Ф5
- * (128-132), поэтому не пересекаются ни с печатными, ни с Ф-клавишами. */
-#define KBD_KEY_HOME 133    /* «влево-вверх» (↖) — курсор в начало строки */
-#define KBD_KEY_END  134    /* «СТР» — курсор в конец строки             */
+/* Коды служебных и специальных клавиш, возвращаемые kbd_scan()/kbd_read().
+ * Числовые значения соответствуют матричной таблице kbd_codes в
+ * lib/kbd/keyboard.c (строка*8 + колонка). */
+#define KBD_KEY_TAB    7    /* ТАБ — переключение фокуса (СС+ТАБ — назад) */
+#define KBD_KEY_LEFT   8    /* ← */
+#define KBD_KEY_RIGHT  9    /* → */
+#define KBD_KEY_DOWN   10   /* ↓ */
+#define KBD_KEY_UP     11   /* ↑ */
+#define KBD_KEY_BACK   12   /* ЗАБ (backspace) */
+#define KBD_KEY_F1     128  /* Ф1 */
+#define KBD_KEY_F2     129  /* Ф2 */
+#define KBD_KEY_F3     130  /* Ф3 */
+#define KBD_KEY_F4     131  /* Ф4 */
+#define KBD_KEY_F5     132  /* Ф5 */
+/* ↖ и СТР — строка 1 матрицы (колонки 0 и 1); z88dk оставил их без кода,
+ * поэтому назначаем свои выше ASCII и Ф1-Ф5 (коллизий нет). */
+#define KBD_KEY_HOME   133  /* «влево-вверх» (↖) — курсор в начало строки */
+#define KBD_KEY_END    134  /* «СТР» — курсор в конец строки             */
 
 
 
