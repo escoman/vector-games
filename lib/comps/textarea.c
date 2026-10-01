@@ -18,6 +18,10 @@
 #include "v06.h"
 #include <string.h>
 
+/* Состояние модификатора УС (порт C, бит 6) — для сочетаний УС+↖ / УС+СТР.
+ * Заполняется в kbdscan.asm при каждом опросе матрицы. */
+extern unsigned char kbd_usr_state;
+
 /* Плоскость монохромного режима 256x256 (бит 0 цвета → 0xE000). */
 #define FRAME_PLANE 0xE000u
 
@@ -569,6 +573,26 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
             ta->cur_col += ta->width;
         else if (ta->cur_col < ed_slen)
             ta->cur_col = ed_slen;
+    } else if (key == KBD_KEY_HOME) {  /* ↖ «влево-вверх» */
+        if (kbd_usr_state) {
+            ta->cur_col = 0;                        /* УС+↖ — начало текста */
+        } else if (ta->lines <= 1) {
+            ta->cur_col = 0;                        /* edit — начало строки */
+        } else {
+            ta->cur_col = (ta->cur_col / ta->width) * ta->width;
+        }
+    } else if (key == KBD_KEY_END) {   /* СТР */
+        if (kbd_usr_state) {
+            ta->cur_col = ed_slen;                  /* УС+СТР — конец текста */
+        } else if (ta->lines <= 1) {
+            ta->cur_col = ed_slen;                  /* edit — конец строки */
+        } else {
+            /* Конец текущей строки — граница переноса по ширине, но не
+             * дальше конца текста (для последней строки). */
+            ta->cur_col = (ta->cur_col / ta->width + 1) * ta->width;
+            if (ta->cur_col > ed_slen)
+                ta->cur_col = ed_slen;
+        }
     } else if (key == 12) {  /* ЗАБ (Backspace) */
         if (ta->cur_col > 0) {
             for (i = ta->cur_col - 1; i < ed_slen; i++)
