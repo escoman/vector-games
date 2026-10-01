@@ -16,6 +16,11 @@
  * на всё — её задаёт gfx_set_bmp_palette(fire_palette) ниже. */
 #include "assets/title_bmp.inc"
 
+/* Тема (Mortal Kombat) — сгенерирована utils/midi2mus.py из
+ * assets/theme.mid → music/theme.mus → utils/mus2inc.py. Три тональных
+ * голоса + ударные (стандартные nes-барабаны, nes_drums_samples). */
+#include "rom_data/theme.inc"
+
 /* ----------------------------- ПАЛИТРА --------------------------------
  * 16 цветов огня. Формат V06: BB_GGG_RRR.
  * 0 = чёрный (фон), 15 = белое пламя.
@@ -93,6 +98,11 @@ static const unsigned char flick_frames[][16] = {
  * Период мерцания = FLICK_N * FLICK_DIV кадров (16*2 = 32 ≈ 0.64 с). */
 #define FLICK_DIV 2u
 
+/* Версия AY: фиксированная громкость канала B (гармония), 0..15. Канал A
+ * (мелодия) идёт на общей огибающей. Уменьшите, чтобы мелодия выделялась. */
+#define MK_AY_VOL_B 12u
+#define MK_AY_VOL_C 9u
+
 static unsigned char flick_phase;
 static unsigned char flick_div;
 
@@ -104,6 +114,18 @@ static void flicker_handler(void)
         if (++flick_phase >= FLICK_N)
             flick_phase = 0;
     }
+}
+
+/* ------------------ КАДРОВОЕ ПРЕРЫВАНИЕ (50 Гц) ----------------------
+ * Один обработчик ведёт всё: музыкальный поток (music_tick), огибающие
+ * семплов ударных (drum_tick) и мерцание палитры. Бэкенд вывода
+ * (ВИ53 или AY) задаётся флагами сборки в Makefile — music_start()
+ * выбирает его сам. */
+static void on_frame(void)
+{
+    flicker_handler();
+    music_tick();
+    drum_tick();
 }
 
 /* ----------------------------- MAIN ---------------------------------- */
@@ -124,19 +146,34 @@ int main(void)
      * свободной полосе между ними. x центрирован по 32 столбцам.
      * Цвет 14 (белёсый) мерцает вместе с палитрой. */
     gfx_print(9u, 100u, "SARMIN  ALEXEY", 5u);
-    gfx_print(9u, 120u, "FOR VECTOR-06C", 5u);
-    gfx_print(15u, 140u, "2026", 5u);
+    gfx_print(9u, 110u, "FOR VECTOR-06C", 5u);
+    gfx_print(14u, 120u, "2026", 5u);
 
     gfx_set_bmp_palette(fire_palette);
 
-    /* Мерцание палитры из кадрового прерывания (50 Гц) */
-    frame_handler = flicker_handler;
+    /* Мерцание палитры + музыка + ударные из кадрового прерывания (50 Гц) */
+    frame_handler = on_frame;
+    drum_init();                /* микшер/огибающие семплов ударных */
+    music_set_data(&theme_song);
+    music_set_loop(1);          /* зациклить тему */
+    music_start();              /* бэкенд по флагам сборки (ВИ53/AY) */
+
+#ifdef MUSIC_AY_DRUMS_AY
+    /* Версия AY: канал A (мелодия) — на общей огибающей (спад, период 1000),
+     * канал B (гармония) — фиксированная громкость. Огибающая в AY-3-8910 одна
+     * на все каналы, поэтому форма/период общие, а маска задаёт, какие каналы к
+     * ней подключены. Параметры только сохраняются и применяются на атаке ноты
+     * (см. ay.c), поэтому вызывать ПОСЛЕ music_start()/ay_mixer_init(). */
+    ay_set_envelope(AY_CH_A, AY_ENV_TRIANGLE_DOWN, 500);
+    ay_set_fixed_volume(AY_CH_B, MK_AY_VOL_B);
+    ay_set_fixed_volume(AY_CH_C, MK_AY_VOL_C);
+#endif
 
     rnd_init();
 
     /* Основной цикл: генерация + отрисовка кадра огня (50 Гц) */
     for (;;) {
-        gfx_next_frame();
+        //gfx_next_frame();
 
         fire_generate(153);   /* ~60% очагов, как в fire.html (rand > 0.40) */
         fire_render();
