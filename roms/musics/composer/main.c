@@ -5,15 +5,23 @@
  * 3 тоновых голоса + ударные, проигрывание с подсветкой.
  * Экран 256x256x2, монохромный. Подсветка — инверсией символов.
  *
- * Ф1 — помощь, Ф2 — играть/стоп, Ф3 — ударные, Ф4 — библиотека, Ф5 — о программе.
- * Стрелки + ВК — навигация, выбор SCORE/DRUMS, вход в редактор.
- * ESC — возврат на главный экран.
+ * Ф1 — помощь, Ф2 — играть/стоп, Ф3 — ударные, Ф4 — соло-редактор
+ * партитуры, Ф5 — о программе. Все они обрабатываются хуком
+ * контроллера компонентов (ctrl.on_key), своего цикла клавиатуры у
+ * главного экрана больше нет.
+ *
+ * SCORE 1..3 и DRUMS — компоненты textarea: текст правится на месте,
+ * ТАБ переводит фокус между полями (СС+ТАБ — назад), внутри поля
+ * работают ←/→/↑/↓. АП2 на главном экране — стоп проигрывания и
+ * перерисовка.
+ *
+ * Соло-редактор — отдельный экран, он в solo.c.
  */
 
 #include <string.h>
 #include "v06.h"
+#include "comps.h"
 #include "parser.h"
-#include "editor.h"
 #include "nes_drums.h"
 #include "screens.h"
 
@@ -41,58 +49,65 @@ static const unsigned char composer_pal[2] = {
     V06_RGB(7, 7, 3),   /* 1: белый (текст) */
 };
 
+/* Та же пара, но оба индекса чёрные: на время отрисовки экрана на
+ * экране ничего не видно, так что процесс рисования не мелькает
+ * (белые глифы появляются все сразу, когда палитру вернёшь). */
+static const unsigned char black_pal[2] = {
+    V06_RGB(0, 0, 0),
+    V06_RGB(0, 0, 0)
+};
+
 /* ------------------------------- Константы -------------------------- */
 
-#define SCR_ROWS   32
-#define TEXT_X     0
-#define TEXT_W     32
-#define PREVIEW_H  5
-#define EDIT_VISIBLE 27
+/* Раскладка главного экрана. Пиксели, строки — как в comps.h:
+ * поле занимает от ta->y (верх метки) 25 + (lines-1)*10 строк, то есть
+ * 45 при трёх видимых. Шаг 48 — 3 строки запаса: инверсия метки
+ * задевает ряд на 1 выше неё, а нижняя линия рамки предыдущего поля
+ * стоит на y+45. */
+#define FOOT_Y      248              /* подвал (FREE / подсказки)       */
+#define FIELD_X     0
+#define FIELD_W     30               /* видимых колонок (рамка: 0..31)  */
+#define FIELD_LINES 3                /* видимых строк в поле            */
+#define FIELD_Y0    24
+#define FIELD_PITCH 56
 
-/* --------------------------- Пул-аллокатор -------------------------- */
+/* --------------------------- Память --------------------------------- */
 
-/* Простой bump-аллокатор в статическом пуле.
- * Контролируем, чтобы выделенная память не залезала в VRAM (0x8000). */
-#define POOL_SIZE 1024   /* 4 канала × 256 байт */
-static unsigned char mem_pool[POOL_SIZE];
-static unsigned int pool_used = 0;
-
-static char *pool_alloc(unsigned int size)
-{
-    char *p;
-    if (pool_used + size > POOL_SIZE) return (char *)0;
-    p = (char *)(mem_pool + pool_used);
-    pool_used += size;
-    return p;
-}
-
-/* Общая свободная память: от конца BSS до VRAM (0xE000).
- * pool_end — адрес конца пула (он в конце BSS). */
-extern unsigned char _bss_compiler_tail;
-
-static unsigned int free_ram(void)
-{
-    unsigned int bss_end = (unsigned int)&_bss_compiler_tail;
-    if (bss_end >= 0xE000) return 0;
-    return 0xE000 - bss_end;
-}
+/* Буферы партитур берутся из кучи (lib/mem/heap.c) — она стартует от
+ * конца образа ROM, так что 4 КБ текстовых буферов не стоят образу ни
+ * байта. Потолок кучи по умолчанию 0x8000 (выше — видеопамять); здесь
+ * его поднимаем до 0xE000: экран 256x256x2, активна и заливается одна
+ * плоскость 0xE000, остальное — обычная ОЗУ. */
+#define SCORE_BUF   256            /* байт на канал, с терминатором */
 
 /* --------------------------- Глобальные данные ---------------------- */
 
 static char *score_text[4];
 
+/* Поля главного экрана. Соло-редактор (Ф4) — отдельный экран (solo.c),
+ * он сам создаёт своё поле на буфер выбранного канала. */
+static textarea_t score_fields[4];
+static controller_t ctrl;
+
+static const char *field_label[4] = {
+    "SCORE 1", "SCORE 2", "SCORE 3", "DRUMS"
+};
+
 static unsigned char bc_buf[4][PARSER_BC_SIZE];
 static music_song_t song;
 
-static unsigned int line_map[4][PARSER_MAX_LINES];
-static unsigned char line_count[4];
-static unsigned int play_ticks;
-static unsigned char cur_line_ch[4];
-static unsigned char playing;
+static unsigned char modal_screen; /* на экране модалка со своим заголовком */
 
-static unsigned char sel_item;
+/* Режим проигрывания — он же признак «играет»: PLAY_NONE / PLAY_ALL /
+ * PLAY_ONE (см. screens.h). */
+unsigned char play_mode;
 
-static unsigned char key_prev;
+/* Колонка и ширина той подписи, что горит сейчас. Нужны только чтобы
+ * снять подсветку на естественном конце партитуры — вызвать
+ * play_label() с правильными аргументами прерыванию негде. Обновляет их
+ * сам play_label(); ширина 0 — подписать нечего. */
+static unsigned char lit_col;
+static unsigned char lit_count;
 
 /* ------------------------- Встроенный пример ------------------------ */
 
@@ -103,39 +118,54 @@ static const char default_dr[] = "L4 0 P 2 P 0 P 4 P\nL4 8 P 10 P 8 P 10 P";
 
 /* ------------------------- Прототипы ------------------------------- */
 
-static void draw_main(void);
 void playback_start(void);
 void playback_stop(void);
+
+/* Поле главного экрана открывает соло-редактор, а хук контроллера нужен
+ * fields_init() раньше, чем определён. */
+static unsigned char on_key(unsigned char key);
 
 /* ------------------------- Кадровый обработчик --------------------- */
 
 static void on_frame(void)
 {
-    unsigned char ch;
-
     music_tick();
     drum_tick();
 
-    if (!playing) return;
+    if (play_mode == PLAY_NONE) return;
 
-    play_ticks++;
-    for (ch = 0; ch < 4; ch++) {
-        unsigned char ln;
-        cur_line_ch[ch] = 0;
-        for (ln = 0; ln < line_count[ch]; ln++) {
-            if (line_map[ch][ln] <= play_ticks)
-                cur_line_ch[ch] = ln;
-        }
+    /* Партитура доиграла. Узнать об этом больше негде: цикла клавиатуры
+     * у главного экрана нет, он у контроллера компонентов. Стоп так же,
+     * как по нажатию Ф2/Ф3 — playback_stop() и маску каналов сбрасывает
+     * (music_stop), чтобы следующая Ф2 снова играла всё; гасим
+     * подсветку и выключаем себя — на следующем прерывании
+     * frame_handler уже не вызовит on_frame (trampoline прочитал адрес
+     * заранее, так что выход из прерывания не ломается). */
+    if (!music_is_playing()) {
+        playback_stop();
+        /* На модалке ряд 8 занят её собственным заголовком — тушить
+         * там нечего, а после возврата всё перерисуется заново. */
+        if (!modal_screen)
+            play_label_off();
     }
 }
 
 /* ------------------------- Утилиты --------------------------------- */
 
-void init_screen(void)
+/* Экран: чёрная палитра и очистка. Режим ставить не нужно — его
+ * выставили один раз в main(), и сменить его может только то, что
+ * пишет в порты видеочасти, а экраны нашего ROM-а только красят
+ * плоскость. */
+void begin_init_screen(void)
 {
-    gfx_set_mode(GFX_MODE_256_2);
-    gfx_set_palette(composer_pal);
+    gfx_set_palette(black_pal);
     gfx_clear(0);
+}
+
+/* Отрисовка кончена — показать результат. */
+void end_init_screen(void)
+{
+    gfx_set_palette(composer_pal);
 }
 
 void draw_separator(unsigned char y)
@@ -144,38 +174,61 @@ void draw_separator(unsigned char y)
         "________________________________", 1);
 }
 
-/* Инвертировать метку F2-PLAY в заголовке (XOR-тоггл). */
-static void invert_play_label(void)
+/* Подсветка подписи проигрывания: инвертировать count символов от
+ * колонки col на строке заголовка, либо снять инверсию (on = 0).
+ * Экран печатает свой заголовок сам — здесь только XOR.
+ * Перепечатывать текст вместо этого нельзя: инвертируется 9 строк
+ * (ряд над глифами тоже), а рисуется 8, так что от перепечати над
+ * подписью оставалась бы белая полоска. */
+void play_label(unsigned char col, unsigned char count, unsigned char on)
 {
-    invert_chars(8, 7, 7);
+    invert_chars(col, (unsigned char)(HDR_Y - 1), count);
+    if (on) {
+        lit_col = col;
+        lit_count = count;
+    } else {
+        lit_count = 0;
+    }
 }
 
-/* Инвертировать/деинвертировать метку [EDIT] для секции.
- * XOR-свойство: повторный вызов возвращает текст в исходное состояние. */
-static void invert_section(unsigned char sec)
+/* Погасить ту подпись, что горит. */
+void play_label_off(void)
 {
-    unsigned char row = sec * 7 + 3;
-    unsigned char y = (unsigned char)(row * 8);
-
-    /* Инвертируем только [EDIT] (6 символов начиная с col 9) */
-    invert_chars(9, (unsigned char)(y - 1), 6);
+    if (lit_count)
+        play_label(lit_col, lit_count, 0);
 }
 
 /* ------------------------- Проигрывание ---------------------------- */
 
 void playback_stop(void)
 {
-    playing = 0;
+    play_mode = PLAY_NONE;
     music_stop();
     drum_mute();
     frame_handler = 0;
 }
 
-void playback_solo(unsigned char ch)
+/* Ф2/Ф3 на любом экране: одно нажатие — старт, следующее — стоп.
+ * mode: PLAY_ALL (Ф2, играет всё) или PLAY_ONE (Ф3 на соло-экране,
+ * играет только канал ch).
+ * Результат возвращается вызывающему, чтобы тот восстанавливал СВОЙ
+ * экран: у сообщения об ошибке парсинга весь экран свой, и перерисовка
+ * главного поля отсюда вытеснила бы его. */
+unsigned char playback_toggle(unsigned char mode, unsigned char ch)
 {
-    if (!playing) return;
-    /* Включить только выбранный канал, остальные выключить */
-    music_set_channel_mask((unsigned char)(1u << ch));
+    if (play_mode != PLAY_NONE) {
+        playback_stop();
+        return PLAY_NONE;
+    }
+    playback_start();
+    if (play_mode == PLAY_NONE)
+        return PLAY_ERROR;
+    if (mode == PLAY_ONE) {
+        /* Включить только выбранный канал, остальные выключить */
+        music_set_channel_mask((unsigned char)(1u << ch));
+        play_mode = PLAY_ONE;
+    }
+    return play_mode;
 }
 
 void playback_start(void)
@@ -188,15 +241,17 @@ void playback_start(void)
     for (ch = 0; ch < 4; ch++) {
         if (score_text[ch][0] == 0) {
             bc_buf[ch][0] = MUS_END;
-            line_count[ch] = 0;
             continue;
         }
         parse_score(&res, score_text[ch], bc_buf[ch],
                     PARSER_BC_SIZE, (ch == 3) ? 1 : 0);
         if (!res.ok) {
-            /* Ошибка парсинга — мигнём красным */
-            gfx_clear(0);
+            /* Ошибка парсинга — весь экран под сообщение. Интерфейс
+             * восстановит вызывающий (on_key), когда увидят текст. */
+            begin_init_screen();
             gfx_print(0, 64, "PARSE ERROR", 1);
+            gfx_print(0, 80, "AP2-RETURN", 1);
+            end_init_screen();
             return;
         }
     }
@@ -210,19 +265,8 @@ void playback_start(void)
         if (!res.ok) return;
     }
 
-    /* Построение таблицы строк для подсветки */
-    for (ch = 0; ch < 4; ch++) {
-        if (score_text[ch][0])
-            line_count[ch] = build_line_map(score_text[ch],
-                line_map[ch], PARSER_MAX_LINES, (ch == 3) ? 1 : 0);
-        else
-            line_count[ch] = 0;
-    }
-
     /* Запуск */
-    play_ticks = 0;
-    memset(cur_line_ch, 0, sizeof(cur_line_ch));
-    playing = 1;
+    play_mode = PLAY_ALL;
     frame_handler = on_frame;
     drum_init();
     music_set_data(&song);
@@ -232,69 +276,23 @@ void playback_start(void)
 
 /* ------------------------- Главный экран --------------------------- */
 
-/* Обновление подсветки [EDIT] при смене выделения.
- * Инвертирует старую и новую позиции — быстрее, чем draw_main(). */
-static void update_selection(unsigned char new_sel)
+/* Заголовок и подвал. Сами поля рисует контроллер компонентов. */
+static void chrome_main(void)
 {
-    if (playing) return;
-    invert_section(sel_item);  /* убрать подсветку */
-    sel_item = new_sel;
-    invert_section(sel_item);  /* поставить подсветку */
-}
+    static const char hint[] = "TAB-FIELDS";
+    unsigned int fr = heap_avail();
+    char mem[33];
+    unsigned char pos = 0;
 
-static void draw_main(void)
-{
-    unsigned char sec;
-    unsigned char y;
+    gfx_print(0, HDR_Y, "F1-HELP F2-PLAY F3-DRUMS F4-SOLO", 1);
+    /* На главном экране подпись проигрывания одна: F3 здесь — это
+     * библиотека ударных, а не режим проигрывания. */
+    if (play_mode != PLAY_NONE)
+        play_label(8, PLAY_LBL_N, 1);
 
-    init_screen();
-
-    /* Заголовок (строка 1, y=8) */
-    gfx_print(0, 8,
-        "F1-HELP F2-PLAY F3-DRUMS F4-LIB", 1);
-    if (playing)
-        invert_play_label();
-
-    for (sec = 0; sec < 4; sec++) {
-        unsigned char row = sec * 7 + 3;
-        y = (unsigned char)(row * 8);
-
-        /* Разделитель */
-        draw_separator((unsigned char)(y + 4));
-
-        /* Метка секции */
-        char label[] = "SCORE 1: [EDIT]";
-        if (sec < 3)
-            label[6] = (char)('1' + sec);
-        else
-            memcpy(label, "DRUMS:   [EDIT]", 15);
-
-        gfx_print(0, y, label, 1);
-        if (sel_item == sec && !playing)
-            invert_section(sec);
-
-        /* Превью текста (3 строки) */
-        {
-            unsigned char ln;
-            const char *p = score_text[sec];
-            char buf[33];
-            for (ln = 0; ln < PREVIEW_H; ln++) {
-                unsigned char cy = (unsigned char)((row + 2 + ln) * 8);
-                unsigned char i = 0;
-                while (*p && *p != '\n' && i < 32)
-                    buf[i++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : *p, p++;
-                buf[i] = 0;
-                if (*p == '\n') p++;
-                if (i) gfx_print(0, cy, buf, 1);
-            }
-        }
-    }
-
-    /* Свободная память RAM + F5-ABOUT (внизу экрана) */
+    /* FREE:xxxxxB  TAB-FIELDS  F5-ABOUT — между группами по два ряда
+     * запаса, иначе подсказки слипаются в одну строку. */
     {
-        unsigned int fr = free_ram();
-        char mem[33];
-        unsigned char pos = 0;
         const char *label = "FREE:";
         while (*label) { mem[pos++] = *label++; }
         if (fr >= 10000) mem[pos++] = (char)('0' + (unsigned char)(fr / 10000));
@@ -303,87 +301,149 @@ static void draw_main(void)
         if (fr >= 10)    mem[pos++] = (char)('0' + (unsigned char)((fr / 10) % 10));
         mem[pos++] = (char)('0' + (unsigned char)(fr % 10));
         mem[pos++] = 'B';
-        while (pos < 24) mem[pos++] = ' ';
-        mem[24] = 'F'; mem[25] = '5'; mem[26] = '-'; mem[27] = 'A';
-        mem[28] = 'B'; mem[29] = 'O'; mem[30] = 'U'; mem[31] = 'T';
-        mem[32] = 0;
-        gfx_print(0, 248, mem, 1);
     }
+    while (pos < 12) mem[pos++] = ' ';
+    memcpy(&mem[12], hint, 10);
+    /* Промежуток между группами тоже забивается пробелами: mem —
+     * стековый массив, и случайный ноль в пропуске оборвал бы строку
+     * ровно на середине. */
+    pos = 22;
+    while (pos < 24) mem[pos++] = ' ';
+    memcpy(&mem[24], "F5-ABOUT", 8);
+    mem[32] = 0;
+    gfx_print(0, FOOT_Y, mem, 1);
+}
+
+/* Перерисовать поля целиком: рамку, метки (с инверсией фокуса), окно
+ * текста, индикатор прокрутки и курсор активного поля draw() делает сам.
+ * Нужен каждый раз, когда экран заливали модальные экраны. */
+static void fields_draw(void)
+{
+    unsigned char i;
+
+    for (i = 0; i < 4; i++)
+        score_fields[i].base.draw(&score_fields[i].base,
+                                  (unsigned char)(i == ctrl.active));
+}
+
+static void paint_main(void)
+{
+    begin_init_screen();
+    chrome_main();
+    fields_draw();
+    end_init_screen();
+}
+
+/* Компоненты главного экрана. Соло-редактор (Ф4) своего поля не имеет:
+ * он в solo.c и навешивает компонент на буфер канала сам, при входе. */
+static void fields_init(void)
+{
+    unsigned char i;
+
+    for (i = 0; i < 4; i++)
+        textarea_init(&score_fields[i], score_text[i], SCORE_BUF - 1,
+                      FIELD_W, FIELD_LINES, FIELD_X,
+                      (unsigned char)(FIELD_Y0 + i * FIELD_PITCH),
+                      field_label[i]);
+
+    controller_init(&ctrl);
+    for (i = 0; i < 4; i++)
+        controller_add(&ctrl, (component_t *)&score_fields[i]);
+    ctrl.on_key = on_key;
+}
+
+/* Модальный экран: свои клавиши и свой заголовок. */
+static void modal(void (*screen)(void))
+{
+    modal_screen = 1;
+    screen();
+    modal_screen = 0;
+    paint_main();
+}
+
+/* Функциональные клавиши главного экрана — хук контроллера. Возврат 1:
+ * клавиша наша, 0 — отдать активному полю. ТАБ и АП2 контроллер
+ * забирает себе до вызова хука (см. controller_run). */
+static unsigned char on_key(unsigned char key)
+{
+    unsigned char ch = ctrl.active;
+    unsigned char r;
+
+    if (key == KBD_KEY_F1) { modal(screen_help); return 1; }
+    if (key == KBD_KEY_F2) {
+        r = playback_toggle(PLAY_ALL, 0);
+        if (r == PLAY_ERROR) {   /* парсер залил экран — держать до АП2 */
+            kbd_wait_key(KBD_KEY_ESC);
+            paint_main();
+        } else if (r == PLAY_NONE) {
+            play_label_off();
+        } else {
+            play_label(8, PLAY_LBL_N, 1);
+        }
+        return 1;
+    }
+    if (key == KBD_KEY_F3) { modal(screen_drums); return 1; }
+    /* Ф4 — отдельный экран соло-редактора канала в фокусе. Он сам рисует
+     * свой заголовок, сам заводит поле и контроллер и сам крутит свой
+     * цикл; обратно приходит по АП2. Поле того же канала переносит
+     * курсор, на котором вышли. */
+    if (key == KBD_KEY_F4) {
+        score_fields[ch].cur_col = screen_solo(ch, score_text[ch],
+                                              SCORE_BUF - 1, field_label[ch]);
+        paint_main();
+        return 1;
+    }
+    if (key == KBD_KEY_F5) { modal(screen_about); return 1; }
+    return 0;
 }
 
 /* ------------------------- main ------------------------------------ */
 
 int main(void)
 {
-    unsigned char key;
+    unsigned char i;
 
-    /* Инициализация данных — динамическое выделение из пула */
-    for (key = 0; key < 4; key++) {
-        score_text[key] = pool_alloc(256);
-        if (score_text[key])
-            memset(score_text[key], 0, 256);
+    /* Режим ставится один раз и больше не трогается: экран за ROM
+     * не меняется, а перестановка режима — это очистка видеочасти.
+     * Экраны только красят плоскость: begin_init_screen() ставит
+     * чёрную палитру и чистит, end_init_screen() возвращает рабочую. */
+    gfx_set_mode(GFX_MODE_256_2);
+
+    /* Потолок кучи поднимается до первой выдачи — ниже вершины кучи
+     * его опускать уже некуда (см. lib/mem/heap.c). */
+    heap_top = 0xE000;
+
+    /* Инициализация данных — буферы партитур из кучи.
+     * Отказ проверки оставил бы null-указатели в score_text: memcpy в
+     * адрес 0 — это запись в векторы прерываний, а не тихий мусор. */
+    for (i = 0; i < 4; i++) {
+        score_text[i] = (char *)heap_alloc(SCORE_BUF);
+        if (!score_text[i])
+            return 1;               /* куча кончилась — играть нечего */
+        memset(score_text[i], 0, SCORE_BUF);
     }
+
+    play_mode = PLAY_NONE;
+
+    /* Компоненты, затем примеры партитур: textarea навешивается на буфер,
+     * содержимое его не трогает, так что порядок любой. */
+    fields_init();
     memcpy(score_text[0], default_s0, sizeof(default_s0));
     memcpy(score_text[1], default_s1, sizeof(default_s1));
     memcpy(score_text[2], default_s2, sizeof(default_s2));
     memcpy(score_text[3], default_dr, sizeof(default_dr));
 
-    playing = 0;
-    sel_item = 0;
-    key_prev = 0;
-
-    /* Начальная отрисовка */
+    /* Своего цикла клавиатуры у главного экрана больше нет: управление
+     * полностью у контроллера компонентов — ТАБ между полями, правку
+     * делает активное поле, Ф1..Ф5 — нашему хуку. АП2 из программы не
+     * выбрасывает: у ROM-аппарата выход только мешает (нажал по привычке
+     * — и сиди перезагружай), так что на АП2 останавливаем проигрывание,
+     * перерисовываем экран и снова передаём управление контроллеру. */
     drum_init();
-    draw_main();
-
     for (;;) {
-        v06_wait_frame();
-
-        if (playing && !music_is_playing()) {
-            playing = 0;
-            drum_mute();
-            frame_handler = 0;
-            /* Снять подсветку F2-PLAY и вернуть [EDIT] */
-            invert_play_label();
-            invert_section(sel_item);
-        }
-
-        key = kbd_scan();
-
-        if (key != key_prev && key != 0) {
-            if (key == 128) {          /* F1 — Help */
-                screen_help();
-                draw_main();
-            } else if (key == 129) {   /* F2 — Play/Stop */
-                if (playing) {
-                    playback_stop();
-                    invert_play_label();
-                    invert_section(sel_item);
-                } else {
-                    playback_start();
-                    if (playing) {
-                        invert_section(sel_item);
-                        invert_play_label();
-                    }
-                }
-            } else if (key == 130) {   /* F3 — Drums */
-                screen_drums();
-                draw_main();
-            } else if (key == 131) {   /* F4 — Lib (placeholder) */
-            } else if (key == 132) {   /* F5 — About */
-                screen_about();
-                draw_main();
-            } else if (key == 11) {    /* Up */
-                if (sel_item > 0)
-                    update_selection((unsigned char)(sel_item - 1));
-            } else if (key == 10) {    /* Down */
-                if (sel_item < 3)
-                    update_selection((unsigned char)(sel_item + 1));
-            } else if (key == 13) {    /* Enter — Edit */
-                screen_editor(sel_item, score_text);
-                draw_main();
-            }
-        }
-        key_prev = key;
+        paint_main();
+        controller_run(&ctrl);
+        if (play_mode != PLAY_NONE)
+            playback_stop();
     }
 }

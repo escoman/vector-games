@@ -6,8 +6,13 @@
 
 #include "v06.h"
 
-/* Инициализация экрана: режим 256x256x2, палитра, очистка. */
-void init_screen(void);
+/* Экран: режим 256x256x2 ставят один раз в main(), экраны его не
+ * трогают. Отрисовка экрана оборачивается в пару вызовов:
+ * begin_init_screen() — чёрная палитра и очистка (пока рисуем, на
+ * экране ничего не видно), end_init_screen() — рабочая палитра
+ * composer_pal, то есть показать результат. */
+void begin_init_screen(void);
+void end_init_screen(void);
 
 /* Горизонтальный разделитель из '-' на строке y (в пикселях). */
 void draw_separator(unsigned char y);
@@ -16,15 +21,55 @@ void draw_separator(unsigned char y);
 void invert_chars(unsigned char col, unsigned char row,
                   unsigned char count);
 
-/* Проигрывание: старт/стоп/соло. */
+/* Раскладка заголовка общая у всех экранов: строка HDR_Y. */
+#define HDR_Y 8
+
+/* Проигрывание. Режим — он же признак того, что музыка играет.
+ * Подсвечивается (инвертируется) та подпись заголовка, чей режим
+ * включён: F2-PLAY при полном проигрывании, F3-SOLO при проигрывании
+ * одного голоса — это бывает только на соло-экране. */
+#define PLAY_NONE 0
+#define PLAY_ALL  1
+#define PLAY_ONE  2
+extern unsigned char play_mode;
+
+/* Подпись проигрывания: инвертировать count символов заголовка, начиная
+ * с колонки col, либо снять инверсию (on = 0). Заголовок экран печатает
+ * сам — здесь только XOR, перепечатью текст снимать нельзя (инверсия
+ * захватывает ряд над глифами, а печать нет — осталась бы белая
+ * полоска). Обе подписи по 7 символов.
+ * play_label_off() гасит ту подпись, что горит сейчас — она нужна
+ * кадровому прерыванию, которое останавливает проигрывание на
+ * естественном конце партитуры и передать аргументы не может. */
+#define PLAY_LBL_N 7
+void play_label(unsigned char col, unsigned char count, unsigned char on);
+void play_label_off(void);
+
+/* Проигрывание: старт/стоп. */
 void playback_start(void);
 void playback_stop(void);
-void playback_solo(unsigned char ch);
+
+/* Переключить проигрывание одним нажатием: играет — остановить, не
+ * играет — запустить в режиме mode (PLAY_ALL — всё, PLAY_ONE — только
+ * канал ch). Возвращает установившийся режим: PLAY_NONE после
+ * остановки, PLAY_ALL/PLAY_ONE после запуска; либо PLAY_ERROR, если
+ * парсер не запустил и залил экран своим сообщением — свой экран
+ * восстановит вызывающий. */
+#define PLAY_ERROR    3
+unsigned char playback_toggle(unsigned char mode, unsigned char ch);
 
 /* Экраны — каждый содержит свой главный цикл. */
 void screen_about(void);
 void screen_help(void);
 void screen_drums(void);
-void screen_editor(unsigned char channel, char *score_text[4]);
+
+/* Соло-редактор одного канала (Ф4): отдельный экран, который сам рисует
+ * свой заголовок, сам создаёт поле и контроллер и сам крутит цикл.
+ * Партитуру видит по указателю — component навешивается прямо на буфер
+ * канала, копирования текста нет. Выход — АП2; возвращается позиция
+ * курсора, на которой вышли, чтобы главное поле открылось с неё (и не
+ * осталось с курсором за конец укоротившегося текста). */
+unsigned int screen_solo(unsigned char ch, char *buf, unsigned int max_len,
+                         const char *label);
 
 #endif

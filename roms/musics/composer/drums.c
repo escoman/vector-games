@@ -1,5 +1,5 @@
 /*
- * drums.c — экран ударных (F3) и воспроизведение семплов.
+ * drums.c — экран ударных (Ф3) и воспроизведение семплов.
  */
 #include "v06.h"
 #include "nes_drums.h"
@@ -21,7 +21,7 @@ void draw_drums(void)
 {
     unsigned char i;
 
-    init_screen();
+    begin_init_screen();
     draw_separator(4);
     gfx_print(0, 0,
         "DRUM LIBRARY (0-F TO PLAY)", 1);
@@ -48,13 +48,14 @@ void draw_drums(void)
     }
 
     gfx_print(0, 152, "AP2-RETURN", 1);
+    end_init_screen();
 }
 
 unsigned char drums_handle_key(unsigned char key)
 {
     unsigned char idx = 0xFF;
 
-    if (key == 27)  /* АП2 — возврат */
+    if (key == KBD_KEY_ESC)  /* АП2 — возврат */
         return 1;
 
     if (key >= '0' && key <= '9')

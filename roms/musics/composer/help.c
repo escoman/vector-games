@@ -1,26 +1,48 @@
 /*
- * help.c — экран помощи (F1).
+ * help.c — экран помощи (Ф1).
  */
 #include "v06.h"
 #include "screens.h"
 
+/* Строки справки. Печатаются в цикле с шагом HELP_DY = 10 пикселей:
+ * глиф занимает все 8 строк без нижнего пробела, так что строки
+ * впритык (шаг 8) наезжают друг на друга. 10 — как в полях textarea.
+ * Пустая строка — просто пропуск рядом ниже.
+ * Длиннее 32 колонок ни одна строка: за краем экрана адрес следующего
+ * символа переходит в соседнюю строку, и хвост затирает её начало. */
+#define HELP_DY 10
+
+static const char *help_lines[] = {
+    "HELP",
+    "",
+    "NOTES: C D E F G A B (+ -)",
+    "OCTAVE: O0-O7",
+    "LENGTH: L1 L2 L4 L8 L16",
+    "        L32 L64 L128",
+    "PAUSE: P",
+    "TEMPO: T32-T255",
+    "REPEAT: [ ... ]N",
+    "LOOP: BEGIN ... END",
+    "DRUMS: 0-15 (SAMPLE INDEX)",
+    "EDIT: TAB-FIELDS, TYPE TEXT",
+    "ARROWS MOVE CURSOR IN FIELD",
+    "AP2-RETURN"
+};
+
+#define HELP_COUNT (sizeof(help_lines) / sizeof(help_lines[0]))
+
 void draw_help(void)
 {
-    init_screen();
-    gfx_print(0, 0,  "HELP", 1);
-    gfx_print(0, 16, "NOTES: C D E F G A B (+ -)", 1);
-    gfx_print(0, 24, "OCTAVE: O0-O7", 1);
-    gfx_print(0, 32, "LENGTH: L1 L2 L4 L8 L16 L32 L64 L128", 1);
-    gfx_print(0, 40, "PAUSE: P", 1);
-    gfx_print(0, 48, "TEMPO: T32-T255", 1);
-    gfx_print(0, 56, "REPEAT: [ ... ]N", 1);
-    gfx_print(0, 64, "LOOP: BEGIN ... END", 1);
-    gfx_print(0, 72, "DRUMS: 0-15 (SAMPLE INDEX)", 1);
-    gfx_print(0, 96, "AP2-RETURN", 1);
+    unsigned char i;
+
+    begin_init_screen();
+    for (i = 0; i < HELP_COUNT; i++)
+        gfx_print(0, (unsigned char)(i * HELP_DY), help_lines[i], 1);
+    end_init_screen();
 }
 
 void screen_help(void)
 {
     draw_help();
-    kbd_wait_key(27);
+    kbd_wait_key(KBD_KEY_ESC);
 }

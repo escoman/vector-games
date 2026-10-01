@@ -41,8 +41,9 @@ typedef struct {
 void controller_init(controller_t *ctrl);
 void controller_add(controller_t *ctrl, component_t *comp);
 
-/* Главный цикл: TAB — переключение, ESC — выход (возврат 27),
- * on_key — перехват спецклавиш, остальное — активному компоненту.
+/* Главный цикл: ТАБ (KBD_KEY_TAB) — переключение, АП2 (KBD_KEY_ESC) —
+ * выход (возвращает KBD_KEY_ESC), on_key — перехват спецклавиш
+ * (KBD_KEY_F1.. из v06.h), остальное — активному компоненту.
  * Возвращает код клавиши, вызвавшей выход. */
 unsigned char controller_run(controller_t *ctrl);
 
@@ -93,7 +94,14 @@ void edit_init(textarea_t *ta, char *buf, unsigned int max_len,
  * То есть поле занимает 25 + (lines-1)*10 строк: у edit (lines=1) это 25,
  * как и раньше; у textarea раньше было 17+lines*8 — при шаге 10 поле
  * вырастает на 2 ряда на каждую лишнюю строку, при расстановке
- * компонентов по экрану это учитывай. */
+ * компонентов по экрану это учитывай.
+ *
+ * Содержимое буфера init не трогает: буфер принадлежит вызывающему и
+ * может содержать готовый текст — компонент навешивается на него как на
+ * данные (повторная инициализация тем же буфером тоже законна). Но
+ * буфер обязан быть законченной 0-строкой: с мусором в памяти компонент
+ * начнёт печатать и править мусор. Курсор после init — в начале текста.
+ */
 void textarea_init(textarea_t *ta, char *buf, unsigned int max_len,
                    unsigned char width, unsigned char lines,
                    unsigned char x, unsigned char y,

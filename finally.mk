@@ -11,6 +11,16 @@
 
 PPSSPP_ROMS ?= /home/alexey/snap/ppsspp-emu/common/.config/ppsspp/PSP/GAME/VECTOR06C/ROMS
 
+# Предел образа ROM в байтах. По умолчанию 32 КБ: образ вместе с BSS
+# лежит в 0x0100..0x7FFF, выше — видеопамять.
+# Проект с одной активной плоскостью 0xE000 поднимает предел до
+# 0xC000-0x100 = 48896: загрузчик во время загрузки рисует свою таблицу
+# в 0xC000, поэтому образ выше 0xBFFF не влезает никогда.
+# Это только про образ. Потолок кучи — отдельное решение проекта:
+# heap_top по умолчанию 0x8000 (lib/mem/heap.c), и проект, отдавший
+# образу память выше него, должен поднять и его.
+ROM_MAX ?= 32768
+
 ifneq ($(filter clean,$(MAKECMDGOALS)),clean)
 
 deploy: $(TARGET)
@@ -35,8 +45,8 @@ endif
 	@for r in $(TARGET) $(TARGET_AY); do \
 		[ -f "$$r" ] || continue; \
 		SIZE=$$(stat -c%s "$$r"); \
-		if [ "$$SIZE" -gt 32768 ]; then \
-			echo "\033[33mWARNING: $$r is $${SIZE} bytes (> 32KB)\033[0m"; \
+		if [ "$$SIZE" -gt $(ROM_MAX) ]; then \
+			echo "\033[33mWARNING: $$r is $${SIZE} bytes (> $(ROM_MAX))\033[0m"; \
 		else \
 			echo "$$r: $${SIZE} bytes"; \
 		fi; \

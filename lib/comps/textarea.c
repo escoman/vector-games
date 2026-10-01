@@ -55,13 +55,6 @@ extern unsigned char kbd_usr_state;
 /* Буфер одной выводимой строки: максимум 32 колонки + терминатор. */
 static unsigned char draw_buf[34];
 
-/* Отладочные счётчики (показываются в отладочной панели контроллера):
- *  textarea_draw_count   — сколько раз перерисовывали область целиком;
- *  textarea_redraw_chars — сколько символов нарисовала последняя
- *                          перерисовка (т.е. цена одного нажатия). */
-unsigned int textarea_draw_count = 0;
-unsigned int textarea_redraw_chars = 0;
-
 /* Инверсия символов в режиме 256x256x2 (плоскость 0xE000).
  * Инвертирует 9 строк: 1 выше + 8 глифа — целостная инверсия. */
 static void invert_chars(unsigned char col, unsigned char row,
@@ -144,8 +137,15 @@ static void draw_cells(const textarea_t *ta, unsigned int src,
     rem = (src < slen) ? slen - src : 0;
     nch = (rem > n) ? n : (unsigned char)rem;
 
-    for (i = 0; i < nch; i++)
-        draw_buf[i] = p[i];
+    for (i = 0; i < nch; i++) {
+        /* У шрифта таблица начинается с пробела (32), и глифа для
+         * управляющих символов нет — чтение индекса со знаком даёт мусор
+         * до таблицы. Переносов компонент не знает (строки режутся только
+         * по ширине), но символ переноса в буфере может быть из данных
+         * вызывающей стороны, поэтому показываем его пробелом: данные не
+         * трогаем, а на экране не каша. */
+        draw_buf[i] = ((unsigned char)p[i] < ' ') ? ' ' : p[i];
+    }
     for (; i < n; i++)
         draw_buf[i] = ' ';
     draw_buf[n] = 0;
@@ -159,7 +159,6 @@ static void draw_cells(const textarea_t *ta, unsigned int src,
     gfx_fill_stride((unsigned int)(FRAME_PLANE + (unsigned int)col * 256
                                    + (255 - (unsigned char)(row + TA_CURSOR_ROW))),
                     0x00, 0x0100u, n);
-    textarea_redraw_chars += n;
 }
 
 /* Перерисовка изменённых ячеек [from, to) плоских позиций — только
@@ -447,8 +446,9 @@ void textarea_init(textarea_t *ta, char *buf, unsigned int max_len,
     ta->x = x;
     ta->y = y;
     ta->label = label;
-    if (buf && max_len > 0)
-        buf[0] = 0;
+    /* Содержимое буфера не трогается: компонент навешивается на уже
+     * готовый текст (соло-редактор открывает партитуру, а не пустое
+     * поле). буфер обязан быть законченной строкой — хотя бы buf[0] = 0. */
 }
 
 void textarea_draw(component_t *c, unsigned char active)
@@ -486,7 +486,6 @@ void textarea_draw_content(component_t *c)
 {
     textarea_t *ta = (textarea_t *)c;
 
-    textarea_draw_count++;
     adjust_scroll(ta);
     draw_visible(ta);
     draw_scrollbar(ta);
@@ -525,7 +524,6 @@ void textarea_focus_toggle(component_t *c)
 
     /* Скрыть курсор: он лежит в пустом ряду под глифом и букв не задевает,
      * поэтому достаточно занулить его байт — перерисовка символа не нужна. */
-    textarea_redraw_chars = 0;   /* переключение фокуса не перерисовывает ячейки */
     erase_cursor_at(ta, ta->cur_col);
 
     /* Инверсия label */
@@ -549,7 +547,7 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
     unsigned int i;
     unsigned char content_changed = 0;
 
-    if (key == 27)  /* АП2 — выход */
+    if (key == KBD_KEY_ESC)  /* АП2 — выход */
         return 1;
 
     ed_slen = str_len(ta->buf);
@@ -559,16 +557,16 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
     ed_old_vscroll = ta->vscroll;
     ed_from = ed_old_cur;              /* вставка — в позицию курсора */
 
-    if (key == 8) {  /* ← */
+    if (key == KBD_KEY_LEFT) {
         if (ta->cur_col > 0)
             ta->cur_col--;
-    } else if (key == 9) {  /* → */
+    } else if (key == KBD_KEY_RIGHT) {
         if (ta->cur_col < ed_slen)
             ta->cur_col++;
-    } else if (key == 11 && ta->lines > 1) {  /* ↑ (textarea only) */
+    } else if (key == KBD_KEY_UP && ta->lines > 1) {  /* ↑ (textarea only) */
         if (ta->cur_col >= ta->width)
             ta->cur_col -= ta->width;
-    } else if (key == 10 && ta->lines > 1) {  /* ↓ (textarea only) */
+    } else if (key == KBD_KEY_DOWN && ta->lines > 1) {  /* ↓ (textarea only) */
         if (ta->cur_col + ta->width <= ed_slen)
             ta->cur_col += ta->width;
         else if (ta->cur_col < ed_slen)
@@ -593,7 +591,7 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
             if (ta->cur_col > ed_slen)
                 ta->cur_col = ed_slen;
         }
-    } else if (key == 12) {  /* ЗАБ (Backspace) */
+    } else if (key == KBD_KEY_BACK) {
         if (ta->cur_col > 0) {
             for (i = ta->cur_col - 1; i < ed_slen; i++)
                 ta->buf[i] = ta->buf[i + 1];
@@ -601,7 +599,7 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
             ed_from = ta->cur_col;     /* удалён символ левее курсора */
             content_changed = 1;
         }
-    } else if (key >= 32 && key < 127) {  /* Обычный символ — вставка */
+    } else if (KBD_IS_PRINT(key)) {  /* Обычный символ — вставка */
         if (ed_slen < ta->max_len) {
             for (i = ed_slen; i > ta->cur_col; i--)
                 ta->buf[i] = ta->buf[i - 1];
@@ -619,7 +617,6 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
      *    (восстановленный символ затирает его); всё левее не трогаем;
      *  - сдвинулся только курсор → стереть старый, нарисовать новый. */
     adjust_scroll(ta);
-    textarea_redraw_chars = 0;
 
     /* Правая (исключительная) граница — самый дальний из:
      *  - ed_to: старый/новый конец строки (стереть хвост после удаления,

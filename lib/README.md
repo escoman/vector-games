@@ -10,6 +10,7 @@ Architecture:
 - `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `unpack/` — RLE and LZ bitmap decompression into VRAM;
+- `mem/` — bump allocator over the RAM left above the ROM image (`heap.c`);
 - `comps/` — UI components (controller, edit, textarea) — own header `comps/comps.h`.
 
 All public prototypes are declared centrally in `v06.h`.
@@ -110,6 +111,26 @@ Constraints: `x` must be multiple of 8; image must fit in 256x256. Area outside 
 ### LZ (tile-based)
 
 `gfx_lz_expand(src)` — LZ tile unpacker. Header: tpp(16), ntiles(16), h_div8(8); dictionary: ntiles * 8 bytes; four LZ streams; literal token = 9-bit dictionary index (2 bytes); reference token = 12-bit offset + 4-bit length. Tile #0 at xxxx:00FF, descending.
+
+---
+
+## MEM — Heap over Free RAM
+
+`heap_alloc(size)` (`mem/heap.c`) — bump allocator over the RAM the ROM image does not use. The heap starts at the linker symbol `__tail` (end of the loaded image, BSS included) and grows up to `heap_top`, whose default `0x8000` keeps it strictly below VRAM — safe in every mode. There is no `free`: memory is handed out once, at startup.
+
+A static buffer in BSS costs the image exactly its size — the ROM file is loaded into RAM contiguously, so zero-filled bytes take file space too. Buffers needed only while running belong in the heap.
+
+A project that provably never touches the upper planes may raise the ceiling: in `GFX_MODE_256_2` a single plane (0xE000) is displayed and cleared, so `0x8000..0xDFFF` is ordinary RAM and `heap_top = 0xE000`. Assign it before the first allocation — lowering a ceiling below the heap pointer strands live allocations under the picture.
+
+Raising `ROM_MAX` past `0x8000` without raising `heap_top` is the opposite mistake: the image then reaches above the ceiling, and both `heap_alloc` and `heap_avail` report an empty heap (`0` / `0`) rather than an underflowed size. Always test the returned pointer — a null written to as a buffer lands in the interrupt vectors at `0x0000`.
+
+The image itself may extend to `0xBFFF` (48 KB) in single-plane projects: the boot loader draws its load table into plane `0xC000` while loading, so that window becomes usable only after the program starts — i.e. for the heap. `finally.mk` checks the image size against `ROM_MAX` (default 32768; a project raising it to 48896 must be single-plane).
+
+| Symbol | Purpose |
+|--------|---------|
+| `void *heap_alloc(unsigned int size)` | next `size` bytes, `0` if the heap is exhausted |
+| `unsigned int heap_avail(void)` | bytes left below `heap_top` |
+| `unsigned int heap_top` | heap ceiling, `0x8000` by default; assign to raise it |
 
 ---
 

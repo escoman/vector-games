@@ -14,8 +14,14 @@ SOUNDTRACK  = ../soundtracks
 
 TARGET      = composer.rom
 
-SRCS        = $(LIB)/sys/startup.asm main.c parser.c editor.c \
-              about.c help.c drums.c \
+# Экран 256x256x2: активна одна плоскость 0xE000, значит 0x8000..0xBFFF
+# можно отдавать образу, а 0xC000..0xDFFF — куче (lib/mem/heap.c).
+# Потолок кучи (heap_top = 0xE000) поднимает сам main.c: без этого куча
+# осталась бы под 0x8000 и при образе выше 0x8000 выдача вернула бы 0.
+ROM_MAX     = 48896
+
+SRCS        = $(LIB)/sys/startup.asm main.c parser.c \
+              about.c help.c drums.c solo.c \
               $(SOUNDTRACK)/nes_drums.c \
               $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
               $(LIB)/gfx/pr.asm \
@@ -24,9 +30,12 @@ SRCS        = $(LIB)/sys/startup.asm main.c parser.c editor.c \
               $(LIB)/snd/vi53.c $(LIB)/snd/ay.c \
               $(LIB)/snd/notes.c \
               $(LIB)/snd/music.c \
-              $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c
+              $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
+              $(LIB)/gfx/fstride.asm \
+              $(LIB)/comps/comps.c $(LIB)/comps/textarea.c \
+              $(LIB)/mem/heap.c
 
-ZFLAGS      = +vector06c --no-crt -I$(LIB) -I$(SOUNDTRACK) -DMUSIC_ONLY
+ZFLAGS      = +vector06c --no-crt -I$(LIB) -I$(LIB)/comps -I$(SOUNDTRACK) -DMUSIC_ONLY
 
 .PHONY: all deploy clean full
 
@@ -34,7 +43,7 @@ all: $(TARGET)
 
 full: clean all deploy
 
-$(TARGET): $(SRCS) parser.h editor.h screens.h
+$(TARGET): $(SRCS) parser.h screens.h $(LIB)/comps/comps.h
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
             $(ZCC) $(ZFLAGS) $(SRCS) -o $@
 	@echo "=== Done: $@ ==="
