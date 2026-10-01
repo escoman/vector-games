@@ -1,0 +1,12 @@
+# Build artifacts
+*.rom
+*.o
+zcc_opt.def
+*.c.asm
+src/back_bmp.inc
+
+# Exported sprites (WIP, subject to change)
+src/sprites/
+
+# JS source (reference only, not tracked)
+src_js/
