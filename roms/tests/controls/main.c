@@ -3,7 +3,7 @@
  *
  * Два edit-поля и один textarea (многострочный), навигация TAB,
  * внешний обработчик F1 (счётчик нажатий внизу экрана).
- * ESC — выход.
+ * АП2 — выход, объявлен тем же обработчиком.
  */
 
 #include <string.h>
@@ -26,10 +26,12 @@ static controller_t ctrl;
 
 static unsigned char f1_count;
 
-/* Внешний обработчик клавиш */
+/* Внешний обработчик клавиш. Возврат >1 — код выхода из цикла
+ * контроллера: АП2 сюда приходит как любая другая клавиша и выходит
+ * только отсюда. */
 static unsigned char on_key(unsigned char key)
 {
-    if (key == 128) {  /* F1 — счётчик */
+    if (key == KBD_KEY_F1) {  /* F1 — счётчик */
         char buf[16];
 
         f1_count++;
@@ -51,8 +53,8 @@ static unsigned char on_key(unsigned char key)
 int main(void)
 {
     /* Инициализация экрана */
+    gfx_set_black_palette();
     gfx_set_mode(GFX_MODE_256_2);
-    gfx_set_palette(pal);
     gfx_clear(0);
 
     /* Заголовок */
@@ -75,8 +77,10 @@ int main(void)
     controller_add(&ctrl, (component_t *)&note_area);
     ctrl.on_key = on_key;
 
-    /* Запуск — TAB переключение, ESC выход */
-    controller_run(&ctrl);
+    controller_draw(&ctrl);
 
-    return 0;
+    gfx_set_palette(pal);
+
+    /* Запуск — ТАБ переключение, выход по АП2 из on_key */
+    controller_run(&ctrl);
 }

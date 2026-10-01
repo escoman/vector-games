@@ -22,7 +22,6 @@ void draw_drums(void)
     unsigned char i;
 
     begin_init_screen();
-    draw_separator(4);
     gfx_print(0, 0,
         "DRUM LIBRARY (0-F TO PLAY)", 1);
 

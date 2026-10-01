@@ -17,7 +17,7 @@ typedef struct component_s {
     void (*draw)(struct component_s *c, unsigned char active);
     void (*draw_content)(struct component_s *c);
     void (*draw_cursor)(struct component_s *c);  /* только курсор */
-    unsigned char (*handle_key)(struct component_s *c, unsigned char key);
+    void (*handle_key)(struct component_s *c, unsigned char key);
     void (*focus_toggle)(struct component_s *c);  /* инверсия label */
 } component_t;
 
@@ -41,10 +41,22 @@ typedef struct {
 void controller_init(controller_t *ctrl);
 void controller_add(controller_t *ctrl, component_t *comp);
 
-/* Главный цикл: ТАБ (KBD_KEY_TAB) — переключение, АП2 (KBD_KEY_ESC) —
- * выход (возвращает KBD_KEY_ESC), on_key — перехват спецклавиш
- * (KBD_KEY_F1.. из v06.h), остальное — активному компоненту.
- * Возвращает код клавиши, вызвавшей выход. */
+/* Отрисовать все компоненты: активный — с фокусом, остальные — без.
+ * Нужен экрану, который сам красит свою подложку: вызов идёт в её
+ * конец, пока палитра ещё чёрная. controller_run при входе в цикл
+ * рисует компоненты сам, так что экрану, который paint() не заводил,
+ * делать ничего не надо. */
+void controller_draw(controller_t *ctrl);
+
+/* Главный цикл. Из него два возврата и оба решает приложение:
+ *  - on_key вернул >1 — это код выхода, controller_run возвращает его;
+ *  - on_key нет — цикл не выходит никогда.
+ * Себе контроллер забирает только ТАБ (KBD_KEY_TAB — переключение
+ * фокуса, СС+ТАБ — назад). АП2 — такая же
+ * обычная клавиша: выход по ней объявляет само приложение, возвращая
+ * из on_key код >1. Компонент клавишу не то что не выбрасывает
+ * — handle_key вообще ничего не возвращает.
+ * Возвращает код выхода. */
 unsigned char controller_run(controller_t *ctrl);
 
 /* ----------------------- Edit / Textarea --------------------------- */
@@ -111,7 +123,7 @@ void textarea_init(textarea_t *ta, char *buf, unsigned int max_len,
 void textarea_draw(component_t *c, unsigned char active);
 void textarea_draw_content(component_t *c);
 void textarea_draw_cursor(component_t *c);
-unsigned char textarea_handle_key(component_t *c, unsigned char key);
+void textarea_handle_key(component_t *c, unsigned char key);
 void textarea_focus_toggle(component_t *c);
 
 #endif /* COMPS_H */

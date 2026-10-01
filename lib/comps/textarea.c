@@ -541,14 +541,15 @@ static unsigned int ed_old_scroll;
 static unsigned int ed_old_vscroll;
 static unsigned int ed_from;           /* первая изменённая ячейка    */
 
-unsigned char textarea_handle_key(component_t *c, unsigned char key)
+/* Правка поля по одной клавише. Возврата нет: клавишу компонент не
+ * выбрасывает, из цикла контроллера выходит только приложение (см.
+ * controller_run). АП2 сюда приходит как любая непечатаемая — ни на что
+ * не влияет. */
+void textarea_handle_key(component_t *c, unsigned char key)
 {
     textarea_t *ta = (textarea_t *)c;
     unsigned int i;
     unsigned char content_changed = 0;
-
-    if (key == KBD_KEY_ESC)  /* АП2 — выход */
-        return 1;
 
     ed_slen = str_len(ta->buf);
     ed_to = ed_slen;                   /* правка, не меняющая длину */
@@ -641,6 +642,4 @@ unsigned char textarea_handle_key(component_t *c, unsigned char key)
         erase_cursor_at(ta, ed_old_cur);
         textarea_draw_cursor(c);
     }
-
-    return 0;
 }

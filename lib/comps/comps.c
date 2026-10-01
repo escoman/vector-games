@@ -3,7 +3,9 @@
  *
  * Управляет набором компонентов: первичная отрисовка, навигация
  * TAB (вперёд) и СС+TAB (назад) между компонентами, передача клавиш
- * активному.
+ * активному. Из цикла есть ровно один выход — когда on_key вернёт
+ * код >1: контроллер не знает ни про какие клавиши, кроме TAB,
+ * решение о выходе принимает приложение.
  */
 
 #include "comps.h"
@@ -26,18 +28,26 @@ void controller_add(controller_t *ctrl, component_t *comp)
         ctrl->items[ctrl->count++] = comp;
 }
 
+/* Отрисовать все компоненты контроллера: активный — с фокусом
+ * (у textarea это инверсия метки), остальные — без. Экран, который сам
+ * красит свою подложку, зовёт это из своего paint() — до возврата
+ * рабочей палитры, чтобы процесс отрисовки не мелькал. controller_run
+ * делает тот же вызов при входе, поэтому экрану, который рисовать себя
+ * сам не хочет, достаточно просто запустить цикл. */
+void controller_draw(controller_t *ctrl)
+{
+    unsigned char i;
+
+    for (i = 0; i < ctrl->count; i++)
+        ctrl->items[i]->draw(ctrl->items[i],
+                             (unsigned char)(i == ctrl->active));
+}
+
 unsigned char controller_run(controller_t *ctrl)
 {
     unsigned char key, key_prev = 0;
 
     if (ctrl->count == 0) return 0;
-
-    /* Первичная отрисовка всех компонентов */
-    {
-        unsigned char i;
-        for (i = 0; i < ctrl->count; i++)
-            ctrl->items[i]->draw(ctrl->items[i], i == ctrl->active ? 1 : 0);
-    }
 
     for (;;) {
         v06_wait_frame();
@@ -67,8 +77,6 @@ unsigned char controller_run(controller_t *ctrl)
                 /* Отобразить курсор нового активного (контент уже на экране) */
                 ctrl->items[ctrl->active]->draw_cursor(
                     ctrl->items[ctrl->active]);
-            } else if (key == KBD_KEY_ESC) {  /* АП2 — выход */
-                return KBD_KEY_ESC;
             } else {
                 unsigned char handled = 0;
                 if (ctrl->on_key) {
@@ -79,10 +87,10 @@ unsigned char controller_run(controller_t *ctrl)
                 if (!handled) {
                     /* Передать активному компоненту. Он сам выполняет
                      * минимальную перерисовку: весь контент при изменении
-                     * текста/прокрутки, либо только курсор при навигации. */
-                    if (ctrl->items[ctrl->active]->handle_key(
-                            ctrl->items[ctrl->active], key))
-                        return key;
+                     * текста/прокрутки, либо только курсор при навигации.
+                     * Выбраться из цикла он оттуда не может. */
+                    ctrl->items[ctrl->active]->handle_key(
+                        ctrl->items[ctrl->active], key);
                 }
             }
         }

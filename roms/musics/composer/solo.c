@@ -44,7 +44,10 @@ static void chrome_solo(void)
 static void paint_solo(void)
 {
     chrome_solo();
-    solo_field.base.draw((component_t *)&solo_field, 1);
+    /* Поле — компонент контроллера, и рисуется оно здесь же, до возврата
+     * палитры: без этого повторная отрисовка (после сообщения парсера)
+     * вернула бы заголовок на пустой экран. */
+    controller_draw(&solo_ctrl);
     end_init_screen();
 }
 
@@ -70,6 +73,7 @@ static void show_result(unsigned char r)
 
 static unsigned char solo_key(unsigned char key)
 {
+    if (key == KBD_KEY_ESC) return KBD_KEY_ESC;   /* выход из цикла */
     if (key == KBD_KEY_F2) {                  /* играть/стоп все каналы */
         show_result(playback_toggle(PLAY_ALL, 0));
         return 1;
@@ -94,14 +98,14 @@ unsigned int screen_solo(unsigned char ch, char *buf, unsigned int max_len,
     textarea_init(&solo_field, buf, max_len, SOLO_W, SOLO_LINES,
                   SOLO_X, SOLO_Y, label);
 
-    /* Экран рисуем целиком сами: поле дорисовывается до возврата
-     * рабочей палитры, чтобы процесс отрисовки не был виден. Контроллер
-     * при входе нарисует то же поле ещё раз — теми же символами. */
-    paint_solo();
-
     controller_init(&solo_ctrl);
     controller_add(&solo_ctrl, (component_t *)&solo_field);
     solo_ctrl.on_key = solo_key;
+
+    /* Экран рисуем целиком сами: поле дорисовывается до возврата
+     * рабочей палитры, чтобы процесс отрисовки не был виден. */
+    paint_solo();
+
     controller_run(&solo_ctrl);              /* АП2 — выход */
 
     return solo_field.cur_col;
