@@ -425,8 +425,14 @@ static void drum_set_counter(void)
 }
 
 /* Поток ударных: нота (байт 1..10) запускает семпл 0..9 с таблицы
- * песни; пауза новые атаки не даёт, звучащий семпл не обрывает. */
-static void drum_event(void)
+ * песни; пауза новые атаки не даёт, звучащий семпл не обрывает.
+ * play = 0 — канал выключен маской: байткод читается, счётчик ведётся,
+ * но семпл НЕ запускается. Это не косметика: drum_sample_play() в
+ * ленточном маршруте выдаёт первый кадр сразу (jp tape_tick), т.е.
+ * пачку переключений PC0 за этот же тик, и удар звучал бы кусочком,
+ * хотя следом стоит drum_mute() — маска гасила не вывод, а уже
+ * совершённую атаку. */
+static void drum_event(unsigned char play)
 {
     unsigned char b, n;
 
@@ -462,7 +468,7 @@ static void drum_event(void)
             g_dr.pc -= back;
             continue;
         }
-        if (b <= 16u)                   /* новый удар — перезапуск */
+        if (b <= 16u && play)           /* новый удар — перезапуск */
             drum_sample_play(g_song->samples[b - 1u]);
         drum_set_counter();
         return;
@@ -515,17 +521,19 @@ static void clock_tick(void)
     }
     if (g_dr.pc != 0) {
         if (!(g_ch_mask & 8u)) {
-            /* Ударные выключены — пропускаем атаки */
+            /* Ударные выключены — пропускаем атаки: поток читается без
+             * запуска семпла (см. drum_event), drum_mute дописывает
+             * тишину на случай удара, оставшегося со включённого канала. */
             if (g_dr.cnt > 0u)
                 --g_dr.cnt;
             else {
-                drum_event();
+                drum_event(0);
                 drum_mute();
             }
         } else if (g_dr.cnt > 0u)
             --g_dr.cnt;
         else
-            drum_event();
+            drum_event(1);
     }
 }
 
