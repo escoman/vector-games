@@ -14,6 +14,7 @@
 /* Максимальные размеры буферов */
 #define PARSER_BC_SIZE   256     /* байткод на один канал */
 #define PARSER_MAX_LINES  32     /* строк в таблице подсветки */
+#define PERR_MSG_SIZE     24     /* фрагмент исходника в результате */
 
 /* Коды ошибок парсера */
 #define PERR_OK            0
@@ -26,6 +27,7 @@
 #define PERR_BAD_OCT       7     /* O вне 0..7 */
 #define PERR_BAD_TEMPO     8     /* T вне 32..255 */
 #define PERR_BRACKET_N     9     /* ]n: n вне 2..255 */
+#define PERR_BAD_VOL      10     /* V вне 1..15 */
 
 /* Результат парсинга */
 typedef struct {
@@ -33,7 +35,18 @@ typedef struct {
     unsigned char err_line;       /* строка ошибки (0-based, если ok) */
     unsigned char err_col;        /* столбец ошибки */
     unsigned char err_code;       /* код ошибки (PERR_*) */
+    unsigned char err_chan;       /* партитура: 0..2 тон, 3 ударные,
+                                   * 4 = номер не заявлен (parse_score
+                                   * не знает своего номера тонового
+                                   * канала; parse_song заполняет точно) */
+    char err_text[PERR_MSG_SIZE]; /* фрагмент партитуры от ошибочного
+                                   * токена: до 4 операндов или до конца
+                                   * партитуры/комментария — что ближе;
+                                   * пусто для ошибок без позиции */
 } parse_result_t;
+
+/* Человекочитаемое имя кода ошибки (для экрана). */
+const char *parse_error_name(unsigned char code);
 
 /* Парсинг текста одного канала в буфер байткода.
  * drums=1 для канала ударных. Записывает bytecode (до bc_size байт),

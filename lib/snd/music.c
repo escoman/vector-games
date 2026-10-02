@@ -47,6 +47,16 @@
  *   0xEA <lo> <hi> — JMP назад на (lo | hi<<8) байт: бесконечный
  *               цикл основной части мелодии (intro + loop). Выход
  *               только из game code (music_stop()).
+ *   0xF1..0xFF  — V1..V15: фиксированная громкость канала целиком в
+ *               одном байте (громкость = младший ниббл байта, байт =
+ *               0xF0 + V; операнда нет — как L1..L128 в 0xE0..0xE7).
+ *               При выводе на AY задаёт
+ *               громкость своего канала (R8/R9/R10), применяется на
+ *               следующей атаке ноты (регистры громкости в момент
+ *               атаки пишет ay.c, чтобы не дать фоновый тон).
+ *               При выводе на ВИ53 команда игнорируется (у КР580ВИ53
+ *               нет регистра громкости). В потоке ударных игнорируется
+ *               всегда. По умолчанию — V15.
  */
 
 #include "v06.h"
@@ -64,6 +74,7 @@
 typedef struct {
     void (*note_on)(unsigned char ch, unsigned char note_idx);
     void (*note_off)(unsigned char ch);
+    void (*set_volume)(unsigned char ch, unsigned char vol);
     void (*silence_all)(void);
 } music_out_t;
 
@@ -75,6 +86,11 @@ static void vi53_on(unsigned char ch, unsigned char note_idx)
 static void vi53_off(unsigned char ch)
 {
     vi53_set_channel(ch, 0u);
+}
+/* У КР580ВИ53 нет регистра громкости — V1..V15 игнорируются
+ * (байткод читается, состояние устройства не меняется). */
+static void vi53_vol(unsigned char ch, unsigned char vol)
+{
 }
 static void vi53_silence_all(void)
 {
@@ -93,6 +109,13 @@ static void ay_off(unsigned char ch)
 {
     ay_note_off(ch);
 }
+/* V1..V15: фиксированная громкость канала (0-2 → бит маски
+ * 1<<ch). ay_set_fixed_volume() в регистры AY не пишет — значение
+ * ляжет в R8/R9/R10 на следующей атаке ноты. */
+static void ay_vol(unsigned char ch, unsigned char vol)
+{
+    ay_set_fixed_volume((unsigned char)(1u << ch), vol);
+}
 static void ay_silence_all(void)
 {
     ay_mute_all();
@@ -100,10 +123,10 @@ static void ay_silence_all(void)
 #endif
 
 #ifndef MUSIC_AY_DRUMS_AY
-static const music_out_t music_out_vi53 = { vi53_on, vi53_off, vi53_silence_all };
+static const music_out_t music_out_vi53 = { vi53_on, vi53_off, vi53_vol, vi53_silence_all };
 #endif
 #ifndef MUSIC_VI53_DRUMS_TAPE
-static const music_out_t music_out_ay   = { ay_on,   ay_off,   ay_silence_all };
+static const music_out_t music_out_ay   = { ay_on,   ay_off,   ay_vol,   ay_silence_all };
 #endif
 
 /* Текущий драйвер вывода (по умолчанию ВИ53; в AY-only ROM — AY). Локальное
@@ -127,6 +150,13 @@ static void music_note_off(unsigned char ch)
     g_out->note_off(ch);
 }
 
+/* Громкость канала (V1..V15) на привязанном устройстве.
+ * Драйвер ВИ53 — пустая функция: команда игнорируется. */
+static void music_note_volume(unsigned char ch, unsigned char vol)
+{
+    g_out->set_volume(ch, vol);
+}
+
 /* --------------------------- Состояние -------------------------------- */
 
 /* Один поток партитуры: позиция в байткоде и текущее состояние */
@@ -139,6 +169,7 @@ typedef struct {
     unsigned char len;          /* текущая длительность (MUS_LEN)     */
     unsigned char gate;         /* тиков тишины до вступления ноты    */
     unsigned char note;         /* индекс ноты 0-94 (div_tab/ay_period) */
+    unsigned char vol;          /* V1..V15: громкость для AY (ВИ53 — нет) */
 } mus_ch_t;
 
 static const music_song_t *g_song;
@@ -167,18 +198,25 @@ static void reset_stream(mus_ch_t *c, const unsigned char *pc)
     c->cnt = 0u;
     c->gate = 0u;
     c->len = 32u;               /* до первой команды MUS_LEN — L4     */
+    c->vol = 15u;               /* до первой команды V1..V15 — V15    */
 }
 
 /* Общий запуск транспорта: сброс всех четырёх потоков на позицию 0.
  * Устройство вывода должно быть привязано ДО вызова (g_out). */
 static void music_start_common(void)
 {
+    unsigned char i;
+
     if (g_song == 0)
         return;
     reset_stream(&g_ch[0], g_song->s0);
     reset_stream(&g_ch[1], g_song->s1);
     reset_stream(&g_ch[2], g_song->s2);
     reset_stream(&g_dr, g_song->dr);
+    /* Громкости по умолчанию (V15) на текущий вывод: прошлая песня
+     * могла оставить в драйвере другие значения. */
+    for (i = 0u; i < 3u; ++i)
+        music_note_volume(i, g_ch[i].vol);
     g_acc = 0u;
     g_paused = 0u;
     g_playing = 1u;
@@ -356,7 +394,11 @@ void music_use_ay(void)
     ay_mute_all();
     /* 3. Переключить драйвер вывода */
     g_out = &music_out_ay;
-    /* 4. Восстановить текущие ноты на AY (если играет) */
+    /* 4. Восстановить громкости V1..V15, считанные на выводе ВИ53
+     * (драйвер ВИ53 их игнорировал; ay_mixer_init выше ставит 15). */
+    for (i = 0u; i < 3u; ++i)
+        music_note_volume(i, g_ch[i].vol);
+    /* 5. Восстановить текущие ноты на AY (если играет) */
     if (g_playing && !g_paused) {
         for (i = 0u; i < 3u; ++i) {
             if (g_ch[i].gate == 0u && g_ch[i].note < 95u &&
@@ -426,6 +468,16 @@ static void tone_event(unsigned char ch)
                                 ((unsigned int)c->pc[1] << 8);
             c->pc += 2;
             c->pc -= back;
+            continue;
+        }
+        if (b >= MUS_VOL_BASE + 1u) {   /* 0xF1..0xFF: V1..V15, 1 байт;
+                                          * громкость = младший ниббл байта
+                                          * (1..15 по построению, операнда
+                                          * нет; вычитание 0xF0 sccz80
+                                          * считает вне диапазона char) */
+            n = (unsigned char)(b & 0x0Fu);
+            c->vol = n;
+            music_note_volume(ch, n);   /* на ВИ53 — пустая функция */
             continue;
         }
         /* Гейт: первый тик ноты — тишина (разделяет повторы той же
@@ -498,6 +550,11 @@ static void drum_event(unsigned char play)
                                 ((unsigned int)g_dr.pc[1] << 8);
             g_dr.pc += 2;
             g_dr.pc -= back;
+            continue;
+        }
+        if (b >= MUS_VOL_BASE + 1u) {   /* 0xF1..0xFF: громкость тональных
+                                          * каналов ударные не касается —
+                                          * команда игнорируется */
             continue;
         }
         if (b <= 16u && play)           /* новый удар — перезапуск */

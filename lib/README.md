@@ -262,8 +262,9 @@ Bytecode (constants shared with `mus2inc.py`):
 | 0xE8 | Loop start `[` |
 | 0xE9 n | Loop end `]n`: repeat section n times total |
 | 0xEA lo hi | JMP back (lo | hi<<8) bytes: infinite loop |
+| 0xF1..0xFF | V1..V15: fixed channel volume, whole command = 1 byte (byte = 0xF0 + V, vol = low nibble; no operand, like L1..L128). AY: applied to the channel's R8/R9/R10 at the next note attack; VI53: ignored (no volume register). Drums stream: always ignored. Default V15. |
 
-State commands (0xE0-0xE9) do not advance time. Default duration without commands = L4. Octave is compile-time state in mus2inc.py, no bytecode command (range 0xD0..0xD7 is free).
+State commands (0xE0-0xE9, 0xF1-0xFF) do not advance time. Default duration without commands = L4. Octave is compile-time state in mus2inc.py, no bytecode command (range 0xD0..0xD7 is free).
 
 Tempo at runtime: `tempo_num/tempo_den` ticks per frame.
 

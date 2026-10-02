@@ -123,6 +123,11 @@ typedef struct {
     const char *line_start;     /* начало текущей строки */
 
     unsigned char err;          /* код ошибки (0 = нет) */
+    char *err_text;             /* указатель на result->err_text: фрагмент
+                                 * партитуры пишем сразу туда. Хранить здесь
+                                 * копию нельзя — pstate_t лежит на стеке,
+                                 * а стек (STACK_TOP=0x100) глуби чем на ~200
+                                 * байтов затирает вектор 0x0038. */
 
     /* Таблица строк для подсветки */
     unsigned int *line_ticks;   /* line_ticks[i] = тик на начало строки i */
@@ -147,12 +152,51 @@ static void emit_len(pstate_t *s, unsigned int l_val)
         emit(s, MUS_LEN + idx);
 }
 
+/* Фрагмент исходника от ошибочного токена: до 4 операндов (токенов)
+ * или до конца партитуры / комментария «;» — что ближе. Переводы
+ * строк и табуляции заменяются пробелами, хвостовые пробелы срезаются;
+ * всего до PERR_MSG_SIZE-1 символов (32-колоночный экран). */
+static void grab_excerpt(const char *p, char *out)
+{
+    unsigned char i = 0u;
+    unsigned char toks = 0u;
+    unsigned char in_tok = 0u;
+
+    while (*p == ' ' || *p == '\t' || *p == '\n')
+        p++;
+    while (i < PERR_MSG_SIZE - 1u) {
+        unsigned char c = (unsigned char)*p;
+        if (c == 0u || c == ';')
+            break;                      /* конец партитуры / комментарий */
+        if (c == ' ' || c == '\t' || c == '\n') {
+            if (in_tok) {
+                ++toks;
+                if (toks >= 4u)
+                    break;              /* нескольких операндов хватает */
+            }
+            in_tok = 0u;
+            c = ' ';                    /* переводы строк — в пробелы */
+        } else {
+            in_tok = 1u;
+        }
+        out[i++] = (char)c;
+        p++;
+    }
+    while (i > 0u && out[i - 1u] == ' ')
+        --i;
+    out[i] = 0;
+}
+
 /* Установка ошибки */
 static void set_error(pstate_t *s, unsigned char code, const char *pos)
 {
     if (s->err == 0) {
         s->err = code;
         s->col = (unsigned char)(pos - s->line_start);
+        /* err_text == 0 у build_line_map: там фрагмент не нужен, а
+         * писать некуда — на стеке запаса под него больше нет. */
+        if (s->err_text)
+            grab_excerpt(pos, s->err_text);
     }
 }
 
@@ -280,6 +324,24 @@ static void parse_token(pstate_t *s, const char *p, const char **endp)
         } else {
             s->l_val = lv;
             emit_len(s, lv);
+        }
+        *endp = p;
+        return;
+    }
+
+    /* V<n> — громкость канала V1..V15 (байт 0xF1..0xFF, вся команда
+     * — 1 байт). Команда состояния: время не продвигает. На AY
+     * применяется на следующей атаке ноты, на ВИ53 рантайм её
+     * игнорирует. В канале ударных не эмитится (рантайм игнорирует
+     * V в drum-потоке — не тратить байткод). */
+    if ((ch == 'V' || ch == 'v') && p[1] >= '0' && p[1] <= '9') {
+        unsigned int v;
+        p++;
+        v = parse_number(&p);
+        if (v < 1 || v > 15) {
+            set_error(s, PERR_BAD_VOL, start);
+        } else if (!s->drums) {
+            emit(s, (unsigned char)(MUS_VOL_BASE + v));
         }
         *endp = p;
         return;
@@ -415,6 +477,7 @@ void parse_score(parse_result_t *result,
     st.mark_top = 0;
     st.line = 0;
     st.err = 0;
+    st.err_text = result->err_text;
     st.ticks = 0;
     st.line_ticks = 0;
     st.num_lines = 0;
@@ -480,6 +543,12 @@ done:
     result->err_line = st.line;
     result->err_col = st.col;
     result->err_code = st.err ? st.err : PERR_OK;
+    /* номер тонового канала parse_score не знает (4 = не заявлен),
+     * ударные определяются флагом; parse_song переставляет точно */
+    result->err_chan = drums ? 3u : 4u;
+    if (!st.err)
+        result->err_text[0] = 0;  /* при ошибке фрагмент уже записан
+                                   * set_error прямо в result */
 }
 
 /* ---------------------- Парсинг полной песни ------------------------- */
@@ -491,7 +560,6 @@ void parse_song(parse_result_t *result,
                 const unsigned char * const *samples,
                 music_song_t *song)
 {
-    parse_result_t res;
     unsigned char ch;
     unsigned int g;
 
@@ -516,10 +584,13 @@ void parse_song(parse_result_t *result,
             bytecode_buf[ch][0] = MUS_END;
             continue;
         }
-        parse_score(&res, score_text[ch], bytecode_buf[ch],
+        /* Локальной копии результата нет — parse_score пишет прямо в
+         * result: каждый parse_result_t на стеке этого вызова стоил бы
+         * лишние ~37 байт, а стек упирается в векторную страницу. */
+        parse_score(result, score_text[ch], bytecode_buf[ch],
                     PARSER_BC_SIZE, is_drums);
-        if (!res.ok) {
-            *result = res;
+        if (!result->ok) {
+            result->err_chan = ch; /* точный номер партитуры */
             return;
         }
     }
@@ -545,6 +616,8 @@ void parse_song(parse_result_t *result,
                     t += len_ticks(l_val);
                 } else if (b >= MUS_LEN && b <= MUS_LEN + 7) {
                     l_val = (unsigned int)(0x80 >> (b - MUS_LEN));
+                } else if (b >= MUS_VOL_BASE + 1) {
+                    /* V1..V15: состояние, время не продвигает */
                 } else if (b == MUS_LPSTART) {
                     /* пропуск */
                 } else if (b == MUS_LPEND) {
@@ -563,11 +636,36 @@ void parse_song(parse_result_t *result,
         song->length = max_t;
     }
 
-    res.ok = 1;
-    res.err_line = 0;
-    res.err_col = 0;
-    res.err_code = PERR_OK;
-    *result = res;
+    result->ok = 1;
+    result->err_line = 0;
+    result->err_col = 0;
+    result->err_code = PERR_OK;
+    result->err_chan = 4u;
+    result->err_text[0] = 0;
+}
+
+/* ------------------------- Имена ошибок ------------------------------ */
+
+/* Текст для экрана: что за ошибка (код PERR_*). Строки короче
+ * 32 колонок — печатаются gfx_print целиком. */
+const char *parse_error_name(unsigned char code)
+{
+    static const char *names[] = {
+        "NO ERROR",                /* PERR_OK            */
+        "UNKNOWN TOKEN",           /* PERR_UNKNOWN_TOK   */
+        "END WITHOUT BEGIN",       /* PERR_NO_END_BEGIN  */
+        "BEGIN WITHOUT END",       /* PERR_NO_BEGIN_END  */
+        "UNCLOSED SECTION [",      /* PERR_NO_BRACKET    */
+        "NOTE TOO HIGH",           /* PERR_NOTE_HIGH     */
+        "BAD LENGTH L",            /* PERR_BAD_LEN       */
+        "OCTAVE O MUST BE 0-7",    /* PERR_BAD_OCT       */
+        "TEMPO T MUST BE 32-255",  /* PERR_BAD_TEMPO     */
+        "REPEAT N MUST BE 2-255",  /* PERR_BRACKET_N     */
+        "VOLUME V MUST BE 1-15"    /* PERR_BAD_VOL       */
+    };
+    if (code > PERR_BAD_VOL)
+        return "UNKNOWN ERROR";
+    return names[code];
 }
 
 /* ------------------- Таблица строк для подсветки --------------------- */

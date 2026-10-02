@@ -123,7 +123,7 @@ static unsigned char out_ay;
 /* ------------------------- Встроенный пример ------------------------ */
 
 static const char default_s0[] = "O4 L4 C D E F G A B O5 C";
-static const char default_s1[] = "O3 L4 C E G C E G O4 C E";
+static const char default_s1[] = "O3 L4 V2 C V4 D V6 E V8 F V10 G V12 A V14 B V15 O4 C";
 static const char default_s2[] = "O2 L2 C G C G";
 static const char default_dr[] = "L4 0 P 2 P 0 P 4 P\nL4 8 P 10 P 8 P 10 P";
 
@@ -218,6 +218,71 @@ static void out_invert(unsigned char ay)
 
 /* ------------------------- Проигрывание ---------------------------- */
 
+/* Собираем строки сообщения об ошибке парсинга в 32-колоночный
+ * буфер: префикс + числа + фрагмент партитуры. Простого хелпера
+ * форматирования в lib нет — здесь нужен только dec-ввод. */
+static char msg_buf[33];
+
+static void msg_cat(const char *s)
+{
+    unsigned char i = 0;
+    while (msg_buf[i])
+        i++;
+    while (*s && i < 31) {
+        msg_buf[i++] = *s++;
+    }
+    msg_buf[i] = 0;
+}
+
+static void msg_dec(unsigned int v)
+{
+    char tmp[8];
+    char t;
+    unsigned char n = 0, i;
+
+    do {
+        tmp[n++] = (char)('0' + (unsigned char)(v % 10u));
+        v /= 10u;
+    } while (v && n < 7u);
+    tmp[n] = 0;
+    for (i = 0u; i < n / 2u; ++i) {   /* цифры в обратном порядке */
+        t = tmp[i];
+        tmp[i] = tmp[n - 1u - i];
+        tmp[n - 1u - i] = t;
+    }
+    msg_cat(tmp);
+}
+
+/* Экран ошибки парсинга: код, партитура (SCORE 0..2 / DRUMS),
+ * строка/столбец (1-based), что за ошибка и фрагмент партитуры от
+ * ошибочного токена. Вызывается из playback_start; держится до AP2
+ * (см. playback_toggle/show_result). */
+static void show_parse_error(const parse_result_t *res, unsigned char ch)
+{
+    static const char *chan_names[4] = {
+        "SCORE 0", "SCORE 1", "SCORE 2", "DRUMS"
+    };
+
+    begin_init_screen();
+    gfx_print(0, 40, "PARSE ERROR", 1);
+    gfx_print(0, 56, ch < 4u ? chan_names[ch] : "PARTITURE ?", 1);
+    msg_buf[0] = 0;
+    msg_cat("LINE ");
+    msg_dec((unsigned int)res->err_line + 1u);
+    msg_cat(" COL ");
+    msg_dec((unsigned int)res->err_col + 1u);
+    gfx_print(0, 72, msg_buf, 1);
+    gfx_print(0, 88, parse_error_name(res->err_code), 1);
+    if (res->err_text[0]) {           /* фрагмент не пуст — есть что */
+        msg_buf[0] = 0;               /* показать: ошибочный токен и   */
+        msg_cat("> ");                /* следующие операнды партитуры  */
+        msg_cat(res->err_text);
+        gfx_print(0, 104, msg_buf, 1);
+    }
+    gfx_print(0, 136, "AP2-RETURN", 1);
+    end_init_screen();
+}
+
 void playback_stop(void)
 {
     play_mode = PLAY_NONE;
@@ -251,7 +316,11 @@ unsigned char playback_toggle(unsigned char mode, unsigned char ch)
 
 void playback_start(void)
 {
-    parse_result_t res;
+    /* Результат парсинга — не на стеке: цепочка
+     * controller_run → on_key → playback_toggle → playback_start →
+     * parse_song → parse_score и так близка к векторной странице
+     * (стек растёт из-под 0x0100, а RST 0x38 живёт на 0x0038). */
+    static parse_result_t res;
     unsigned char ch;
     unsigned char tempo = 120;
 
@@ -266,10 +335,7 @@ void playback_start(void)
         if (!res.ok) {
             /* Ошибка парсинга — весь экран под сообщение. Интерфейс
              * восстановит вызывающий (on_key), когда увидят текст. */
-            begin_init_screen();
-            gfx_print(0, 64, "PARSE ERROR", 1);
-            gfx_print(0, 80, "AP2-RETURN", 1);
-            end_init_screen();
+            show_parse_error(&res, ch);
             return;
         }
     }
@@ -280,7 +346,10 @@ void playback_start(void)
         for (ch = 0; ch < 4; ch++)
             texts[ch] = score_text[ch][0] ? score_text[ch] : (const char *)0;
         parse_song(&res, texts, bc_buf, tempo, nes_drums_samples, &song);
-        if (!res.ok) return;
+        if (!res.ok) {
+            show_parse_error(&res, res.err_chan);
+            return;
+        }
     }
 
     /* Запуск */

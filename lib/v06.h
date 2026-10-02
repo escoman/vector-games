@@ -283,6 +283,10 @@ extern void sound_silence(void);
 #define MUS_LPSTART     0xE8    /* «[»                                   */
 #define MUS_LPEND       0xE9    /* «]n»                                  */
 #define MUS_JMP         0xEA    /* <lo> <hi>                             */
+#define MUS_VOL_BASE    0xF0    /* 0xF1..0xFF: V1..V15 громкость канала, */
+                                /* вся команда — 1 байт (байт = 0xF0 + V, */
+                                /* громкость = байт & 0x0F); AY R8/R9/R10  */
+                                /* на атаке; ВИ53 — игнор                 */
 
 typedef struct {
     unsigned int tempo_num;

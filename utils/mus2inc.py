@@ -21,6 +21,10 @@
 #             Tempo: может отсутствовать); по умолчанию T120;
 #   O<n>      октава 0..7 (по умолчанию O4);
 #   L<n>      длительность: 1,2,4,8,16,32,64,128 (по умолчанию L4);
+#   V<n>      громкость канала 1..15 (по умолчанию V15): на AY задаёт
+#             фиксированную громкость своего канала (R8/R9/R10),
+#             применяется на следующей атаке ноты; на ВИ53 рантайм
+#             игнорирует команду; в партитуре ударных не эмитится;
 #   P         пауза на текущую длительность;
 #   C..B      ноты; '#' или '+' — диез, '-' — бемоль; цифра после ноты
 #             или паузы — явная длительность этой ноты (C8, P16);
@@ -55,6 +59,11 @@
 #   0xE9 n      ']n' — конец секции: счётчик + 1; пока счётчик < n,
 #               исполнение возвращается к адресу возврата (секция
 #               звучит ровно n раз). Время не продвигает.
+#   0xF1..0xFF  V1..V15: фиксированная громкость канала целиком в одном
+#               байте (байт = 0xF0 + V, операнда нет — как L1..L128).
+#               На AY применяется на следующей атаке ноты, на ВИ53
+#               игнорируется; в drum-потоке не эмитится. Время не
+#               продвигает; по умолчанию V15 (команда не нужна).
 #
 # Формат .smp (бинарный): байт N — число кадров, затем N пар
 # (R6, R10) — период шума и громкость канала C AY-3-8910, по одному
@@ -79,6 +88,7 @@ MUS_LEN_BASE = 0xE0   # E0..E7 = L1..L128 (однобайтовая команд
 MUS_LPSTART = 0xE8    # '[' — начало повторяемой секции
 MUS_LPEND = 0xE9      # ']n' + байт n: секция звучит n раз
 MUS_JMP = 0xEA        # END -> JMP: 0xEA <lo> <hi> — возврат назад
+MUS_VOL_BASE = 0xF0   # F1..FF = V1..V15 (однобайтовая команда состояния)
 L_INDEX = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 NOTE_BASE = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
@@ -135,7 +145,7 @@ class Stream:
 
 def tokenize(body, fname, drums):
     """Разобрать тело партитуры на события. Возвращает список кортежей
-    (kind, value): ('T', n), ('O', n), ('L', n), ('P', l|None),
+    (kind, value): ('T', n), ('O', n), ('L', n), ('V', n), ('P', l|None),
     ('N', abs_note, l|None), ('D', sample_id), ('[',), (']', n), ('!',)."""
     toks = []
     pos = 0
@@ -187,6 +197,11 @@ def tokenize(body, fname, drums):
         m = re.match(r'L(\d+)', body[pos:], re.I)
         if m:
             toks.append(('L', int(m.group(1))))
+            pos += m.end()
+            continue
+        m = re.match(r'V(\d+)', body[pos:], re.I)
+        if m:
+            toks.append(('V', int(m.group(1))))
             pos += m.end()
             continue
         m = re.match(r'P(\d+)?', body[pos:], re.I)
@@ -286,6 +301,16 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
                                ' 1,2,4,8,16,32,64,128')
             st.len_locked = True
             st.set_len(tok[1])
+            continue
+        if kind == 'V':
+            if not 1 <= tok[1] <= 15:
+                raise MusError(f'{fname}: V{tok[1]} вне диапазона 1..15')
+            st.len_locked = True
+            # Команда состояния: один байт 0xF0+V, время не продвигает.
+            # На ВИ53 рантайм игнорирует её; в drum-потоке не эмитится
+            # (рантайм игнорирует V в ударных — не тратить байткод).
+            if not st.drums:
+                st.bytes.append(MUS_VOL_BASE + tok[1])
             continue
         if kind == 'P':
             st.len_locked = True
@@ -406,9 +431,10 @@ def split_sections(text, fname):
 
 
 def self_test():
-    """Проверка однобайтового кодирования L (E0..E7), compile-time
-    октавы O и повторов секций (E8/E9 n) — случаи из ТЗ. Нота C в O4 =
-    абсолютный номер 48, байт 0x31; команды октавы в байткоде нет."""
+    """Проверка однобайтового кодирования L (E0..E7), громкости V
+    (F1..FF), compile-time октавы O и повторов секций (E8/E9 n) —
+    случаи из ТЗ. Нота C в O4 = абсолютный номер 48, байт 0x31;
+    команды октавы в байткоде нет."""
     def comp(text, drums=False):
         st = Stream('selftest', drums=drums)
         toks = tokenize(text, '<selftest>', drums)
@@ -453,6 +479,16 @@ def self_test():
         ('BEGIN/END с O/L',
          'O4 C BEGIN D E END', False,
          '31 33 35 EA 05 00 00'),
+        # Тест 9 — громкость: V1..V15 целиком в одном байте (F0+V),
+        # V15 — тоже эмитится явно (сброс после прошлой команды),
+        # время не продвигает
+        ('громкость',
+         'V8 C V15 C', False,
+         'F8 31 FF 31 00'),
+        # Тест 10 — V в партитуре ударных не эмитится (рантайм игнорирует)
+        ('V в ударных',
+         'V8 0 P', True,
+         '01 60 00'),
     ]
     failed = 0
     for name, text, drums, want in cases:
@@ -502,10 +538,17 @@ def self_test():
         print('САМОТЕСТ [незакрытый BEGIN]: не выдал ошибку')
     except MusError:
         print('САМОТЕСТ [незакрытый BEGIN]: OK (ошибка)')
+    # V вне 1..15 — ошибка
+    try:
+        comp('V0 C', False)
+        failed += 1
+        print('САМОТЕСТ [V0]: не выдал ошибку')
+    except MusError:
+        print('САМОТЕСТ [V0]: OK (ошибка)')
     if failed:
         sys.exit(f'mus2inc --self-test: провалено {failed} из'
-                 f' {len(cases) + 5}')
-    print(f'mus2inc --self-test: все {len(cases) + 5} тестов пройдены')
+                 f' {len(cases) + 6}')
+    print(f'mus2inc --self-test: все {len(cases) + 6} тестов пройдены')
 
 
 def main():
@@ -529,8 +572,8 @@ def main():
                     ' ZX0 и выдать music_csong_t вместо music_song_t;'
                     ' рантайм распаковывает его в ОЗУ (music_load_compressed)')
     ap.add_argument('--self-test', action='store_true',
-                    help='проверить однобайтовое кодирование L и октавы,'
-                    ' выйти')
+                    help='проверить однобайтовое кодирование L, громкость V'
+                    ' и октавы, выйти')
     args = ap.parse_args()
 
     if args.self_test:
