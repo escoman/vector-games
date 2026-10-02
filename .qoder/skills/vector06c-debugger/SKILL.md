@@ -219,7 +219,7 @@ RDB save: success / failed
 
 ## Project Resources
 
-Все пути относительно `/home/alexey/Projects/vector-debugger/`.
+Все пути относительно `/home/alexey/Projects/vector-debug/`.
 
 ### Profiles
 
@@ -227,13 +227,13 @@ RDB save: success / failed
 
 | Задача | Profile |
 |--------|---------|
-| "Что делает ROM?" | `debugger/agent/profiles/reverse_engineering.md` |
-| "Проверь ROM на ошибки" | `debugger/agent/profiles/bug_hunting.md` |
-| "Проведи полный аудит ROM" | `debugger/agent/profiles/rom_audit.md` |
+| "Что делает ROM?" | `agent/profiles/reverse_engineering.md` |
+| "Проверь ROM на ошибки" | `agent/profiles/bug_hunting.md` |
+| "Проведи полный аудит ROM" | `agent/profiles/rom_audit.md` |
 
 ### Tasks
 
-Используй только необходимые задачи из `debugger/agent/tasks/`:
+Используй только необходимые задачи из `agent/tasks/`:
 
 | Task | Path | Когда использовать |
 |------|------|-------------------|
@@ -246,7 +246,7 @@ RDB save: success / failed
 
 ### Knowledge Base
 
-Читай по мере необходимости из `debugger/agent/knowledge/vector06c/`:
+Читай по мере необходимости из `agent/knowledge/vector06c/`:
 
 | Документ | Когда читать |
 |----------|-------------|
@@ -259,11 +259,11 @@ RDB save: success / failed
 | `sound.md` | Звуковое оборудование |
 | `verification.md` | **Обязательно** для проверки фактов |
 | `video.md` | Видео/палитра/VRAM |
-| `z88dk_map.md` | **Обязательно** при работе с MAP-файлами Z88DK (перемещён в `debugger/docs/`) |
+| `z88dk_map.md` | **Обязательно** при работе с MAP-файлами Z88DK (перемещён в `docs/`) |
 
 ### Workflow Protocol
 
-`debugger/agent/AI_AGENT_WORKFLOW.md` — полный протокол анализа.
+`agent/AI_AGENT_WORKFLOW.md` — полный протокол анализа.
 
 ### ROM Library
 
@@ -526,16 +526,16 @@ Confidence: [High/Medium/Low]
 
 ### Работа с MAP-файлами Z88DK
 
-При работе с `.map`-файлами **обязательно** используй `debugger/docs/z88dk_map.md` как источник формата.
+При работе с `.map`-файлами **обязательно** используй `docs/z88dk_map.md` как источник формата.
 
-Для запросов: создать MAP, построить MAP, исправить MAP, разобрать MAP, конвертировать MAP — сначала ознакомься с форматом Z88DK в `debugger/docs/z88dk_map.md`.
+Для запросов: создать MAP, построить MAP, исправить MAP, разобрать MAP, конвертировать MAP — сначала ознакомься с форматом Z88DK в `docs/z88dk_map.md`.
 
 **Запрещено:**
 - Придумывать собственный формат MAP.
 - Создавать debugger-specific синтаксис MAP.
 - Считать любой текстовый файл `symbol = value` форматом Z88DK MAP.
 - Использовать JSON/YAML/CSV вместо реального формата Z88DK.
-- Добавлять собственные поля или секции, не описанные в `debugger/docs/z88dk_map.md`.
+- Добавлять собственные поля или секции, не описанные в `docs/z88dk_map.md`.
 
 Если данных недостаточно для корректной генерации — сообщи, какие данные отсутствуют.
 
@@ -657,10 +657,10 @@ ASM exporter автоматически:
 
 | Задача | Документация для чтения |
 |--------|------------------------|
-| Создать MAP-файл | `debugger/docs/z88dk_map.md` |
-| Создать ROM-файл | `debugger/agent/knowledge/vector06c/rom_format.md` |
-| Работать с портами | `debugger/agent/knowledge/vector06c/io.md` |
-| Работать с VRAM | `debugger/agent/knowledge/vector06c/video.md` |
+| Создать MAP-файл | `docs/z88dk_map.md` |
+| Создать ROM-файл | `agent/knowledge/vector06c/rom_format.md` |
+| Работать с портами | `agent/knowledge/vector06c/io.md` |
+| Работать с VRAM | `agent/knowledge/vector06c/video.md` |
 
 ### Запрещено
 

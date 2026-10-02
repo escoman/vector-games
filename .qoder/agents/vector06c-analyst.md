@@ -38,26 +38,26 @@ ROM → MCP Debugger → DebugAdapter → Agent API → disassembly / CPU / memo
 
 ## Ресурсы
 
-Все пути относительно `/home/alexey/Projects/vector-debugger/`.
+Все пути относительно `/home/alexey/Projects/vector-debug/`.
 
 ### Knowledge Base
 
-Читай по мере необходимости из `debugger/agent/knowledge/vector06c/`:
+Читай по мере необходимости из `agent/knowledge/vector06c/`:
 - `architecture.md`, `cpu.md`, `io.md`, `keyboard.md`, `memory.md`
 - `rom_format.md`, `sound.md`, `video.md`
 - `verification.md` — для проверки фактов (пометки `UNVERIFIED`, `CONFLICT`)
-- `z88dk_map.md` (в `debugger/docs/`) — **обязательно** при работе с MAP-файлами (формат Z88DK)
+- `z88dk_map.md` (в `docs/`) — **обязательно** при работе с MAP-файлами (формат Z88DK)
 
 ### Profiles
 
 Выбирай перед началом анализа:
-- `debugger/agent/profiles/reverse_engineering.md` — «Что делает ROM?»
-- `debugger/agent/profiles/bug_hunting.md` — поиск ошибок
-- `debugger/agent/profiles/rom_audit.md` — полный аудит ROM
+- `agent/profiles/reverse_engineering.md` — «Что делает ROM?»
+- `agent/profiles/bug_hunting.md` — поиск ошибок
+- `agent/profiles/rom_audit.md` — полный аудит ROM
 
 ### Tasks
 
-Используй методологии из `debugger/agent/tasks/`:
+Используй методологии из `agent/tasks/`:
 - `analyze_io/TASK.md` — анализ портов ввода/вывода
 - `analyze_vram/TASK.md` — анализ видеопамяти
 - `find_bugs/TASK.md` — поиск ошибок в коде
@@ -89,7 +89,7 @@ ROM → MCP Debugger → DebugAdapter → Agent API → disassembly / CPU / memo
 16. Создай подтверждённые связи RDB (`debug_add_rdb_link`) — обязательно при наличии evidence.
 17. Сохрани RDB (`debug_save_rdb`) — обязательно, не жди команды пользователя.
 18. Проверь результат сохранения.
-19. Формируй итоговый отчёт по `debugger/agent/AI_AGENT_WORKFLOW.md` (с objects count, links count, save status).
+19. Формируй итоговый отчёт по `agent/AI_AGENT_WORKFLOW.md` (с objects count, links count, save status).
 
 Шаги 6–9 обязательны. Не заменяй их самостоятельным чтением ROM.
 
