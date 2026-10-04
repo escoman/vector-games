@@ -58,16 +58,26 @@ kbd{background:#333;border:1px solid #555;border-radius:3px;padding:0 4px;font-s
   <div class="toolbar">
     <input type="file" id="fileInput" accept=".inc,.asm,.list,.txt" style="display:none">
     <button class="primary" onclick="document.getElementById('fileInput').click()">Открыть .inc…</button>
+    <button onclick="newFontUI()">Новый шрифт…</button>
+    <label class="badge" for="saveFmt">сохранить как:</label>
+    <select id="saveFmt" onchange="updateSaveHint()">
+      <option value="table">.inc — таблица имён (chars≠0)</option>
+      <option value="range">.asm — диапазон (chars=0)</option>
+    </select>
     <button id="saveBtn" onclick="saveFont()" disabled>Сохранить (скачать)</button>
     <span class="badge" id="fmtBadge"></span>
     <span class="status" id="status"></span>
   </div>
   <div class="note">
     Открываете inc-файл шрифта — формат определяется по меткам (<b>font_chars</b>+<b>font8x8</b> ·
-    <b>font_chars_512</b>+<b>font16x8</b> · <b>font_chars_512t</b>+<b>font_thin</b>). Глифы редактируются в сетке,
-    ниже — превью набранного текста. Сохранение отдаёт изменённый файл через загрузку браузера
-    (перезаписать по пути браузер не может — скачанный файл положите вместо старого).
-    Комментарии, таблица имён и вёрстка строк сохраняются как были; меняются только байты глифов.
+    <b>font_chars_512</b>+<b>font16x8</b> · <b>font_chars_512t</b>+<b>font_thin</b>). Либо «Новый шрифт…» —
+    пустая заготовка, символы добавляете кнопкой «＋ глиф».
+    Глифы рисуются в сетке, ниже — превью набранного текста.
+    <b>Сохранение:</b> «.inc — таблица имён» — обычный шрифт-заглушка (метки font_chars/данные),
+    если набор не менялся — файл сохраняется побайтово (комментарии и вёрстка как были), иначе
+    перегенерируется начисто. «.asm — диапазон» — standalone-модуль с дескриптором chars=0
+    (как range_fonts.asm), требует сплошных кодов. Браузер не может перезаписать файл по пути —
+    скачанный файл кладёте вместо старого.
   </div>
 </div>
 
@@ -87,6 +97,12 @@ kbd{background:#333;border:1px solid #555;border-radius:3px;padding:0 4px;font-s
         <button id="clearBtn" onclick="clearGlyph()" disabled>Очистить</button>
         <button id="flipHBtn" onclick="flipGlyphH()" disabled>↔</button>
         <button id="flipVBtn" onclick="flipGlyphV()" disabled>↕</button>
+      </div>
+      <div class="toolbar" id="charsetBar" style="display:none">
+        <span style="font-size:11px;color:#888">набор:</span>
+        <button onclick="addGlyphUI()">＋ глиф</button>
+        <button onclick="deleteGlyphUI()">－ удалить глиф</button>
+        <button onclick="renameCodeUI()">переименовать код…</button>
       </div>
       <div id="edLegend"></div>
       <div id="editor" style="min-height:40px;color:#666;font-size:12px">Откройте файл…</div>
@@ -324,10 +340,11 @@ function loadFromText(text, name){
   if(!r.ok){ FONT=null; setStatus(r.error,'err'); $('fmtBadge').textContent='';
              $('gallery').innerHTML=''; $('editor').textContent='Откройте файл…';
              $('saveBtn').disabled=true; renderPreview(); return; }
-  r.name=name; FONT=r; SEL=-1; dirty=false;
+  r.name=name; r.kind='table'; r.charsetDirty=false; FONT=r; SEL=-1; dirty=false;
   $('fmtBadge').innerHTML=`формат <b>${fmtLabel(r.mode)}</b> · глифов <b>${r.chars.length}</b> · `
     +`шаг <b>${r.stride}</b> Б · файл <b>${name}</b>`;
   setStatus('формат распознан, файл загружен','ok');
+  $('charsetBar').style.display='flex';
   buildGallery();
   selectGlyph(0);
   $('saveBtn').disabled=false;
@@ -501,20 +518,193 @@ function renderPreview(){
 }
 
 /* ── сохранение ── */
+function download(text, fname){
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
 function saveFont(){
   if(!FONT) return;
   if(dirty) commitGlyph();
-  // пересобрать values из текущих пикселей для всех глифов не нужно:
-  // values уже актуальны для незагруженных — обновим выбранный
-  const text=reserialize(FONT, FONT.values);
-  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=FONT.name||'font.inc';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-  setStatus('файл скачан — замените старый','ok');
+  const fmt=$('saveFmt').value;
+  let text, fname;
+  try{
+    if(fmt==='range'){
+      text=genRangeAsm(FONT); fname=asmLabelOf(FONT.name)+'.asm';
+    } else if(!FONT.charsetDirty && FONT.lines){
+      text=reserialize(FONT, FONT.values); fname=FONT.name||'font.inc';   // щадящий round-trip
+    } else {
+      text=genTableInc(FONT); fname=withExt(FONT.name||'font','inc');
+    }
+  }catch(e){ setStatus(String(e&&e.message||e),'err'); return; }
+  download(text, fname);
+  setStatus('файл скачан: '+fname,'ok');
 }
+
+function withExt(n,e){ return /\.[A-Za-z]+$/.test(n)? n : n+'.'+e; }
+function asmLabelOf(n){ return (n||'myfont').replace(/\.[A-Za-z]+$/,'').replace(/[^A-Za-z0-9_]/g,'_').replace(/^(\d)/,'_$1'); }
+
+/* ── генераторы файлов ── */
+function escDefm(s){ return s.replace(/\\/g,'\\\\'); }   // backslash в defm маловероятен, но бережно
+
+function genTableInc(font){
+  const L=[];
+  L.push(';');
+  L.push('; '+(font.name||'font')+' — шрифт '+fmtLabel(font.mode)+', создан в edit_font.html.');
+  L.push(';');
+  L.push('; Контракт подключаемого шрифта: метки '+font.charsLabel+' и '+font.dataLabel+'.');
+  L.push('; '+font.chars.length+' симв., таблица имён '+font.charsLabel+' = порядок глифов в '+font.dataLabel+',');
+  L.push('; конец таблицы — defb 0. Индекс глифа = позиция символа.');
+  L.push(';');
+  L.push(font.charsLabel+':');
+  const defmSafe = font.chars.every(c=>c>=0x20&&c<=0x7e&&c!==0x22&&c!==0x5c);
+  if(defmSafe && font.chars.length){
+    L.push('        defm    "'+font.chars.map(c=>String.fromCharCode(c)).join('')+'"');
+  } else {
+    for(let i=0;i<font.chars.length;i+=16){
+      const part=font.chars.slice(i,i+16);
+      L.push('        defb    '+part.map(c=> (c>=0x20&&c<=0x7e&&c!==0x22&&c!==0x5c)
+            ? "'"+String.fromCharCode(c)+"'" : toHex(c)).join(', '));
+    }
+  }
+  L.push('        defb    0');
+  L.push('');
+  L.push(font.dataLabel+':');
+  for(let g=0; g<font.chars.length; g++){
+    const bytes=font.values.slice(g*font.stride, g*font.stride+font.stride);
+    const cm="; '"+charName(font.chars[g])+"'";
+    if(font.mode==='16x8'){
+      L.push('        defb    '+bytes.slice(0,8).map(toHex).join(', '));
+      L.push('        defb    '+bytes.slice(8,16).map(toHex).join(', ')+' '+cm);
+    } else {
+      L.push('        defb    '+bytes.map(toHex).join(', ')+' '+cm);
+    }
+  }
+  return L.join('\n')+'\n';
+}
+
+function genRangeAsm(font){
+  if(!font.chars.length) throw new Error('Нечего сохранять: набор пуст — добавьте глифы.');
+  const idx=font.chars.map((c,i)=>[c,i]).sort((a,b)=>a[0]-b[0]);
+  const codes=idx.map(x=>x[0]);
+  for(let i=1;i<codes.length;i++) if(codes[i]!==codes[i-1]+1)
+    throw new Error('Для диапазона коды должны идти сплошь: нет '+toHex(codes[i-1]+1)+
+                    ' (есть '+toHex(codes[0])+'..'+toHex(codes[codes.length-1])+').');
+  const first=codes[0], last=codes[codes.length-1], gl=asmLabelOf(font.name);
+  const L=[];
+  L.push(';');
+  L.push('; '+gl+'.asm — шрифт прямого индекса (chars = 0), '+fmtLabel(font.mode)+'.');
+  L.push('; Коды '+toHex(first)+'..'+toHex(last)+' ('+codes.length+' глифов). Создан в edit_font.html.');
+  L.push('; Таблицы имён нет: глиф = glyphs + (код - '+toHex(first)+') * '+font.stride+'.');
+  L.push(';');
+  L.push('        PUBLIC  _'+gl);
+  L.push('        SECTION code_clib');
+  L.push('');
+  L.push(gl+'_glyphs:');
+  for(const [code,i] of idx){
+    const bytes=font.values.slice(i*font.stride,(i+1)*font.stride);
+    L.push('        defb    '+bytes.map(toHex).join(', ')+" ; '"+charName(code)+"'");
+  }
+  L.push('');
+  L.push('_'+gl+':');
+  L.push('        defw    0                       ; chars = 0: прямой индекс');
+  L.push('        defw    '+gl+'_glyphs');
+  L.push('        defw    '+toHex(first)+'                    ; first_code');
+  L.push('        defw    '+toHex(last)+'                     ; last_code');
+  L.push('');
+  return L.join('\n');
+}
+
+/* ── новый шрифт и операции с набором ── */
+function blankBytes(n){ return new Array(n).fill(0); }
+function markCharsetDirty(){ FONT.charsetDirty=true; FONT.lines=null; FONT.tokens=[];
+  updateBadge(); }
+function updateBadge(){
+  if(!FONT){ $('fmtBadge').textContent=''; return; }
+  $('fmtBadge').innerHTML=`формат <b>${fmtLabel(FONT.mode)}</b> · глифов <b>${FONT.chars.length}</b> · `
+    +`шаг <b>${FONT.stride}</b> Б · <b>${FONT.name}</b>`
+    + (FONT.charsetDirty?' <span style="color:#cca700">(набор изменён)</span>':'');
+}
+
+function parseCodeInput(s){
+  if(s==null) return NaN; s=String(s).trim(); if(!s) return NaN;
+  let m;
+  if(m=s.match(/^0[xX]([0-9a-fA-F]{1,2})$/)) return parseInt(m[1],16);
+  if(m=s.match(/^(\d+)$/)){ const v=+m[1]; return v<256?v:NaN; }
+  if(s.length===1) return s.charCodeAt(0);
+  if(m=s.match(/^'?(.)'?$/)) return m[1].charCodeAt(0);
+  return s.charCodeAt(s.length-1);
+}
+
+function createNewFont(mode, name){
+  const spec = mode==='16x8' ? {stride:16,cols:16,charsLabel:'font_chars_512',dataLabel:'font16x8'}
+             : mode==='8x8t' ? {stride:8, cols:8, charsLabel:'font_chars_512t',dataLabel:'font_thin'}
+             :                  {stride:8, cols:8, charsLabel:'font_chars',dataLabel:'font8x8'};
+  FONT = Object.assign({mode, rows:8, kind:'table', chars:[], values:[], tokens:[], lines:null, text:null,
+                        name:(name||'myfont'), charsetDirty:true}, spec);
+  // стартовый пробел, чтобы было чем рисовать и превью не падало
+  FONT.chars.push(0x20); FONT.values.push(...blankBytes(FONT.stride));
+  SEL=-1; dirty=false;
+  $('saveFmt').value='table';
+  $('fmtBadge').innerHTML=''; updateBadge();
+  setStatus('новый шрифт создан — добавляйте глифы кнопкой «＋ глиф»','ok');
+  $('charsetBar').style.display='flex';
+  buildGallery(); selectGlyph(0);
+  $('saveBtn').disabled=false;
+  ['prevBtn','nextBtn','clearBtn','flipHBtn','flipVBtn'].forEach(id=>$(id).disabled=false);
+  renderPreview();
+}
+
+function newFontUI(){
+  const s=prompt('Новый шрифт. Формат:\n  1 — 8×8 (pr.asm)\n  2 — 16×8 (pr512.asm)\n  3 — 4×8 thin (pr512t.asm)','1');
+  if(s==null) return;
+  const mode=({'1':'8x8','2':'16x8','3':'8x8t','8x8':'8x8','16x8':'16x8','thin':'8x8t','8x8t':'8x8t'})[s.trim()];
+  if(!mode){ setStatus('не распознан формат','err'); return; }
+  const name=prompt('Имя шрифта (метка/файл):','myfont');
+  createNewFont(mode, (name||'myfont').trim());
+}
+
+function addGlyphCore(code){
+  if(!FONT) return;
+  if(FONT.kind==='range') code = FONT.chars.length? Math.max(...FONT.chars)+1 : 0x20;
+  if(!(code>=0&&code<256)){ setStatus('код вне 0x00..0xFF','err'); return; }
+  if(FONT.chars.indexOf(code)>=0){ setStatus('код 0x'+code.toString(16).toUpperCase()+' уже есть','warn'); return; }
+  if(dirty) commitGlyph();
+  FONT.chars.push(code); FONT.values.push(...blankBytes(FONT.stride));
+  markCharsetDirty(); buildGallery(); selectGlyph(FONT.chars.length-1); renderPreview();
+}
+function addGlyphUI(){ const c=prompt('Код нового символа (символ или 0xNN):','A'); if(c==null) return;
+  addGlyphCore(parseCodeInput(c)); }
+
+function deleteGlyphCore(){
+  if(!FONT||SEL<0) return;
+  const code=FONT.chars[SEL];
+  if(!confirm('Удалить глиф '+charName(code)+' (0x'+code.toString(16).toUpperCase()+', #'+SEL+')?')) return;
+  dirty=false;
+  FONT.chars.splice(SEL,1); FONT.values.splice(SEL*FONT.stride, FONT.stride);
+  markCharsetDirty(); buildGallery();
+  const n=Math.min(SEL, FONT.chars.length-1);
+  if(n>=0){ SEL=-1; selectGlyph(n); } else { px=[]; $('editor').innerHTML='нет глифов — «＋ глиф»';
+    $('edCap').textContent=''; $('edOut').innerHTML=''; }
+  renderPreview();
+}
+function deleteGlyphUI(){ deleteGlyphCore(); }
+
+function renameCodeCore(code){
+  if(!FONT||SEL<0) return;
+  if(!(code>=0&&code<256)){ setStatus('код вне 0x00..0xFF','err'); return; }
+  const dup=FONT.chars.indexOf(code); if(dup>=0 && dup!==SEL){ setStatus('код уже используется','warn'); return; }
+  if(dirty) commitGlyph();
+  FONT.chars[SEL]=code; markCharsetDirty(); buildGallery(); selectGlyph(SEL); renderPreview();
+}
+function renameCodeUI(){ if(!FONT||SEL<0) return;
+  const c=prompt('Новый код для этого глифа (символ или 0xNN):', String.fromCharCode(FONT.chars[SEL]));
+  if(c==null) return; renameCodeCore(parseCodeInput(c)); }
+
+function updateSaveHint(){ /* заготовка: можно подсказать расширение в статусе */ }
 
 /* ── горячие клавиши ── */
 document.addEventListener('keydown',e=>{
