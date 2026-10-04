@@ -119,6 +119,50 @@ extern void gfx_print_512t(unsigned char x, unsigned char y, const char *s,
                            unsigned char color) __z88dk_callee;
 
 
+/* ----------------------------- Шрифты ------------------------------ */
+
+/* Дескриптор шрифта. Все четыре поля читают pr.asm, pr512.asm и
+ * pr512t.asm; режим задаётся полем chars.
+ *
+ * chars != 0 — таблица имён: chars перечисляет символы в том же
+ * порядке, что глифы в glyphs, и заканчивается нулём; индекс глифа =
+ * позиция символа в таблице, неизвестный символ рисуется глифом 0.
+ * Годится для разреженных наборов (у PUTUP две разорванные группы
+ * кодов) и стоит 1 байт индекса на символ.
+ *
+ * chars == 0 — прямой индекс по коду символа: глиф лежит по адресу
+ * glyphs + (код - first_code) * шаг. Шаг известен из формата шрифта
+ * (8 байт в pr.asm и pr512t.asm, 16 в pr512.asm) и в дескрипторе не
+ * хранится. Коды вне [first_code..last_code] пропускаются: клетка
+ * остаётся нетронутой, ничего не затирается. Индекс — два сравнения
+ * вместо обхода таблицы, поэтому для плотных наборов (цифры,
+ * латиница целиком) этот режим и компактнее, и быстрее.
+ *
+ * first_code <= last_code, в слове значим младший байт. */
+typedef struct {
+    const char *chars;            /* таблица имён, 0 = прямой индекс */
+    const unsigned char *glyphs;  /* данные глифов                   */
+    unsigned int first_code;      /* прямой индекс: первый код        */
+    unsigned int last_code;       /* прямой индекс: последний код     */
+} gfx_font_t;
+
+/* Шрифты, собранные в ROM (данные — lib/gfx/fonts/default_*.inc).
+ * В asm эти дескрипторы лежат под метками _gfx_font_8x8,
+ * _gfx_font_16x8 и _gfx_font_thin. */
+extern const gfx_font_t gfx_font_8x8;    /* 8x8   pr.asm     */
+extern const gfx_font_t gfx_font_16x8;   /* 16x8  pr512.asm  */
+extern const gfx_font_t gfx_font_thin;   /* 4x8   pr512t.asm */
+
+/* Поставить текущий шрифт; действует на весь последующий вывод,
+ * менять можно хоть между символами одной строки. 0 возвращает шрифт,
+ * собранный в ROM. Пример своего шрифта (дескриптор + asm-модуль) —
+ * roms/tests/fonts/putup_font.asm; шрифт, подменяемый на сборке, —
+ * lib/gfx/fonts/default_8x8.inc. */
+extern void gfx_select_font(const gfx_font_t *font) __z88dk_callee;
+extern void gfx_select_font_512(const gfx_font_t *font) __z88dk_callee;
+extern void gfx_select_font_512t(const gfx_font_t *font) __z88dk_callee;
+
+
 
 /* ----------------------------------------------------------------------- */
 /*                                UNPACK                                   */

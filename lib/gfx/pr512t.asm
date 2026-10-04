@@ -20,12 +20,23 @@
 ; x — колонка (0-63), y — строка (0-255).
 ; Цвет 0-3: bit0 -> E000h/A000h, bit1 -> C000h/8000h.
 ;
+; Шрифт подключается во время работы: gfx_select_font_512t() меняет
+; текущий дескриптор (gfx_font_t в v06.h), поэтому gfx_print_512t можно
+; напечатать разными шрифтами. До первого вызова работает шрифт из
+; ROM (_gfx_font_thin).
+;
+; Дескриптор с chars = 0 вместо таблицы имён задаёт прямой индекс по
+; коду символа в диапазоне first_code..last_code; коды вне диапазона
+; не рисуются совсем (клетка остаётся нетронутой).
+;
 ; Только 8080-инструкции: без jr/djnz и без префиксов CB/DD/ED/FD.
 ;
 
         SECTION code_clib
         PUBLIC  _gfx_put_char_512t
         PUBLIC  _gfx_print_512t
+        PUBLIC  _gfx_select_font_512t
+        PUBLIC  _gfx_font_thin
 
 ; ---------------------------------------------------------------
 ; void gfx_put_char_512t(x, y, ch, color)
@@ -162,13 +173,62 @@ print_done_512t:
         ret
 
 ; ---------------------------------------------------------------
+; void gfx_select_font_512t(const gfx_font_t *font)
+;
+; __z88dk_callee
+;
+; Меняет текущий шрифт: аргумент — адрес дескриптора gfx_font_t
+; (v06.h). font = 0 возвращает шрифт, собранный в ROM.
+; ---------------------------------------------------------------
+_gfx_select_font_512t:
+        pop     h                       ; HL = адрес возврата
+        pop     d                       ; DE = адрес дескриптора
+
+        mov     a, e
+        or      d
+        jnz     sel_user_512t
+        ld      de, _gfx_font_thin       ; 0 -> шрифт из ROM
+
+sel_user_512t:
+        xchg                            ; HL = дескриптор, DE = адрес возврата
+        shld    tmp_font
+        xchg                            ; HL = адрес возврата обратно
+        push    h
+
+        ret
+
+; ---------------------------------------------------------------
 ; Внутренняя отрисовка одного тонкого символа 4x8.
 ; ---------------------------------------------------------------
 draw_char_512t:
-        ; --- поиск глифа: E = индекс; нет в таблице -> пробел ---
+        ; --- текущий шрифт: из дескриптора tmp_font берём адреса
+        ;     таблиц; один раз на символ ---
+        ld      hl, (tmp_font)
+        ld      a, (hl)
+        ld      (tmp_chars), a
+        inc     hl
+        ld      a, (hl)
+        ld      (tmp_chars + 1), a
+        inc     hl
+        ld      a, (hl)
+        ld      (tmp_glyphs), a
+        inc     hl
+        ld      a, (hl)
+        ld      (tmp_glyphs + 1), a
+
+        ; --- поиск индекса глифа ------------------------------
+        ;
+        ; chars = 0  -> прямой индекс: E = код - first_code; код вне
+        ;               [first_code..last_code] пропускаем, клетку не
+        ;               затираем.
+        ; chars != 0 -> линейный поиск в таблице имён, неизвестный
+        ;               символ = глиф 0 (пробел).
         ld      a, (tmp_ch)
         ld      c, a                    ; C = искомый символ
-        ld      hl, font_chars_512t
+        ld      hl, (tmp_chars)
+        ld      a, h
+        or      l
+        jp      z, direct_index_512t
         ld      e, 0
 find_loop_512t:
         ld      a, (hl)
@@ -181,6 +241,35 @@ find_loop_512t:
         jp      find_loop_512t
 char_not_found_512t:
         ld      e, 0                    ; неизвестный -> пробел
+        jp      glyph_found_512t
+
+        ; Прямой индекс: границы в словах дескриптора +4 (first_code)
+        ; и +6 (last_code), значим младшие байты. Шаг глифа известен
+        ; из формата (8 байт) и в дескрипторе не хранится.
+direct_index_512t:
+        ld      hl, (tmp_font)
+        ld      a, l
+        adi     4
+        ld      l, a
+        ld      a, h
+        aci     0
+        ld      h, a                    ; HL = first_code
+        ld      b, (hl)                 ; B = first_code
+        inc     hl
+        inc     hl                      ; HL = last_code
+        ld      a, (hl)
+        sub     b                       ; макс. индекс = last - first
+        jp      c, put_char_done_512t   ; first > last: шрифт неверный
+        ld      d, a
+        ld      a, (tmp_ch)
+        sub     b                       ; индекс = код - first_code
+        jp      c, put_char_done_512t   ; код < first_code: клетка цела
+        cp      d
+        jp      z, direct_ok_512t       ; код == last_code
+        jp      nc, put_char_done_512t  ; код > last_code
+direct_ok_512t:
+        ld      e, a                    ; E = индекс глифа
+
 glyph_found_512t:
         ld      h, 0
         ld      l, e
@@ -188,7 +277,7 @@ glyph_found_512t:
         add     hl, hl
         add     hl, hl                  ; индекс * 8
         ; tmp_fp = font_thin + index*8
-        ld      de, font_thin
+        ld      de, (tmp_glyphs)
         add     hl, de
         ld      a, l
         ld      (tmp_fp), a
@@ -453,135 +542,66 @@ tmp_s:          defw    0
 tmp_parity:     defb    0
 
 ; ---------------------------------------------------------------
-; Символы шрифта.
+; Текущий шрифт.
+;
+; tmp_font   — адрес дескриптора (gfx_font_t); инициализируется
+;              при сборке шрифтом из ROM, меняется на ходу.
+; tmp_chars, tmp_glyphs — два слова дескриптора, разобранные
+;              один раз на символ (см. draw_char_512t).
 ; ---------------------------------------------------------------
-font_chars_512t:
-        defm    " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:().,?!@<>=&$#*+%;[]_"
-        defb    '"'
-        defb    0
+
+tmp_font:       defw    _gfx_font_thin
+tmp_chars:      defw    0
+tmp_glyphs:     defw    0
 
 ; ---------------------------------------------------------------
-; font_thin: 56 глифов по 8 байт.
-; Старшая тетрада = чётные пиксели, младшая = нечётные.
+; Тонкий шрифт 4x8 (режим 512x256).
+;
+; Данные по умолчанию — fonts/default_thin.inc. Путь разрешается
+; относительно каталога этого файла, передавать -I не нужно.
+;
+; Игра со своим шрифтом добавляет в SRCS модуль вида
+;
+;         SECTION code_clib
+;         PUBLIC  font_chars_512t
+;         PUBLIC  font_thin
+;
+;   font_chars_512t:
+;         defm    " ..."
+;         defb    0
+;   font_thin:
+;         defb    ...
+;
+; и собирается с -Ca-DFONT_EXTERNAL_512T: тогда вместо INCLUDE обе
+; метки объявляются как EXTERN и линкуются из того модуля.
+;
+; Второй вариант — не заменять шрифт по умолчанию, а добавить
+; в ROM ещё один дескриптор и переключать его gfx_select_font_512t.
 ; ---------------------------------------------------------------
-font_thin:
-        ; ' '
-        defb    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-        ; 'A'
-        defb    0x44, 0x6C, 0xAA, 0xAA, 0xEE, 0xAA, 0xAA, 0x00
-        ; 'B'
-        defb    0xEE, 0x5A, 0x5A, 0x6E, 0x5A, 0x5A, 0xEE, 0x00
-        ; 'C'
-        defb    0x66, 0x5A, 0x88, 0x88, 0x88, 0x5A, 0x66, 0x00
-        ; 'D'
-        defb    0xEC, 0x6A, 0x5A, 0x5A, 0x5A, 0x6A, 0xEC, 0x00
-        ; 'E'
-        defb    0xFE, 0x58, 0x68, 0x6C, 0x68, 0x58, 0xFE, 0x00
-        ; 'F'
-        defb    0xFE, 0x58, 0x68, 0x6C, 0x68, 0x48, 0xCC, 0x00
-        ; 'G'
-        defb    0x66, 0x5A, 0x88, 0x88, 0xBA, 0x5A, 0x76, 0x00
-        ; 'H'
-        defb    0xAA, 0xAA, 0xAA, 0xEE, 0xAA, 0xAA, 0xAA, 0x00
-        ; 'I'
-        defb    0x6C, 0x44, 0x44, 0x44, 0x44, 0x44, 0x6C, 0x00
-        ; 'J'
-        defb    0x36, 0x22, 0x22, 0x22, 0xAA, 0xAA, 0x6C, 0x00
-        ; 'K'
-        defb    0xDA, 0x5A, 0x6A, 0x6C, 0x6A, 0x5A, 0xDA, 0x00
-        ; 'L'
-        defb    0xCC, 0x48, 0x48, 0x48, 0x58, 0x5A, 0xFE, 0x00
-        ; 'M'
-        defb    0x9A, 0xFA, 0xFE, 0xFE, 0x9E, 0x9A, 0x9A, 0x00
-        ; 'N'
-        defb    0x9A, 0xDA, 0xDE, 0xBE, 0xBA, 0x9A, 0x9A, 0x00
-        ; 'O'
-        defb    0x64, 0x6A, 0x9A, 0x9A, 0x9A, 0x6A, 0x64, 0x00
-        ; 'P'
-        defb    0xEE, 0x5A, 0x5A, 0x6E, 0x48, 0x48, 0xCC, 0x00
-        ; 'Q'
-        defb    0x6C, 0xAA, 0xAA, 0xAA, 0xAE, 0x6C, 0x26, 0x00
-        ; 'R'
-        defb    0xEE, 0x5A, 0x5A, 0x6E, 0x6A, 0x5A, 0xDA, 0x00
-        ; 'S'
-        defb    0x6C, 0xAA, 0xC8, 0x4C, 0x26, 0xAA, 0x6C, 0x00
-        ; 'T'
-        defb    0xEE, 0xC6, 0x44, 0x44, 0x44, 0x44, 0x6C, 0x00
-        ; 'U'
-        defb    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xEE, 0x00
-        ; 'V'
-        defb    0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x6C, 0x44, 0x00
-        ; 'W'
-        defb    0x9A, 0x9A, 0x9A, 0x9E, 0xFE, 0xFA, 0x9A, 0x00
-        ; 'X'
-        defb    0x9A, 0x9A, 0x6A, 0x64, 0x64, 0x6A, 0x9A, 0x00
-        ; 'Y'
-        defb    0xAA, 0xAA, 0xAA, 0x6C, 0x44, 0x44, 0x6C, 0x00
-        ; 'Z'
-        defb    0xFE, 0x9A, 0xA2, 0x24, 0x54, 0x5A, 0xFE, 0x00
-        ; '0'
-        defb    0x6E, 0x9A, 0xBA, 0xBE, 0xDE, 0xDA, 0x6E, 0x00
-        ; '1'
-        defb    0x44, 0x4C, 0x44, 0x44, 0x44, 0x44, 0xEE, 0x00
-        ; '2'
-        defb    0x6C, 0xAA, 0x22, 0x64, 0x48, 0xAA, 0xEE, 0x00
-        ; '3'
-        defb    0x6C, 0xAA, 0x22, 0x64, 0x22, 0xAA, 0x6C, 0x00
-        ; '4'
-        defb    0x26, 0x66, 0x6A, 0xAA, 0xFE, 0x22, 0x36, 0x00
-        ; '5'
-        defb    0xEE, 0x88, 0xEC, 0x22, 0x22, 0xAA, 0x6C, 0x00
-        ; '6'
-        defb    0x64, 0x48, 0x88, 0xEC, 0xAA, 0xAA, 0x6C, 0x00
-        ; '7'
-        defb    0xEE, 0xAA, 0x22, 0x24, 0x44, 0x44, 0x44, 0x00
-        ; '8'
-        defb    0x6C, 0xAA, 0xAA, 0x6C, 0xAA, 0xAA, 0x6C, 0x00
-        ; '9'
-        defb    0x6C, 0xAA, 0xAA, 0x6E, 0x22, 0x24, 0x4C, 0x00
-        ; '-'
-        defb    0x00, 0x00, 0x00, 0xEE, 0x00, 0x00, 0x00, 0x00
-        ; ':'
-        defb    0x00, 0x44, 0x44, 0x00, 0x00, 0x44, 0x44, 0x00
-        ; '('
-        defb    0x24, 0x44, 0x48, 0x48, 0x48, 0x44, 0x24, 0x00
-        ; ')'
-        defb    0x48, 0x44, 0x24, 0x24, 0x24, 0x44, 0x48, 0x00
-        ; '.'
-        defb    0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x44, 0x00
-        ; ','
-        defb    0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x44, 0x48
-        ; '?'
-        defb    0x6C, 0xAA, 0x22, 0x24, 0x44, 0x00, 0x44, 0x00
-        ; '!'
-        defb    0x44, 0x44, 0x44, 0x44, 0x44, 0x00, 0x44, 0x00
-        ; '@'
-        defb    0x6E, 0x90, 0xB6, 0x94, 0xB6, 0x80, 0x6E, 0x00
-        ; '<'
-        defb    0x12, 0x24, 0x48, 0x80, 0x48, 0x24, 0x12, 0x00
-        ; '>'
-        defb    0x88, 0x44, 0x22, 0x10, 0x22, 0x44, 0x88, 0x00
-        ; '='
-        defb    0x00, 0x00, 0xEE, 0x00, 0xEE, 0x00, 0x00, 0x00
-        ; '&'
-        defb    0x44, 0x28, 0x44, 0x70, 0x0A, 0xA2, 0x5C, 0x00
-        ; '#'
-        defb    0x60, 0x60, 0xFE, 0x60, 0xFE, 0x60, 0x60, 0x00
-        ; '$'
-        defb    0x04, 0x7E, 0x8C, 0x6E, 0x16, 0xEE, 0x04, 0x00
-        ; '*'
-        defb    0x04, 0x0E, 0x64, 0xFE, 0x64, 0x0E, 0x04, 0x00
-        ; '+'
-        defb    0x04, 0x04, 0x04, 0xFE, 0x04, 0x04, 0x04, 0x00
-        ; '%'
-        defb    0xD8, 0xC2, 0xE8, 0x04, 0x72, 0x38, 0xB2, 0x00
-        ; ';'
-        defb    0x00, 0x00, 0x44, 0x44, 0x00, 0x44, 0x44, 0x48
-        ; '['
-        defb    0x66, 0x44, 0x44, 0x44, 0x44, 0x44, 0x66, 0x00
-        ; ']'
-        defb    0x66, 0x22, 0x22, 0x22, 0x22, 0x22, 0x66, 0x00
-        ; '_'
-        defb    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF
-        ; '"'
-        defb    0x5A, 0x5A, 0xAA, 0xA0, 0x00, 0x00, 0x00, 0x00
+
+        ifdef   FONT_EXTERNAL_512T
+        EXTERN  font_chars_512t
+        EXTERN  font_thin
+        else
+        INCLUDE "fonts/default_thin.inc"
+        endif
+
+
+; ---------------------------------------------------------------
+; Дескриптор шрифта по умолчанию. Структура gfx_font_t (v06.h):
+;
+;   word 0  адрес таблицы имён   (font_chars_512t, 0 = конец)
+;   word 1  адрес данных глифов  (font_thin)
+;   word 2  первый код символа   (first_code, младший байт)
+;   word 3  последний код        (last_code, младший байт)
+;
+; Слова 2 и 3 работают только при chars = 0 (прямой индекс), поэтому у
+; шрифта по умолчанию они заполнены нулём.
+;
+; ---------------------------------------------------------------
+
+_gfx_font_thin:
+        defw    font_chars_512t
+        defw    font_thin
+        defw    0
+        defw    0
