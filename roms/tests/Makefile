@@ -11,6 +11,7 @@ TESTS = 512x256 \
         dt2 \
         dt2_512 \
         dt2_lz \
+        fonts \
         scr_modes \
         tape_test
 
