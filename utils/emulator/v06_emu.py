@@ -392,6 +392,15 @@ class CPU8080:
 REGS = {'b':0,'c':1,'d':2,'e':3,'h':4,'l':5,'m':6,'a':7}
 RPS = {'b':0,'bc':0,'d':1,'de':1,'h':2,'hl':2,'sp':3}
 COND = {'nz':0,'z':1,'nc':2,'c':3,'po':4,'pe':5,'p':6,'m':7}
+# Условные коды op-кодов по номеру условия из COND.
+CCOPS = {'jp':[0xC2,0xCA,0xD2,0xDA,0xE2,0xEA,0xF2,0xFA],
+         'call':[0xC4,0xCC,0xD4,0xDC,0xE4,0xEC,0xF4,0xFC],
+         'ret':[0xC0,0xC8,0xD0,0xD8,0xE0,0xE8,0xF0,0xF8],
+         'rst':[0xCF,0xD7,0xDF,0xE7,0xEF,0xF7,0xFF,0xFF]}
+# Старые 8080-мнемоники, где условие зашито в само имя.
+CCNAME = {'jnz':'nz','jz':'z','jnc':'nc','jc':'c','jpo':'po','jpe':'pe','jm':'m',
+          'cnz':'nz','cz':'z','cnc':'nc','ccall':'c','cc':'c','cpo':'po','cpe':'pe','cm':'m',
+          'rnz':'nz','rz':'z','rnc':'nc','rc':'c','rpo':'po','rpe':'pe','rm':'m'}
 
 
 def strip_comment(s):
@@ -478,10 +487,12 @@ def assemble_instruction(line: str, symbols: dict[str,int], unresolved_zero=Fals
         if a=='a' and b=='(de)': return [0x1A]
         if b=='a' and a=='(bc)': return [0x02]
         if b=='a' and a=='(de)': return [0x12]
+        if b=='(hl)' and a in REGS: return [0x40 | (REGS[a]<<3) | 6]
+        if a=='(hl)' and b in REGS: return [0x40 | (6<<3) | REGS[b]]
+        if a=='(hl)': return [0x36, val(ops[1])]
         if a=='a' and b.startswith('('): return [0x3A, val(b[1:-1])&255, val(b[1:-1])>>8]
         if b=='a' and a.startswith('('): return [0x32, val(a[1:-1])&255, val(a[1:-1])>>8]
-        if b=='(hl)': return [0x40 | (REGS[a]<<3) | 6]
-        if a=='(hl)': return [0x40 | (6<<3) | REGS[b]]
+        if a in REGS and b in REGS: return [0x40 | (REGS[a]<<3) | REGS[b]]
         if a in REGS: return [0x06 | (REGS[a]<<3), val(ops[1])]
         if a in RPS: return [0x01 | (RPS[a]<<4), val(ops[1])&255, val(ops[1])>>8]
     if m == 'stax':
@@ -490,14 +501,16 @@ def assemble_instruction(line: str, symbols: dict[str,int], unresolved_zero=Fals
         x=ops[0].lower(); return [0x0A if x in ('b','bc') else 0x1A]
     if m in ('sta','lda','shld','lhld'):
         op={'sta':0x32,'lda':0x3A,'shld':0x22,'lhld':0x2A}[m]; n=val(ops[0]); return [op,n&255,n>>8]
-    if m in ('inr','inc') and len(ops)==1:
+    if m in ('inr','inc','inx') and len(ops)==1:
         x=ops[0].lower()
+        if x=='(hl)': return [0x34]
+        if x in RPS and (m == 'inx' or x not in ('b','d','h')): return [0x03 | (RPS[x]<<4)]
         if x in REGS: return [0x04 | (REGS[x]<<3)]
-        if x in RPS: return [0x03 | (RPS[x]<<4)]
-    if m in ('dcr','dec') and len(ops)==1:
+    if m in ('dcr','dec','dcx') and len(ops)==1:
         x=ops[0].lower()
+        if x=='(hl)': return [0x35]
+        if x in RPS and (m == 'dcx' or x not in ('b','d','h')): return [0x0B | (RPS[x]<<4)]
         if x in REGS: return [0x05 | (REGS[x]<<3)]
-        if x in RPS: return [0x0B | (RPS[x]<<4)]
     if m=='dad': return [0x09 | (RPS[ops[0].lower()]<<4)]
     if m in ('rlc','rlca'): return [0x07]
     if m in ('rrc','rrca'): return [0x0F]
@@ -507,20 +520,44 @@ def assemble_instruction(line: str, symbols: dict[str,int], unresolved_zero=Fals
         return {'xchg': [0xEB], 'xthl':[0xE3], 'pchl':[0xE9], 'stc':[0x37],
                 'cmc':[0x3F], 'cma':[0x2F], 'cpl':[0x2F], 'daa':[0x27],
                 'ei':[0xFB], 'di':[0xF3]}[m]
-    alu={'add':0x80,'adc':0x88,'sub':0x90,'sbb':0x98,'ana':0xA0,'xra':0xA8,'ora':0xB0,'cmp':0xB8}
+    alu={'add':0x80,'adc':0x88,'sub':0x90,'sbb':0x98,'ana':0xA0,'and':0xA0,
+         'xra':0xA8,'xor':0xA8,'ora':0xB0,'or':0xB0,'cmp':0xB8,'cp':0xB8}
     if m in alu:
+        if m=='add' and ops[0].lower()=='hl':      # z88dk «add hl, rr» = DAD rr
+            return [0x09 | (RPS[ops[1].lower()]<<4)]
         x=ops[-1].lower()
         if x in REGS: return [alu[m] | REGS[x]]
-        imm={'add':0xC6,'adc':0xCE,'sub':0xD6,'sbb':0xDE,'ana':0xE6,'xra':0xEE,'ora':0xF6,'cmp':0xFE}[m]
+        if x=='(hl)': return [alu[m] | 6]
+        imm={'add':0xC6,'adc':0xCE,'sub':0xD6,'sbb':0xDE,'ana':0xE6,'and':0xE6,
+             'xra':0xEE,'xor':0xEE,'ora':0xF6,'or':0xF6,'cmp':0xFE,'cp':0xFE}[m]
         n=val(ops[-1]); return [imm,n]
     if m in ('adi','aci','sui','sbi','ani','xri','ori','cpi'):
         return [{'adi':0xC6,'aci':0xCE,'sui':0xD6,'sbi':0xDE,'ani':0xE6,'xri':0xEE,'ori':0xF6,'cpi':0xFE}[m], val(ops[0])]
-    if m in ('jmp','jnz','jz','jnc','jc','jpo','jpe','jp','jm'):
-        op={'jmp':0xC3,'jnz':0xC2,'jz':0xCA,'jnc':0xD2,'jc':0xDA,'jpo':0xE2,'jpe':0xEA,'jp':0xF2,'jm':0xFA}[m]; n=val(ops[0]); return [op,n&255,n>>8]
-    if m in ('call','cc','cnz','cz','cnc','ccall','cpo','cpe','cp','cm'):
-        op={'call':0xCD,'cnz':0xC4,'cz':0xCC,'cnc':0xD4,'ccall':0xDC,'cc':0xDC,'cpo':0xE4,'cpe':0xEC,'cp':0xF4,'cm':0xFC}[m]; n=val(ops[0]); return [op,n&255,n>>8]
-    if m in ('ret','rnz','rz','rnc','rc','rpo','rpe','rp','rm'):
-        return [{'ret':0xC9,'rnz':0xC0,'rz':0xC8,'rnc':0xD0,'rc':0xD8,'rpo':0xE0,'rpe':0xE8,'rp':0xF0,'rm':0xF8}[m]]
+    # z88dk пишет условие отдельным аргументом: `jp nz, X`, `call z, X`, `ret c`.
+    # Старые 8080-мнемоники (`jnz`, `cnz`, `rnz`) остаются как синонимы.
+    kind = m if m in CCOPS else ('jp' if m == 'jmp' else None)
+    cc = None
+    if kind is None and m in CCNAME:
+        kind = {'j': 'jp', 'c': 'call', 'r': 'ret'}[m[0]]
+        cc = COND[CCNAME[m]]
+    if kind in CCOPS:
+        a = list(ops)
+        if kind == 'jp' and cc is None and not a:
+            return None                        # «jp p, X» требует условия
+        if cc is None and a and a[0].lower() in COND and len(a) == (1 if kind == 'ret' else 2):
+            cc = COND[a[0].lower()]
+            a = a[1:]
+        if kind == 'ret':
+            return [CCOPS['ret'][cc] if cc is not None else 0xC9]
+        if kind == 'jp' and cc is None and a[0].lower() == '(hl)':
+            return [0xE9]                      # PCHL
+        if kind == 'rst':
+            if not a: return None
+            return [(CCOPS['rst'][cc] if cc is not None else 0xC7) |
+                    ((val(a[0]) & 7) << 3)]
+        n = val(a[0])
+        op = CCOPS[kind][cc] if cc is not None else (0xC3 if kind == 'jp' else 0xCD)
+        return [op, n & 255, n >> 8]
     if m in ('push','pop'):
         x=ops[0].lower(); base=0xC5 if m=='push' else 0xC1
         if x=='psw': rp=3
@@ -528,7 +565,6 @@ def assemble_instruction(line: str, symbols: dict[str,int], unresolved_zero=Fals
         return [base | (rp<<4)]
     if m=='in': return [0xDB,val(ops[0])&255]
     if m=='out': return [0xD3,val(ops[0])&255]
-    if m=='rst': return [0xC7 | ((val(ops[0]) & 7)<<3)]
     return None
 
 

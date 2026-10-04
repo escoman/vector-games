@@ -60,6 +60,8 @@ endif # not clean
 # картинки), код программы, библиотеки и runtime. Пересобирает линковкой с
 # картой (-m), печатает отчёт utils/romconsist.py и удаляет карту. Позволяет
 # понять, что ужимать, когда ROM переваливает за 32 КБ.
+# KEEP_MAP=1 оставляет карту — по адресам символов из неё удобно снимать
+# состояние игры эмулятором.
 ROMCONSIST ?= $(PROJECT_ROOT)utils/romconsist.py
 CONSIST_MAP = $(TARGET:.rom=.map)
 
@@ -74,7 +76,7 @@ consist: $(TARGET)
 	    $(ZCC) $(ZFLAGS) -m $(SRCS) -o $(TARGET) >/dev/null 2>&1
 	@if [ -f "$(CONSIST_MAP)" ]; then \
 		python3 "$(ROMCONSIST)" "$(CONSIST_MAP)"; \
-		rm -f "$(CONSIST_MAP)"; \
+		if [ "$(KEEP_MAP)" != "1" ]; then rm -f "$(CONSIST_MAP)"; fi; \
 	else \
 		echo "consist: карта $(CONSIST_MAP) не создана (zcc -m не сработал?)"; \
 	fi

@@ -118,6 +118,19 @@ extern void gfx_print_512(unsigned char x, unsigned char y, const char *s,
 extern void gfx_print_512t(unsigned char x, unsigned char y, const char *s,
                            unsigned char color) __z88dk_callee;
 
+/* Плоскость сегментов (0xE000, вес 1). Реализация — lib/gfx/plane.asm.
+   Фон занимает только чётные индексы палитры, поэтому бит 0 плоскости веса 1
+   в фоне сброшен везде: OR выставляет сегмент, AND-NOT тем же массивом
+   стирает его, возвращая ровно биты фона. Один массив данных служит и для
+   рисования, и для стирания. Плоскость веса 1 должна быть активна
+   (GFX_MODE_256_16 или GFX_MODE_256_2).
+
+   Формат массива: [0] x0 (кратен 8), [1] y0, [2] wb (ширина в байтах),
+   [3] h (строк), далее wb*h байт маски колонками сверху вниз.
+   Требования: x0 кратно 8, y0 + h <= 256, x0 + wb*8 <= 256. */
+extern void gfx_plane_or(const unsigned char *src);
+extern void gfx_plane_andn(const unsigned char *src);
+
 
 /* ----------------------------- Шрифты ------------------------------ */
 
@@ -177,6 +190,14 @@ extern void gfx_rle_expand_512(const unsigned char *src);
 
 /* LZ-тайловая распаковка (bmp2inc_lz.py format) */
 extern void gfx_lz_expand(const unsigned char *src);
+
+/* Распаковщик ZX0 «standard» (lib/unpack/zx0.asm). src — сжатый поток,
+ * dst — буфер размером не меньше исходных данных; длину результата
+ * декодер не знает (конец — маркер EOF в потоке), её хранит вызывающий.
+ * Пишет в dst линейно по возрастанию адреса, области не должны
+ * пересекаться и src должен лежать ниже dst.
+ * Стандартное соглашение: стек чистит вызывающий. */
+extern void zx0_decompress(const unsigned char *src, unsigned char *dst);
 
 
 
@@ -361,12 +382,6 @@ typedef struct {
     const unsigned char * const *samples;
 } music_csong_t;
 
-/* Распаковщик ZX0 «standard» (lib/unpack/zx0.asm). src — сжатый поток,
- * dst — буфер размером не меньше исходных данных; длину результата
- * декодер не знает (конец — маркер EOF в потоке), её хранит вызывающий.
- * Стандартное соглашение: стек чистит вызывающий. */
-extern void zx0_decompress(const unsigned char *src, unsigned char *dst);
-
 extern void music_set_data(const music_song_t *song);
 extern void music_start(void);
 extern void music_pause(void);
@@ -464,6 +479,12 @@ extern unsigned char kbd_scan(void);            /* опрос матрицы    
 extern void kbd_scan_now(void);                 /* снимок в ISR          */
 extern unsigned char kbd_read(void);            /* декод. последний снимок*/
 extern void kbd_wait_key(unsigned char key);    /* ждать нажатия         */
+
+/* Снимок матрицы после kbd_scan()/kbd_scan_now(): 8 байт, строки, бит 1 =
+ * клавиша нажата (колонка = номер бита). kbd_scan()/kbd_read() отдают только
+ * ПЕРВУЮ нажатую клавишу, а игре нужно следить за несколькими
+ * одновременно: тогда читаем kbd_rows[] и снимаем фронты сами. */
+extern unsigned char kbd_rows[8];
 
 /* Коды служебных и специальных клавиш, возвращаемые kbd_scan()/kbd_read().
  * Числовые значения соответствуют матричной таблице kbd_codes в
