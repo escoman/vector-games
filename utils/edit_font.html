@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Font Editor — Vector-06C</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;font-size:14px;color:#e0e0e0;background:#1e1e1e;padding:14px}
+h1{font-size:16px;font-weight:600;margin-bottom:10px}
+h2{font-size:13px;font-weight:600;margin:0 0 8px;color:#9cdcfe}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.col{min-width:0}
+.panel{background:#252526;border:1px solid #3c3c3c;border-radius:6px;padding:10px;margin-bottom:12px}
+button,select,input[type=text]{padding:5px 10px;background:#2a2a2a;color:#e0e0e0;border:1px solid #444;
+  border-radius:4px;cursor:pointer;font-size:12px;font-family:monospace}
+button:hover{background:#333}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:#2d5a2d;color:#4ec9b0;border-color:#4ec9b0}
+button.primary:hover{background:#3a6e3a}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.badge{font-size:11px;color:#dcdcaa}
+.badge b{color:#4ec9b0}
+.status{font-size:12px;margin-left:6px}
+.status.ok{color:#4ec9b0}.status.err{color:#f48771}.status.warn{color:#cca700}
+#gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px;max-height:60vh;overflow:auto}
+.thumb{background:#1e1e1e;border:1px solid #3c3c3c;border-radius:4px;padding:4px;cursor:pointer;text-align:center}
+.thumb:hover{border-color:#569cd6}
+.thumb.sel{border-color:#4ec9b0;background:#20303a}
+.thumb canvas{image-rendering:pixelated;display:block;margin:0 auto 2px}
+.thumb .cap{font-size:10px;color:#888;line-height:1.2}
+.thumb .cap b{color:#dcdcaa;font-size:12px}
+/* редактор-сетка */
+.legend{display:flex;gap:12px;margin:4px 0;font-size:10px;color:#888}
+.legend-item{display:flex;align-items:center;gap:4px}
+.dot{width:10px;height:10px;border-radius:2px}
+.ed-grid{display:inline-grid;gap:1px;margin-top:6px}
+.cell{width:26px;height:26px;background:#252525;border:1px solid #444;cursor:pointer;user-select:none}
+.cell.on-r{background:#4ec9b0;border-color:#4ec9b0}
+.cell.on-e{background:#569cd6;border-color:#569cd6}
+.cell.on-o{background:#cca700;border-color:#cca700}
+.cell.div{border-left:2px solid #cca700}
+.asm-out{font-family:monospace;font-size:12px;color:#4ec9b0;background:#1e1e1e;padding:6px 10px;
+  border-radius:4px;white-space:pre-wrap;border:1px solid #444;word-break:break-all;margin-top:8px}
+.note{font-size:11px;color:#888;margin-top:8px;line-height:1.6}
+#previewCanvas{image-rendering:pixelated;background:#000;border:1px solid #444;border-radius:4px;margin-top:8px}
+.field{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.field label{font-size:11px;color:#888}
+#previewText{flex:1;min-width:220px}
+.hint{font-size:11px;color:#777;margin-top:6px}
+kbd{background:#333;border:1px solid #555;border-radius:3px;padding:0 4px;font-size:10px}
+</style>
+</head>
+<body>
+<h1>Font Editor — Vector-06C <span style="color:#888;font-size:12px">(шрифты pr.asm / pr512.asm / pr512t.asm)</span></h1>
+
+<div class="panel">
+  <div class="toolbar">
+    <input type="file" id="fileInput" accept=".inc,.asm,.list,.txt" style="display:none">
+    <button class="primary" onclick="document.getElementById('fileInput').click()">Открыть .inc…</button>
+    <button id="saveBtn" onclick="saveFont()" disabled>Сохранить (скачать)</button>
+    <span class="badge" id="fmtBadge"></span>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="note">
+    Открываете inc-файл шрифта — формат определяется по меткам (<b>font_chars</b>+<b>font8x8</b> ·
+    <b>font_chars_512</b>+<b>font16x8</b> · <b>font_chars_512t</b>+<b>font_thin</b>). Глифы редактируются в сетке,
+    ниже — превью набранного текста. Сохранение отдаёт изменённый файл через загрузку браузера
+    (перезаписать по пути браузер не может — скачанный файл положите вместо старого).
+    Комментарии, таблица имён и вёрстка строк сохраняются как были; меняются только байты глифов.
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="panel">
+      <h2>Глифы шрифта <span id="galCount" style="color:#888;font-weight:400"></span></h2>
+      <div id="gallery"></div>
+    </div>
+  </div>
+  <div class="col" style="flex:1">
+    <div class="panel">
+      <h2>Редактор глифа <span id="edCap" style="color:#dcdcaa;font-weight:400"></span></h2>
+      <div class="toolbar">
+        <button id="prevBtn" onclick="stepGlyph(-1)" disabled>◀ пред.</button>
+        <button id="nextBtn" onclick="stepGlyph(1)" disabled>след. ▶</button>
+        <button id="clearBtn" onclick="clearGlyph()" disabled>Очистить</button>
+        <button id="flipHBtn" onclick="flipGlyphH()" disabled>↔</button>
+        <button id="flipVBtn" onclick="flipGlyphV()" disabled>↕</button>
+      </div>
+      <div id="edLegend"></div>
+      <div id="editor" style="min-height:40px;color:#666;font-size:12px">Откройте файл…</div>
+      <div id="edOut"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Превью текста</h2>
+      <div class="field">
+        <label>Текст:</label>
+        <input type="text" id="previewText" oninput="renderPreview()"
+               placeholder="наберите текст, например ABC-0123">
+        <label><input type="checkbox" id="pvInk" onchange="renderPreview()" checked style="width:auto"> цвет even/odd</label>
+      </div>
+      <div><canvas id="previewCanvas"></canvas></div>
+      <div class="hint" id="pvHint"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   ЯДРО (чистые функции, без DOM): разбор .inc, round-trip, decode/encode
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Спецификации трёх форматов. Порядок проверки важен: метка font_chars
+   не должна схлопнуться с font_chars_512 — регулярки якорятся на ':'. */
+const SPECS = [
+  {mode:'8x8t', stride:8,  cols:8,  charsLabel:'font_chars_512t', dataLabel:'font_thin'},
+  {mode:'16x8', stride:16, cols:16, charsLabel:'font_chars_512',  dataLabel:'font16x8'},
+  {mode:'8x8',  stride:8,  cols:8,  charsLabel:'font_chars',      dataLabel:'font8x8'},
+];
+
+/* Строка без комментария, начинается с метки (label:)? */
+function isLabelLine(code){ return /^\s*[A-Za-z_$][\w$.]*\s*:/.test(code); }
+/* Мнемоника данных defb/defw/defm/db/dw/fdb/byte? */
+const RE_MNEM = /\b(defb|defw|defm|db|dw|fdb|byte|text)\b/i;
+
+/* Разобрать числовой токен: 0xNN, NNb, 'c', DEC → {value, hexStyle} */
+function parseTok(tok){
+  let m;
+  if(m=tok.match(/^0[xX]([0-9a-fA-F]{1,2})$/)) return {value:parseInt(m[1],16), hex:true};
+  if(m=tok.match(/^([01][01]*)b$/i))           return {value:parseInt(m[1],2),  hex:true};
+  if(m=tok.match(/^'(.+)'$/))                  return {value:m[1].charCodeAt(0), hex:true};
+  if(m=tok.match(/^'\\(.)'$/)){ const esc={'0':0,'n':10,'r':13,'t':9};
+                               return {value: esc[m[1]]!==undefined?esc[m[1]]:m[1].charCodeAt(0), hex:true}; }
+  if(m=tok.match(/^(\d+)$/))                   return {value:parseInt(m[1],10), hex:false};
+  return null;
+}
+
+/* Строка без комментария; ';' внутри кавычек — не комментарий. */
+function stripComment(line){
+  let q=null;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(q){ if(ch===q) q=null; continue; }
+    if(ch==='"'||ch==="'"){ q=ch; continue; }
+    if(ch===';') return line.slice(0,i);
+  }
+  return line;
+}
+
+/* Собрать токен обратно в текст, сохраняя стиль оригинала. */
+function fmtTok(origText, value){
+  if(/^0[xX]/.test(origText)){
+    const width = origText.length - 2;            // сколько цифр было (0xNN → 2)
+    return '0x'+value.toString(16).toUpperCase().padStart(width,'0');
+  }
+  if(/^\d+$/.test(origText)) return String(value);
+  return origText; // литерал-символ — не трогаем
+}
+
+/* Разбор одного «сегмента данных» строки (после мнемоники, до ';').
+   Возвращает {nums:[{start,len,text,value,hex}], strBytes:[{code}], } */
+function scanDataSegment(line){
+  const code = stripComment(line);
+  const out = {nums:[], strBytes:[]};
+  if(isLabelLine(code)) return out;
+  const mn = code.match(RE_MNEM);
+  if(!mn) return out;
+  let i = mn.index + mn[0].length;
+  const rest = code.slice(i);
+  const base = i;
+  // строковый литерал в кавычках — только у defm/text (defb '"' — это символ)
+  const isStr = /^(defm|text)$/i.test(mn[1]);
+  const sm = isStr ? rest.match(/"([^"]*)"/) : null;
+  if(sm){
+    for(const ch of sm[1]) out.strBytes.push({code: ch.charCodeAt(0)});
+  }
+  // числовые токены вне кавычек
+  const reNum = /0[xX][0-9a-fA-F]{1,2}\b|[01]+\s*b\b|'(\\.|[^'])'|[A-Za-z]|\d+\b/g;
+  let m;
+  while((m=reNum.exec(rest))){
+    // пропускаем токены, попавшие внутрь кавычек
+    if(sm){ const qs=sm.index, qe=sm.index+sm[0].length;
+            if(m.index>=qs && m.index<qe) continue; }
+    const tok=m[0];
+    if(/^[A-Za-z]$/.test(tok)) continue;        // не одиночные буквы-«шум»
+    const p=parseTok(tok);
+    if(p) out.nums.push({start:base+m.index, len:tok.length, text:tok, value:p.value, hex:p.hex});
+  }
+  return out;
+}
+
+function parseInc(text){
+  const lines = text.split('\n');
+  const findLine = lbl => {
+    const re = new RegExp('^\\s*'+lbl+'\\s*:');
+    for(let k=0;k<lines.length;k++) if(re.test(lines[k])) return k;
+    return -1;
+  };
+  let spec=null, charsAt=-1, dataAt=-1;
+  for(const s of SPECS){
+    const ca=findLine(s.charsLabel), da=findLine(s.dataLabel);
+    if(ca>=0 && da>=0){ spec=s; charsAt=ca; dataAt=da; break; }
+  }
+  if(!spec) return {ok:false, error:'Формат не распознан. Нужно определить метки '
+      +'font_chars+font8x8, font_chars_512+font16x8 или font_chars_512t+font_thin.'};
+  if(dataAt<charsAt) return {ok:false, error:'Метка данных раньше таблицы символов — неожиданный порядок.'};
+
+  // ── таблица имён (chars) ──
+  const charVals=[];
+  for(let k=charsAt+1;k<dataAt;k++){
+    const seg=scanDataSegment(lines[k]);
+    for(const sb of seg.strBytes) charVals.push(sb.code);
+    for(const n of seg.nums)      charVals.push(n.value);
+  }
+  const z=charVals.indexOf(0);
+  const chars = (z>=0? charVals.slice(0,z) : charVals).slice();
+  if(chars.length===0) return {ok:false, error:'Таблица символов пуста.'};
+
+  // ── блок глифов (values) с позициями токенов для round-trip ──
+  const values=[]; const tokens=[]; // tokens параллельно values
+  for(let k=dataAt;k<lines.length;k++){
+    if(k===dataAt){ // строку метки данных пропускаем целиком
+      continue;
+    }
+    const seg=scanDataSegment(lines[k]);
+    for(const sb of seg.strBytes){ values.push(sb.code); tokens.push(null); }
+    for(const n of seg.nums){ values.push(n.value); tokens.push({line:k, ...n}); }
+  }
+
+  const need = chars.length*spec.stride;
+  if(values.length!==need){
+    return {ok:false, error:`Несоответствие: символов ${chars.length}, ожидалось `
+        +`глиф-байтов ${need} (×${spec.stride}), найдено ${values.length}. Файл не загружен.`};
+  }
+
+  return {ok:true, mode:spec.mode, stride:spec.stride, cols:spec.cols, rows:8,
+          charsLabel:spec.charsLabel, dataLabel:spec.dataLabel,
+          chars, values, tokens, lines, text};
+}
+
+/* Пересобрать текст с новыми байтами глифов; меняем только токены блока данных. */
+function reserialize(font, newValues){
+  const out = font.lines.slice();
+  // сгруппировать токены по строкам, идущим слева направо
+  const byLine = {};
+  font.tokens.forEach((tk,i)=>{ if(tk){ (byLine[tk.line] ||= []).push({tk,i}); }});
+  for(const lineIdx of Object.keys(byLine)){
+    const L=+lineIdx; const arr=byLine[lineIdx].sort((a,b)=>a.tk.start-b.tk.start);
+    let src=out[L], res='', pos=0;
+    for(const {tk,i} of arr){
+      res += src.slice(pos, tk.start);
+      res += fmtTok(tk.text, newValues[i]);
+      pos = tk.start + tk.len;
+    }
+    res += src.slice(pos);
+    out[L]=res;
+  }
+  return out.join('\n');
+}
+
+/* ── decode/encode одного глифа (как в edit_glyph.html) ── */
+function decodeGlyph(font, g){
+  const rows=8, cols=font.cols;
+  const px=Array.from({length:rows},()=>Array(cols).fill(0));
+  const base=g*font.stride, v=font.values;
+  if(font.mode==='8x8' || font.mode==='8x8t'){
+    for(let i=0;i<8;i++){ const b=v[base+i], r=7-i;
+      if(font.mode==='8x8'){ for(let c=0;c<8;c++) px[r][c]=(b>>(7-c))&1; }
+      else { const hi=b&0xF0, lo=b&0x0F;
+             for(let k=0;k<4;k++){ px[r][k*2]=(hi>>(7-k))&1; px[r][k*2+1]=(lo>>(3-k))&1; } }
+    }
+  } else { // 16x8
+    for(let i=0;i<8;i++){ const eb=v[base+i*2], ob=v[base+i*2+1], r=7-i;
+      for(let j=0;j<8;j++){ px[r][j*2]=(eb>>(7-j))&1; px[r][j*2+1]=(ob>>(7-j))&1; } }
+  }
+  return px;
+}
+
+function encodeGlyph(font, px){
+  const bytes=new Array(font.stride);
+  if(font.mode==='8x8'){
+    for(let i=0;i<8;i++){ const r=7-i; let b=0;
+      for(let c=0;c<8;c++) if(px[r][c]) b|=128>>c; bytes[i]=b; }
+  } else if(font.mode==='8x8t'){
+    for(let i=0;i<8;i++){ const r=7-i; let hi=0, lo=0;
+      for(let k=0;k<4;k++){ if(px[r][k*2])   hi|=0x80>>k; if(px[r][k*2+1]) lo|=0x08>>k; }
+      bytes[i]=(hi&0xF0)|(lo&0x0F); }
+  } else { // 16x8
+    for(let i=0;i<8;i++){ const r=7-i; let eb=0, ob=0;
+      for(let j=0;j<8;j++){ if(px[r][j*2])   eb|=128>>j; if(px[r][j*2+1]) ob|=128>>j; }
+      bytes[i*2]=eb; bytes[i*2+1]=ob; }
+  }
+  return bytes;
+}
+
+window.FontCore={parseInc,reserialize,decodeGlyph,encodeGlyph};
+
+/* ══════════════════════════════════════════════════════════════════
+   UI
+   ══════════════════════════════════════════════════════════════════ */
+let FONT=null;          // разобранный шрифт
+let SEL=-1;             // индекс выбранного глифа
+let px=[];              // пиксели редактируемого глифа
+let dirty=false;
+
+const $=id=>document.getElementById(id);
+const toHex=n=>'0x'+n.toString(16).toUpperCase().padStart(2,'0');
+const charName=c=>c===0x20?'␣':(c===0x22?'\"':String.fromCharCode(c));
+
+function setStatus(msg,cls){ const s=$('status'); s.textContent=msg||''; s.className='status '+(cls||''); }
+
+document.getElementById('fileInput').addEventListener('change', ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>loadFromText(reader.result, f.name);
+  reader.readAsText(f);
+  ev.target.value='';
+});
+
+function loadFromText(text, name){
+  const r=parseInc(text);
+  if(!r.ok){ FONT=null; setStatus(r.error,'err'); $('fmtBadge').textContent='';
+             $('gallery').innerHTML=''; $('editor').textContent='Откройте файл…';
+             $('saveBtn').disabled=true; renderPreview(); return; }
+  r.name=name; FONT=r; SEL=-1; dirty=false;
+  $('fmtBadge').innerHTML=`формат <b>${fmtLabel(r.mode)}</b> · глифов <b>${r.chars.length}</b> · `
+    +`шаг <b>${r.stride}</b> Б · файл <b>${name}</b>`;
+  setStatus('формат распознан, файл загружен','ok');
+  buildGallery();
+  selectGlyph(0);
+  $('saveBtn').disabled=false;
+  ['prevBtn','nextBtn','clearBtn','flipHBtn','flipVBtn'].forEach(id=>$(id).disabled=false);
+  renderPreview();
+}
+
+function fmtLabel(m){ return m==='8x8'?'8×8 (pr.asm)':m==='16x8'?'16×8 (pr512.asm)':'4×8 thin (pr512t.asm)'; }
+
+/* ── галерея миниатюр ── */
+function drawGlyphCanvas(cv, g, cell, perColor){
+  const save=FONT.values; // рисуем из текущего состояния, но SEL может быть изменён
+  const pxg = (g===SEL)? px : decodeGlyph(FONT,g);
+  const cols=FONT.cols, rows=8;
+  cv.width=cols*cell; cv.height=rows*cell;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    if(!pxg[r][c]) continue;
+    ctx.fillStyle = perColor ? (c%2===0?'#569cd6':'#cca700') : '#4ec9b0';
+    ctx.fillRect(c*cell,(rows-1-r)*cell,cell,cell); // ряд 0 — снизу, рисуем сверху вниз
+  }
+}
+
+function buildGallery(){
+  const gal=$('gallery'); gal.innerHTML='';
+  $('galCount').textContent=`(${FONT.chars.length})`;
+  FONT.chars.forEach((code,i)=>{
+    const d=document.createElement('div'); d.className='thumb'; d.dataset.i=i;
+    const cv=document.createElement('canvas');
+    const cap=document.createElement('div'); cap.className='cap';
+    cap.innerHTML=`<b>${charName(code)}</b><br>0x${code.toString(16).toUpperCase()} · #${i}`;
+    d.appendChild(cv); d.appendChild(cap);
+    d.addEventListener('click',()=>selectGlyph(i));
+    gal.appendChild(d);
+    drawGlyphCanvas(cv,i,5,FONT.mode!=='8x8');
+  });
+}
+function refreshThumb(i){
+  const d=$('gallery').querySelector(`.thumb[data-i="${i}"]`); if(!d) return;
+  drawGlyphCanvas(d.querySelector('canvas'),i,5,FONT.mode!=='8x8');
+}
+
+/* ── редактор выбранного глифа ── */
+function selectGlyph(i){
+  if(!FONT||i<0||i>=FONT.chars.length) return;
+  if(SEL>=0 && SEL!==i && dirty) commitGlyph();  // зафиксировать предыдущий
+  SEL=i; px=decodeGlyph(FONT,i);
+  $('gallery').querySelectorAll('.thumb').forEach(e=>e.classList.toggle('sel',+e.dataset.i===i));
+  $('edCap').textContent=`— ${charName(FONT.chars[i])}  (0x${FONT.chars[i].toString(16).toUpperCase()}, #${i})`;
+  buildEditor();
+  updateEdOut();
+  const cur=$('gallery').querySelector(`.thumb[data-i="${i}"]`);
+  if(cur) cur.scrollIntoView({block:'nearest'});
+}
+
+function buildEditor(){
+  const box=$('editor'); box.innerHTML='';
+  const cols=FONT.cols;
+  const legend=$('edLegend');
+  if(FONT.mode==='8x8') legend.innerHTML='';
+  else if(FONT.mode==='16x8')
+    legend.innerHTML='<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even (E000)</div>'
+      +'<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd (C000)</div></div>';
+  else
+    legend.innerHTML='<div class="legend"><div class="legend-item"><div class="dot" style="background:#569cd6"></div>even (старшая тетрада)</div>'
+      +'<div class="legend-item"><div class="dot" style="background:#cca700"></div>odd (младшая тетрада)</div></div>';
+  const grid=document.createElement('div'); grid.className='ed-grid';
+  grid.style.gridTemplateColumns=`repeat(${cols},26px)`;
+  for(let r=7;r>=0;r--) for(let c=0;c<cols;c++){
+    const cell=document.createElement('div'); cell.className='cell';
+    if(FONT.mode==='16x8'&&c===8) cell.classList.add('div');
+    cell.dataset.r=r; cell.dataset.c=c;
+    cell.addEventListener('click',ev=>togglePixel(r,c,ev));
+    grid.appendChild(cell);
+  }
+  box.appendChild(grid);
+  paintEditor();
+}
+
+function paintEditor(){
+  const cells=$('editor').querySelectorAll('.cell');
+  const cols=FONT.cols;
+  for(const cell of cells){
+    const r=+cell.dataset.r, c=+cell.dataset.c;
+    cell.className='cell';
+    if(FONT.mode==='16x8'&&c===8) cell.classList.add('div');
+    if(px[r][c]) cell.classList.add(FONT.mode==='8x8'?'on-r':(c%2===0?'on-e':'on-o'));
+  }
+}
+
+/* клик: paint — рисует/тирает по текущему инструменту (drag-рисование) */
+let drawMode=null;
+function togglePixel(r,c,ev){
+  const v=px[r][c];
+  // при drag первый клик задаёт режим (1->0 или 0->1)
+  if(ev.buttons!==undefined && drawMode===null) drawMode = v?0:1;
+  px[r][c]=drawMode!==null?drawMode:(v?0:1);
+  dirty=true; paintEditor(); updateEdOut(); refreshThumb(SEL); renderPreview();
+}
+window.addEventListener('mouseup',()=>{ drawMode=null; });
+
+function commitGlyph(){
+  if(SEL<0) return;
+  const bytes=encodeGlyph(FONT,px);
+  const base=SEL*FONT.stride;
+  for(let i=0;i<FONT.stride;i++) FONT.values[base+i]=bytes[i];
+  dirty=false;
+}
+
+function clearGlyph(){ px=Array.from({length:8},()=>Array(FONT.cols).fill(0));
+  dirty=true; paintEditor(); updateEdOut(); refreshThumb(SEL); renderPreview(); }
+function flipGlyphH(){ for(let r=0;r<8;r++) px[r].reverse();
+  dirty=true; paintEditor(); updateEdOut(); refreshThumb(SEL); renderPreview(); }
+function flipGlyphV(){ px.reverse(); dirty=true; paintEditor(); updateEdOut(); refreshThumb(SEL); renderPreview(); }
+
+function stepGlyph(d){ const n=SEL+d; if(n>=0&&n<FONT.chars.length){ if(dirty)commitGlyph(); selectGlyph(n);} }
+
+function updateEdOut(){
+  const bytes=encodeGlyph(FONT,px);
+  let s;
+  if(FONT.mode==='16x8'){
+    const l1=bytes.slice(0,8).map(toHex).join(', ');
+    const l2=bytes.slice(8,16).map(toHex).join(', ');
+    s=`defb    ${l1}\n        defb    ${l2}`;
+  } else {
+    s='defb    '+bytes.map(toHex).join(', ');
+  }
+  $('edOut').innerHTML=`<div class="asm-label" style="font-size:11px;color:#888;margin-top:8px">`
+    +`Байты глифа (можно копировать/вставлять):</div><div class="asm-out" contenteditable="true" `
+    +`onblur="importEdOut(this.textContent)">${s}</div>`;
+}
+
+function importEdOut(text){
+  const re=/0[xX][0-9a-fA-F]{1,2}|\b\d+\b/g; let m; const got=[];
+  while((m=re.exec(text))) got.push(parseInt(m[0],16));
+  if(got.length<FONT.stride){ updateEdOut(); return; }
+  // собрать пиксели из байт напрямую
+  const tmp={mode:FONT.mode,cols:FONT.cols,stride:FONT.stride,values:got};
+  const saved=FONT.values; FONT.values=got; const decoded=decodeGlyph(FONT,0);
+  FONT.values=saved;
+  px=decoded; dirty=true; paintEditor(); refreshThumb(SEL); renderPreview();
+}
+
+/* ── превью текста ── */
+function renderPreview(){
+  const cv=$('previewCanvas'); const ctx=cv.getContext('2d');
+  if(!FONT){ cv.width=0;cv.height=0; $('pvHint').textContent=''; return; }
+  const txt=$('previewText').value;
+  const cell=4, gapCells=1;                 // межглифный зазор в клетках
+  const cols=FONT.cols, rows=8;
+  const advance=cols+gapCells;              // шаг в клетках
+  const width=Math.max(1, txt.length*advance*cell);
+  cv.width=width; cv.height=rows*cell;
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
+  const perColor=$('pvInk').checked && FONT.mode!=='8x8';
+  let unknown=0;
+  for(let t=0;t<txt.length;t++){
+    const code=txt.charCodeAt(t);
+    let idx=FONT.chars.indexOf(code);
+    if(idx<0){ unknown++; idx=0; }        // контракт: неизвестный → глиф 0
+    const g=decodeGlyph(FONT,idx);
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+      if(!g[r][c]) continue;
+      ctx.fillStyle=perColor?(c%2===0?'#569cd6':'#cca700'):(idx===0&&FONT.chars.indexOf(code)<0?'#552222':'#4ec9b0');
+      ctx.fillRect((t*advance+c)*cell,(rows-1-r)*cell,cell,cell);
+    }
+  }
+  $('pvHint').textContent = txt.length
+     ? (`${txt.length} симв., ${unknown} вне таблицы (показаны глифом 0)`) : '';
+}
+
+/* ── сохранение ── */
+function saveFont(){
+  if(!FONT) return;
+  if(dirty) commitGlyph();
+  // пересобрать values из текущих пикселей для всех глифов не нужно:
+  // values уже актуальны для незагруженных — обновим выбранный
+  const text=reserialize(FONT, FONT.values);
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=FONT.name||'font.inc';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  setStatus('файл скачан — замените старый','ok');
+}
+
+/* ── горячие клавиши ── */
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.isContentEditable) return;
+  if(!FONT) return;
+  if(e.key==='ArrowLeft') { stepGlyph(-1); e.preventDefault(); }
+  if(e.key==='ArrowRight'){ stepGlyph(1);  e.preventDefault(); }
+});
+</script>
+</body>
+</html>
