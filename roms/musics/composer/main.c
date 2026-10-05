@@ -352,9 +352,15 @@ void playback_start(void)
         }
     }
 
-    /* Запуск */
-    play_mode = PLAY_ALL;
-    frame_handler = on_frame;
+    /* Запуск. Сначала стартуем транспорт (music_start_* ставит
+     * g_playing = 1), и только потом взводим play_mode и кадровый
+     * обработчик. Иначе прерывание 50 Гц, пришедшее в окно между
+     * frame_handler = on_frame и фактическим стартом, увидит
+     * play_mode != PLAY_NONE при music_is_playing() == 0 и ложно
+     * примет его за конец партитуры: playback_stop() сбросит
+     * play_mode и обнулит frame_handler — звук не пойдёт, а
+     * playback_toggle() вернёт PLAY_ERROR (экран зависнет в ожидании
+     * АП2 без всякого сообщения об ошибке). */
     drum_init();
     music_set_data(&song);
     music_set_loop(0);
@@ -367,6 +373,9 @@ void playback_start(void)
         music_start_ay();
     else
         music_start_vi53();
+
+    play_mode = PLAY_ALL;
+    frame_handler = on_frame;
 }
 
 /* ------------------------- Главный экран --------------------------- */
