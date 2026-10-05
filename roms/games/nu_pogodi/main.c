@@ -195,9 +195,11 @@ static const unsigned char * const life_blob[3] = {
 /* ----------------------------------------------------------------------- */
 
 /* Каждый выводимый объект занимает один слот. В слоте лежит массив, который
- * сейчас в плоскости, либо 0. Перерисовка = AND-NOT старого и OR нового,
- * поэтому сегменты никогда не наслаиваются друг на друга и не оставляют
- * «трупа» после стирания. */
+ * сейчас в плоскости, либо 0. Перерисовка = AND-NOT старого и OR нового, так
+ * что «трупа» после стирания не остаётся. Но плоскость сегментов ОДНА, а
+ * спрайты перекрываются (корзина волка и яйцо у края): AND-NOT стирает не
+ * только свой бит, но и пиксели соседа. Поэтому после стирания сосед
+ * перекладывается заново — см. slot_put() и overlap_mate(). */
 #define SLOT_WOLF_BODY  0
 #define SLOT_WOLF_BASK  1
 #define SLOT_RABBIT     2
@@ -212,13 +214,57 @@ static const unsigned char * const life_blob[3] = {
 
 static const unsigned char *slot_blob[SLOT_COUNT];
 
+/* Какой сегмент попадает под стирание blob: вернуть его битмап и записать в
+ * *which его слот; 0 — перекрываний нет.
+ *
+ * В этой игре перекрытий ровно три, и все — корзина волка с яйцом у края
+ * СВОЕГО жёлоба: baskettopright/eggrighttop4 3 общих пикселя,
+ * basketbottomright/eggrightbottom4 15, basketbottomleft/eggleftbottom4 1
+ * (замер всех пар спрайтов — .scratch/overlap_report.py). Цифры перекрываются
+ * только друг с другом в одном разряде, а это один слот — там стирание и OR
+ * идут в правильном порядке. Заяц, туловище волка, цыплёнок и жизни не
+ * перекрываются ни с чем.
+ *
+ * Поэтому перекладывается конкретный сосед, а не сканируются все слоты: полный
+ * скан с перекладкой всех, чьи прямоугольники попали под стирание, стоил
+ * примерно кадр луча на каждый кадр, когда волк идёт. Если арти изменится,
+ * список перекрытий надо замерить заново. */
+static const unsigned char *overlap_mate(const unsigned char *blob,
+                                        unsigned char *which)
+{
+    unsigned char p;
+
+    for (p = 0; p < 4; p++) {
+        if (blob == wolf_basket[p]) {
+            *which = (unsigned char)(SLOT_EGGS + p * 5 + GROOVE_LAST);
+            return egg_blob[(unsigned char)(p * 5 + GROOVE_LAST)];
+        }
+        if (blob == egg_blob[(unsigned char)(p * 5 + GROOVE_LAST)]) {
+            *which = SLOT_WOLF_BASK;
+            return wolf_basket[p];
+        }
+    }
+    return 0;
+}
+
 /* Поставить в слот новый битмап (HIDE — просто стереть). */
 static void slot_put(unsigned char which, const unsigned char *blob)
 {
+    const unsigned char *old, *mate;
+    unsigned char mate_slot = 0;
+
     if (slot_blob[which] == blob)
         return;
-    if (slot_blob[which])
-        gfx_plane_andn(slot_blob[which]);
+    old = slot_blob[which];
+    if (old) {
+        gfx_plane_andn(old);
+        /* Стерли по всему прямоугольнику маски — вместе со своими пикселями
+         * могли снять и пиксели живого соседа. Перекладываем его: OR
+         * идемпотентен, лишнего не появится. */
+        mate = overlap_mate(old, &mate_slot);
+        if (mate && slot_blob[mate_slot] == mate)
+            gfx_plane_or(mate);
+    }
     slot_blob[which] = blob;
     if (blob)
         gfx_plane_or(blob);
@@ -636,8 +682,13 @@ static void groove_turn(unsigned char position)
             increase_score(1);
             sfx_play(&fx_catch);        /* писк: яйцо в корзине */
         } else {
-            broken_side = (position == POS_LU || position == POS_LD)
-                        ? SIDE_LEFT : SIDE_RIGHT;
+            /* Сторона жёлоба: LU/LD — левая, RU/RD — правая. Ровно сдвиг, а не
+             * `(position == POS_LU || position == POS_LD) ? …`: sccz80
+             * компилирует тернарник с || в условии НАОБОРОТ (видно по
+             * дизассемблированию groove_turn: для position=0 остаётся
+             * SIDE_RIGHT), и скорлупа при разбитии слева появлялась справа.
+             * Тот же приём, что у wolf_body[position >> 1]. */
+            broken_side = (unsigned char)(position >> 1);
             /* Гудок разбитого яйца играет сама анимация — как в JS, где
                missSound вызывается в StartEggBrokeAnimation() и в первом шаге
                ChickenAnimation(). */
