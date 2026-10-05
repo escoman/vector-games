@@ -70,6 +70,7 @@
 #include "v06.h"
 #include "src/bg.inc"
 #include "src/sprites.inc"
+#include "src/title_music.inc"
 
 
 /* ----------------------------------------------------------------------- */
@@ -935,9 +936,40 @@ static void initialise_game(void)
     wolf_put(wolf_position);
 }
 
+/* ----------------------------------------------------------------------- */
+/*  Музыка заставки                                                        */
+/* ----------------------------------------------------------------------- */
+
+/* Мелодия title.mid играет по кругу, пока игра не началась (пока мы в меню).
+ * В конце трека — пауза TITLE_GAP кадров (~5 с при 50 Гц), чтобы он не стартовал
+ * сразу заново: loop у песни выключен, заглушку перезапускаем сами по счётчику. */
+#define TITLE_GAP  250u
+
+static unsigned int title_gap;
+
+static void menu_music_start(void)
+{
+    music_set_data(&title_music_song);
+    music_set_loop(0);
+    music_start();
+    title_gap = 0;
+}
+
+static void menu_music_stop(void)
+{
+    music_stop();
+    title_gap = 0;
+}
+
+
+/* ----------------------------------------------------------------------- */
+/*  Старт игры                                                             */
+/* ----------------------------------------------------------------------- */
+
 static void start_game(unsigned char type)
 {
     game_type = type;
+    menu_music_stop();            /* заставка кончилась — мелодия долой */
 
     /* Фон не перерисовывается: за время игры он не меняется, а распаковка
      * 24 КБ заставила бы ждать. Сбрасываются только сегменты и слоты. */
@@ -1133,6 +1165,7 @@ static void to_menu(void)
     screen_reset();
     initialise_game();
     draw_ui();
+    menu_music_start();           /* в меню играет мелодия заставки */
 }
 
 
@@ -1292,10 +1325,19 @@ int main(void)
     for (i = 0; i < 8; i++)
         prev_rows[i] = kbd_rows[i];
 
+    drum_init();
     to_menu();
 
     for (;;) {
         v06_wait_frame();
+        music_tick();
+        drum_tick();
+        /* В меню мелодия идёт по кругу; после конца ждём TITLE_GAP и снова
+         * стартуем. music_is_playing() станет 0, когда трек дошёл до MUS_END
+         * (loop выключен). */
+        if (state == ST_MENU && !music_is_playing() &&
+            ++title_gap >= TITLE_GAP)
+            menu_music_start();
         input();
         if (remap == 0)          /* во время назначения игра стоит */
             update();

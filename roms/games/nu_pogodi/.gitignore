@@ -8,6 +8,11 @@ src/bg.inc
 src/sprites.inc
 src/preview.png
 
+# Музыка заставки: src/sounds/title.mid — ИСХОДНИК (не игнорим); .mus и .inc —
+# порождаемые (midi2mus.py -> mus2inc.py), перегенерируются на сборке.
+src/sounds/title.mus
+src/title_music.inc
+
 # src/screen.bmp и src/sprites/*.bmp — ИСХОДНИКИ (правятся в GIMP), НЕ игнорим.
 
 # JS source (reference only, not tracked)
