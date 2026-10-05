@@ -57,6 +57,15 @@
  *               При выводе на ВИ53 команда игнорируется (у КР580ВИ53
  *               нет регистра громкости). В потоке ударных игнорируется
  *               всегда. По умолчанию — V15.
+ *   0xC0..0xCF  — S0..S15 <lo> <hi>: форма огибающей (R13 = байт &
+ *               0x0F) и период (R11/R12, little-endian). Команда
+ *               подключает к огибающей СВОЙ канал: генератор AY один
+ *               на всех, shape/period глобальны, маска подключённых
+ *               каналов накапливается; повторный S в любой партитуре
+ *               переопределяет общую огибающую. Применяется на
+ *               следующей атаке ноты. V1..V15 отключает канал обратно
+ *               на фиксированную громкость. При выводе на ВИ53 команда
+ *               игнорируется; в потоке ударных пропускаются операнды.
  */
 
 #include "v06.h"
@@ -75,6 +84,8 @@ typedef struct {
     void (*note_on)(unsigned char ch, unsigned char note_idx);
     void (*note_off)(unsigned char ch);
     void (*set_volume)(unsigned char ch, unsigned char vol);
+    void (*set_envelope)(unsigned char mask, unsigned char shape,
+                         unsigned int period);
     void (*silence_all)(void);
 } music_out_t;
 
@@ -90,6 +101,11 @@ static void vi53_off(unsigned char ch)
 /* У КР580ВИ53 нет регистра громкости — V1..V15 игнорируются
  * (байткод читается, состояние устройства не меняется). */
 static void vi53_vol(unsigned char ch, unsigned char vol)
+{
+}
+/* У КР580ВИ53 нет огибающей — S0..S15 игнорируются. */
+static void vi53_env(unsigned char mask, unsigned char shape,
+                     unsigned int period)
 {
 }
 static void vi53_silence_all(void)
@@ -116,6 +132,13 @@ static void ay_vol(unsigned char ch, unsigned char vol)
 {
     ay_set_fixed_volume((unsigned char)(1u << ch), vol);
 }
+/* S0..S15: маска накоплена в music.c (g_env_mask); ay_set_envelope()
+ * в регистры не пишет — R11/R12/R13 и бит 0x1F лягут на атаке ноты. */
+static void ay_env(unsigned char mask, unsigned char shape,
+                   unsigned int period)
+{
+    ay_set_envelope(mask, shape, period);
+}
 static void ay_silence_all(void)
 {
     ay_mute_all();
@@ -123,10 +146,10 @@ static void ay_silence_all(void)
 #endif
 
 #ifndef MUSIC_AY_DRUMS_AY
-static const music_out_t music_out_vi53 = { vi53_on, vi53_off, vi53_vol, vi53_silence_all };
+static const music_out_t music_out_vi53 = { vi53_on, vi53_off, vi53_vol, vi53_env, vi53_silence_all };
 #endif
 #ifndef MUSIC_VI53_DRUMS_TAPE
-static const music_out_t music_out_ay   = { ay_on,   ay_off,   ay_vol,   ay_silence_all };
+static const music_out_t music_out_ay   = { ay_on,   ay_off,   ay_vol,   ay_env,   ay_silence_all };
 #endif
 
 /* Текущий драйвер вывода (по умолчанию ВИ53; в AY-only ROM — AY). Локальное
@@ -136,6 +159,14 @@ static const music_out_t *g_out = &music_out_vi53;
 #else
 static const music_out_t *g_out = &music_out_ay;
 #endif
+
+/* Зеркало огибающей (S0..S15): генератор AY один на всех — shape и
+ * period глобальны, маска g_env_mask — подключённые каналы (бит i =
+ * канал i). Нужно для восстановления состояния в music_use_ay();
+ * V1..V15 снимает бит канала (см. music_note_volume). */
+static unsigned char g_env_shape;
+static unsigned int  g_env_period;
+static unsigned char g_env_mask;
 
 /* Включение ноты на привязанном устройстве. note_idx — индекс ноты
  * 0-94 (как в v06_div_tab[]/v06_ay_period_tab[]). */
@@ -151,10 +182,27 @@ static void music_note_off(unsigned char ch)
 }
 
 /* Громкость канала (V1..V15) на привязанном устройстве.
- * Драйвер ВИ53 — пустая функция: команда игнорируется. */
+ * Драйвер ВИ53 — пустая функция: команда игнорируется.
+ * V также отключает канал от огибающей (зеркало маски здесь,
+ * на стороне AY бит снимает ay_set_fixed_volume). */
 static void music_note_volume(unsigned char ch, unsigned char vol)
 {
+    g_env_mask &= (unsigned char)~(unsigned char)(1u << ch);
     g_out->set_volume(ch, vol);
+}
+
+/* Огибающая канала (S0..S15 <period>) на привязанном устройстве.
+ * Генератор AY один: shape/period общие, маска подключённых каналов
+ * накапливается; канал перейдёт на огибающую на следующей атаке.
+ * Драйвер ВИ53 — пустая функция (зеркало всё равно ведётся — нужно
+ * для music_use_ay). */
+static void music_note_envelope(unsigned char ch, unsigned char shape,
+                                unsigned int period)
+{
+    g_env_shape = shape;
+    g_env_period = period;
+    g_env_mask |= (unsigned char)(1u << ch);
+    g_out->set_envelope(g_env_mask, shape, period);
 }
 
 /* --------------------------- Состояние -------------------------------- */
@@ -213,6 +261,11 @@ static void music_start_common(void)
     reset_stream(&g_ch[1], g_song->s1);
     reset_stream(&g_ch[2], g_song->s2);
     reset_stream(&g_dr, g_song->dr);
+    /* Огибающая с нуля: прошлая песня могла оставить каналы на
+     * генераторе; V-синхронизация ниже снимет биты и на стороне AY. */
+    g_env_shape = 0u;
+    g_env_period = 0u;
+    g_env_mask = 0u;
     /* Громкости по умолчанию (V15) на текущий вывод: прошлая песня
      * могла оставить в драйвере другие значения. */
     for (i = 0u; i < 3u; ++i)
@@ -395,10 +448,14 @@ void music_use_ay(void)
     /* 3. Переключить драйвер вывода */
     g_out = &music_out_ay;
     /* 4. Восстановить громкости V1..V15, считанные на выводе ВИ53
-     * (драйвер ВИ53 их игнорировал; ay_mixer_init выше ставит 15). */
+     * (драйвер ВИ53 их игнорировал; ay_mixer_init выше ставит 15).
+     * music_note_volume снимет биты огибающей — шаг 5 вернёт маску. */
     for (i = 0u; i < 3u; ++i)
         music_note_volume(i, g_ch[i].vol);
-    /* 5. Восстановить текущие ноты на AY (если играет) */
+    /* 5. Восстановить огибающую (S0..S15), считанную на выводе ВИ53 */
+    if (g_env_mask)
+        g_out->set_envelope(g_env_mask, g_env_shape, g_env_period);
+    /* 6. Восстановить текущие ноты на AY (если играет) */
     if (g_playing && !g_paused) {
         for (i = 0u; i < 3u; ++i) {
             if (g_ch[i].gate == 0u && g_ch[i].note < 95u &&
@@ -468,6 +525,15 @@ static void tone_event(unsigned char ch)
                                 ((unsigned int)c->pc[1] << 8);
             c->pc += 2;
             c->pc -= back;
+            continue;
+        }
+        if (b >= MUS_ENV_BASE && b <= MUS_ENV_BASE + 15u) {
+            /* 0xC0..0xCF: S0..S15 + период <lo> <hi> — огибающая */
+            unsigned char shape = (unsigned char)(b & 0x0Fu);
+            unsigned int per = (unsigned int)c->pc[0] |
+                               ((unsigned int)c->pc[1] << 8);
+            c->pc += 2;
+            music_note_envelope(ch, shape, per);
             continue;
         }
         if (b >= MUS_VOL_BASE + 1u) {   /* 0xF1..0xFF: V1..V15, 1 байт;
@@ -550,6 +616,12 @@ static void drum_event(unsigned char play)
                                 ((unsigned int)g_dr.pc[1] << 8);
             g_dr.pc += 2;
             g_dr.pc -= back;
+            continue;
+        }
+        if (b >= MUS_ENV_BASE && b <= MUS_ENV_BASE + 15u) {
+            /* 0xC0..0xCF: S0..S15 — огибающая тональных каналов
+             * ударных не касается; пропускаем операнд периода */
+            g_dr.pc += 2;
             continue;
         }
         if (b >= MUS_VOL_BASE + 1u) {   /* 0xF1..0xFF: громкость тональных

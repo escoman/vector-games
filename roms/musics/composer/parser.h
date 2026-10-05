@@ -28,6 +28,8 @@
 #define PERR_BAD_TEMPO     8     /* T вне 32..255 */
 #define PERR_BRACKET_N     9     /* ]n: n вне 2..255 */
 #define PERR_BAD_VOL      10     /* V вне 1..15 */
+#define PERR_BAD_SHAPE    11     /* S вне 0..15 */
+#define PERR_BAD_PERIOD   12     /* период огибающей вне 0..65535 или отсутствует */
 
 /* Результат парсинга */
 typedef struct {

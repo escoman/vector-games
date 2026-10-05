@@ -122,7 +122,7 @@ static unsigned char out_ay;
 
 /* ------------------------- Встроенный пример ------------------------ */
 
-static const char default_s0[] = "O4 L4 C D E F G A B O5 C";
+static const char default_s0[] = "O4 L4 S10 1500 C D E F G A B O5 C";
 static const char default_s1[] = "O3 L4 V2 C V4 D V6 E V8 F V10 G V12 A V14 B V15 O4 C";
 static const char default_s2[] = "O2 L2 C G C G";
 static const char default_dr[] = "L4 0 P 2 P 0 P 4 P\nL4 8 P 10 P 8 P 10 P";

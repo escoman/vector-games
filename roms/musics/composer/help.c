@@ -23,7 +23,7 @@ static const char *help_lines[] = {
     "LENGTH:  L1 L2 L4 L8 L16",
     "         L32 L64 L128",
     "VOLUME:  V1-V15 (AY)",
-    "",
+    "SHAPE:   S0-S15 PERIOD (AY)",
     "PAUSE:   P",
     "",
     "TEMPO:   T32-T255",

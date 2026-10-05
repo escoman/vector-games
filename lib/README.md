@@ -285,9 +285,10 @@ Bytecode (constants shared with `mus2inc.py`):
 | 0xE8 | Loop start `[` |
 | 0xE9 n | Loop end `]n`: repeat section n times total |
 | 0xEA lo hi | JMP back (lo | hi<<8) bytes: infinite loop |
+| 0xC0..0xCF lo hi | S0..S15 + period (WORD little-endian): envelope shape (R13 = byte & 0x0F) and period (R11/R12). AY only; attaches the command's own channel to the envelope at its next note attack (bit4=0x1F in R8/R9/R10, R11-R13 restart). The AY envelope generator is single and shared: shape/period are global, the attached-channel mask accumulates; an S in another score redefines the common envelope for all attached channels, and V1..V15 detaches its channel back to fixed volume. VI53: ignored. Drums stream: operand bytes skipped. |
 | 0xF1..0xFF | V1..V15: fixed channel volume, whole command = 1 byte (byte = 0xF0 + V, vol = low nibble; no operand, like L1..L128). AY: applied to the channel's R8/R9/R10 at the next note attack; VI53: ignored (no volume register). Drums stream: always ignored. Default V15. |
 
-State commands (0xE0-0xE9, 0xF1-0xFF) do not advance time. Default duration without commands = L4. Octave is compile-time state in mus2inc.py, no bytecode command (range 0xD0..0xD7 is free).
+State commands (0xC0-0xCF, 0xE0-0xE9, 0xF1-0xFF) do not advance time. Default duration without commands = L4. Octave is compile-time state in mus2inc.py, no bytecode command (range 0xD0..0xD7 is free).
 
 Tempo at runtime: `tempo_num/tempo_den` ticks per frame.
 

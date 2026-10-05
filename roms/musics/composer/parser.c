@@ -347,6 +347,56 @@ static void parse_token(pstate_t *s, const char *p, const char **endp)
         return;
     }
 
+    /* S<n> <period> — огибающая S0..S15 (байт 0xC0+n) + период WORD
+     * little-endian (R11/R12). Команда состояния: время не продвигает,
+     * канал подключается к огибающей на следующей атаке. Генератор AY
+     * один — параметры общие для всех подключённых каналов; на ВИ53
+     * рантайм команду игнорирует. В канале ударных операнды только
+     * разбираются, байткод не эмитится (рантайм их пропускает). */
+    if ((ch == 'S' || ch == 's') && p[1] >= '0' && p[1] <= '9') {
+        unsigned int n, per;
+        unsigned char over;
+        p++;
+        n = parse_number(&p);
+        if (n > 15) {
+            set_error(s, PERR_BAD_SHAPE, start);
+            *endp = p;
+            return;
+        }
+        /* период — следующее число через пробелы (табуляцию),
+         * accumulate с точной проверкой переполнения 16 бит:
+         * per*10+d <= 65535 <=> per < 6553 или (per == 6553 и d <= 5) */
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if (*p < '0' || *p > '9') {
+            set_error(s, PERR_BAD_PERIOD, start);
+            *endp = p;
+            return;
+        }
+        per = 0u;
+        over = 0u;
+        while (*p >= '0' && *p <= '9') {
+            unsigned int d = (unsigned int)(*p - '0');
+            if (over || per > 6553u || (per == 6553u && d > 5u))
+                over = 1u;
+            else
+                per = per * 10u + d;
+            p++;
+        }
+        if (over) {
+            set_error(s, PERR_BAD_PERIOD, start);
+            *endp = p;
+            return;
+        }
+        if (!s->drums) {
+            emit(s, (unsigned char)(MUS_ENV_BASE + n));
+            emit(s, (unsigned char)(per & 0xFFu));
+            emit(s, (unsigned char)(per >> 8));
+        }
+        *endp = p;
+        return;
+    }
+
     /* P — пауза */
     if (ch == 'P' || ch == 'p') {
         unsigned int l_ov = 0;
@@ -624,6 +674,8 @@ void parse_song(parse_result_t *result,
                     pc++;  /* пропуск n */
                 } else if (b == MUS_JMP) {
                     pc += 2;
+                } else if (b >= MUS_ENV_BASE && b <= MUS_ENV_BASE + 15) {
+                    pc += 2;  /* S0..S15: пропуск периода, время стоит */
                 } else if (b >= 1 && b <= 0x5F) {
                     t += len_ticks(l_val);
                 } else if (b >= 0x61 && b <= 0x7F) {
@@ -661,9 +713,11 @@ const char *parse_error_name(unsigned char code)
         "OCTAVE O MUST BE 0-7",    /* PERR_BAD_OCT       */
         "TEMPO T MUST BE 32-255",  /* PERR_BAD_TEMPO     */
         "REPEAT N MUST BE 2-255",  /* PERR_BRACKET_N     */
-        "VOLUME V MUST BE 1-15"    /* PERR_BAD_VOL       */
+        "VOLUME V MUST BE 1-15",   /* PERR_BAD_VOL       */
+        "SHAPE S MUST BE 0-15",    /* PERR_BAD_SHAPE     */
+        "PERIOD MUST BE 0-65535"   /* PERR_BAD_PERIOD    */
     };
-    if (code > PERR_BAD_VOL)
+    if (code > PERR_BAD_PERIOD)
         return "UNKNOWN ERROR";
     return names[code];
 }

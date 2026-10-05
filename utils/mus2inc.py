@@ -67,6 +67,13 @@
 #               На AY применяется на следующей атаке ноты, на ВИ53
 #               игнорируется; в drum-потоке не эмитится. Время не
 #               продвигает; по умолчанию V15 (команда не нужна).
+#   0xC0..0xCF  S0..S15 + <lo> <hi>: форма огибающей (R13 = байт & 0x0F)
+#               и период (R11/R12, little-endian). Подключает СВОЙ канал
+#               к огибающей на следующей атаке; генератор AY один —
+#               shape/period общие, маска каналов накапливается, V1..V15
+#               отключает канал. На ВИ53 игнорируется; в drum-потоке не
+#               эмитится (рантайм пропускает операнды). Время не
+#               продвигает. Синтаксис: «S10 1500».
 #
 # Формат .smp (бинарный): байт N — число кадров, затем N пар
 # (R6, R10) — период шума и громкость канала C AY-3-8910, по одному
@@ -92,6 +99,7 @@ MUS_LPSTART = 0xE8    # '[' — начало повторяемой секции
 MUS_LPEND = 0xE9      # ']n' + байт n: секция звучит n раз
 MUS_JMP = 0xEA        # END -> JMP: 0xEA <lo> <hi> — возврат назад
 MUS_VOL_BASE = 0xF0   # F1..FF = V1..V15 (однобайтовая команда состояния)
+MUS_ENV_BASE = 0xC0   # C0..CF = S0..S15 + период WORD LE (огибающая AY)
 L_INDEX = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 NOTE_BASE = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
@@ -148,7 +156,8 @@ class Stream:
 
 def tokenize(body, fname, drums):
     """Разобрать тело партитуры на события. Возвращает список кортежей
-    (kind, value): ('T', n), ('O', n), ('L', n), ('V', n), ('P', l|None),
+    (kind, value): ('T', n), ('O', n), ('L', n), ('V', n),
+    ('S', shape, period|None), ('P', l|None),
     ('N', abs_note, l|None), ('D', sample_id), ('[',), (']', n), ('!',)."""
     toks = []
     pos = 0
@@ -205,6 +214,14 @@ def tokenize(body, fname, drums):
         m = re.match(r'V(\d+)', body[pos:], re.I)
         if m:
             toks.append(('V', int(m.group(1))))
+            pos += m.end()
+            continue
+        # S<n> <period> — огибающая; период обязателен, но проверяется
+        # в compile_stream (здесь — None, чтобы выдать внятную ошибку)
+        m = re.match(r'S(\d+)(?:\s+(\d+))?', body[pos:], re.I)
+        if m:
+            toks.append(('S', int(m.group(1)),
+                         int(m.group(2)) if m.group(2) else None))
             pos += m.end()
             continue
         m = re.match(r'P(\d+)?', body[pos:], re.I)
@@ -314,6 +331,27 @@ def compile_stream(st, toks, fname, song_tempo_ref, allow_flag):
             # (рантайм игнорирует V в ударных — не тратить байткод).
             if not st.drums:
                 st.bytes.append(MUS_VOL_BASE + tok[1])
+            continue
+        if kind == 'S':
+            shape, per = tok[1], tok[2]
+            if not 0 <= shape <= 15:
+                raise MusError(f'{fname}: S{shape} вне диапазона 0..15')
+            if per is None:
+                raise MusError(f'{fname}: S{shape} — нужен период огибающей'
+                               ' (число 0..65535 через пробел)')
+            if not 0 <= per <= 65535:
+                raise MusError(f'{fname}: S{shape} период {per} вне'
+                               ' диапазона 0..65535')
+            st.len_locked = True
+            # Команда состояния: 0xC0+shape + период WORD little-endian,
+            # время не продвигает. Генератор AY один — shape/period общие
+            # для всех подключённых каналов; на ВИ53 рантайм её
+            # игнорирует; в drum-потоке не эмитится (рантайм пропускает
+            # операнды).
+            if not st.drums:
+                st.bytes.append(MUS_ENV_BASE + shape)
+                st.bytes.append(per & 0xFF)
+                st.bytes.append((per >> 8) & 0xFF)
             continue
         if kind == 'P':
             st.len_locked = True
@@ -492,6 +530,15 @@ def self_test():
         ('V в ударных',
          'V8 0 P', True,
          '01 60 00'),
+        # Тест 11 — огибающая: S10 = 0xCA + период 1500 = 0x05DC (LE:
+        # DC 05); S0 = 0xC0 + 65535 = FF FF; время не продвигает
+        ('огибающая',
+         'S10 1500 C S0 65535 C', False,
+         'CA DC 05 31 C0 FF FF 31 00'),
+        # Тест 12 — S в партитуре ударных не эмитится (рантайм пропускает)
+        ('S в ударных',
+         'S10 1500 0 P', True,
+         '01 60 00'),
     ]
     failed = 0
     for name, text, drums, want in cases:
@@ -548,10 +595,24 @@ def self_test():
         print('САМОТЕСТ [V0]: не выдал ошибку')
     except MusError:
         print('САМОТЕСТ [V0]: OK (ошибка)')
+    # S вне 0..15 — ошибка
+    try:
+        comp('S16 1000 C', False)
+        failed += 1
+        print('САМОТЕСТ [S16]: не выдал ошибку')
+    except MusError:
+        print('САМОТЕСТ [S16]: OK (ошибка)')
+    # S без периода — ошибка
+    try:
+        comp('S10 C', False)
+        failed += 1
+        print('САМОТЕСТ [S без периода]: не выдал ошибку')
+    except MusError:
+        print('САМОТЕСТ [S без периода]: OK (ошибка)')
     if failed:
         sys.exit(f'mus2inc --self-test: провалено {failed} из'
-                 f' {len(cases) + 6}')
-    print(f'mus2inc --self-test: все {len(cases) + 6} тестов пройдены')
+                 f' {len(cases) + 8}')
+    print(f'mus2inc --self-test: все {len(cases) + 8} тестов пройдены')
 
 
 def main():
