@@ -2,6 +2,9 @@
 #
 # mus2inc.py — компилятор партитур Вектора-06Ц: .mus + .smp -> .inc.
 #
+# Одиночный бинарный .smp тоже принимается как вход (символ по --name) —
+# так шумовые эффекты попадают в ROM без партитуры, через drum_sample_play().
+#
 # Формат .mus (текст, комментарии от ';' до конца строки):
 #   Tempo: T<n>                — общий темп композиции (ударных в
 #             минуту): один на все партитуры, можно указать вместо
@@ -591,6 +594,32 @@ def main():
     out = args.output or os.path.splitext(fname)[0] + '.inc'
     name = args.name or os.path.splitext(os.path.basename(fname))[0]
     base_dir = os.path.dirname(os.path.abspath(fname))
+
+    if fname.lower().endswith('.smp'):
+        # Одиночный бинарный .smp (данные шума): партитур нет, компилируем
+        # только массив байтов — тот же результат, что `sample N:` в .mus.
+        try:
+            with open(fname, 'rb') as f:
+                blob = f.read()
+        except OSError as exc:
+            ap.error(str(exc))
+        frames = blob[0] if blob else 0
+        if len(blob) != 1 + 2 * frames or frames == 0:
+            ap.error(f'{fname}: не .smp: байт числа кадров {frames}, файл '
+                     f'{len(blob)} байт (ожидается {1 + 2 * frames})')
+        body = [f'/* {os.path.basename(out)} — сгенерирован mus2inc.py из'
+                f' {os.path.basename(fname)}; не редактировать. */\n',
+                f'static const unsigned char {name}[] = {{']
+        for i in range(0, len(blob), 12):
+            body.append('    ' + ', '.join(f'0x{b:02X}'
+                                          for b in blob[i:i + 12]) + ',')
+        body.append('};')
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(body) + '\n')
+        print(f'  -> {out}')
+        print(f'{os.path.basename(fname)}: кадров {frames}'
+              f' (пара R6/R10 на кадр), байт {len(blob)} -> {name}[]')
+        return
 
     try:
         with open(fname, encoding='utf-8') as f:

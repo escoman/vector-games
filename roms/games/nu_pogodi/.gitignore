@@ -13,6 +13,12 @@ src/preview.png
 # Импорт .mid → .mus — вручную через `make mus`.
 src/title_music.inc
 
+# Шумовые эффекты: src/sounds/*.smp (пары R6/R10) — запись эксперимента: Tape Out
+# в игре не используется, SFX_SMP в Makefile пуст, в ROM они не попадают. Не
+# удалять: пригодятся, если захотят вернуть шум. src/*_smp.inc — порождаемые
+# (mus2inc.py), они игнорятся ниже.
+src/*_smp.inc
+
 # src/screen.bmp и src/sprites/*.bmp — ИСХОДНИКИ (правятся в GIMP), НЕ игнорим.
 
 # JS source (reference only, not tracked)

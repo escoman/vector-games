@@ -7,7 +7,7 @@ Architecture:
 - `sys/startup.asm` — ROM entry, frame interrupt 50 Hz, `frame_count`, `frame_handler`, `irq_active`;
 - `sys/v06pal.asm` — palette register write during vertical blank;
 - `gfx/` — video memory, modes, clearing, text rendering;
-- `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
+- `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), 3-voice SFX mixer (`sfx.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `unpack/` — RLE and LZ bitmap decompression into VRAM;
 - `mem/` — bump allocator over the RAM left above the ROM image (`heap.c`);
@@ -234,10 +234,33 @@ Return channels to fixed volume: clear envelope flag for channels in `chan_mask`
 
 ### Melody Players
 
-Two mutually exclusive players (both write to the same VI53 channels — use only one per ROM):
+`sound.c` and `music.c` are mutually exclusive (both write to the same VI53 channels — use only one per ROM). `sfx.c` writes those channels too, so it shares them with whichever player is active (see below).
 
 - **sound.c** — step sequencer (`sound_step_t` array); simple, no bytecode.
 - **music.c** (`-DMUSIC_ONLY`) — bytecode synthesizer; 3 tone + drums from `.smp` samples.
+- **sfx.c** — short overlapping game sounds; 3 independent voice slots, no bytecode.
+
+#### sfx.c
+
+An effect is `sfx_t {steps, len, prio}`; a step is `sfx_step_t {note, detune, ticks}` —
+`note` is an absolute note number (same indexing as `notes.c`, 0 = silence),
+`ticks` are 50 Hz frames, `detune` is added to the VI53 **divider** every frame
+(negative = pitch rises, so a glissando needs no table; it is a `signed char`, so
+only −128..127 — the engine clamps the divider to 1..65535 at both ends of a long
+sweep). `sfx_play()` allocates one
+free channel for the whole effect; if all three are busy the effect takes the lowest
+`prio` voice, and only if it is strictly higher (equal priority never preempts, so
+repeated identical sounds are not cut short). `sfx_tick()` must be called once per
+frame from the main loop, next to `music_tick()`/`drum_tick()`.
+
+Noise is not mixed here at all, and there is no `sfx_hit()` shim any more: the
+library has a single noise generator (`drums.asm`), so SFX stay on the three
+tone channels — "egg broke" / "game over" are done as a buzz with a falling
+`detune` instead. If a game really wants a sample, call `drum_sample_play()`
+directly (route — Tape Out or AY Noise C — stays whatever `drums.asm` is set
+to). While a melody plays, its attacks
+overwrite SFX voices (the SFX engine has no knowledge of the player's channels); games
+normally stop the music, menu clicks are short enough to tolerate it.
 
 #### sound.c
 

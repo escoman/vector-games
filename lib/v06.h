@@ -469,6 +469,33 @@ extern void drum_tape_mode_manual_env(void);            /* вручную+оги
 extern unsigned char drum_tape_running(void);           /* гейт кадра    */
 extern void drum_tape_set_steps_per_tick(unsigned int n);
 
+/* - - - - - - - - - SFX: 3-голосный смеситель эффектов - - - - - - - - - - - */
+
+/* lib/snd/sfx.c: короткий сигнал на одном канале ВИ53, несколько сигналов
+ * могут звучать одновременно (по числу каналов). Только тональные каналы:
+ * шума здесь нет (он один на всех в drums.asm), эффекты вида «разбилось»
+ * делаются гудком с падением — detune по кадрам. */
+typedef struct {
+    unsigned char note;         /* абсолютный номер ноты 0..94 (0 = тишина),
+                                   см. v06_div_tab и макросы N_<нота>(<окт.>)  */
+    signed char   detune;       /* прибавка к ДЕЛИТЕЛЮ каждый кадр (свип),
+                                   только -128..127: 127 = ~полтона на ноте
+                                   средней октавы; положительный = вниз     */
+    unsigned char ticks;        /* кадров 50 Гц на этот шаг (0 = 1)            */
+} sfx_step_t;
+
+typedef struct {
+    const sfx_step_t *steps;    /* последовательность шагов                    */
+    unsigned char len;          /* их число                                  */
+    unsigned char prio;         /* 0..255: выше — вытесняет занятой канал     */
+} sfx_t;
+
+extern void sfx_init(void);                      /* тишина, сброс голосов     */
+extern unsigned char sfx_play(const sfx_t *fx);   /* 1 — запущен, 0 — нечего   */
+extern void sfx_stop_all(void);                  /* заглушить все голоса      */
+extern unsigned char sfx_busy(void);             /* есть звучащий эффект      */
+extern void sfx_tick(void);                       /* из main loop, 50 Гц       */
+
 
 
 /* ----------------------------------------------------------------------- */

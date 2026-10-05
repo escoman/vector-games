@@ -454,6 +454,86 @@ static void draw_ui(void);            /* текст поверх фона, см.
 
 
 /* ----------------------------------------------------------------------- */
+/*  Звуковые эффекты                                                       */
+/* ----------------------------------------------------------------------- */
+
+/* Игровые сигналы. Все — только на трёх тональных каналах КР580ВИ53: шумовой
+ * генератор Tape Out (drums.asm) в этой игре не используется вовсе, разбитое
+ * яйцо звучит гудком с падением — как пьезоизлучатель у настоящего ИМ-02.
+ *
+ * Первоисточник привязки — src/scene_play.js (там, где стоит .play()); высоты
+ * подобраны руками: максимум спектра по кадрам 50 Гц из src/sounds/*.wav там,
+ * где он вообще поддаётся измерению (замер — .scratch/measure_wav.py). Ноты —
+ * абсолютные номера (N_<нота>(<октава>) из v06.h), detune — прибавка к
+ * делителю каждый кадр (минус = тон идёт вверх), ticks — кадров на шаг.
+ *
+ * Приоритеты: 5 — тик движения яйца, 20 — клик клавиши, 40 — пойманное яйцо,
+ * 60 — разбилось, 100 — конец игры. Более важный сигнал вытесняет голос
+ * менее важного, равный не вытесняет: частые одинаковые сигналы не будут
+ * обрывать друг друга, а просто проиграются все три канала. */
+
+/* Писк пойманного яйца (catch.wav): F#6 с подъёмом до G#6 и щёлк на D7. */
+static const sfx_step_t step_catch[] = {
+    { N_Fs(6),  -35, 3 },
+    { N_Gs(6),    0, 3 },
+    { N_D(7),     0, 2 }
+};
+
+/* Конец игры (gameover.wav): быстрая трель G#6/D7 ~1 с, затем спад. */
+static const sfx_step_t step_loose[] = {
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_Gs(6), 0, 2 }, { N_D(7), 0, 2 },
+    { N_B(5),  0, 2 },               /* хвост: вниз по ступеням           */
+    { N_E(5),   0, 2 },
+    { N_A(4),   0, 2 },
+    /* и съезд ещё на четверть октавы: +100 к делителю в кадр, 21 кадр,
+     * 5108 -> ~7100 (294 -> 211 Гц). detune — signed char, больше 127
+     * писать нельзя: 220 молча превращается в -36 и свип едет вверх.   */
+    { N_D(4), 100, 21 }
+};
+
+static const sfx_t fx_catch = { step_catch, 3,  40 };
+static const sfx_t fx_loose = { step_loose, 24, 100 };   /* 10 пар трели + 4 хвоста */
+
+/* Тик движения яйца — ОДИН на все четыре жёлоба: в настоящей игре электроника
+ * поля стороны не различает, а четыре файла lu/ld/ru/rd в веб-порту — его
+ * artifact. Замер по WAV'ам это подтверждает: спектр широкополосный чпок
+ * 0,1…0,2 с, пик скачет (у lu — 899/1633/2753 Гц), различимой высоты там нет.
+ * Длинный звук на максимальной скорости «съел» бы кадры: тик идёт каждые
+ * ~4 кадра, поэтому чпок — 2 кадра и самый низкий приоритет. */
+static const sfx_step_t step_move[] = { { N_Gs(6), 0, 1 }, { N_D(7), 0, 1 } };
+static const sfx_t fx_move = { step_move, 2, 5 };
+
+/* Разбилось / цыплёнок утащил / мигание возвращаемой жизни: вместо шума —
+ * гудок с падением. Двухтонное «крыло» по 2 кадра даёт дребезг на частоте
+ * переключения 25 Гц, хвост — съезд с 392 Гц до ~320 Гц. Всего 16 кадров
+ * (0,32 с) — в интервал мигания жизни (500 мс) влезает. */
+static const sfx_step_t step_miss[] = {
+    { N_G(5),   0, 2 },     /* 784 Гц */
+    { N_D(5),   0, 2 },     /* 587 Гц */
+    { N_G(5),   0, 2 },
+    { N_D(5),   0, 2 },
+    { N_G(4), 100, 8 }      /* 392 Гц и вниз по 100 к делителю в кадр */
+};
+static const sfx_t fx_miss = { step_miss, 5, 60 };
+
+/* Клавиша волка: в JS на любое нажатие назначенной клавиши играет ОДИН и тот
+ * же click.mp3 — и в заставке, и во время анимации. Высота выбрана вне набора
+ * движения и поимки (те 903/638 и 1014…903), чтобы клик на слух отделялся. */
+static const sfx_step_t step_click[] = { { N_C(7), 0, 1 }, { N_G(6), 0, 2 } };
+static const sfx_t fx_click = { step_click, 2, 20 };
+
+
+
+/* ----------------------------------------------------------------------- */
 /*  Скорость                                                               */
 /* ----------------------------------------------------------------------- */
 
@@ -554,11 +634,13 @@ static void groove_turn(unsigned char position)
     if (g[GROOVE_LAST]) {
         if (wolf_position == position) {
             increase_score(1);
+            sfx_play(&fx_catch);        /* писк: яйцо в корзине */
         } else {
             broken_side = (position == POS_LU || position == POS_LD)
                         ? SIDE_LEFT : SIDE_RIGHT;
-            /* Разбитое яйцо видно только если заяц сейчас на месте; иначе
-               скорлупу подбирает цыплёнок. */
+            /* Гудок разбитого яйца играет сама анимация — как в JS, где
+               missSound вызывается в StartEggBrokeAnimation() и в первом шаге
+               ChickenAnimation(). */
             if (rabbit_visible) start_chicken();
             else start_egg_broke();
         }
@@ -576,11 +658,21 @@ static void groove_turn(unsigned char position)
  * числа оставшихся жизней. */
 static void turn(void)
 {
-    unsigned char row;
+    unsigned char row, p, i, need_sound;
 
     generate_new_egg();
     row = game_type ? 4 : life_row(life_count);
-    groove_turn(turn_order[row][groove_cursor]);
+    p = turn_order[row][groove_cursor];
+    groove_turn(p);
+
+    /* Звук движения яйца: в JS после GrooveTurn суммируются флаги этого
+     * жёлоба, и если хоть одно яйцо на сцене — играет чпок. Один на все
+     * четыре жёлоба, см. комментарий к step_move. */
+    need_sound = 0;
+    for (i = 0; i < EGGS_PER_GROOVE; i++)
+        need_sound = (unsigned char)(need_sound + groove[p][i]);
+    if (need_sound)
+        sfx_play(&fx_move);
 
     groove_cursor++;
     if (groove_cursor >= turn_len[row])
@@ -646,6 +738,7 @@ static void decrease_life_count(unsigned char count)
             show_lives(0);
             state = ST_LOOSE;
             loose_timer = 0;
+            sfx_play(&fx_loose);        /* трель конца игры, ~1 с */
         }
         break;
     }
@@ -752,6 +845,7 @@ static void anim_blink_tick(unsigned char which)
 static void start_egg_broke(void)
 {
     if (anim_broke) return;
+    sfx_play(&fx_miss);             /* гудок с падением — как missSound в JS */
     state = ST_ANIMATION;
     anim_broke_timer = 0;
     anim_broke_step = 0;
@@ -780,6 +874,7 @@ static void anim_broke_tick(void)
 static void start_chicken(void)
 {
     if (anim_chicken) return;
+    sfx_play(&fx_miss);             /* то же, что ChickenAnimation step1 */
     state = ST_ANIMATION;
     anim_chicken_timer = 0;
     chicken_next = 0;
@@ -834,6 +929,8 @@ static void anim_addlives_tick(void)
     if (addlives_k < ADDLIVES_STEPS) {
         /* Чётные шаги гасят все три заставки, нечётные зажигают. */
         unsigned char on = (unsigned char)(addlives_k & 1);
+        if (on)
+            sfx_play(&fx_miss);     /* мигание жизни сопровождается гудком */
         life_put(0, on); life_put(1, on); life_put(2, on);
         addlives_k++;
         return;
@@ -965,6 +1062,7 @@ static void start_game(unsigned char type)
 {
     game_type = type;
     menu_music_stop();            /* заставка кончилась — мелодия долой */
+    sfx_stop_all();               /* и недозвучавшие щелчки меню */
 
     /* Фон не перерисовывается: за время игры он не меняется, а распаковка
      * 24 КБ заставила бы ждать. Сбрасываются только сегменты и слоты. */
@@ -1161,6 +1259,7 @@ static void to_menu(void)
     initialise_game();
     draw_ui();
     menu_music_start();           /* в меню играет мелодия заставки */
+    sfx_stop_all();               /* оборвать эффекты игры: в меню свой голос */
 }
 
 
@@ -1262,7 +1361,9 @@ static void input(void)
     }
 
     if (remap) {
-        assign_key((unsigned char)(remap - 1), row, bit);
+        unsigned char action = (unsigned char)(remap - 1);
+        assign_key(action, row, bit);
+        sfx_play(&fx_click);        /* тот же клик, что и в игре */
         remap++;
         if (remap > 4) {
             remap = 0;
@@ -1286,15 +1387,23 @@ static void input(void)
             to_menu();
             return;
         }
-        /* Во время анимации и после проигрыша клавиши не помогают, как в
-         * оригинале. */
-        if (state != ST_PLAYING)
+        /* Во время анимации и после проигрыша клавиши волка не двигают, как в
+         * оригинале, — но клик всё равно слышен: в JS clickSound.play() стоит
+         * вне проверки состояния. */
+        if (state != ST_PLAYING) {
+            for (p = 0; p < 4; p++)
+                if (row == key_row[p] && bit == key_bit[p]) {
+                    sfx_play(&fx_click);
+                    break;
+                }
             return;
+        }
     }
 
     for (p = 0; p < 4; p++)
         if (row == key_row[p] && bit == key_bit[p]) {
             set_wolf_position(p);
+            sfx_play(&fx_click);      /* один и тот же клик на любую сторону */
             break;
         }
 }
@@ -1321,12 +1430,18 @@ int main(void)
         prev_rows[i] = kbd_rows[i];
 
     drum_init();
+    sfx_init();
     to_menu();
 
     for (;;) {
         v06_wait_frame();
         music_tick();
-        drum_tick();
+        /* drum_tick() не зовём: в этом кадре он только держал PC0 в нуле
+         * (tape_mute пишет BSR каждый кадр), а шумовых эффектов в игре нет —
+         * все сигналы идут по трём тональным каналам ВИ53. Кадровый бюджет
+         * слегка освободился; drum_init() оставлен — он один раз глушит
+         * ударный движок (R10 = 0), к PC0 не прикасается. */
+        sfx_tick();
         /* В меню мелодия идёт по кругу сама (music_set_loop(1)); при старте
          * игры menu_music_stop() её гасит — ручной рестарт не нужен. */
         input();

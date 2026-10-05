@@ -7,7 +7,10 @@
 # make sprites      — то же, только src/sprites/*.bmp;
 # make inc          — bg.inc + sprites.inc из screen.bmp+спрайтов (призраки тут);
 # make music        — src/title_music.inc из src/sounds/title.mus (партитура);
-# make mus          — переимпортировать title.mus из title.mid (тонет правку!);
+# make smp          — переснять src/sounds/*.smp с оригиналов src/sounds/*.wav
+#                     (ПЕРЕЗАПИСЫВАЕТ ручную правку пар R6/R10); в ROM сейчас
+#                     не идут — Tape Out не используется
+# make mus          — переимпортировать title.mus из title.mid (точит правку!);
 # make preview      — src/preview.png для composed-фона (как в ROM);
 # make clean        — убрать артефакты;
 # make deploy       — положить ROM в эмулятор;
@@ -31,7 +34,15 @@ GEN     = tools/gen_assets.py
 GENFONT = tools/gen_font.py
 MIDI2MUS = ../../../utils/midi2mus.py
 MUS2INC  = ../../../utils/mus2inc.py
+DMC2SMP  = ../../../utils/dmc2smp.py
 TARGET  = nu_pogodi.rom
+
+# Шумовые эффекты в ROM НЕ идут: Tape Out в игре не используется вовсе,
+# «разбилось» и «конец игры» — тональные гудки на КР580ВИ53 (main.c, шаг
+# sfx_step_t). src/sounds/*.smp остаются как запись эксперимента (их снимает
+# `make smp` с .wav), но в образ не попадают: список SFX_SMP пуст.
+SFX_SMP =
+SFX_INC = $(addprefix src/,$(addsuffix _smp.inc,$(SFX_SMP)))
 
 # FORCE=1 пересоздать screen.bmp/спрайты (осторожно: сотрёт ручную правку).
 FORCE ?= 0
@@ -45,6 +56,7 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/unpack/zx0.asm \
        $(LIB)/kbd/kbdscan.asm $(LIB)/kbd/keyboard.c \
        $(LIB)/snd/notes.c $(LIB)/snd/music.c $(LIB)/snd/vi53.c \
+       $(LIB)/snd/sfx.c \
        $(LIB)/snd/drums.asm \
        src/font.asm \
        main.c
@@ -52,19 +64,20 @@ SRCS = $(LIB)/sys/startup.asm \
 # FONT_EXTERNAL: pr.asm берёт font_chars/font8x8 как EXTERN из src/font.asm
 # (кириллический шрифт) вместо шрифта по умолчанию lib/gfx/fonts/default_8x8.inc.
 # MUSIC_ONLY + MUSIC_VI53_DRUMS_TAPE: партитурный синтезатор music.c, тон на
-# КР580ВИ53, ударные (пустые в заставке) на Tape Out. -D — в C-препроцессор
-# (music.c), -Ca-D — в z80asm (drums.asm).
+# КР580ВИ53. Маршрут ударных задан Tape Out только чтобы не линковать AY-драйвер:
+# партия ударных в заставке пустая, семплов в ROM нет, так что в PC0 игра не
+# пишет ни разу. -D — в C-препроцессор (music.c), -Ca-D — в z80asm (drums.asm).
 ZFLAGS = +vector06c --no-crt -I$(LIB) -Ca-DFONT_EXTERNAL \
          -DMUSIC_ONLY -DMUSIC_VI53_DRUMS_TAPE -Ca-DMUSIC_VI53_DRUMS_TAPE
 
-.PHONY: all deploy clean full screen sprites assets preview inc font mus music
+.PHONY: all deploy clean full screen sprites assets preview inc font mus music smp sfx
 
 all: $(TARGET)
 
 full: clean all deploy
 
 # main.c и библиотеки — prereq'и, иначе правка кода не вызывает пересборку.
-$(TARGET): main.c $(GEN) src/font.asm src/bg.inc src/sprites.inc src/title_music.inc $(SRCS)
+$(TARGET): main.c $(GEN) src/font.asm src/bg.inc src/sprites.inc src/title_music.inc $(SFX_INC) $(SRCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) $(SRCS) -o $@
 	@echo "=== Done: $@ ==="
@@ -104,6 +117,17 @@ music: src/title_music.inc
 
 mus:
 	@python3 $(MIDI2MUS) src/sounds/title.mid -o src/sounds/title.mus --no-drums
+
+# Шумовые эффекты: src/sounds/<имя>.smp — ИСХОДНИК (байты пар R6/R10, правятся
+# руками), src/<имя>_smp.inc компилируется из него на сборке. Снять заново с
+# оригинальных .wav — цель `make smp` (ПЕРЕЗАПИСЫВАЕТ все .smp, теряя правку).
+src/%_smp.inc: src/sounds/%.smp $(MUS2INC)
+	@python3 $(MUS2INC) $< -o $@ --name $(*)_sample
+
+sfx: $(SFX_INC)
+
+smp:
+	@python3 $(DMC2SMP) src/sounds -o src/sounds -g 0.1
 
 # Перегенерировать кириллический шрифт src/font.asm из PUTUP + дефолтного.
 font:
