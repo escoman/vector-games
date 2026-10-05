@@ -181,17 +181,27 @@ LIFE = [(136, 22), (157, 22), (179, 22)]
 DIGIT_X = [149, 164, 179, 194]
 DIGIT_Y = -5
 
+# Разбитое яйцо (последний кадр жёлоба, где его ловят/бьют) и выбегающие
+# цыплята спускаются на несколько строк вниз: на прежних местах они налазят
+# на траву. Отсюда координаты попадают и в заголовок blob-а живого спрайта,
+# и в призраки фона, поэтому и то и то сдвигается разом.
+BROKEN_EGG_DROP = 4
+CHICKEN_DROP = 4
+
 
 def all_positions():
     """frame -> [(x, y), ...]; у одного кадра может быть несколько мест."""
     pos = {}
     for groove, pts in EGG_SLOTS.items():
-        for i, p in enumerate(pts):
-            pos[f'{EGG_FRAME[groove]}{i}'] = [p]
+        last = len(pts) - 1
+        for i, (x, y) in enumerate(pts):
+            if i == last:                 # разбитое яйцо — последний кадр
+                y += BROKEN_EGG_DROP
+            pos[f'{EGG_FRAME[groove]}{i}'] = [(x, y)]
     pos.update({k: [v] for k, v in WOLF.items()})
     pos.update({k: [v] for k, v in BASKET.items()})
     pos.update({k: [v] for k, v in RABBIT.items()})
-    pos.update({k: [v] for k, v in CHICKEN.items()})
+    pos.update({k: [(x, y + CHICKEN_DROP)] for k, (x, y) in CHICKEN.items()})
     pos['life'] = list(LIFE)
     for d in '0123456789':
         pos[d] = [(x, DIGIT_Y) for x in DIGIT_X]

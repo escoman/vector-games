@@ -1114,7 +1114,7 @@ static void draw_top_line(void)
     else if (state == ST_MENU)
         gfx_print(0, UI_MENU_Y, "F1-IGRA A  F2-IGRA B  F3-KLAVIWI", 8);
     else
-        gfx_print(0, UI_MENU_Y, "            AR2-ВYHOD           ", 8);
+        gfx_print(0, UI_MENU_Y, "            AR2-VYHOD           ", 8);
 }
 
 /* Всё, что ROM дописывает поверх фона: строку Ф-клавиш и подписи клавиш у
