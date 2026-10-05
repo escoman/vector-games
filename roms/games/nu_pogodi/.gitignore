@@ -3,13 +3,12 @@
 *.o
 zcc_opt.def
 *.c.asm
-# Данные ROM: генерируются tools/gen_assets.py из src/back.bmp + src/sprites.png
+# Данные ROM: генерируются tools/gen_assets.py из src/screen.bmp + src/sprites/*.bmp
 src/bg.inc
 src/sprites.inc
 src/preview.png
 
-# Exported sprites (WIP, subject to change)
-src/sprites/
+# src/screen.bmp и src/sprites/*.bmp — ИСХОДНИКИ (правятся в GIMP), НЕ игнорим.
 
 # JS source (reference only, not tracked)
 src_js/

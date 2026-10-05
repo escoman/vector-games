@@ -373,6 +373,39 @@ def dump(s, sym, rm, frames):
             break
 
 
+def menu_walk(s, sym, rm):
+    """Заставка: волк ходит по позициям от клавиш, игра не идёт (req3).
+    Дефолтные клавиши: ↖(F7)=LU, ←(LEFT)=LD, СТР(F8)=RU, →(RIGHT)=RD."""
+    global BP
+    BP = sym["_input"]
+    s.call("debug_set_breakpoint", address=BP)
+    s.call("debug_run")
+    if wait_bp(s) is None:
+        print("точка останова не сработала")
+        return
+    # (клавиша, ожидаемая позиция волка)
+    seq = [("RIGHT", 3), ("F7", 0), ("LEFT", 1), ("F8", 2), ("RIGHT", 3)]
+    bad = 0
+    for key, want in seq:
+        s.call("debug_press_key", key=key)
+        s.call("debug_run")
+        wait_bp(s)
+        s.call("debug_release_key", key=key)
+        s.call("debug_run")
+        wait_bp(s)
+        g = decode(*read_vars(s, sym), sym)
+        exp = expected(rm, g["slots"])
+        d = diff(exp, rd(s, INK, 8192))
+        ok = (g["state"] == 0 and g["wolf"] == want and not d)
+        bad += 0 if ok else 1
+        print("  %-6s -> state=%d wolf=%d (хотел %d) расхожд.=%d %s"
+              % (key, g["state"], g["wolf"], want, len(d), "OK" if ok else "FAIL"))
+    print("заставка: волк ходит, %d ошибок" % bad)
+    planes = {8: rd(s, 0x8000, 8192), 4: rd(s, 0xA000, 8192),
+              2: rd(s, 0xC000, 8192), 1: rd(s, INK, 8192)}
+    print("PNG:", png("menu_walk", planes))
+
+
 def main():
     what = sys.argv[1] if len(sys.argv) > 1 else "boot"
     s = session()
@@ -383,6 +416,15 @@ def main():
         return
 
     rm = Rom(s, sym)
+
+    if what == "menu":
+        s.call("debug_run")
+        time.sleep(1.5)          # даём первому to_menu() распаковать фон
+        s.call("debug_pause")
+        menu_walk(s, sym, rm)
+        s.call("debug_pause")
+        s.close()
+        return
 
     if what == "dump":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 100

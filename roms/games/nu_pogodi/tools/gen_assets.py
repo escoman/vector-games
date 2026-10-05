@@ -7,12 +7,14 @@
 
 Раскладка экрана по строкам:
 
-     0..7    строка функциональных клавиш (в фоне чёрная, текст рисует ROM)
-     8..15   «головка» поля: на ЖКИ заячьи уши и табло счёта стоят ВЫШЕ
+     0..11   строка функциональных клавиш (в фоне чёрная, текст рисует ROM)
+   12..27    «головка» поля: на ЖКИ заячьи уши и табло счёта стоят ВЫШЕ
              верхней границы поля, поэтому у координат спрайтов бывает
-             отрицательный y — эти 8 строк и дают им место
-    16..191  поле (256x176, масштабированный кроп фотографии)
-   192..255  панель: четыре кнопки управления и рамки под подписи клавиш
+             отрицательный y — эти 16 строк и дают им место, а заодно
+             верхняя кромка поля (крыша домика) перестаёт обрезаться
+   28..203   поле (256x176, масштабированный кроп фотографии)
+  204..255   панель: круглые красные кнопки по углам (рядом — чёрные
+             стрелки и подписи клавиш), в середине логотип «Ну, погоди!»
 
 Спрайты и их призраки задаются в координатах ПОЛЯ (y=0 — верхняя граница
 поля на фото); FIELD_TOP сдвигает на экран и фон, и спрайты, поэтому призрак
@@ -26,30 +28,41 @@
     байтами: возвращаются ровно биты фона, никаких нейтральных патчей и
     теневых буферов не нужно.
 
-    слот  биты  что                       цвет
-      0   0000  вне поля (чёрная рамка)   0x00
-      2   0010  заливка арены             0xAD
-      4   0100  призраки сегментов        0xA4
-      6   0110  декор: заборы, конструкция 0x13
-      8   1000  декор: куры               0xFF
-     10   1010  декор: кусты, травинки    0x12
-      нечётные     сегменты               0x00
+    слот  биты  что                        цвет
+      0   0000  вне поля (чёрная рамка)    0x00
+      2   0010  заливка арены              0xAD
+      4   0100  призраки сегментов         0xA4
+      6   0110  декор: заборы, насесты     0x13
+      8   1000  декор: куры, логотип       0xFF
+     10   1010  декор: кусты, травинки     0x12
+     12   1100  декор: крыша, кирпичи,     0x07
+                        гребешки кур
+      нечётные     сегменты                0x00
 
 Заливка оригинала — диагональные полосы «небо / трава / арена» с плавным
 переходом; на Векторе они дают шесть едва различимых оттенков и съедают
-палитру, поэтому сводится к одному тону. Три настоящих цвета декора при этом
+палитру, поэтому сводится к одному тону. Настоящие цвета декора при этом
 разделяются надёжно: после усреднения BOX-ом в источнике остаются (44,56,13)
-кусты, (108,75,33) заборы, (236,236,236) куры и континуум 153..196 яркости,
-в который попадают и полосы, и серые призраки.
+кусты, (108,75,33) заборы, (141,26,29) красная черепица и гребешки,
+(236,236,236) куры и континуум 153..196 яркости, в который попадают и полосы,
+и серые призраки.
 
 Призраки НЕ извлекаются из фотографии — они рисуются из тех же масок, которые
 потом идут сегментами, поэтому совпадают с объектами пиксель в пиксель.
 
-Использование:
-    python3 tools/gen_assets.py            # всё сразу
-    python3 tools/gen_assets.py back       # только src/back.bmp
-    python3 tools/gen_assets.py inc        # только .inc из готовых src/*.bmp|png
-    python3 tools/gen_assets.py preview    # src/preview.png для просмотра
+Использование (пайплайн):
+    gen_assets.py screen    # src/screen.bmp из ground.png (без призраков);
+                            #   существующий НЕ перезаписывает (кроме --force)
+    gen_assets.py sprites   # src/sprites/*.bmp из атласа sprites.png;
+                            #   существующие НЕ перезаписывает (кроме --force)
+    gen_assets.py inc       # screen.bmp + sprites/*.bmp -> bg.inc (с призраками)
+                            #   и sprites.inc; исходники не трогает
+    gen_assets.py preview   # preview.png — как фон будет выглядеть в ROM
+    gen_assets.py           # = screen + sprites + inc + preview (безопасно)
+
+screen.bmp и src/sprites/*.bmp — ИСХОДНИКИ, их правит человек (GIMP). Их
+никогда не перезаписывает сборка ROM: только ручные цели screen/sprites с
+явным --force. Финальная палитра — в main.c (bg_palette[]), не здесь.
 """
 import json
 import os
@@ -69,7 +82,8 @@ SRC = os.path.join(ROOT, 'roms/games/nu_pogodi/src')
 GROUND = os.path.join(SRC, 'ground.png')
 ATLAS_PNG = os.path.join(SRC, 'sprites.png')
 ATLAS_JSON = os.path.join(SRC, 'sprites.json')
-BACK_BMP = os.path.join(SRC, 'back.bmp')
+SPRITE_DIR = os.path.join(SRC, 'sprites')   # спрайты 1x, правятся руками
+SCREEN_BMP = os.path.join(SRC, 'screen.bmp')  # чистое поле + панель, без призраков
 BG_INC = os.path.join(SRC, 'bg.inc')
 SPR_INC = os.path.join(SRC, 'sprites.inc')
 PREVIEW = os.path.join(SRC, 'preview.png')
@@ -80,12 +94,13 @@ FIELD_X, FIELD_Y = 262, 168       # левый верхний угол поля 
 FIELD_W, FIELD_H = 571, 371       # размер поля на ground.png (~2.23 x 2.11)
 SCR_W, SCR_H = 256, 256           # холст = весь экран: поток плоскостей
                                   # ложится в 0x8000..0xDFFF без «дыр»
-MENU_H = 8                        # строка Ф-клавиш сверху
-HEADROOM = 8                      # строк над полем: уши зайца и табло счёта
-FIELD_TOP = MENU_H + HEADROOM     # экранная строка y=0 поля = 16
-BAND_TOP = FIELD_TOP - HEADROOM   # 8: выше поля ничего не рисуем
-BAND_BOT = FIELD_TOP + ARENA_H    # 192: нижняя граница поля (исключительно)
-PANEL_TOP = BAND_BOT              # 192: панель кнопок
+MENU_H = 12                       # строка Ф-клавиш сверху
+HEADROOM = 16                     # строк над полем: уши зайца, табло счёта
+                                  # и верхняя кромка крыши (не обрезается)
+FIELD_TOP = MENU_H + HEADROOM     # экранная строка y=0 поля = 28
+BAND_TOP = FIELD_TOP - HEADROOM   # 12: выше поля ничего не рисуем
+BAND_BOT = FIELD_TOP + ARENA_H    # 204: нижняя граница поля (исключительно)
+PANEL_TOP = BAND_BOT              # 204: панель кнопок и логотипа
 
 SXC = FIELD_W / ARENA_W           # масштаб фотографии по горизонтали
 SYC = FIELD_H / ARENA_H           # ... и по вертикали
@@ -94,6 +109,8 @@ SYC = FIELD_H / ARENA_H           # ... и по вертикали
 WHITE_MIN = 215                    # min(R,G,B): куры 236, небо 196
 DARK_MAX = 55                      # средняя яркость: кусты 38, забор 72
 FIELD_MIN = 128                    # ниже — декор, выше — заливка/призраки
+RED_MIN = 105                      # R крышной черепицы 141, коричневого 108
+RED_DRG = 45                       # R-G и R-B: у красного 115, у коричневого 33
 
 # --- слоты палитры и их цвета ---------------------------------------------
 SLOT_OUT = 0
@@ -102,6 +119,7 @@ SLOT_GHOST = 4
 SLOT_BROWN = 6
 SLOT_WHITE = 8
 SLOT_DARK = 10
+SLOT_RED = 12
 SLOT_INK = 1
 
 BG_COLORS = {
@@ -111,6 +129,7 @@ BG_COLORS = {
     SLOT_BROWN: 0x13,
     SLOT_WHITE: 0xFF,
     SLOT_DARK: 0x12,
+    SLOT_RED: 0x07,
 }
 
 INK_COLOR = 0x00
@@ -189,25 +208,29 @@ def load_frames():
     return {fr['filename']: fr['frame'] for fr in js['frames']}
 
 
-FRAMES = load_frames()
-ATLAS = Image.open(ATLAS_PNG).convert('RGBA')
+_ATLAS = {}
 
 
-def sprite_size(frame):
-    return (max(1, round(frame['w'] / SCALE)),
-            max(1, round(frame['h'] / SCALE)))
+def atlas():
+    """Лениво грузит атлас — он нужен только бутстрапу src/sprites/*.bmp.
+    На сборке .inc атлас не требуется: спрайты читаются из готовых BMP."""
+    if not _ATLAS:
+        _ATLAS['frames'] = load_frames()
+        _ATLAS['img'] = Image.open(ATLAS_PNG).convert('RGBA')
+    return _ATLAS['img'], _ATLAS['frames']
 
 
-def mask_of(name):
-    """Бинарный контур кадра атласа, приведённый к 1x.
+def _mask_from_atlas(name):
+    """Бинарный контур кадра атласа, приведённый к 1x (только бутстрап).
 
     Порог «тёмный/не тёмный» применяется к исходнику в 2.2x, усреднение
     BOX-ом считает долю площади пикселя, занятую штрихом, а 0.5 отбирает
     пиксели, где штрих занял больше половины. Так линия не обрастает
     полутеном интерполяции и не рассыпается на диагоналях.
     """
-    fr = FRAMES[name]
-    a = ATLAS.crop((fr['x'], fr['y'], fr['x'] + fr['w'], fr['y'] + fr['h']))
+    at, frames = atlas()
+    fr = frames[name]
+    a = at.crop((fr['x'], fr['y'], fr['x'] + fr['w'], fr['y'] + fr['h']))
     ap = a.load()
     d = Image.new('L', a.size)
     dp = d.load()
@@ -216,10 +239,45 @@ def mask_of(name):
             r, g, b, al = ap[x, y]
             luma = (r * 0.3 + g * 0.59 + b * 0.11) / 255.0
             dp[x, y] = 255 if (al > 127 and luma < 0.5) else 0
-    w, h = sprite_size(fr)
+    w = max(1, round(fr['w'] / SCALE))
+    h = max(1, round(fr['h'] / SCALE))
     cov = d.resize((w, h), Image.BOX)
     cp = cov.load()
     return {(i, j) for j in range(h) for i in range(w) if cp[i, j] >= 128}, w, h
+
+
+def sprite_path(name):
+    return os.path.join(SPRITE_DIR, name + '.bmp')
+
+
+def mask_of(name):
+    """Контур спрайта 1x из src/sprites/<name>.bmp: множество тёмных пикселей.
+
+    BMP — итоговое разрешение (WYSIWYG): что нарисовано, то и ляжет на экран.
+    Тёмный пиксель (luma < 128) — чернила сегмента, светлый — пусто. Из этого
+    же контура рисуются и призраки на фоне, поэтому призрак и сегмент
+    совпадают пиксель в пиксель.
+    """
+    path = sprite_path(name)
+    if not os.path.exists(path):
+        raise SystemExit(f'нет спрайта {path} — сначала: make sprites')
+    im = Image.open(path).convert('L')
+    w, h = im.size
+    p = im.load()
+    return {(i, j) for j in range(h) for i in range(w) if p[i, j] < 128}, w, h
+
+
+def write_sprite_bmp(path, pts, w, h):
+    """Двуцветный BMP спрайта 1x: чернила — чёрный (0), фон — белый (255).
+
+    8-битный grayscale: значения байтов читаются обратно один-в-один, без
+    палитры (индексный 'P' BMP при чтении отдаёт сырые индексы вместо яркости).
+    """
+    im = Image.new('L', (w, h), 255)
+    p = im.load()
+    for (i, j) in pts:
+        p[i, j] = 0
+    im.save(path)
 
 
 def srow(y):
@@ -267,28 +325,37 @@ def pack_rect(pts, x, y, w, h):
 
 
 # ===========================================================================
-# Панель под полем: кнопки управления и рамки под подписи клавиш
+# Панель под полем: красные кнопки управления и логотип в середине
 # ===========================================================================
 
-BTN_W, BTN_H = 32, 20                # кнопка-клавиша
-BTN_XL = 6                           # левый край левой пары
-BTN_XR = SCR_W - BTN_W - BTN_XL      # ... и правой, зеркально = 218
-LBL_W = 48                           # рамка под подпись клавиши (5 знаков)
-LBL_XL = BTN_XL + BTN_W + 4          # = 42
-LBL_XR = SCR_W - LBL_XL - LBL_W      # = 166, зеркально левой
-BAND_A_Y = PANEL_TOP + 4             # верхний ряд кнопок = 196
-BAND_B_Y = PANEL_TOP + 28            # нижний ряд кнопок = 220
+PANEL_H = SCR_H - PANEL_TOP            # 52 строки
 
-# action -> (кнопка, рамка подписи). Порядок повторяет экран: левый верхний
-# жёлоб — левая верхняя кнопка, правый нижний — правая нижняя.
-UI_SLOTS = (((BTN_XL, BAND_A_Y), (LBL_XL, BAND_A_Y)),
-            ((BTN_XL, BAND_B_Y), (LBL_XL, BAND_B_Y)),
-            ((BTN_XR, BAND_A_Y), (LBL_XR, BAND_A_Y)),
-            ((BTN_XR, BAND_B_Y), (LBL_XR, BAND_B_Y)))
+# Круглые кнопки, как в оригинале: светлый обод, красная середина и чёрная
+# стрелка-указатель на ободе, направленная в свой угол поля.
+BTN_RB = 12                            # радиус светлого обода
+BTN_RR = 5                             # радиус красной кнопки
+BTN_CX_L = 20                          # центр левой пары
+BTN_CX_R = SCR_W - BTN_CX_L            # ... и правой, зеркально = 236
+BTN_CY_A = PANEL_TOP + 12              # центр верхнего ряда = 216
+BTN_CY_B = PANEL_TOP + 36              # центр нижнего ряда = 240
+# Вынос стрелки по каждой оси. Стрелка стоит на диагонали, поэтому её центр
+# уходит от центра кнопки на BTN_ARROW*sqrt(2) ~ 8.5 — в середину кольца
+# между красной серединой (BTN_RR) и ободом (BTN_RB): чёрная стрелка видна на
+# светлом ободе и не залезает ни в краску кнопки, ни в чёрный фон панели.
+BTN_ARROW = 6                          # вынос стрелки от центра кнопки
+LOGO_RAISE = 6                         # логотип поднимаем над центром панели
+
+# Подписи клавиш ROM рисует текстом у внутреннего края: левые в колонках
+# 5..9, правые в 22..26 (согласовано с ui_key_col/ui_key_y в main.c). Между
+# ними (x 84..171) — место под логотип.
+
+# action -> центр кнопки и направление стрелки. Порядок: левый верхний
+# жёлоб — левая верхняя кнопка (↖), левый нижний — ↙, правые — ↗ ↘.
+BUTTONS = ((BTN_CX_L, BTN_CY_A, 'nw'), (BTN_CX_L, BTN_CY_B, 'sw'),
+           (BTN_CX_R, BTN_CY_A, 'ne'), (BTN_CX_R, BTN_CY_B, 'se'))
 
 # Стрелка 5x5: остриё в левый верхний угол, хвост по диагонали вправо-вниз.
 ARROW_NW = ('11100', '11000', '10100', '00100', '00010')
-ARROWS = ('nw', 'sw', 'ne', 'se')
 ARROW_SHAPES = {
     'nw': ARROW_NW,
     'sw': ARROW_NW[::-1],                        # остриё в левый нижний угол
@@ -296,35 +363,73 @@ ARROW_SHAPES = {
     'se': tuple(r[::-1] for r in ARROW_NW[::-1]),
 }
 
+# Куда смотрит стрелка вокруг центра кнопки (единичные векторы угла поля).
+ARROW_DX = {'nw': -1, 'sw': -1, 'ne': 1, 'se': 1}
+ARROW_DY = {'nw': -1, 'sw': 1, 'ne': -1, 'se': 1}
 
-def draw_frame(grid, x, y, w, h, slot):
-    """Тонкая рамка w x h: верхняя и нижняя линии, левая и правая."""
-    for i in range(w):
-        grid[y][x + i] = slot
-        grid[y + h - 1][x + i] = slot
-    for j in range(h):
-        grid[y + j][x] = slot
-        grid[y + j][x + w - 1] = slot
+LOGO_PNG = os.path.join(SRC, 'logo.png')
+LOGO_X0, LOGO_X1 = 84, 172             # горизонтальные границы логотипа
+
+
+def draw_circle(grid, cx, cy, r, slot):
+    """Заливной круг радиуса r с центром (cx, cy)."""
+    r2 = r * r
+    for j in range(cy - r, cy + r + 1):
+        if not (0 <= j < SCR_H):
+            continue
+        for i in range(cx - r, cx + r + 1):
+            if 0 <= i < SCR_W and (i - cx) ** 2 + (j - cy) ** 2 <= r2:
+                grid[j][i] = slot
+
+
+def draw_button(grid, cx, cy, arrow):
+    """Круглая клавиша: светлый обод, красная середина, чёрная стрелка.
+
+    Стрелка лежит на ободе (вынос BTN_ARROW между радиусом красной середины и
+    обода) и смотрит в свой угол поля. Чёрная (SLOT_OUT) — видна на светлом
+    ободе; на красной середине её рисовать нельзя, там она бы пропала.
+    """
+    draw_circle(grid, cx, cy, BTN_RB, SLOT_GHOST)   # светлый обод
+    draw_circle(grid, cx, cy, BTN_RR, SLOT_RED)     # красная кнопка
+    shape = ARROW_SHAPES[arrow]
+    ax = cx + ARROW_DX[arrow] * BTN_ARROW - len(shape[0]) // 2
+    ay = cy + ARROW_DY[arrow] * BTN_ARROW - len(shape) // 2
+    for j, row in enumerate(shape):
+        for i, ch in enumerate(row):
+            if ch == '1' and 0 <= ay + j < SCR_H and 0 <= ax + i < SCR_W:
+                grid[ay + j][ax + i] = SLOT_OUT      # чёрная стрелка
+
+
+def draw_logo(grid):
+    """«Ну, погоди!» из src/logo.png — растер в центр панели.
+
+    Кириллицу шрифт 8x8 не выводит, поэтому заголовок ложится в фон
+    битмапом: чёрные знаки на белом поле становятся пикселями SLOT_WHITE.
+    Логотип поднимаем над центром панели на LOGO_RAISE.
+    """
+    im = Image.open(LOGO_PNG).convert('L')
+    tw = LOGO_X1 - LOGO_X0
+    th = max(1, round(im.height * tw / im.width))
+    im = im.resize((tw, th), Image.LANCZOS)
+    p = im.load()
+    y0 = PANEL_TOP + (PANEL_H - th) // 2 - LOGO_RAISE
+    for j in range(th):
+        for i in range(tw):
+            if p[i, j] < 128:
+                grid[y0 + j][LOGO_X0 + i] = SLOT_WHITE
 
 
 def build_panel(grid):
-    """Четыре клавиши по углам поля и четыре рамки для подписей.
+    """Две круглые кнопки слева и две справа, логотип между ними.
 
-    Две слева и две справа, одна над другой — как жёлобы, которые они
-    двигают. Внутри рамки подписи ROM рисует название назначенной клавиши,
-    поэтому её внутренний контур обязан оставаться чёрным: draw_char обнуляет
-    все активные плоскости, кроме своей, и рамка под текстом исчезнет.
+    Подписи клавиш в фон не попадают — их ROM рисует текстом у внутреннего
+    края кнопки, поэтому между кнопкой и логотипом обязана быть чёрная
+    полоса: draw_char обнуляет под знаком все активные плоскости, кроме
+    своей, и текст, вставший на кнопку или логотип, съел бы их.
     """
-    for (btn, lbl), arrow in zip(UI_SLOTS, ARROWS):
-        draw_frame(grid, btn[0], btn[1], BTN_W, BTN_H, SLOT_GHOST)
-        shape = ARROW_SHAPES[arrow]
-        ax = btn[0] + (BTN_W - len(shape[0])) // 2
-        ay = btn[1] + (BTN_H - len(shape)) // 2
-        for j, row in enumerate(shape):
-            for i, ch in enumerate(row):
-                if ch == '1':
-                    grid[ay + j][ax + i] = SLOT_WHITE
-        draw_frame(grid, lbl[0], lbl[1], LBL_W, BTN_H, SLOT_GHOST)
+    for (cx, cy, arrow) in BUTTONS:
+        draw_button(grid, cx, cy, arrow)
+    draw_logo(grid)
 
 
 # ===========================================================================
@@ -343,11 +448,12 @@ def load_ground():
     return field.resize((ARENA_W, BAND_BOT - BAND_TOP), Image.BOX)
 
 
-def build_background():
-    """Слотовая карта экрана 256x256: панель, заливка, декор и призраки.
+def build_screen_grid():
+    """Слотовая карта экрана 256x256: заливка, декор и панель — БЕЗ призраков.
 
-    Строки вне поля [0, BAND_TOP) и [BAND_BOT, SCR_H) остаются SLOT_OUT —
-    чёрные, кроме панели, которую дорисовывает build_panel().
+    Это содержимое src/screen.bmp, которое правится руками. Строки вне поля
+    [0, BAND_TOP) и [BAND_BOT, SCR_H) остаются SLOT_OUT — чёрные, кроме
+    панели, которую дорисовывает build_panel().
     """
     g = load_ground()
     gp = g.load()
@@ -358,6 +464,8 @@ def build_background():
             luma = r * 0.3 + gr * 0.59 + b * 0.11
             if min(r, gr, b) >= WHITE_MIN:
                 grid[y][x] = SLOT_WHITE
+            elif r >= RED_MIN and r - gr >= RED_DRG and r - b >= RED_DRG:
+                grid[y][x] = SLOT_RED          # черепица, кирпичи, гребешки
             elif luma >= FIELD_MIN:
                 grid[y][x] = SLOT_FIELD
             elif luma > DARK_MAX:
@@ -365,10 +473,19 @@ def build_background():
             else:
                 grid[y][x] = SLOT_DARK
 
-    # Призраки — из тех же масок, что и сегменты: совпадение гарантировано.
+    build_panel(grid)
+    return grid
+
+
+def add_ghosts(grid):
+    """Наложить призраки сегментов поверх чистого поля (только на заливку).
+
+    Призрак — светлый контур (SLOT_GHOST) там, где стоит спрайт. Рисуется из
+    тех же масок src/sprites/*.bmp, что и сегменты, поэтому совпадает с
+    объектами пиксель в пиксель. Заменяет только заливку SLOT_FIELD: декор
+    (кирпичи, заборы, куры) под спрайтами остаётся как есть.
+    """
     for name, places in all_positions().items():
-        if name not in FRAMES:
-            continue
         pts, w, h = mask_of(name)
         for (x, y) in places:
             x0, y0, wb, hh = rect_of(x, y, w, h)
@@ -378,9 +495,6 @@ def build_background():
                     continue
                 if grid[sy][sx] == SLOT_FIELD:
                     grid[sy][sx] = SLOT_GHOST
-
-    build_panel(grid)
-    return grid
 
 
 def write_bmp4(path, width, height, grid, palette):
@@ -458,38 +572,32 @@ def c_ident(name):
     return ('spr_digit' + name) if name.isdigit() else 'spr_' + name
 
 
-def emit_bg(grid, width, height, pal):
+def emit_bg(grid, width, height):
     stream = plane_stream(grid, width, height)
     packed = zx0.compress(stream)
     assert zx0.decompress(packed) == stream, 'ZX0 round-trip не сошёлся'
     out = ["""/*
  * bg.inc — фон экрана «Ну, погоди!» (Вектор-06Ц).
  *
- * СГЕНЕРИРОВАНО tools/gen_assets.py — правки здесь сгорают при пересборке,
- * картинку правила в src/back.bmp и перегенерируй:
- *     python3 tools/gen_assets.py inc
+ * СГЕНЕРИРОВАНО tools/gen_assets.py — правки здесь сгорают при пересборке.
+ * Картинку правила в src/screen.bmp (чистое поле) и src/sprites/*.bmp
+ * (спрайты; их призраки накладываются при генерации), затем:
+ *     make inc
  *
- * bg_zx0 — плоскости с весами 8, 4, 2 в порядке адресов видеопамяти,
- * то есть поток ложится ровно в 0x8000..0xDFFF и распаковывается туда
- * одним вызовом zx0_decompress(). Плоскость веса 1 (0xE000) в фоне
- * пуста по построению: все фоновые слоты чётные. Её обнуляют заливанием.
+ * bg_zx0 — плоскости с весами 8, 4, 2 в порядке адресов видеопамяти, то есть
+ * поток ложится ровно в 0x8000..0xDFFF и распаковывается туда одним вызовом
+ * zx0_decompress(). Плоскость веса 1 (0xE000) в фоне пуста по построению:
+ * все фоновые слоты чётные, её обнуляют заливанием.
+ *
+ * ПАЛИТРА ЗДЕСЬ НЕ ЗАДАЁТСЯ — финальные цвета слотов определяет main.c
+ * (массив bg_palette[] из V06_RGB), чтобы править цвета без перегенерации
+ * ассетов. Индексы (слоты) фиксированы генератором:
+ *   0 вне поля · 2 заливка · 4 призраки · 6 заборы · 8 куры/лого ·
+ *  10 кусты · 12 черепица; нечётные — чернила сегментов (всегда 0xE000).
  */
 """,
-            'static const unsigned char bg_palette[16] = {\n']
-    for i, byte in enumerate(pal):
-        role = ('вне поля' if i == SLOT_OUT else
-                'заливка' if i == SLOT_FIELD else
-                'призраки' if i == SLOT_GHOST else
-                'декор кусты' if i == SLOT_DARK else
-                'декор забор' if i == SLOT_BROWN else
-                'декор куры' if i == SLOT_WHITE else 'СЕГМЕНТ')
-        r, g, b = vector_rgb(byte)
-        out.append(f'    V06_RGB({(r * 7 + 127) // 255},'
-                   f'{(g * 7 + 127) // 255},{(b * 3 + 127) // 255}),  '
-                   f'/* {i:2d}: 0x{byte:02X} — {role} */\n')
-    out.append('};\n\n')
-    out.append(c_array('bg_zx0', packed,
-                       f'  /* {len(stream)} КБ сырых -> {len(packed)} */'))
+            c_array('bg_zx0', packed,
+                    f'  /* {len(stream)} КБ сырых -> {len(packed)} */')]
     return ''.join(out)
 
 
@@ -515,8 +623,6 @@ def emit_sprites():
 """]
     total = 0
     for name, places in sorted(all_positions().items()):
-        if name not in FRAMES:
-            continue
         pts, w, h = mask_of(name)
         for n, (x, y) in enumerate(places):
             x0, y0, wb, hh, data = pack_rect(pts, x, y, w, h)
@@ -536,41 +642,79 @@ def emit_sprites():
 # Режимы
 # ===========================================================================
 
-def do_back():
-    grid = build_background()
-    write_bmp4(BACK_BMP, SCR_W, SCR_H, grid, palette16())
-    print(f'{BACK_BMP}: {SCR_W}x{SCR_H}, '
-          f'{len({v for r in grid for v in r})} слотов')
+FORCE = '--force' in sys.argv
+
+
+def do_screen():
+    """src/screen.bmp — чистое поле + панель, без призраков.
+
+    Существующий файл НЕ перезаписывает (правки руками в безопасности),
+    кроме явного --force.
+    """
+    if os.path.exists(SCREEN_BMP) and not FORCE:
+        print(f'  есть {SCREEN_BMP} — не трогаю (--force пересоздаст)')
+        return
+    grid = build_screen_grid()
+    write_bmp4(SCREEN_BMP, SCR_W, SCR_H, grid, palette16())
+    print(f'  wrote {SCREEN_BMP}: {SCR_W}x{SCR_H}, '
+          f'{len({v for r in grid for v in r})} слотов (без призраков)')
+
+
+def do_sprites():
+    """src/sprites/*.bmp — спрайты 1x из атласа. Каждый файл создаётся раз и
+    больше не перезаписывается (кроме --force), чтобы правки не пропали."""
+    os.makedirs(SPRITE_DIR, exist_ok=True)
+    names = sorted(all_positions())
+    made = skip = 0
+    for name in names:
+        path = sprite_path(name)
+        if os.path.exists(path) and not FORCE:
+            skip += 1
+            continue
+        pts, w, h = _mask_from_atlas(name)
+        write_sprite_bmp(path, pts, w, h)
+        made += 1
+    print(f'  src/sprites: новых {made}, уже было {skip} '
+          f'(всего {len(names)}; --force пересоздаст все)')
 
 
 def do_inc():
-    w, h, grid, bmp_pal = read_bmp4(BACK_BMP)
+    """screen.bmp + src/sprites/*.bmp -> bg.inc (с призраками) и sprites.inc.
+
+    Исходники только читаются: screen.bmp и спрайты не трогаются."""
+    w, h, grid, bmp_pal = read_bmp4(SCREEN_BMP)
+    add_ghosts(grid)
     with open(BG_INC, 'w') as f:
-        f.write(emit_bg(grid, w, h, bmp_pal))
+        f.write(emit_bg(grid, w, h))
     text, total = emit_sprites()
     with open(SPR_INC, 'w') as f:
         f.write(text)
     st = plane_stream(grid, w, h)
-    print(f'{BG_INC}: фон {len(st)} сырых -> '
-          f'{len(zx0.compress(st))} ZX0')
-    print(f'{SPR_INC}: сегменты {total} байт (без сжатия)')
+    print(f'  {BG_INC}: фон {len(st)} сырых -> '
+          f'{len(zx0.compress(st))} ZX0 (призраки наложены)')
+    print(f'  {SPR_INC}: сегменты {total} байт (без сжатия)')
 
 
 def do_preview():
-    w, h, grid, bmp_pal = read_bmp4(BACK_BMP)
+    """preview.png — как будет выглядеть фон в ROM (screen.bmp + призраки)."""
+    w, h, grid, bmp_pal = read_bmp4(SCREEN_BMP)
+    add_ghosts(grid)
     out = Image.new('RGB', (w, h))
     op = out.load()
     for y in range(h):
         for x in range(w):
             op[x, y] = vector_rgb(bmp_pal[grid[y][x]])
     out.resize((w * 3, h * 3), Image.NEAREST).save(PREVIEW)
-    print(f'{PREVIEW}')
+    print(f'  {PREVIEW}')
 
 
 def main():
-    what = sys.argv[1] if len(sys.argv) > 1 else 'all'
-    if what in ('all', 'back'):
-        do_back()
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    what = args[0] if args else 'all'
+    if what in ('all', 'screen'):
+        do_screen()
+    if what in ('all', 'sprites'):
+        do_sprites()
     if what in ('all', 'inc'):
         do_inc()
     if what in ('all', 'preview'):
