@@ -10,17 +10,21 @@
 #                     и атласа, ЕСЛИ их ещё нет (--force / FORCE=1 пересоздаст);
 # make screen       — то же, только src/screen.bmp;
 # make sprites      — то же, только src/sprites/*.bmp;
-# make inc          — bg.inc + sprites.inc из screen.bmp+спрайтов (призраки тут);
+# make inc          — bg.inc + sprites.inc из screen.bmp+спрайтов; призраки
+#                     спрайтов на фон по умолчанию НЕ накладываются (так bg.inc
+#                     компактнее), GHOSTS=1 возвращает их (make inc GHOSTS=1);
 # make music        — src/title_music.inc из src/sounds/title.mus (партитура);
 # make smp          — переснять src/sounds/*.smp с оригиналов src/sounds/*.wav
-#                     (ПЕРЕЗАПИСЫВАЕТ ручную правку пар R6/R10); в ROM сейчас
-#                     не идут — Tape Out не используется
+#                     (ПЕРЕЗАПИСЫВАЕТ ручную правку пар R6/R10); в ROM не идут —
+#                     отдельные шумовые эффекты не используются (Tape Out занят
+#                     партией ударных заставки)
 # make mus          — переимпортировать title.mus из title.mid (точит правку!);
 #                     какой трек из src/music/ кладётся в title.mid — переменной
 #                     TITLE (по умолчанию title): make mus TITLE=titleA_loop;
 #                     скорость воспроизведения — переменной TEMPO (правит
 #                     строку Tempo: в готовом .mus): make mus TITLE=titleA;
-# make preview      — src/preview.png для composed-фона (как в ROM);
+# make preview      — src/preview.png для composed-фона (как в ROM; призраки —
+#                     только с GHOSTS=1);
 # make clean        — убрать артефакты;
 # make deploy       — положить ROM в эмулятор;
 # make full         — clean + all + deploy.
@@ -28,7 +32,8 @@
 # src/screen.bmp (поле+панель, без призраков) и src/sprites/*.bmp (спрайты 1x)
 # — ИСХОДНИКИ, их правит человек в GIMP: палитра BMP настоящая векторная,
 # индексы совпадают со слотами. Сборка ROM их НЕ перезаписывает — только
-# читает. Призраки накладываются на поле при генерации bg.inc (make inc).
+# читает. Призраки спрайтов на поле по умолчанию НЕ накладываются (bg.inc без
+# них компактнее); GHOSTS=1 (make inc/preview GHOSTS=1) возвращает наложение.
 # Финальная палитра — в main.c (bg_palette[]), не в ассетах.
 # Цели screen/sprites идемпотентны: существующие файлы не трогаются без FORCE=1.
 #
@@ -49,13 +54,18 @@ GENFONT = tools/gen_font.py
 MIDI2MUS = ../../../utils/midi2mus.py
 MUS2INC  = ../../../utils/mus2inc.py
 DMC2SMP  = ../../../utils/dmc2smp.py
+# Общий набор ударных (16 семплов nes_drums) — тот же, что подключают
+# music-ROM'ы через ../soundtracks/soundtrack.mk.
+SOUNDTRACKS = ../../musics/soundtracks
+NESDRUMS    = $(SOUNDTRACKS)/nes_drums.c
 TARGET     = nu_pogodi.rom
 TARGET_AY  = nu_pogodi_ay.rom
 
-# Шумовые эффекты в ROM НЕ идут: Tape Out в игре не используется вовсе,
-# «разбилось» и «конец игры» — тональные гудки на КР580ВИ53 (main.c, шаг
-# sfx_step_t). src/sounds/*.smp остаются как запись эксперимента (их снимает
-# `make smp` с .wav), но в образ не попадают: список SFX_SMP пуст.
+# Отдельные шумовые эффекты в ROM НЕ идут: «разбилось» и «конец игры» —
+# тональные гудки на КР580ВИ53 (main.c, шаг sfx_step_t). Tape Out теперь занят
+# партией ударных заставки (drums.asm), поэтому src/sounds/*.smp остаются лишь
+# как запись эксперимента (их снимает `make smp` с .wav), но в образ не
+# попадают: список SFX_SMP пуст.
 SFX_SMP =
 SFX_INC = $(addprefix src/,$(addsuffix _smp.inc,$(SFX_SMP)))
 
@@ -77,6 +87,11 @@ TEMPO ?= 242
 FORCE ?= 0
 GFLAGS = $(if $(filter 1,$(FORCE)),--force,)
 
+# GHOSTS=1 наложить призраки спрайтов на фон в bg.inc/preview (по умолчанию
+# выключено — так ZX0-пакованный фон компактнее).
+GHOSTS ?= 0
+GHFLAGS = $(if $(filter 1,$(GHOSTS)),--ghosts,)
+
 # Общая часть источников (без библиотеки вывода — её добавляет вариант).
 SRCS_COMMON = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm \
@@ -88,6 +103,7 @@ SRCS_COMMON = $(LIB)/sys/startup.asm \
        $(LIB)/snd/notes.c $(LIB)/snd/music.c \
        $(LIB)/snd/sfx.c \
        $(LIB)/snd/drums.asm \
+       $(NESDRUMS) \
        src/font.asm \
        main.c
 
@@ -97,10 +113,11 @@ SRCS_AY = $(SRCS_COMMON) $(LIB)/snd/ay.c     # TARGET_AY — тон на AY-3-89
 # FONT_EXTERNAL: pr.asm берёт font_chars/font8x8 как EXTERN из src/font.asm
 # (кириллический шрифт) вместо шрифта по умолчанию lib/gfx/fonts/default_8x8.inc.
 # MUSIC_ONLY + один флаг маршрута: он кодирует и чип тона, и путь ударных
-# (music.c, drums.asm, sfx.c выбирают вывод по нему же на сборке). В игре
-# ударных нет вовсе — drum_tick() из главного цикла убран, Tape Out не
-# используется ни в одном варианте. -D — в C-препроцессор, -Ca-D — в z80asm.
-ZFLAGS_BASE = +vector06c --no-crt -I$(LIB) -Ca-DFONT_EXTERNAL -DMUSIC_ONLY
+# (music.c, drums.asm, sfx.c выбирают вывод по нему же на сборке). Партия
+# ударных берётся из percussion-канала title.mid (midi2mus, GM-карта) и идёт
+# на общих семплах nes_drums (--use-shared). Маршрут: ВИ53-вариант — Tape Out
+# (PC0), AY-вариант — Noise C. -D — в C-препроцессор, -Ca-D — в z80asm.
+ZFLAGS_BASE = +vector06c --no-crt -I. -I$(LIB) -I$(SOUNDTRACKS) -Ca-DFONT_EXTERNAL -DMUSIC_ONLY
 ZFLAGS      = $(ZFLAGS_BASE) -DMUSIC_VI53_DRUMS_TAPE -Ca-DMUSIC_VI53_DRUMS_TAPE
 ZFLAGS_AY   = $(ZFLAGS_BASE) -DMUSIC_AY_DRUMS_AY   -Ca-DMUSIC_AY_DRUMS_AY
 
@@ -119,7 +136,7 @@ $(TARGET): main.c $(GEN) $(GEN_HEADERS) $(SRCS)
 	@echo "=== Done: $@ ==="
 	@ls -l $@
 
-# AY-вариант: тон на AY-3-8910 (ударные — Noise C, но их в игре нет), без vi53.c.
+# AY-вариант: тон на AY-3-8910 (ударные — Noise C), без vi53.c.
 $(TARGET_AY): main.c $(GEN) $(GEN_HEADERS) $(SRCS_AY)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS_AY) $(SRCS_AY) -o $@
@@ -133,10 +150,10 @@ SPRITE_BMPS = $(wildcard src/sprites/*.bmp)
 # не вызвал его дважды. Зависит от screen.bmp и всех спрайтов: правка любого
 # из них вызывает перегенерацию .inc (но сами исходники не трогаются).
 src/bg.inc src/sprites.inc &: src/screen.bmp $(SPRITE_BMPS) $(GEN)
-	@python3 $(GEN) inc
+	@python3 $(GEN) inc $(GHFLAGS)
 
 inc:
-	@python3 $(GEN) inc
+	@python3 $(GEN) inc $(GHFLAGS)
 
 # Создать исходники, если их ещё нет (FORCE=1 пересоздаст, потеряв правку).
 screen:
@@ -148,7 +165,7 @@ sprites:
 assets: screen sprites preview
 
 preview:
-	@python3 $(GEN) preview
+	@python3 $(GEN) preview $(GHFLAGS)
 
 # Мелодия заставки: src/sounds/title.mus — ИСХОДНИК (правится руками в текстовом
 # виде), из него на каждой сборке перегенерируется src/title_music.inc. Импорт из
@@ -157,13 +174,13 @@ preview:
 # Копия делается в самом рецепте, а не отдельным файловым правилом: иначе выбор
 # второго варианта подряд не срабатывал бы (title.mid свежее исходника).
 src/title_music.inc: src/sounds/title.mus $(MUS2INC)
-	@python3 $(MUS2INC) $< -o $@ --name title_music --allow-len-mismatch
+	@python3 $(MUS2INC) $< -o $@ --name title_music --use-shared nes_drums --allow-len-mismatch
 
 music: src/title_music.inc
 
 mus:
 	@cp src/music/$(TITLE).mid src/sounds/title.mid
-	@python3 $(MIDI2MUS) src/sounds/title.mid -o src/sounds/title.mus --no-drums
+	@python3 $(MIDI2MUS) src/sounds/title.mid -o src/sounds/title.mus
 	@sed -i "s/^Tempo: T.*/Tempo: T$(TEMPO)/" src/sounds/title.mus
 	@echo "  Tempo: -> T$(TEMPO) (компенсация ~24 кадров/с вместо 50)"
 

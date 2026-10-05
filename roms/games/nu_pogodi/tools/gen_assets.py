@@ -55,10 +55,16 @@
                             #   существующий НЕ перезаписывает (кроме --force)
     gen_assets.py sprites   # src/sprites/*.bmp из атласа sprites.png;
                             #   существующие НЕ перезаписывает (кроме --force)
-    gen_assets.py inc       # screen.bmp + sprites/*.bmp -> bg.inc (с призраками)
-                            #   и sprites.inc; исходники не трогает
+    gen_assets.py inc       # screen.bmp + sprites/*.bmp -> bg.inc и sprites.inc;
+                            #   исходники не трогает. Призраки спрайтов на фон
+                            #   НЕ накладываются (так bg.inc компактнее) — их
+                            #   возвращает флаг --ghosts
     gen_assets.py preview   # preview.png — как фон будет выглядеть в ROM
+                            #   (без призраков; --ghosts добавляет их)
     gen_assets.py           # = screen + sprites + inc + preview (безопасно)
+
+--ghosts — наложить призраки спрайтов на фон в inc/preview (по умолчанию
+выключено). --force — пересоздать исходники screen/sprites, затерев правку.
 
 screen.bmp и src/sprites/*.bmp — ИСХОДНИКИ, их правит человек (GIMP). Их
 никогда не перезаписывает сборка ROM: только ручные цели screen/sprites с
@@ -591,7 +597,8 @@ def emit_bg(grid, width, height):
  *
  * СГЕНЕРИРОВАНО tools/gen_assets.py — правки здесь сгорают при пересборке.
  * Картинку правила в src/screen.bmp (чистое поле) и src/sprites/*.bmp
- * (спрайты; их призраки накладываются при генерации), затем:
+ * (спрайты). Призраки спрайтов на фон по умолчанию НЕ накладываются
+ * (так bg.inc компактнее); включить их — `make inc GHOSTS=1`, затем:
  *     make inc
  *
  * bg_zx0 — плоскости с весами 8, 4, 2 в порядке адресов видеопамяти, то есть
@@ -653,6 +660,13 @@ def emit_sprites():
 # ===========================================================================
 
 FORCE = '--force' in sys.argv
+# Призраки спрайтов на фоне ПО УМОЛЧАНИЮ ОТКЛЮЧЕНЫ: они съедают место в
+# ZX0-пакованном bg.inc, а в игре сегменты рисуются поверх чистого поля и без
+# них. Флаг --ghosts возвращает наложение (для preview/сравнения). Касается
+# только do_inc()/do_preview(): screen.bmp всегда чистое поле без призраков,
+# а светлые ободки кнопок панели (SLOT_GHOST) рисуются в build_panel() и от
+# этого флага не зависят.
+GHOSTS = '--ghosts' in sys.argv
 
 
 def do_screen():
@@ -689,11 +703,14 @@ def do_sprites():
 
 
 def do_inc():
-    """screen.bmp + src/sprites/*.bmp -> bg.inc (с призраками) и sprites.inc.
+    """screen.bmp + src/sprites/*.bmp -> bg.inc и sprites.inc.
 
-    Исходники только читаются: screen.bmp и спрайты не трогаются."""
+    Призраки спрайтов на фон накладываются только с --ghosts (по умолчанию
+    фон чистый — так bg.inc компактнее). Исходники только читаются:
+    screen.bmp и спрайты не трогаются."""
     w, h, grid, bmp_pal = read_bmp4(SCREEN_BMP)
-    add_ghosts(grid)
+    if GHOSTS:
+        add_ghosts(grid)
     with open(BG_INC, 'w') as f:
         f.write(emit_bg(grid, w, h))
     text, total = emit_sprites()
@@ -701,14 +718,17 @@ def do_inc():
         f.write(text)
     st = plane_stream(grid, w, h)
     print(f'  {BG_INC}: фон {len(st)} сырых -> '
-          f'{len(zx0.compress(st))} ZX0 (призраки наложены)')
+          f'{len(zx0.compress(st))} ZX0 '
+          f'({"призраки наложены" if GHOSTS else "без призраков"})')
     print(f'  {SPR_INC}: сегменты {total} байт (без сжатия)')
 
 
 def do_preview():
-    """preview.png — как будет выглядеть фон в ROM (screen.bmp + призраки)."""
+    """preview.png — как будет выглядеть фон в ROM (screen.bmp; призраки —
+    только с --ghosts, чтобы preview совпадал с собранным bg.inc)."""
     w, h, grid, bmp_pal = read_bmp4(SCREEN_BMP)
-    add_ghosts(grid)
+    if GHOSTS:
+        add_ghosts(grid)
     out = Image.new('RGB', (w, h))
     op = out.load()
     for y in range(h):
