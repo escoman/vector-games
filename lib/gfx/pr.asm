@@ -32,6 +32,11 @@
 ; (0x8000 + n*0x2000); строка y блока — по адресу (256-y)&0xFF, строки
 ; вниз — уменьшение адреса.
 ;
+; ОПТИМИЗАЦИИ:
+;   1. LUT 256 байт (font_lut) — O(1) lookup вместо O(n) поиска.
+;   2. Дескриптор читается один раз (build_lut), не на каждый символ.
+;   3. Single-plane fast path для 256x256x2 (active_planes=0x01).
+;
 ; Только 8080-инструкции: без jr/djnz и без префиксов CB/DD/ED/FD.
 ;
 
@@ -42,335 +47,207 @@
         PUBLIC  _gfx_select_font
         PUBLIC  _gfx_font_8x8
 
-        ; Маска активных плоскостей текущего видеорежима (mode.c).
-        ; Биты совпадают с маской B ниже: bit0→E000, bit1→C000,
-        ; bit2→A000, bit3→8000.
         EXTERN  _gfx_active_planes
 
 ; ---------------------------------------------------------------
 ; void gfx_put_char(unsigned char x, unsigned char y,
 ;                     char ch, unsigned char color)
 ;   __z88dk_callee
-;
-; Аргументы на входе:
-;
-;   fill? Нет.
-;
-; После CALL стек:
-;
-;   SP -> return address
-;          color
-;          ch
-;          y
-;          x
-;
-; Забираем всё через POP и возвращаем return address обратно.
-;
-; x:
-;   0..31, номер столбца (каждый столбец = 8 пикселей).
-;
-; y:
-;   0..248, верхняя строка символа.
-;
-; color:
-;   bit 3 -> плоскость E000-FFFF
-;   bit 2 -> плоскость C000-DFFF
-;   bit 1 -> плоскость A000-BFFF
-;   bit 0 -> плоскость 8000-9FFF
-;
-; Неизвестный символ = пробел.
 ; ---------------------------------------------------------------
 
 _gfx_put_char:
 
-        ; Снимаем return address.
         pop     de
-
-        ; color
         pop     hl
         ld      a, l
         ld      (tmp_color), a
-
-        ; ch
         pop     hl
         ld      a, l
         ld      (tmp_ch), a
-
-        ; y
         pop     hl
         ld      a, l
         ld      (tmp_y), a
-
-        ; x
         pop     hl
         ld      a, l
         ld      (tmp_x), a
-
-        ; Возвращаем return address.
         push    de
 
+        ; Построить LUT при первом обращении
+        ld      a, (lut_valid)
+        or      a
+        jp      nz, pc_lut_ok
+        call    build_lut
+pc_lut_ok:
         jp      draw_char
 
 
 ; ---------------------------------------------------------------
-; draw_char
+; draw_char — отрисовка одного символа.
 ;
-; Внутренняя отрисовка одного символа.
-;
-; Входные данные:
-;
-;   tmp_x
-;   tmp_y
-;   tmp_ch
-;   tmp_color
-;
-; Стек не изменяется.
-;
-; Регистры:
-;
-;   HL = адрес текущего байта VRAM
-;   DE = указатель текущего глифа
-;   C  = color
-;   B  = маска плоскости
+; Вход: tmp_x, tmp_y, tmp_ch, tmp_color, font_lut, tmp_glyphs.
+; LUT уже построен (lut_valid=1). tmp_glyphs содержит адрес данных.
 ; ---------------------------------------------------------------
 
 draw_char:
 
-        ; =======================================================
-        ; Текущий шрифт.
-        ;
-        ; tmp_font — адрес дескриптора (gfx_font_t). Из него
-        ; выбираем два слова: таблицу имён и данные глифов.
-        ; Читаем один раз на символ, дальше идёт как раньше.
-        ; =======================================================
-
-        ld      hl, (tmp_font)
-        ld      a, (hl)
-        ld      (tmp_chars), a
-        inc     hl
-        ld      a, (hl)
-        ld      (tmp_chars + 1), a
-        inc     hl
-        ld      a, (hl)
-        ld      (tmp_glyphs), a
-        inc     hl
-        ld      a, (hl)
-        ld      (tmp_glyphs + 1), a
-
-        ; =======================================================
-        ; Ищем индекс глифа E.
-        ;
-        ; chars = 0  -> прямой индекс: E = код - first_code.
-        ;               Код вне [first_code..last_code] пропускаем,
-        ;               клетку не затираем.
-        ; chars != 0 -> линейный поиск в таблице имён, неизвестный
-        ;               символ = глиф 0 (пробел).
-        ; =======================================================
-
+        ; --- LUT lookup: O(1) ---
         ld      a, (tmp_ch)
-        ld      c, a
+        ld      e, a
+        ld      d, 0
+        ld      hl, font_lut          ; LXI (linker resolves 16-bit)
+        add     hl, de                ; HL = &font_lut[char]
+        ld      a, (hl)               ; A = glyph index или 0xFF
+        cp      0FFh
+        jp      z, dc_range_out
 
-        ld      hl, (tmp_chars)
-        ld      a, h
-        or      l
-        jp      z, dc_direct
-
-        ld      e, 0
-
-dc_find:
-        ld      a, (hl)
-        or      a
-        jp      z, dc_not_found
-
-        cp      c
-        jp      z, dc_found
-
-        inc     hl
-        inc     e
-        jp      dc_find
-
-dc_not_found:
-        ld      e, 0
-        jp      dc_found
-
-        ; =======================================================
-        ; Прямой индекс. Границы лежат в словах дескриптора +4
-        ; (first_code) и +6 (last_code), значим младшие байты.
-        ;
-        ; Шаг глифа в дескрипторе не нужен: он известен из формата
-        ; шрифта и равен 8 байтам.
-        ; =======================================================
-
-dc_direct:
-
-        ; HL = tmp_font + 4 (16-битное сложение с переносом)
-        ld      hl, (tmp_font)
-        ld      a, l
-        adi     4
-        ld      l, a
-        ld      a, h
-        aci     0
-        ld      h, a
-
-        ld      b, (hl)               ; B = first_code
-        inc     hl
-        inc     hl                    ; HL = last_code
-        ld      a, (hl)
-        sub     b                     ; D = last_code - first_code,
-        jp      c, dc_range_out       ; макс. индекс; first > last –
-        ld      d, a                  ; неверный шрифт, ничего не рисует
-
-        ld      a, (tmp_ch)
-        sub     b                     ; индекс = код - first_code
-        jp      c, dc_range_out       ; код меньше first_code
-        cp      d
-        jp      z, dc_direct_ok       ; код == last_code
-        jp      nc, dc_range_out      ; код больше last_code
-dc_direct_ok:
-        ld      e, a                  ; E = индекс глифа
-
-dc_found:
-
-        ; =======================================================
-        ; HL = font8x8 + index * 8
-        ; =======================================================
-
+        ; --- Адрес глифа: tmp_glyphs + A*8 ---
+        ld      e, a
         ld      h, 0
         ld      l, e
-
         add     hl, hl
         add     hl, hl
-        add     hl, hl
+        add     hl, hl                ; HL = index × 8
+        xchg                          ; DE = index×8
+        ld      hl, (tmp_glyphs)      ; HL = base глифов (LHLD)
+        add     hl, de                ; HL = адрес глифа
+        ld      (tmp_glyph), hl       ; SHLD — сохранить
 
-        ld      de, (tmp_glyphs)
-        add     hl, de
-
-        ; Сохраняем адрес глифа.
-        ld      (tmp_glyph), hl
-
-        ; =======================================================
-        ; Вычисляем начальный адрес VRAM.
-        ;
-        ; Плоскость 8000:
-        ;
-        ;   8000 + x*256 + (255-y)
-        ;
-        ; Например:
-        ;
-        ;   x=0,  y=0   -> 80FF
-        ;   x=1,  y=0   -> 81FF
-        ;   x=0,  y=8   -> 80F7
-        ;   x=31, y=248 -> 9F07
-        ;
-        ; Внутри символа адрес уменьшается на 1.
-        ; =======================================================
-
-        ; x (столбец 0-31)
+        ; --- VRAM: H = 80h+x, L = 255-y ---
         ld      a, (tmp_x)
         and     31
-
-        ; 80h + номер блока
         add     a, 80h
         ld      h, a
-
-        ; 255 - y
         ld      a, (tmp_y)
         cpl
         ld      l, a
 
-        ; =======================================================
-        ; C = color
-        ; B = маска текущей плоскости.
-        ;
-        ; Порядок:
-        ;
-        ;   B=08 -> E000
-        ;   B=04 -> C000
-        ;   B=02 -> A000
-        ;   B=01 -> 8000
-        ; =======================================================
-
+        ; --- C = color ---
         ld      a, (tmp_color)
         ld      c, a
 
+        ; --- Single-plane check: active == 0x01 → E000 ---
+        ld      a, (_gfx_active_planes)
+        cpi     01h
+        jp      nz, dc_multi
+
+        ; E000: сдвиг H += 60h
+        ld      a, h
+        adi     60h
+        ld      h, a
+
+        ; Загрузить DE = адрес глифа (сохраняет HL=VRAM)
+        ld      de, (tmp_glyph)
+
+        ; Цветовой бит: C & 01
+        ld      a, c
+        and     01h
+        jp      z, dc_clear_1p
+
+        ; --- Запись 8 строк ---
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        inc     de
+        dec     hl
+        ld      a, (de)
+        ld      (hl), a
+        ret
+
+dc_clear_1p:
+        xor     a
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        ret
+
+
+; ---------------------------------------------------------------
+; Multi-plane loop: для режимов 4 плоскостей или 0x05.
+; ---------------------------------------------------------------
+
+dc_multi:
+
         ld      b, 08h
-
-
-; ===============================================================
-; Следующая плоскость
-; ===============================================================
 
 dc_plane:
 
-        ; -------------------------------------------------------
-        ; Пропускаем плоскости, не входящие в текущий видеорежим:
-        ; неактивную плоскость не пишем и не стираем.
-        ; -------------------------------------------------------
-
+        ; Пропуск неактивных плоскостей
         ld      a, (_gfx_active_planes)
         and     b
         jp      z, dc_skip
 
-        ; -------------------------------------------------------
-        ; DE = начало текущего глифа.
-        ; -------------------------------------------------------
-
+        ; Загрузить DE = глиф (XCHG+LHLD+XCHG — сохраняет HL)
         ld      de, (tmp_glyph)
 
-        ; -------------------------------------------------------
-        ; Проверяем цветовой бит.
-        ; -------------------------------------------------------
-
+        ; Цветовой бит
         ld      a, c
         and     b
         jp      z, dc_clear
 
-
-        ; =======================================================
-        ; Цветной глиф.
-        ; Записываем 8 строк.
-        ;
-        ; После каждой строки:
-        ;
-        ;   DE++
-        ;   HL--
-        ; =======================================================
-
+        ; --- Запись 8 строк ---
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         inc     de
         dec     hl
-
         ld      a, (de)
         ld      (hl), a
         dec     hl
@@ -378,112 +255,60 @@ dc_plane:
         jp      dc_plane_next
 
 
-; ===============================================================
-; Нулевая плоскость.
-;
-; Если соответствующий бит color = 0, фон символа должен
-; быть очищен.
-; ===============================================================
-
 dc_clear:
 
         xor     a
-
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
+        ld      (hl), a
+        dec     hl
         ld      (hl), a
         dec     hl
 
-        ld      (hl), a
-        dec     hl
-
-        ld      (hl), a
-        dec     hl
-
-        ld      (hl), a
-        dec     hl
-
-        ld      (hl), a
-        dec     hl
-
-        ld      (hl), a
-        dec     hl
-
-        ld      (hl), a
-        dec     hl
-
-        ld      (hl), a
-        dec     hl
-
-
-; ===============================================================
-; Переход к следующей плоскости.
-;
-; После 8 × DEC HL:
-;
-;   HL = исходный адрес - 8
-;
-; Нужно получить:
-;
-;   исходный адрес + 2000h
-;
-; поэтому добавляем 2008h.
-;
-; Используем полноценную 16-битную арифметику с переносом.
-; ===============================================================
 
 dc_plane_next:
 
-        ; После записи/очистки HL уменьшен на 8 — компенсируем и
-        ; переходим на следующую плоскость: +2008h.
+        ; +2008h (компенсация -8 от записей + переход к следующей пл.)
         ld      a, l
         adi     08h
         ld      l, a
-
         ld      a, h
         aci     20h
         ld      h, a
 
         jp      dc_mask_next
 
-        ; -------------------------------------------------------
-        ; Плоскость неактивна: запись не производилась, HL не менялся.
-        ; Переход на следующую плоскость: +2000h (H += 20h).
-        ; -------------------------------------------------------
 
 dc_skip:
 
+        ; Плоскость неактивна: +2000h
         ld      a, h
         adi     20h
         ld      h, a
 
-        ; -------------------------------------------------------
-        ; Следующая маска:
-        ;
-        ; 08 -> 04
-        ; 04 -> 02
-        ; 02 -> 01
-        ; 01 -> 80
-        ;
-        ; После обработки плоскости 01 завершаем.
-        ; -------------------------------------------------------
 
 dc_mask_next:
 
+        ; Следующая маска: 08→04→02→01→80(выход)
         ld      a, b
         rrca
         ld      b, a
-
         cp      80h
         jp      nz, dc_plane
-
         ret
 
 
-; ---------------------------------------------------------------
-; Код вне диапазона шрифта прямого индекса: в VRAM не пишем ничего.
-; ---------------------------------------------------------------
-
 dc_range_out:
-
         ret
 
 
@@ -491,77 +316,50 @@ dc_range_out:
 ; void gfx_print(unsigned char x, unsigned char y,
 ;                  const char *s, unsigned char color)
 ;   __z88dk_callee
-;
-; Выводит строку символов с шагом 8 пикселей.
-;
-; DE = указатель строки во время цикла.
-; draw_char может портить DE, поэтому указатель сохраняется
-; обычным PUSH/POP вокруг CALL.
 ; ---------------------------------------------------------------
 
 _gfx_print:
 
-        ; return address
         pop     de
-
-        ; color
         pop     hl
         ld      a, l
         ld      (tmp_color), a
-
-        ; s
         pop     hl
         ld      (tmp_s), hl
-
-        ; y
         pop     hl
         ld      a, l
         ld      (tmp_y), a
-
-        ; x
         pop     hl
         ld      a, l
         ld      (tmp_x), a
-
-        ; return address обратно
         push    de
 
-        ; DE = строка
-        ld      de, (tmp_s)
+        ; LUT: построить при первом обращении
+        ld      a, (lut_valid)
+        or      a
+        jp      nz, pr_lut_ok
+        call    build_lut
+pr_lut_ok:
 
+        ; DE = строка (LHLD+XCHG: сохраняет HL)
+        ld      hl, (tmp_s)
+        xchg
 
-; ===============================================================
-; Цикл вывода строки
-; ===============================================================
 
 dp_loop:
 
         ld      a, (de)
         or      a
         jp      z, dp_done
-
-        ; DE указывает на следующий символ после INC.
         inc     de
-
-        ; Сохраняем указатель строки.
         push    de
-
-        ; Текущий символ.
         ld      (tmp_ch), a
-
-        ; Рисуем.
         call    draw_char
-
-        ; Восстанавливаем указатель строки.
         pop     de
-
-        ; x += 1 (следующий столбец)
         ld      a, (tmp_x)
         inc     a
         ld      (tmp_x), a
-
         jp      dp_loop
-
 
 dp_done:
         ret
@@ -570,28 +368,13 @@ dp_done:
 ; ---------------------------------------------------------------
 ; void gfx_select_font(const gfx_font_t *font)
 ;   __z88dk_callee
-;
-; Меняет текущий шрифт. Аргумент — адрес дескриптора
-; (gfx_font_t из v06.h); вызов действует на все последующие
-; gfx_put_char / gfx_print.
-;
-; font = 0 возвращает шрифт, собранный в ROM (_gfx_font_8x8).
-;
-; После CALL стек:
-;
-;   SP -> return address
-;          font
 ; ---------------------------------------------------------------
 
 _gfx_select_font:
 
-        ; return address
         pop     de
-
-        ; font
         pop     hl
 
-        ; NULL -> шрифт по умолчанию
         ld      a, h
         or      l
         jp      nz, sel_user
@@ -601,9 +384,149 @@ _gfx_select_font:
 sel_user:
         ld      (tmp_font), hl
 
-        ; return address обратно
-        push    de
+        ; Сбросить LUT — будет перестроен при ближайшей печати
+        xor     a
+        ld      (lut_valid), a
 
+        push    de
+        ret
+
+
+; ---------------------------------------------------------------
+; build_lut — построить font_lut из дескриптора tmp_font.
+; Сохраняет tmp_glyphs. Устанавливает lut_valid=1.
+; Вызывается один раз на шрифт.
+; ---------------------------------------------------------------
+
+build_lut:
+
+        ; Прочитать дескриптор gfx_font_t из tmp_font:
+        ;   +0,+1 = chars (таблица имён или 0 для прямого индекса)
+        ;   +2,+3 = glyphs
+        ;   +4,+5 = first_code (младший байт значим)
+        ;   +6,+7 = last_code (младший байт значим)
+
+        ld      hl, (tmp_font)        ; HL = адрес дескриптора
+
+        ; glyphs (+2,+3) → tmp_glyphs (HL)
+        ld      a, l
+        adi     2
+        ld      l, a
+        ld      a, h
+        aci     0
+        ld      h, a                  ; HL = desc + 2
+        ld      a, (hl)               ; A = glyph low
+        inc     hl
+        ld      h, (hl)               ; H = glyph high
+        ld      l, a                  ; HL = glyph address
+        ld      (tmp_glyphs), hl      ; SHLD: save
+
+        ; chars (+0,+1): читаем из дескриптора
+        ld      hl, (tmp_font)
+        ld      a, (hl)               ; chars low
+        inc     hl
+        ld      h, (hl)               ; H = chars high
+        ld      l, a                  ; HL = chars word
+        ld      (tmp_chars), hl       ; SHLD: store chars ptr
+
+        ; Проверка: chars == 0? → прямой индекс
+        ld      a, h
+        or      l
+        jp      nz, bl_table
+
+        ; ---- ПРЯМОЙ ИНДЕКС (chars = 0) ----
+
+        ; first_code at descriptor+4
+        ld      hl, (tmp_font)
+        ld      a, l
+        adi     4
+        ld      l, a
+        ld      a, h
+        aci     0
+        ld      h, a                  ; HL = desc + 4
+        ld      a, (hl)               ; A = first_code
+        ld      (bl_first), a
+        inc     hl
+        inc     hl                    ; HL = desc + 6
+        ld      a, (hl)               ; A = last_code
+        ld      (bl_last), a
+
+        ; Очистить LUT → 0xFF
+        ld      hl, font_lut
+        ld      b, 0
+bl_clrff:
+        ld      (hl), 0FFh            ; MVI M, FF
+        inc     hl
+        inc     b                     ; INR B → sets Z on 256-wrap
+        jp      nz, bl_clrff
+
+        ; Заполнить: font_lut[first+i] = i, для i=0..(last-first)
+        ld      a, (bl_first)
+        ld      e, a
+        ld      d, 0
+        ld      hl, font_lut
+        add     hl, de                ; HL = &font_lut[first]
+        ld      a, (bl_last)
+        sub     e                     ; A = last - first
+        ld      c, a                  ; C = count-1
+        ld      b, 0                  ; B = index
+
+bl_dfill:
+        ld      a, b
+        ld      (hl), a               ; lut[code] = index
+        inc     hl
+        inc     b
+        dec     c
+        jp      nz, bl_dfill
+
+        ; Последний элемент (last_code включительно)
+        ld      a, b
+        ld      (hl), a
+
+        jp      bl_finish
+
+
+        ; ---- ТАБЛИЦА ИМЁН (chars != 0) ----
+
+bl_table:
+
+        ; Очистить LUT → 0
+        ld      hl, font_lut
+        ld      b, 0
+bl_clr0:
+        ld      (hl), 0               ; MVI M, 00
+        inc     hl
+        inc     b
+        jp      nz, bl_clr0
+
+        ; Сканировать таблицу имён
+        ; DE = указатель на таблицу (tmp_chars)
+        ld      de, (tmp_chars)
+        ; C = 0 (индекс)
+        ld      c, 0
+
+bl_fill:
+        ld      a, (de)               ; char code (LDAX D)
+        or      a                     ; null?
+        jp      z, bl_finish          ; конец таблицы
+
+        push    de                    ; сохранить указатель таблицы
+        ld      e, a                  ; DE = char offset
+        ld      d, 0
+        ld      hl, font_lut
+        add     hl, de                ; HL = &font_lut[char]
+        ld      a, c                  ; A = current index
+        ld      (hl), a               ; font_lut[char] = index
+        pop     de                    ; восстановить указатель
+
+        inc     de                    ; next entry
+        inc     c                     ; next index
+        jp      bl_fill
+
+
+bl_finish:
+        ld      a, 1
+        ld      (lut_valid), a
         ret
 
 
@@ -613,66 +536,39 @@ sel_user:
 
 tmp_x:
         defb    0
-
 tmp_y:
         defb    0
-
 tmp_ch:
         defb    0
-
 tmp_color:
         defb    0
-
 tmp_glyph:
         defw    0
-
 tmp_s:
         defw    0
-
-; ---------------------------------------------------------------
-; Текущий шрифт.
-;
-; tmp_font   — адрес дескриптора; инициализируется при сборке
-;              шрифтом из ROM, gfx_select_font меняет его на ходу.
-; tmp_chars, tmp_glyphs — два слова дескриптора, разобранные
-;              один раз на символ (см. draw_char).
-; ---------------------------------------------------------------
-
 tmp_font:
         defw    _gfx_font_8x8
-
 tmp_chars:
         defw    0
-
 tmp_glyphs:
         defw    0
-
+lut_valid:
+        defb    0
+bl_first:
+        defb    0
+bl_last:
+        defb    0
 
 ; ---------------------------------------------------------------
-; Шрифт 8x8.
-;
-; Данные по умолчанию — fonts/default_8x8.inc. Путь разрешается
-; относительно каталога этого файла, передавать -I не нужно.
-;
-; Шрифт целиком можно заменить на собранный в игре: для этого в
-; SRCS добавляется модуль вида
-;
-;         SECTION code_clib
-;         PUBLIC  font_chars
-;         PUBLIC  font8x8
-;
-;   font_chars:
-;         defm    " ..."
-;         defb    0
-;   font8x8:
-;         defb    ...
-;
-; и собирается с -Ca-DFONT_EXTERNAL: тогда вместо INCLUDE обе
-; метки объявляются как EXTERN и линкуются из того модуля.
-;
-; Второй вариант — не заменять шрифт по умолчанию, а добавить
-; в ROM ещё один дескриптор и переключать его gfx_select_font
-; (так печатают несколькими шрифтами на одном экране).
+; font_lut: 256 байт LUT (char → glyph index или 0xFF).
+; Выравнивание не требуется — доступ через 16-битный LXI + DAD.
+; ---------------------------------------------------------------
+
+font_lut:
+        defs    256
+
+; ---------------------------------------------------------------
+; Шрифт 8x8 по умолчанию.
 ; ---------------------------------------------------------------
 
         ifdef   FONT_EXTERNAL
@@ -682,18 +578,12 @@ tmp_glyphs:
         INCLUDE "fonts/default_8x8.inc"
         endif
 
-
 ; ---------------------------------------------------------------
-; Дескриптор шрифта по умолчанию. Структура gfx_font_t (v06.h):
-;
-;   word 0  адрес таблицы имён   (font_chars, 0 = конец таблицы)
-;   word 1  адрес данных глифов  (font8x8)
-;   word 2  первый код символа   (first_code, младший байт)
-;   word 3  последний код        (last_code, младший байт)
-;
-; Слова 2 и 3 работают только при chars = 0 (прямой индекс), поэтому у
-; шрифта по умолчанию они заполнены нулём.
-;
+; Дескриптор gfx_font_t:
+;   word 0: адрес таблицы имён
+;   word 1: адрес данных глифов
+;   word 2: first_code (для прямого индекса)
+;   word 3: last_code
 ; ---------------------------------------------------------------
 
 _gfx_font_8x8:
