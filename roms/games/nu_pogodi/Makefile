@@ -6,6 +6,8 @@
 # make screen       — то же, только src/screen.bmp;
 # make sprites      — то же, только src/sprites/*.bmp;
 # make inc          — bg.inc + sprites.inc из screen.bmp+спрайтов (призраки тут);
+# make music        — src/title_music.inc из src/sounds/title.mus (партитура);
+# make mus          — переимпортировать title.mus из title.mid (тонет правку!);
 # make preview      — src/preview.png для composed-фона (как в ROM);
 # make clean        — убрать артефакты;
 # make deploy       — положить ROM в эмулятор;
@@ -17,6 +19,11 @@
 # читает. Призраки накладываются на поле при генерации bg.inc (make inc).
 # Финальная палитра — в main.c (bg_palette[]), не в ассетах.
 # Цели screen/sprites идемпотентны: существующие файлы не трогаются без FORCE=1.
+#
+# src/sounds/title.mus — ИСХОДНИК мелодии заставки (текстовая партитура, правится
+# руками: Tempo + нотные строки score0/1/2). Сборка всегда перегоняет его в
+# src/title_music.inc (mus2inc.py). title.mid — только исходник для импорта
+# (`make mus`), ROM его не читает.
 
 include ../../../config.mk
 
@@ -50,7 +57,7 @@ SRCS = $(LIB)/sys/startup.asm \
 ZFLAGS = +vector06c --no-crt -I$(LIB) -Ca-DFONT_EXTERNAL \
          -DMUSIC_ONLY -DMUSIC_VI53_DRUMS_TAPE -Ca-DMUSIC_VI53_DRUMS_TAPE
 
-.PHONY: all deploy clean full screen sprites assets preview inc font
+.PHONY: all deploy clean full screen sprites assets preview inc font mus music
 
 all: $(TARGET)
 
@@ -87,13 +94,16 @@ assets: screen sprites preview
 preview:
 	@python3 $(GEN) preview
 
-# Мелодия заставки: src/sounds/title.mid -> title.mus -> src/title_music.inc.
-# .mid — исходник (правится человеком), .mus/.inc порождаются на сборке.
-src/sounds/title.mus: src/sounds/title.mid $(MIDI2MUS)
-	@python3 $(MIDI2MUS) $< -o $@ --no-drums
-
+# Мелодия заставки: src/sounds/title.mus — ИСХОДНИК (правится руками в текстовом
+# виде), из него на каждой сборке перегенерируется src/title_music.inc. Импорт из
+# title.mid — отдельной целью `make mus` (ПЕРЕЗАПИСЫВАЕТ title.mus, теряя правку).
 src/title_music.inc: src/sounds/title.mus $(MUS2INC)
 	@python3 $(MUS2INC) $< -o $@ --name title_music --allow-len-mismatch
+
+music: src/title_music.inc
+
+mus:
+	@python3 $(MIDI2MUS) src/sounds/title.mid -o src/sounds/title.mus --no-drums
 
 # Перегенерировать кириллический шрифт src/font.asm из PUTUP + дефолтного.
 font:

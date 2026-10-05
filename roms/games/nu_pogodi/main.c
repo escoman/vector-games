@@ -941,24 +941,19 @@ static void initialise_game(void)
 /* ----------------------------------------------------------------------- */
 
 /* Мелодия title.mid играет по кругу, пока игра не началась (пока мы в меню).
- * В конце трека — пауза TITLE_GAP кадров (~5 с при 50 Гц), чтобы он не стартовал
- * сразу заново: loop у песни выключен, заглушку перезапускаем сами по счётчику. */
-#define TITLE_GAP  250u
-
-static unsigned int title_gap;
-
+ * Пауза между повторами заложена в самих партитурах (хвост из L-пауз), поэтому
+ * зацикливаем штатно: music_set_loop(1) — движок сам переставляет потоки на
+ * начало по достижении MUS_END, ручной рестарт и счётчик выдержки не нужны. */
 static void menu_music_start(void)
 {
     music_set_data(&title_music_song);
-    music_set_loop(0);
+    music_set_loop(1);
     music_start();
-    title_gap = 0;
 }
 
 static void menu_music_stop(void)
 {
     music_stop();
-    title_gap = 0;
 }
 
 
@@ -1332,12 +1327,8 @@ int main(void)
         v06_wait_frame();
         music_tick();
         drum_tick();
-        /* В меню мелодия идёт по кругу; после конца ждём TITLE_GAP и снова
-         * стартуем. music_is_playing() станет 0, когда трек дошёл до MUS_END
-         * (loop выключен). */
-        if (state == ST_MENU && !music_is_playing() &&
-            ++title_gap >= TITLE_GAP)
-            menu_music_start();
+        /* В меню мелодия идёт по кругу сама (music_set_loop(1)); при старте
+         * игры menu_music_stop() её гасит — ручной рестарт не нужен. */
         input();
         if (remap == 0)          /* во время назначения игра стоит */
             update();

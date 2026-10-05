@@ -7,6 +7,7 @@
 
 ```
 NSF-экспорт (TXT) ──▶ txt2mus.py ──▶ .mus ──▶ find_repeats.py ──▶ _rep.mus ──▶ mus2inc.py ──▶ .inc
+MIDI (.mid) ───────▶ midi2mus.py ──▶ .mus ─┘   (или правка .mus руками: mus_transpose.py)
 ```
 
 Или одной командой:
@@ -28,6 +29,25 @@ python3 utils/txt2mus.py track_0.txt [-o out.mus] [--tempo N] [--verify] [--self
 - Секции: Square1 → score0, Square2 → score1, Triangle → score2, Noise+DPCM → drums
 - Циклы: `BEGIN_CYCLE` / `END_CYCLE` → `BEGIN … END` со сбросом O/L
 - Квантизация: PPQ = 32, темп из `--tempo` или из framerate (60 Гц → T225)
+
+### mus_transpose.py
+
+Транспонирование готовой партитуры `.mus` по октавам: меняет только команды
+`O<n>` в выбранных партиях, остальное (ноты, длительности, повторы, темп,
+комментарии) не трогает.
+
+```bash
+python3 utils/mus_transpose.py track.mus -n -1              # все голоса на октаву ниже
+python3 utils/mus_transpose.py track.mus -n -1 --score 1     # только второй голос
+python3 utils/mus_transpose.py track.mus -n 1 --dry-run      # отчёт без записи
+python3 utils/mus_transpose.py --self-test
+```
+
+- Октавы прижимаются к диапазону 0..7 с предупреждением (очень низкие ноты
+  `mus2inc.py` и так делает паузами — абсолютный номер ниже 12 не звучит)
+- Печатает гистограмму октав «было/стало» по каждой партии — удобно для контроля
+- Сделан потому, что ручная замена коротких токенов (`O5`→`O4`) в плотном тексте
+  партитуры применяется частично: скрипт делает это детерминированно
 
 ### find_repeats.py
 

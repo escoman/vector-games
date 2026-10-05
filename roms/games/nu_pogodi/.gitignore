@@ -8,9 +8,9 @@ src/bg.inc
 src/sprites.inc
 src/preview.png
 
-# Музыка заставки: src/sounds/title.mid — ИСХОДНИК (не игнорим); .mus и .inc —
-# порождаемые (midi2mus.py -> mus2inc.py), перегенерируются на сборке.
-src/sounds/title.mus
+# Музыка заставки: src/sounds/title.mus — ИСХОДНИК (правится руками, коммитится);
+# src/title_music.inc — порождаемый (mus2inc.py), перегенерируется на сборке.
+# Импорт .mid → .mus — вручную через `make mus`.
 src/title_music.inc
 
 # src/screen.bmp и src/sprites/*.bmp — ИСХОДНИКИ (правятся в GIMP), НЕ игнорим.
