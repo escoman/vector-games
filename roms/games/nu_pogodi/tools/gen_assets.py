@@ -163,23 +163,23 @@ def vector_rgb(byte):
 # ===========================================================================
 
 EGG_SLOTS = {
-    'lt': [(21, 40), (30, 47), (42, 51), (51, 58), (59, 72)],
-    'lb': [(22, 82), (31, 87), (39, 94), (50, 98), (58, 112)],
-    'rt': [(227, 40), (218, 44), (207, 51), (197, 59), (189, 65)],
-    'rb': [(229, 84), (218, 88), (207, 94), (198, 100), (187, 110)],
+    'lt': [(21, 43), (30, 50), (42, 54), (51, 61), (59, 72)],
+    'lb': [(22, 86), (31, 91), (39, 98), (50, 102), (58, 110)],
+    'rt': [(225, 40), (216, 44), (205, 51), (195, 59), (189, 65)],
+    'rb': [(224, 84), (216, 91), (205, 97), (196, 103), (187, 107)],
 }
 EGG_FRAME = {'lt': 'egglefttop', 'lb': 'eggleftbottom',
              'rt': 'eggrighttop', 'rb': 'eggrightbottom'}
 
 WOLF = {'wolfleft': (90, 70), 'wolfright': (129, 71)}
 BASKET = {'baskettopleft': (69, 70), 'basketbottomleft': (66, 103),
-          'baskettopright': (170, 73), 'basketbottomright': (165, 109)}
+          'baskettopright': (168, 73), 'basketbottomright': (163, 109)}
 RABBIT = {'rabbit': (42, -2)}
 CHICKEN = {
     'chickenleft0': (50, 147), 'chickenleft1': (45, 128),
     'chickenleft2': (33, 130), 'chickenleft3': (18, 132),
     'chickenleft4': (9, 131),
-    'chickenright0': (182, 146), 'chickenright1': (194, 134),
+    'chickenright0': (180, 146), 'chickenright1': (194, 134),
     'chickenright2': (215, 134), 'chickenright3': (225, 133),
     'chickenright4': (237, 134),
 }

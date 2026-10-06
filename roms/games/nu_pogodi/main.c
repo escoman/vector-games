@@ -1286,7 +1286,7 @@ static void draw_keys(void)
 static void draw_top_line(void)
 {
     if (remap)
-        gfx_print(0, UI_MENU_Y, "SMENA KLAVYW           F3-OTMENA", 8);
+        gfx_print(0, UI_MENU_Y, "SMENA KLAVIW           F3-OTMENA", 8);
     else if (state == ST_MENU)
         gfx_print(0, UI_MENU_Y, "F1-IGRA A  F2-IGRA B  F3-KLAVIWI", 8);
     else

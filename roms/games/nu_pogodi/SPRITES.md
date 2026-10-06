@@ -15,41 +15,41 @@ Y=0 — верх экрана (совпадает с JS). Все координ�
 
 | # | Спрайт | X | Y | Размер |
 |---|--------|---|---|--------|
-| 0 | egglefttop0 | 21 | 40 | 11×12 |
-| 1 | egglefttop1 | 30 | 47 | 13×9 |
-| 2 | egglefttop2 | 42 | 51 | 10×13 |
-| 3 | egglefttop3 | 51 | 58 | 12×11 |
+| 0 | egglefttop0 | 21 | 43 | 11×12 |
+| 1 | egglefttop1 | 30 | 50 | 13×9 |
+| 2 | egglefttop2 | 42 | 54 | 10×13 |
+| 3 | egglefttop3 | 51 | 61 | 12×11 |
 | 4 | egglefttop4 | 59 | 72 | 13×10 |
 
 ### Левый низ (eggleftbottom)
 
 | # | Спрайт | X | Y | Размер |
 |---|--------|---|---|--------|
-| 0 | eggleftbottom0 | 22 | 82 | 10×13 |
-| 1 | eggleftbottom1 | 31 | 87 | 10×12 |
-| 2 | eggleftbottom2 | 39 | 94 | 12×10 |
-| 3 | eggleftbottom3 | 50 | 98 | 10×13 |
-| 4 | eggleftbottom4 | 58 | 112 | 13×10 |
+| 0 | eggleftbottom0 | 22 | 86 | 10×13 |
+| 1 | eggleftbottom1 | 31 | 91 | 10×12 |
+| 2 | eggleftbottom2 | 39 | 98 | 12×10 |
+| 3 | eggleftbottom3 | 50 | 102 | 10×13 |
+| 4 | eggleftbottom4 | 58 | 110 | 13×10 |
 
 ### Правый верх (eggrighttop)
 
 | # | Спрайт | X | Y | Размер |
 |---|--------|---|---|--------|
-| 0 | eggrighttop0 | 227 | 40 | 9×12 |
-| 1 | eggrighttop1 | 218 | 44 | 10×13 |
-| 2 | eggrighttop2 | 207 | 51 | 12×11 |
-| 3 | eggrighttop3 | 197 | 59 | 13×10 |
+| 0 | eggrighttop0 | 225 | 40 | 9×12 |
+| 1 | eggrighttop1 | 216 | 44 | 10×13 |
+| 2 | eggrighttop2 | 205 | 51 | 12×11 |
+| 3 | eggrighttop3 | 195 | 59 | 13×10 |
 | 4 | eggrighttop4 | 189 | 65 | 9×12 |
 
 ### Правый низ (eggrightbottom)
 
 | # | Спрайт | X | Y | Размер |
 |---|--------|---|---|--------|
-| 0 | eggrightbottom0 | 229 | 84 | 12×11 |
-| 1 | eggrightbottom1 | 218 | 88 | 10×12 |
-| 2 | eggrightbottom2 | 207 | 94 | 12×10 |
-| 3 | eggrightbottom3 | 198 | 100 | 10×13 |
-| 4 | eggrightbottom4 | 187 | 110 | 12×9 |
+| 0 | eggrightbottom0 | 224 | 84 | 12×11 |
+| 1 | eggrightbottom1 | 216 | 91 | 10×12 |
+| 2 | eggrightbottom2 | 205 | 97 | 12×10 |
+| 3 | eggrightbottom3 | 196 | 103 | 10×13 |
+| 4 | eggrightbottom4 | 187 | 107 | 12×9 |
 
 ## Волк
 
@@ -64,8 +64,8 @@ Y=0 — верх экрана (совпадает с JS). Все координ�
 |--------|---|---|--------|
 | basketUpLeft | 69 | 70 | 37×33 |
 | basketBottomLeft | 66 | 103 | 36×33 |
-| basketUpRight | 170 | 73 | 27×29 |
-| basketBottomRight | 165 | 109 | 30×28 |
+| basketUpRight | 168 | 73 | 27×29 |
+| basketBottomRight | 163 | 109 | 30×28 |
 
 ## Заяц
 
@@ -93,7 +93,7 @@ Y=0 — верх экрана (совпадает с JS). Все координ�
 
 | Кадр | Спрайт | X | Y | Размер |
 |------|--------|---|---|--------|
-| 0 | chickenright0 | 182 | 146 | 28×15 |
+| 0 | chickenright0 | 180 | 146 | 28×15 |
 | 1 | chickenright1 | 194 | 134 | 19×13 |
 | 2 | chickenright2 | 215 | 134 | 10×13 |
 | 3 | chickenright3 | 225 | 133 | 12×13 |
