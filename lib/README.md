@@ -15,6 +15,10 @@ Architecture:
 
 All public prototypes are declared centrally in `v06.h`.
 
+Library scheme:
+
+![Library scheme](scheme.jpg)
+
 ---
 
 ## COMMON — Hardware Port Map
