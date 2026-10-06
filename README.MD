@@ -1,113 +1,76 @@
-# Music ROMs для Вектора-06Ц
+# Vector Games
 
-ROM-файлы для эмулятора PPSSPP, воспроизводящие музыку NES на Векторе-06Ц.
+Исходники ROM-проектов для ПК «Вектор-06Ц» (КР580ВМ80A / i8080): игры,
+саундтреки NES, демо и тесты оборудования. Всё собирается локальным
+тулчейном z88dk (`z88dk/` в корне репозитория) и запускается в эмуляторе
+(PPSSPP — собранные ROM, Python-эмулятор — для отладки).
 
-Звук: 3 тональных канала ВИ53 + шумовой канал AY-3-8910 (ударные).
+Звук: 3 тональных канала КР580ВИ53 + AY-3-8910 (шум/ударные).
+Графика: 4 бит-плоскости VRAM, режимы 256×256 (16 цветов) и 512×256.
 Всё синхронизировано от единого кадрового прерывания (50 Гц).
 
-## Проекты
+## Части проекта
 
-### jackal
+| Папка | Что там | Документация |
+|-------|---------|--------------|
+| `lib/` | Библиотека взаимодействия с железом (без clib z88dk): gfx, snd, kbd, unpack, mem, comps, sys | [lib/README.md](lib/README.md) |
+| `roms/games/` | Игры: портированная «Ну, погоди!» | [Makefile](roms/games/nu_pogodi/Makefile), [SPRITES.md](roms/games/nu_pogodi/SPRITES.md), [TEST.md](roms/games/nu_pogodi/TEST.md) |
+| `roms/musics/` | Саундтреки NES (Jackal, Castlevania, DuckTales 2, Super Mario) и музыкальные демо/тесты | [roms/musics/README.MD](roms/musics/README.MD) |
+| `roms/demos/` | Демо beam-race-рендеринга (огонь) | [OPTIMIZATION.MD](roms/demos/fire2/OPTIMIZATION.MD) |
+| `roms/tests/` | Тесты отдельных функций библиотеки и режимов экрана | — |
+| `roms/redesign/` | Реверс-инжиниринг оригинальных ROM Вектора (putup, riseout, clrs, testay): отчёты по стадиям | TZ.md / TZ2.md в папках проектов |
+| `utils/` | Python-скрипты конверляции музыки, графики и семплов | [utils/README.MD](utils/README.MD) |
+| `utils/emulator/` | Python-эмулятор Вектора-06Ц (8080) и тестовая обвязка | [v06_emu.py](utils/emulator/v06_emu.py), [v07_emu.md](utils/emulator/v07_emu.md) |
+| `utils/analyze/` | Фреймворк анализа ROM (disassembly, RDB, отчёты) | [utils/analyze/README.MD](utils/analyze/README.MD) |
+| `docs/` | Техническая документация по Вектору-06Ц и z88dk | список ниже |
+| `release/` | Результат сборки (`make` в корне) | [release/README.MD](release/README.MD) |
+| `z88dk/` | Локальный тулчейн (zcc, z80asm, clibs для vector06c) | — |
 
-Саундтрек из NES-игры **Jackal** (Konami, 1986).
-8 треков, меню с выбором клавишами 1–8.
+## Документация (docs/)
 
-| Клавиша | Трек |
-|---------|------|
-| 1 | Intro |
-| 2 | Level 1 |
-| 3 | Level 2 |
-| 4 | Level 3 |
-| 5 | Boss |
-| 6 | Stage Clear |
-| 7 | Game Over |
-| 8 | Credits |
-| 0 | Стоп |
-
-### castlevania
-
-Саундтрек из NES-игры **Castlevania** (Konami, 1987).
-9 треков, меню с выбором клавишами 1–9.
-
-| Клавиша | Трек |
-|---------|------|
-| 1 | Prologue |
-| 2–6 | Track 1–5 |
-| 7 | Track 7 |
-| 8 | Track 8 |
-| 9 | Boss |
-| 0 | Стоп |
-
-### ducktales2
-
-Саундтрек из NES-игры **DuckTales 2** (Capcom, 1993).
-6 треков, меню с выбором клавишами 1–6.
-
-### nes_drums
-
-Тестовый ROM: библиотека из 16 синтетических шумовых инструментов NES
-на AY-3-8910. Демозаписи Jackal и Castlevania, ручной запуск семплов
-клавишами 0–9, A–F.
-
-### drums
-
-Демо-ROM библиотеки ударных (drums.asm): 7 синтетических инструментов
-на канале шума AY-3-8910 (kick, snare, hat closed/open, tom, clap, rim).
-Тоновые каналы свободны для мелодии.
-
-### synth
-
-Тестовый ROM партитурного синтезатора (lib/music.c).
-6 тестов из ТЗ: гамма, три голоса, ударные, ритм, синхронизация,
-«Полёт шмеля».
+- [VECTOR.MD](docs/VECTOR.MD) — полная документация по процессору, ASM и машинному коду
+- [VECTOR_VERIFIED.md](docs/VECTOR_VERIFIED.md) — результаты фактологического аудита документации
+- [VECTOR_CPU_COMMANDS.md](docs/VECTOR_CPU_COMMANDS.md) — система команд КР580ВМ80A
+- [512x256.MD](docs/512x256.MD) — режим экрана 512×256
+- [vector_techinfo.md](docs/vector_techinfo.md) — техинформация по ПК «Вектор» (EMU80)
+- [Z88DK.md](docs/Z88DK.md), [Z88DK_512_SOUND.md](docs/Z88DK_512_SOUND.md) — разбор библиотеки z88dk
+- [Z88DK_CALL.md](docs/Z88DK_CALL.md) — соглашения о вызовах C ↔ ASM
 
 ## Сборка
 
-### Все проекты сразу
-
 ```bash
-make          # собрать все ROM + скопировать в release/
-make clean    # убрать артефакты всех проектов + папку release/
-make full     # clean + сборка всех проектов
+make          # собрать все ROM (musics + tests), скопировать в release/
+make full     # clean + сборка
+make clean    # убрать артефакты всех проектов + release/
 ```
 
-### Отдельный проект
+Отдельный проект:
 
 ```bash
-cd roms/musics/<project>
+cd roms/<группа>/<project>
 make          # собрать ROM
 make deploy   # собрать + скопировать в ROMS эмулятора PPSSPP
 make full     # clean + deploy
-make clean    # убрать артефакты
 ```
 
-Результат сборки всех проектов — в папке `release/` (ROM-файлы + README).
-
-Путь до z88dk: локальная папка `z88dk/` проекта (переопределяется `make Z88DK=...`).
+Игры (`roms/games/`) и демо (`roms/demos/`) собираются только из своих
+папок; у каждого проекта свой Makefile с дополнительными целями
+(ассеты, музыка, проверка раунд-трипа).
 
 ## Пайплайн конвертации музыки
 
 ```
-NSF-экспорт (.txt)
-       │
-       ▼
-  txt2inc.py      → .inc (партитура + повторы + данные)
+NSF-экспорт (TXT) ─▶ txt2mus.py ─▶ .mus ─▶ find_repeats.py ─▶ _rep.mus ─▶ mus2inc.py ─▶ .inc
+MIDI (.mid) ──────▶ midi2mus.py ─┘            (правка .mus: mus_transpose.py)
+WAV ──────────────▶ dmc2smp.py ──▶ .smp ─────▶ txt2smp.py / smp2wav.py (шумовые семплы)
 ```
 
-Или по шагам:
-
-```
-  txt2mus.py      → .mus (партитура)
-       │
-       ▼
-  find_repeats.py → _rep.mus (сжатие повторами, −40…55%)
-       │
-       ▼
-  mus2inc.py      → .inc (music_song_t для z88dk)
-```
+Графика: `bmp2inc.py` / `bmp2inc512.py` / `bmp2inc_lz.py` — BMP → `.inc`
+(RLE- и LZ-потоки в VRAM). Подробно — в [utils/README.MD](utils/README.MD).
 
 ## Зависимости
 
-- **z88dk** — компилятор Z80/8080 для Вектора-06Ц
-- **Python 3.6+** — скрипты конвертации
+- **z88dk** — локальная папка `z88dk/` (переопределяется `make Z88DK=...`)
+- **Python 3.6+** — скрипты конвертации и эмулятор
 - **Pillow** — для bmp2inc.py (заставки)
+- **vector-debugger (MCP)** — эмулятор с отладчиком для реверс-инжиниринга
