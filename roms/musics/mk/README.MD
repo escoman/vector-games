@@ -7,8 +7,9 @@
 поверх фона.
 
 Музыка: `music/theme.mus` (исходник, правится вручную) → `utils/mus2inc.py`
-(`--use-shared nes_drums`) → `rom_data/theme.inc`. Конвертация из
-`assets/theme.mid` при сборке отключена.
+(`--use-shared nes_drums`) → `rom_data/theme.inc`. Конвертация из MIDI при сборке
+отключена; `.mus` перегенерируют вручную из выбранного `assets/<midi>.mid`
+(`theme`, `themeA`, `themeB`) — `make regen-mus THEME=<midi>`.
 
 ## Варианты сборки
 
@@ -24,5 +25,6 @@ make          # собрать оба ROM
 make clean    # убрать артефакты (сгенерированные .inc; .mus НЕ трогает)
 make deploy   # собрать + положить в ROMS эмулятора PPSSPP
 make full     # clean + сборка + deploy
-make regen-mus# вручную перегенерировать music/theme.mus из assets/theme.mid
+make regen-mus# вручную перегенерировать music/theme.mus из выбранного MIDI
+make regen-mus THEME=themeA  # то же из assets/themeA.mid (theme|themeA|themeB)
 ```

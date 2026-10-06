@@ -1,8 +1,9 @@
 # Makefile — mk (демо fire2: огонь 64×64 → 256×256 + тема Mortal Kombat).
 #
 # Музыка: music/theme.mus (исходник, правится вручную) → utils/mus2inc.py
-# (--use-shared nes_drums) → rom_data/theme.inc. Конвертация из assets/theme.mid
-# при сборке ОТКЛЮЧЕНА; перегенерировать .mus вручную: make regen-mus.
+# (--use-shared nes_drums) → rom_data/theme.inc. Конвертация из MIDI при сборке
+# ОТКЛЮЧЕНА; .mus перегенерируют вручную: make regen-mus THEME=<midi>, где
+# <midi> — имя файла в assets/ без расширения (theme | themeA | themeB).
 # Два варианта вывода звука (взаимоисключающие библиотеки):
 #   mk.rom     — ВИ53 (ударные Tape Out);
 #   mk_ay.rom  — AY-3-8910 (ударные Noise C).
@@ -11,7 +12,8 @@
 # make clean    — убрать артефакты (сгенерированные .inc; .mus НЕ трогает);
 # make deploy   — собрать и положить ROM в папку ROMS эмулятора PPSSPP;
 # make full     — clean + сборка + deploy;
-# make regen-mus — вручную перегенерировать music/theme.mus из assets/theme.mid.
+# make regen-mus [THEME=<midi>] — перегенерировать music/theme.mus из выбранного
+#   assets/<midi>.mid (по умолчанию THEME=theme).
 
 include ../../../config.mk
 
@@ -22,6 +24,10 @@ BMP2INC     = ../../../utils/bmp2inc.py
 MUS2INC     = ../../../utils/mus2inc.py
 MIDI2MUS    = ../../../utils/midi2mus.py
 SOUNDTRACKS = ../soundtracks
+
+# Какой MIDI из assets/ перегенерирует music/theme.mus (make regen-mus):
+# theme | themeA | themeB. Имя без расширения .mid.
+THEME ?= theme
 
 # Общая часть источников (без библиотеки вывода — её добавляет вариант).
 SRCS_COMMON = $(LIB)/sys/startup.asm \
@@ -53,12 +59,16 @@ full: clean all deploy
 
 # --- Генерация данных -------------------------------------------------
 
-# Тема: .mus больше НЕ генерируется из MIDI при сборке — music/theme.mus является
-# исходником и правится вручную. Перегенерация из assets/theme.mid (нормализованный
-# темп T118, 3 голоса + nes-бэкбит) — только по явному запросу `make regen-mus`:
+# Тема: .mus НЕ генерируется из MIDI при сборке — music/theme.mus является
+# исходником и правится вручную. Перегенерация из выбранного assets/$(THEME).mid
+# (нормализованный темп T118) — только по явному запросу `make regen-mus`:
+#   make regen-mus              # из assets/theme.mid (по умолчанию)
+#   make regen-mus THEME=themeA # из assets/themeA.mid
+#   make regen-mus THEME=themeB # из assets/themeB.mid
+# В выход всегда music/theme.mus, поэтому дальше сборка идёт как обычно.
 regen-mus:
 	@mkdir -p music
-	python3 $(MIDI2MUS) assets/theme.mid -o music/theme.mus --tempo 118
+	python3 $(MIDI2MUS) assets/$(THEME).mid -o music/theme.mus --tempo 118
 
 # .mus → .inc (семплы ударных берутся из общей библиотеки nes_drums).
 rom_data/theme.inc: music/theme.mus
