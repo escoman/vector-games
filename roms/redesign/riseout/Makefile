@@ -13,7 +13,6 @@
 
 include ../../../config.mk
 
-Z80ASM   = $(Z88DK)/bin/z80asm
 ASMFLAGS = -b -m=8080_strict
 TARGET   = src/RISEOUT_NEW.ROM
 ORIG     = src/riseout.rom

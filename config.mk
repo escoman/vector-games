@@ -12,7 +12,15 @@ $(error Z88DK not found: $(Z88DK). Set Z88DK=/path/to/z88dk)
 endif
 
 ZCC          = $(Z88DK)/bin/zcc
+# чистый ассемблер — проектам, которые собирают без zcc (tests/clrs, redesign)
+Z80ASM       = $(Z88DK)/bin/z80asm
 ZCCCFG      := $(Z88DK)/lib/config
+
+# Под Windows в z88dk/bin рядом с Linux-бинарями лежат .exe-версии тех же
+# инструментов; все виндоус-особенности — в windows.mk
+ifeq ($(OS),Windows_NT)
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))windows.mk
+endif
 
 # PROJECT_ROOT — корень проекта (для include finally.mk в конце Makefile).
 # firstword MAKEFILE_LIST = верхний Makefile (GNU Make guarantee).

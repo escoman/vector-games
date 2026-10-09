@@ -74,3 +74,25 @@ WAV ──────────────▶ dmc2smp.py ──▶ .smp ─�
 - **Python 3.6+** — скрипты конвертации и эмулятор
 - **Pillow** — для bmp2inc.py (заставки)
 - **vector-debugger (MCP)** — эмулятор с отладчиком для реверс-инжиниринга
+
+### Под Windows
+
+Сборка идёт по тем же правилам (`make` / `make full` в корне и в папках
+проектов). Recipe'ы написаны под POSIX-шелл, поэтому понадобятся ещё два
+инструмента; всё Windows-специфичное собрано в `windows.mk` (его сам
+подключает `config.mk`, проекты не трогаются):
+
+- **GNU Make** — ставится из winget: `winget install ezwinports.make`
+- **Git for Windows** — даёт `sh.exe` (POSIX-шелл) и coreutils (`cp`, `mkdir`,
+  `rm`, `ls`, `stat`). Автоматически ищется в `C:\Program Files\Git`;
+  если Git в другом месте — `make SH="D:\path\Git\bin\sh.exe"`
+- **z88dk** — ничего отдельно ставить не нужно: Windows-.exe версии
+  инструментов (zcc, z80asm, appmake, …) лежат в `z88dk/bin/` рядом с
+  Linux-бинарями; под Windows сборка зовёт обёртку `bin/zcc.cmd`
+- **Python 3** — настоящий интерпретатор должен быть доступен как `python`
+  в PATH. Сборка зовёт `python3` (как на Linux) — вызов перехватывает
+  шиммер `utils/winshim/python3`, потому что `python3.exe` по умолчанию в
+  Windows является заглушкой Microsoft Store
+
+При `make deploy` путь к ROMS эмулятора задайте явно
+(`make PPSSPP_ROMS=D:\path\to\ROMS`) — путь по умолчанию Linux-ный.

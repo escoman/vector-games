@@ -4,6 +4,13 @@
 # make clean    — убрать артефакты сборки всех проектов + папку release/;
 # make full     — clean + сборка всех проектов.
 
+# Под Windows этот Makefile тоже требует POSIX-шелла (for/do, mkdir -p, cp)
+# — настройки SHELL/PATH тянутся из config.mk (он тянет windows.mk).
+# Под Linux recipe'ы и так выполняются через sh, include не нужен.
+ifeq ($(OS),Windows_NT)
+include config.mk
+endif
+
 MUSIC_ROMS = roms/musics/castlevania \
              roms/musics/drums \
              roms/musics/ducktales2 \

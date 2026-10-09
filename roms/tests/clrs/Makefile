@@ -2,8 +2,6 @@
 
 include ../../../config.mk
 
-Z80ASM   = $(Z88DK)/bin/z80asm
-
 TARGET = clrs.rom
 
 SRCS = clrs.asm

@@ -9,7 +9,6 @@
 
 include ../../../config.mk
 
-Z80ASM    = $(Z88DK)/bin/z80asm
 ASMFLAGS  = -b -m=8080_strict -s
 TARGET    = src/PUTUP_NEW.ROM
 FULLBIN   = build_full.bin

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Шиммер python3 для Windows (используется только через PATH из windows.mk).
+# В Windows python3.exe по умолчанию — заглушка Microsoft Store, а настоящий
+# Python устанавливается как python. Recipe'ы зовут python3 (как на Linux) —
+# этот скрипт перехватывает вызов по точному имени и отдаёт его python.
+exec python "$@"

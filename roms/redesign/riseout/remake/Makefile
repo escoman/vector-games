@@ -14,7 +14,6 @@
 PROJECT_ROOT := $(abspath $(dir $(realpath $(firstword $(MAKEFILE_LIST))))../../../..)/
 include $(PROJECT_ROOT)config.mk
 
-Z80ASM   = $(Z88DK)/bin/z80asm
 ASMFLAGS = -b -m=8080_strict
 TARGET   = RISEOUT_REMAKE.ROM
 ORIG     = ../src/riseout.rom
