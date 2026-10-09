@@ -8,6 +8,11 @@
  * Горячий путь (зарисовка окна из тайлкарты + композиция спрайта) — в
  * mario.asm (8080). Здесь: инициализация, состояние Марио, ввод, камера, цикл.
  *
+ * ФОН РИСУЕТСЯ РАЗНОСТЬЮ. Небо — индекс 0 палитры, поэтому тайл целиком из
+ * неба = 32 нуля и в VRAM не пишется вообще; совпавшая ячейка тайлкарты —
+ * пропуск; плоскость, пустая и в старой, и в новой колонке — пропуск. Марио
+ * стирается слепком VRAM (mario_undraw), а не перерисовкой двух блоков.
+ *
  * Управление: ← / → — ходьба, ↓ — пригнуться, ПРОБЕЛ — прыжок.
  */
 
@@ -17,10 +22,13 @@
 #include "src/mario.inc"      /* mario_<frame>_<r|l>                     */
 
 /* Горячие функции — см. mario.asm. */
-extern void render_window(unsigned int cam, unsigned char blk0,
-                          unsigned char nblk) __z88dk_callee;
+extern void render_window(unsigned int cam, unsigned int old_cam,
+                          unsigned char blk0, unsigned char nblk) __z88dk_callee;
 extern void mario_draw(unsigned char x, unsigned char y,
                        const unsigned char *spr) __z88dk_callee;
+extern void mario_undraw(void) __z88dk_callee;
+
+#define CAM_NO_REF   0xFFFFu    /* в VRAM пусто (первый экран) */
 
 /* ----------------------------- ГЕОМЕТРИЯ ------------------------------- */
 
@@ -54,6 +62,13 @@ static unsigned char walkphase;  /* 0..2 кадр ходьбы                  
 static unsigned char vy_hold;    /* ↓ удерживается (пригнуться)             */
 static unsigned char moving;     /* идёт горизонтальное движение этот кадр   */
 
+/* Где Марио нарисован в последний раз (его пиксели сейчас в VRAM).
+ * Пока совпадает с текущим состоянием и камера не двинулась — кадр целиком
+ * пропускаем: в VRAM уже лежит готовое изображение. */
+static unsigned char drawn_blk;
+static unsigned char drawn_y;
+static const unsigned char *drawn_spr;
+
 /* Старт прыжка. */
 static void jump_start(void)
 {
@@ -79,6 +94,7 @@ int main(void)
 {
     unsigned char frame;
     unsigned char dir;
+    const unsigned char *spr;
 
     gfx_set_mode(GFX_MODE_256_16);
     gfx_set_black_palette();
@@ -96,11 +112,15 @@ int main(void)
     walkphase = 0;
     frame = 0;
 
-    render_window(cam, 0, VIEW_BLOCKS);
+    render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
+    spr = pick_sprite();
+    mario_draw((unsigned char)(mblk * 8), (unsigned char)my, spr);
+    drawn_blk = mblk;
+    drawn_y = (unsigned char)my;
+    drawn_spr = spr;
 
     for (;;) {
         unsigned int  old_cam;
-        unsigned char old_blk;
         unsigned char key;
 
         gfx_next_frame();
@@ -117,7 +137,6 @@ int main(void)
         /* ---- горизонтальное движение (шаг 8 px, не чаще раза в MOVE_DELAY) ---- */
         moving = 0;
         old_cam = cam;
-        old_blk = mblk;
 
         if (dir && !vy_hold) {
             if (++frame >= MOVE_DELAY) {
@@ -154,17 +173,25 @@ int main(void)
         }
 
         /* ---- отрисовка ---- */
+        spr = pick_sprite();
         if (cam != old_cam) {
-            /* Скролл: перерисовать весь экран из тайлкарты. */
-            render_window(cam, 0, VIEW_BLOCKS);
+            /* Скролл: сначала стереть Марио (иначе его пиксели уедут в
+             * «фон» и останутся в VRAM), затем дорисовать разность колонок.
+             * pair_top валиден только для шага +-1, больше — полный редрав. */
+            mario_undraw();
+            if (cam == old_cam + 1 || old_cam == cam + 1)
+                render_window(cam, old_cam, 0, VIEW_BLOCKS);
+            else
+                render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
+        } else if (mblk == drawn_blk && my == drawn_y && spr == drawn_spr) {
+            continue;                   /* на экране ничего не изменилось */
         } else {
-            /* Без скролла: стереть Марио со старого места (2 блока) и,
-             * если сменился экран столбец, со старого тоже. */
-            render_window(cam, old_blk, 2);
-            if (mblk != old_blk)
-                render_window(cam, mblk, 2);
+            mario_undraw();
         }
-        mario_draw((unsigned char)(mblk * 8), (unsigned char)my, pick_sprite());
+        mario_draw((unsigned char)(mblk * 8), (unsigned char)my, spr);
+        drawn_blk = mblk;
+        drawn_y = (unsigned char)my;
+        drawn_spr = spr;
     }
 
     return 0;

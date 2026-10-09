@@ -5,7 +5,9 @@ gen_assets.py — ассеты демки Mario 16-цвет для Вектор�
 Читает src/tiles.png (карта уровня SMB 1-1) и src/sprites.png (лист спрайтов),
 квантует всё в ОДНУ общую 16-цветную палитру Вектора и пишет:
 
-  src/level.inc   — палитра, тайлсет 8x8 (4 плоскости), тайлкарта уровня;
+  src/level.inc   — палитра, тайлсет 8x8 (4 плоскости), тайлкарта уровня,
+                    tile_nz (карта непустых плоскостей тайла) и pair_top
+                    (верхняя «грязная» строка пары соседних колонок);
   src/mario.inc   — спрайты Small Mario 16x16 с маской (вправо/влево).
 
 Формат Вектора (256x256, 16 цветов, 4 битовые плоскости):
@@ -18,10 +20,11 @@ gen_assets.py — ассеты демки Mario 16-цвет для Вектор�
 
 Тайлкарта: tilemap[col*ROWS + row] — индекс тайла; колонками, чтобы экранный
 блок (столбец из 8 пикселей, 32 тайла по высоте) читался 32 подряд идущими
-байтами.
+байтами. Тайл 0 — пустой (чистое небо = индекс 0), он никогда не пишется в VRAM.
 
-Спрайт 16x16: сначала маска (32 байта, колонками: col0 строки 0..15, col1
-строки 0..15), затем 4 плоскости по 32 байта тем же порядком. Итого 160 байт.
+Спрайт 16x16: 8 прогонов (плоскость x колонка блока) по 16 пар (keep, set);
+res = (old & keep) ^ set. Прозрачность = keep 0xFF, set 0x00 -> байт не трогаем.
+Итого 256 байт.
 """
 
 import os
@@ -35,21 +38,30 @@ SRC = os.path.join(HERE, "..", "src")
 BAND_TOP = 176          # верх видимой полосы уровня (нативные пиксели tiles.png)
 BAND_H = 256            # высота полосы = экран
 TILE = 8
+GROUND_ROWS = 2         # нижние строки тайлкарты — полоска земли (не «небо»)
 VEC_BYTES = 0x8000      # размер видеопамяти (для проверки)
 
 # ---- Общая палитра: индекс -> байт порта 0C (RRRGGGBB) ----------------------
-# Собрана из цветов фона (небо/земля/кирпич/кусты/белый/чёрный) и Марио
-# (красный, кожа). Индекс 0 = чёрный (заливка gfx_clear).
+# НЕБО = ИНДЕКС 0. Это главное требование раскладки: тайл, целиком состоящий из
+# неба, становится нулевым (все 4 плоскости = 0x00), поэтому:
+#   * индекс 0 зарезервирован под пустой тайл (см. build_level),
+#   * sky-области не рисуются вообще (gfx_clear(0) их уже залил),
+#   * при скролле сравнение старых/новых тайлов даёт пропуск целых ячеек.
+#
+# Порядок остальных индексов подобран перебором (8! раскладок) по числу VRAM-
+# записей на шаг скролла: одиночные биты (1,2,4,8) отданы самым частым цветам —
+# чёрному контуру, коричневой земле, тёмно-зелёному и белому (облака). Такая
+# раскладка даёт 2835 записей/шаг против 3877 у «просто поменять местами 0 и 3».
 PALETTE = [
-    0x00,   # 0  чёрный      (контур, ямы)
-    0x0D,   # 1  красный     (Марио: кепка/штаны)
-    0xF7,   # 2  кожа        (Марио: лицо/руки)
-    0xFD,   # 3  небо        (голубой фон)
-    0xB7,   # 4  коричневый  (земля)
-    0x67,   # 5  оранжевый   (кирпич)
-    0x2A,   # 6  зелёный тёмный
-    0x73,   # 7  зелёный светлый (кусты/трубы)
-    0xFF,   # 8  белый       (облака/цифры)
+    0xFD,   # 0  небо        (ФОН: пустой тайл, не рисуется)
+    0x00,   # 1  чёрный      (контур, ямы)          бит 1
+    0xB7,   # 2  коричневый  (земля)                бит 2
+    0x67,   # 3  оранжевый   (кирпич)         биты 1+2
+    0x2A,   # 4  зелёный тёмный                    бит 4
+    0x73,   # 5  зелёный светлый (кусты/трубы) биты 1+4
+    0x0D,   # 6  красный     (Марио: кепка/штаны) биты 2+4
+    0xF7,   # 7  кожа        (Марио: лицо/руки) биты 1+2+4
+    0xFF,   # 8  белый       (облака/цифры)    бит 8
     0x00,   # 9  (не используется)
     0x00,   # 10
     0x00,   # 11
@@ -96,8 +108,11 @@ def build_level():
     rows = BAND_H // TILE
     band_bottom = min(BAND_TOP + BAND_H, H)
 
-    tileset = []          # список 32-байтных тайлов
-    tilemap_index = {}    # bytes -> индекс
+    # Тайл 0 ЗАРЕЗЕРВИРОВАН под пустой (чистое небо = индекс 0 = все плоскости 0).
+    # Он никогда не записывается в VRAM, а render_window использует его как
+    # эталон при первой отрисовке экрана.
+    tileset = [bytes(TILE * 4)]
+    tilemap_index = {bytes(TILE * 4): 0}
 
     def tile_at(cx, cy):
         """cx,cy — координаты тайла. Вернуть 32-байтное представление."""
@@ -131,9 +146,59 @@ def build_level():
                 tileset.append(data)
             tilemap[cx * rows + cy] = ti
 
-    print(f"level: {cols}x{rows} тайлов ({W}x{BAND_H} px), "
-          f"уникальных тайлов: {len(tileset)}")
-    return cols, rows, tileset, bytes(tilemap)
+    # tile_nz[t] — 4-битная карта НЕПУСТЫХ плоскостей тайла (бит p = 1, если в
+    # плоскости p есть хотя бы один ненулевой байт). render_window не трогает
+    # плоскость, если она пуста и в старом, и в новом тайле: писать нечего.
+    tile_nz = bytearray()
+    for t in tileset:
+        m = 0
+        for p in range(4):
+            if any(t[p * TILE + r] for r in range(TILE)):
+                m |= 1 << p
+        tile_nz.append(m)
+
+    # --- Матовая зона канваса ------------------------------------------------
+    # Холст tiles.png за нарисованным уровнем — чистый (0,0,0), quantize даёт
+    # ему индекс 1 = ЧЁРНЫЙ, и пустота за замком скроллится как чёрная стена
+    # (плюс чёрная полоса-артефакт от склейки картинки на верхнем крае полосы).
+    # Небо обязано быть индексом 0, поэтому обесцвечиваем его обратно:
+    # tile_nz == 0x08 означает «в тайле непустая только плоскость веса 1»,
+    # то есть пиксели либо небо (0), либо чёрный (1) — других цветов нет.
+    # Идём строго от row 0 и останавливаемся на первом тайле с другим цветом:
+    # пустой тайл дырку в матовке не пробивает, иначе съелись бы чёрные ямы
+    # в земле (они как раз состоят из того же тайла, но начинаются не сверху).
+    matte = 0
+    for cx in range(cols):
+        base = cx * rows
+        cy = 0
+        while cy < rows and tilemap[base + cy] and tile_nz[tilemap[base + cy]] == 0x08:
+            tilemap[base + cy] = 0
+            matte += 1
+            cy += 1
+        # Первая колонка, где матовка легла от верха до самой земли, — это край
+        # арта: дальше только канвас и дорисованная «в холостую» полоска земли.
+        if cy >= rows - GROUND_ROWS and cx < cols - 1:
+            cols = cx
+            tilemap = tilemap[:cols * rows]
+            print(f"level: арт кончается на колонке {cols}, остальное срезано "
+                  f"(MAX_CAM в main.c считает камеру отсюда)")
+            break
+    print(f"level: матовка канваса -> небо в {matte} ячейках тайлкарты")
+
+    # pair_top[c] = min(col_top[c], col_top[c+1]) — самая верхняя строка, где в
+    # паре соседних колонок вообще есть содержимое. Строки выше гарантированно
+    # пусты обе -> сравнение там можно не начинать (экономия ~30 kT на шаг).
+    def col_top(cx):
+        for cy in range(rows):
+            if tilemap[cx * rows + cy]:
+                return cy
+        return rows
+
+    pair_top = bytearray(min(col_top(cx), col_top(cx + 1)) for cx in range(cols - 1))
+
+    print(f"level: {cols}x{rows} тайлов ({cols * TILE}x{BAND_H} px из {W}x{H}), "
+          f"уникальных тайлов: {len(tileset)}, пустой тайл = 0")
+    return cols, rows, tileset, bytes(tilemap), bytes(tile_nz), bytes(pair_top)
 
 
 # ---------------------------------------------------------------------------
@@ -187,33 +252,38 @@ def extract_cell(px, cell):
 
 
 def grid_to_sprite(grid, mirror=False):
-    """grid[16][16] -> 160 байт: mask(32) + 4 плоскости по 32, колонками."""
+    """grid[16][16] -> 256 байт: 8 прогонов по 16 пар (keep, set).
+
+    Прогон = (плоскость p, колонка блока c), строки 0..15 сверху вниз; порядок
+    прогонов p = 0..3 (веса 8,4,2,1), внутри него c = 0..1. Пара описывает ОДИН
+    байт VRAM: res = (old & keep) ^ set, где keep = ~mask, set = plane & mask.
+
+    Такой формат выбран под регистровый цикл 8080: за один шаг читается два
+    соседних байта спрайта (HL++) и один байт VRAM (DE--), никаких третьих
+    указателей не нужно. Порядок байт совпадает с порядком адресов VRAM:
+    (база_плоскости[p] + blk + c) << 8 | (255 - y - r), т.е. адрес байта
+    УБЫВАЕТ вместе со строкой.
+    """
     if mirror:
         grid = [list(reversed(row)) for row in grid]
-    mask = bytearray(32)
-    planes = [bytearray(32) for _ in range(4)]   # вес 8,4,2,1
-    # колонка-major: col0 строки 0..15, затем col1 строки 0..15
-    for c in range(2):
-        for r in range(16):
-            off = c * 16 + r
-            mb = p8 = p4 = p2 = p1 = 0
-            for b in range(8):
-                x = c * 8 + b
-                bit = 7 - b
-                idx = grid[r][x]
-                if idx is None:
-                    continue
-                mb |= 1 << bit
-                if idx & 8: p8 |= 1 << bit
-                if idx & 4: p4 |= 1 << bit
-                if idx & 2: p2 |= 1 << bit
-                if idx & 1: p1 |= 1 << bit
-            mask[off] = mb
-            planes[0][off] = p8
-            planes[1][off] = p4
-            planes[2][off] = p2
-            planes[3][off] = p1
-    return bytes(mask + planes[0] + planes[1] + planes[2] + planes[3])
+    out = bytearray(256)
+    k = 0
+    for w in (8, 4, 2, 1):              # плоскости вес 8,4,2,1
+        for c in range(2):              # левая/правая колонка по 8 пикселей
+            for r in range(16):         # строки сверху вниз
+                mb = pb = 0
+                for b in range(8):
+                    bit = 7 - b
+                    idx = grid[r][c * 8 + b]
+                    if idx is None:
+                        continue        # прозрачный пиксель
+                    mb |= 1 << bit
+                    if idx & w:
+                        pb |= 1 << bit
+                out[k] = mb ^ 0xFF      # keep: сбрасывает покрытые биты
+                out[k + 1] = pb & mb    # set: выставляет биты спрайта
+                k += 2
+    return bytes(out)
 
 
 def build_sprites():
@@ -240,7 +310,7 @@ def fmt_array(f, name, data, per_line=16):
     f.write("};\n\n")
 
 
-def write_level(cols, rows, tileset, tilemap):
+def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top):
     path = os.path.join(SRC, "level.inc")
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py из tiles.png. Не править руками. */\n\n")
@@ -248,11 +318,14 @@ def write_level(cols, rows, tileset, tilemap):
         f.write(f"#define LEVEL_ROWS   {rows}\n")
         f.write(f"#define LEVEL_TILE_W {cols*TILE}\n")
         f.write(f"#define LEVEL_TILE_H {rows*TILE}\n")
-        f.write(f"#define TILESET_N    {len(tileset)}\n\n")
+        f.write(f"#define TILESET_N    {len(tileset)}\n")
+        f.write("#define TILE_EMPTY   0         /* чистое небо, все плоскости 0 */\n\n")
         fmt_array(f, "level_palette", bytes(PALETTE))
         joined = b"".join(tileset)
         fmt_array(f, "tileset", joined)
         fmt_array(f, "tilemap", tilemap)
+        fmt_array(f, "tile_nz", tile_nz)      # карта непустых плоскостей на тайл
+        fmt_array(f, "pair_top", pair_top)    # верхdiff'а на пару соседних колонок
     print(f"wrote {path} ({os.path.getsize(path)} bytes)")
 
 
@@ -264,17 +337,20 @@ def write_sprites(sprites):
         order.append((name + "_l", sprites[name + "_l"]))
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py из sprites.png. Не править руками. */\n")
-        f.write("/* Спрайт 16x16: mask[32] + 4 плоскости (вес 8,4,2,1) по 32, колонками. */\n\n")
-        f.write("#define MARIO_W 16\n#define MARIO_H 16\n\n")
+        f.write("/* Спрайт 16x16: 8 прогонов (плоскость 8,4,2,1 x колонка 0,1) по 16 "
+                "пар (keep,set). */\n\n")
+        f.write("#define MARIO_W 16\n#define MARIO_H 16\n")
+        f.write("#define MARIO_BYTES 256\n")
+        f.write("#define MARIO_SNAP 128      /* снимок VRAM под спрайтом */\n\n")
         for nm, data in order:
             fmt_array(f, "mario_" + nm, data)
     print(f"wrote {path} ({os.path.getsize(path)} bytes)")
 
 
 def main():
-    cols, rows, tileset, tilemap = build_level()
+    cols, rows, tileset, tilemap, tile_nz, pair_top = build_level()
     sprites = build_sprites()
-    write_level(cols, rows, tileset, tilemap)
+    write_level(cols, rows, tileset, tilemap, tile_nz, pair_top)
     write_sprites(sprites)
 
 
