@@ -444,8 +444,10 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects):
     obj_data = pack_objects(objects)
     # Таблица стартов скана перепечки: объекты отсортированы по x; для окна с
     # базой k*STEP первый релевантный объект — первый с x >= k*STEP - max_w
-    # (объект левее max_w гарантированно не достаёт до окна). bake_window()
-    # начинает скан с obj_start[base>>5] и обрывается на x >= base+OBJ_WIN_COLS.
+    # (объект левее max_w гарантированно не достаёт до окна). bake_cols() начинает
+    # скан с obj_start[блок] и обрывается на x >= конца полосы. Последний элемент —
+    # sentinel (= OBJ_COUNT): инкрементальный сдвиг на последний блок читает
+    # obj_start[nblocks] (правая половина за концом уровня -> пуста, скан пустой).
     step = 32
     nblocks = (cols + step - 1) // step
     max_w = max((int(o["w"]) for o in objects), default=0)
@@ -457,6 +459,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects):
         while j < len(xs) and xs[j] < thr:
             j += 1
         obj_start.append(j)
+    obj_start.append(len(objects))   # sentinel для инкрементального сдвига на край
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py (Mario 8-col, сплит по плоскостям). "
                 "Не править руками. */\n\n")

@@ -115,52 +115,55 @@ static unsigned char drawn_blk;
 static int           drawn_y;    /* мировой y (совпадение по всему значению) */
 static const unsigned char *drawn_spr;
 
-/* Испечь окно колонок [tile_win_base, tile_win_base+OBJ_WIN_COLS) из списка
- * объектов в tile_win. Обнуляем всё окно (BSS при --no-crt не зануляется),
- * затем затаптываем объекты, накрывающие окно. Печём ВСЕ LEVEL_ROWS строк
- * колонки, поэтому вертикальный скролл не требует перепечки. Вызывается на
- * старте и при сдвиге окна.
- *
- * Быстродействие (объектов ~1300, а перепечка на каждой границе окна):
- *   * горячие циклы обнуления/заполнения — на unsigned char (сравнение с 64
- *     инлайнится cp), иначе sccz80 на КАЖДУЮ ячейку вставлял вызов 16-битного
- *     сравнения (l_uge/l_ge) -> миллионы вызовов -> секунды фриза;
+/* Замечания по запеканию окна [tile_win_base, tile_win_base+OBJ_WIN_COLS):
+ *   * BSS при --no-crt не зануляется, поэтому печём ВСЕ LEVEL_ROWS строк
+ *     колонки — вертикальный скролл тогда не требует перепечки;
+ *   * горячие циклы обнуления/копирования/заполнения — на unsigned char
+ *     (сравнение с <=64 инлайнится cp), иначе sccz80 на КАЖДУЮ ячейку вставлял
+ *     вызов 16-битного сравнения (l_uge/l_ge) -> миллионы вызовов -> секунды
+ *     фриза;
  *   * объекты отсортированы по x, скан начинается с obj_start[блок] (первый,
- *     способный достать до окна) и обрывается на x >= bend -> охватываем только
- *     полосу ~окно+max_w колонок, а не весь список. */
-static void bake_window(void)
+ *     способный достать до полосы с учётом max_w) и обрывается на x >= конца
+ *     полосы -> охватываем только узкую полосу, а не весь список. */
+
+/* Обнуление локальных колонок окна [cstart, cend). */
+static void bake_clear(unsigned char cstart, unsigned char cend)
 {
-    unsigned int  b = tile_win_base, bend = tile_win_base + OBJ_WIN_COLS;
-    unsigned int  i, x, c0, c1;
+    unsigned char  c, r;
+    unsigned char *p = tile_win + (unsigned int)cstart * LEVEL_ROWS;
+    for (c = cstart; c < cend; c++)
+        for (r = 0; r < LEVEL_ROWS; r++)
+            *p++ = 0;
+}
+
+/* Запечь в окно МИРОВЫЕ колонки [wstart, wend), начиная с индекса i списка
+ * объектов. Клип по [wstart, wend), поэтому пережившую половину можно занести
+ * отдельно (memmove в bake_shift), а сюда подавать только новую половину. */
+static void bake_cols(unsigned int wstart, unsigned int wend, unsigned int i)
+{
+    unsigned int  base = tile_win_base;
+    unsigned int  x, c0, c1;
     unsigned char c, r, y, w, h, nrows, ncols, t;
     const unsigned char *o;
     unsigned char *p, *col;
 
-    /* Обнуление окна: 8-битные вложенные счётчики, без 16-битных сравнений. */
-    p = tile_win;
-    for (c = 0; c < OBJ_WIN_COLS; c++)
-        for (r = 0; r < LEVEL_ROWS; r++)
-            *p++ = 0;
-
-    /* Скан по отсортированному по x списку: старт с нужного блока, ранний выход. */
-    i = obj_start[b >> 5];
     o = obj_data + i * 5;
     for (; i < (unsigned int)OBJ_COUNT; i++, o += 5) {
         x = (unsigned int)o[1] | ((unsigned int)(o[0] & 0x80) << 1);
-        if (x >= bend)
-            break;                          /* дальше только правее окна */
+        if (x >= wend)
+            break;                          /* дальше только правее полосы */
         y = o[2]; w = o[3]; h = o[4];
-        if (x + w <= b)
-            continue;                       /* левее окна */
+        if (x + w <= wstart)
+            continue;                       /* левее запекаемой полосы */
         t = o[0] & 0x7F;
-        c0 = (x > b) ? x : b;
+        c0 = (x > wstart) ? x : wstart;
         c1 = x + w;
-        if (c1 > bend) c1 = bend;
+        if (c1 > wend) c1 = wend;
         nrows = h;                          /* байт: высота с обрезкой по низу */
         if ((unsigned int)y + nrows > (unsigned int)LEVEL_ROWS)
             nrows = (unsigned char)(LEVEL_ROWS - y);
         ncols = (unsigned char)(c1 - c0);   /* <= OBJ_WIN_COLS, влезает в байт */
-        col = tile_win + (c0 - b) * LEVEL_ROWS;
+        col = tile_win + (c0 - base) * LEVEL_ROWS;
         for (c = 0; c < ncols; c++) {
             p = col + y;
             for (r = 0; r < nrows; r++)
@@ -168,6 +171,55 @@ static void bake_window(void)
             col += LEVEL_ROWS;
         }
     }
+}
+
+/* Полная перепечка окна [base, base+OBJ_WIN_COLS): стартовый bake и редкий
+ * прыжок камеры (респаун). На обычных границях окна вызывается bake_shift. */
+static void bake_window(void)
+{
+    unsigned int b = tile_win_base;
+    bake_clear(0, OBJ_WIN_COLS);
+    bake_cols(b, b + OBJ_WIN_COLS, obj_start[b >> 5]);
+}
+
+/* Инкрементальный сдвиг базы на ОДИН шаг окна: сдвигаем выжившую половину
+ * окна копированием и запекаем ТОЛЬКО новую половину — вдвое меньше затираний
+ * и объектов, чем при полной перепечке. Обновляет tile_win_base сам. Возвращает
+ * 1 при инкрементальном сдвиге (±шаг) и 0 при прыжке камеры — тогда caller
+ * печет окно целиком (bake_window). */
+static unsigned char bake_shift(unsigned int nb)
+{
+    unsigned int  old = tile_win_base;
+    unsigned char cc, rr;
+    unsigned char *d, *s;
+
+    if (nb == old + OBJ_WIN_STEP) {
+        /* Камера вперёд: мир ушёл влево, выживает старшая половина
+         * local[32..64) -> local[0..32); справа входит новая половина. */
+        d = tile_win;
+        s = tile_win + OBJ_WIN_STEP * LEVEL_ROWS;
+        for (cc = 0; cc < OBJ_WIN_STEP; cc++)
+            for (rr = 0; rr < LEVEL_ROWS; rr++)
+                *d++ = *s++;
+        tile_win_base = nb;
+        bake_clear(OBJ_WIN_STEP, OBJ_WIN_COLS);
+        bake_cols(nb + OBJ_WIN_STEP, nb + OBJ_WIN_COLS, obj_start[(nb >> 5) + 1]);
+        return 1;
+    }
+    if (nb + OBJ_WIN_STEP == old) {
+        /* Камера назад: выживает младшая половина local[0..32) -> local[32..64);
+         * слева входит новая половина. */
+        d = tile_win + OBJ_WIN_STEP * LEVEL_ROWS;
+        s = tile_win;
+        for (cc = 0; cc < OBJ_WIN_STEP; cc++)
+            for (rr = 0; rr < LEVEL_ROWS; rr++)
+                *d++ = *s++;
+        tile_win_base = nb;
+        bake_clear(0, OBJ_WIN_STEP);
+        bake_cols(nb, nb + OBJ_WIN_STEP, obj_start[nb >> 5]);
+        return 1;
+    }
+    return 0;                               /* прыжок: нужна полная перепечка */
 }
 
 /* Твёрдость ячейки мира (col,row): маска COLL_* свойства тайла (вариант C).
@@ -380,10 +432,13 @@ int main(void)
          * перепечки нет. cam остаётся непрерывным, а содержимое видимых
          * МИРОВЫХ колонок перепечка не меняет (меняется лишь локальный
          * индекс), поэтому обычный покадровый diff-рендер справляется сам —
-         * полный редрав здесь НЕ нужен и раньше именно он давал подвисание. */
+         * полный редрав здесь НЕ нужен и раньше именно он давал подвисание.
+         * Обычный переход (±шаг) печём инкрементально (bake_shift): только
+         * вошедшая половина окна. Прыжок камеры (респаун — cam меняется
+         * более чем на шаг) даёт nb вдали от текущей базы: тогда полная bake_window. */
         {
             unsigned int nb = (unsigned int)cam & (unsigned int)~(OBJ_WIN_STEP - 1);
-            if (nb != tile_win_base) {
+            if (nb != tile_win_base && !bake_shift(nb)) {
                 tile_win_base = nb;
                 bake_window();
             }
