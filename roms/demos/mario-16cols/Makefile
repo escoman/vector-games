@@ -8,7 +8,8 @@ MAPFILE = mario-16c.map
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm \
-       $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
+       $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/fade.c \
+       $(LIB)/kbd/keyboard.c \
        mario.asm main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)

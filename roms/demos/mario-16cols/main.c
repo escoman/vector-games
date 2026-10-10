@@ -13,7 +13,8 @@
  * пропуск; плоскость, пустая и в старой, и в новой колонке — пропуск. Марио
  * стирается слепком VRAM (mario_undraw), а не перерисовкой двух блоков.
  *
- * Управление: ← / → — ходьба, ПРОБЕЛ — прыжок (только с опоры). Коллизии с
+ * Управление: ← / → — ходьба, ПРОБЕЛ — прыжок (только с опоры), ESC — выход
+ * (плавное гашение экрана). Коллизии с
  * уровнем (см. tiles2.png): земля/трубы/кирпич — стены (не пройти), коробки и
  * верх опор — one-way платформы (запрыгнуть можно, пройти насквозь — тоже).
  */
@@ -32,6 +33,8 @@ extern void mario_draw(unsigned char x, unsigned char y,
 extern void mario_undraw(void) __z88dk_callee;
 
 #define CAM_NO_REF   0xFFFFu    /* в VRAM пусто (первый экран) */
+
+#define FADE_HOLD    4          /* кадров на шаг фейда (больше — медленнее)  */
 
 /* Регистр вертикального скролла порта 03h (spike, Этап 2): смещение вниз =
  * (gfx_scroll_row+1)&0xFF, кольцо по 256 строк. cam_y (px) => d2scroll. */
@@ -83,6 +86,7 @@ static unsigned char walkphase;  /* 0..2 кадр ходьбы                  
 static unsigned char vy_hold;    /* ↓ удерживается                             */
 static unsigned char moving;     /* идёт горизонтальное движение этот кадр      */
 static unsigned char space_prev; /* ПРОБЕЛ в прошлом кадре — фронт для прыжка  */
+static unsigned char esc_prev;   /* ESC в прошлом кадре — фронт для выхода     */
 
 /* Вертикальная камера. cam_row — МИРОВАЯ тайловая строка у верха экрана;
  * tile_stride = LEVEL_ROWS (шаг колонки тайлкарты). Оба читаются ассемблером
@@ -140,7 +144,8 @@ int main(void)
     gfx_set_mode(GFX_MODE_256_16);
     gfx_set_black_palette();
     gfx_clear(0);
-    gfx_set_bmp_palette(level_palette);
+    /* Целевую палитру здесь НЕ ставим: первый кадр рисуем при чёрной
+     * палитре (экран скрыт), потом плавно покажем его gfx_fade_in. */
 
     /* Старт: Марио у земли в НИЖНЕЙ части мира, камера прижата к низу.
      * tile_stride/cam_row читаются ассемблером до первого рендера. Для уровня
@@ -160,6 +165,8 @@ int main(void)
     facing = 0;
     walkphase = 0;
     frame = 0;
+    space_prev = 0;            /* BSS не обнуляется (--no-crt): фронта нет   */
+    esc_prev = 0;
 
     gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
     render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
@@ -168,6 +175,8 @@ int main(void)
     drawn_blk = mblk;
     drawn_y = my;
     drawn_spr = spr;
+
+    gfx_fade_in(level_palette, FADE_HOLD);   /* появление сцены из чёрного */
 
     for (;;) {
         unsigned int  old_cam;
@@ -190,6 +199,13 @@ int main(void)
             unsigned char sp = kbd_is_down(32);
             if (sp && !space_prev) jump_start();
             space_prev = sp;
+        }
+        {
+            /* Выход по фронту ESC: выходим из цикла, ниже — гашение. */
+            unsigned char esc = kbd_is_down(KBD_KEY_ESC);
+            if (esc && !esc_prev)
+                break;
+            esc_prev = esc;
         }
 
         /* ---- горизонтальное движение (шаг 8 px, с проверкой стен) ---- */
@@ -329,6 +345,11 @@ int main(void)
         drawn_y = my;
         drawn_spr = spr;
     }
+
+    /* Выход по ESC: плавно гасим текущий кадр к чёрному и держим его. */
+    gfx_fade_out(FADE_HOLD);
+    for (;;)
+        gfx_next_frame();
 
     return 0;
 }
