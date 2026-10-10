@@ -98,6 +98,13 @@ static unsigned char esc_prev;   /* ESC в прошлом кадре — фро�
  * внешней линковкой — компилятор обязан выпустить символы. */
 unsigned char cam_row;
 unsigned char tile_stride;
+
+/* Кольцевое RAM-окно тайлкарты (Фаза 3). Вместо 20-КиБ tilemap в ROM держим в
+ * RAM только OBJ_WIN_COLS колонок, запечённых из obj_data. Читают и C (pesh,
+ * solid_at), и mario.asm (EXTERN _tile_win / _tile_win_base) — поэтому глобальные.
+ * tile_win_base — МИРОВАЯ колонка окна[0] (кратна OBJ_WIN_STEP). */
+unsigned char tile_win[OBJ_WIN_COLS * LEVEL_ROWS];
+unsigned int    tile_win_base;
 static unsigned char max_cam_row;    /* = LEVEL_ROWS>32 ? LEVEL_ROWS-32 : 0 */
 static unsigned char old_cam_row;    /* cam_row в прошлом кадре            */
 
@@ -108,14 +115,74 @@ static unsigned char drawn_blk;
 static int           drawn_y;    /* мировой y (совпадение по всему значению) */
 static const unsigned char *drawn_spr;
 
+/* Испечь окно колонок [tile_win_base, tile_win_base+OBJ_WIN_COLS) из списка
+ * объектов в tile_win. Обнуляем всё окно (BSS при --no-crt не зануляется),
+ * затем затаптываем объекты, накрывающие окно. Печём ВСЕ LEVEL_ROWS строк
+ * колонки, поэтому вертикальный скролл не требует перепечки. Вызывается на
+ * старте и при сдвиге окна.
+ *
+ * Быстродействие (объектов ~1300, а перепечка на каждой границе окна):
+ *   * горячие циклы обнуления/заполнения — на unsigned char (сравнение с 64
+ *     инлайнится cp), иначе sccz80 на КАЖДУЮ ячейку вставлял вызов 16-битного
+ *     сравнения (l_uge/l_ge) -> миллионы вызовов -> секунды фриза;
+ *   * объекты отсортированы по x, скан начинается с obj_start[блок] (первый,
+ *     способный достать до окна) и обрывается на x >= bend -> охватываем только
+ *     полосу ~окно+max_w колонок, а не весь список. */
+static void bake_window(void)
+{
+    unsigned int  b = tile_win_base, bend = tile_win_base + OBJ_WIN_COLS;
+    unsigned int  i, x, c0, c1;
+    unsigned char c, r, y, w, h, nrows, ncols, t;
+    const unsigned char *o;
+    unsigned char *p, *col;
+
+    /* Обнуление окна: 8-битные вложенные счётчики, без 16-битных сравнений. */
+    p = tile_win;
+    for (c = 0; c < OBJ_WIN_COLS; c++)
+        for (r = 0; r < LEVEL_ROWS; r++)
+            *p++ = 0;
+
+    /* Скан по отсортированному по x списку: старт с нужного блока, ранний выход. */
+    i = obj_start[b >> 5];
+    o = obj_data + i * 5;
+    for (; i < (unsigned int)OBJ_COUNT; i++, o += 5) {
+        x = (unsigned int)o[1] | ((unsigned int)(o[0] & 0x80) << 1);
+        if (x >= bend)
+            break;                          /* дальше только правее окна */
+        y = o[2]; w = o[3]; h = o[4];
+        if (x + w <= b)
+            continue;                       /* левее окна */
+        t = o[0] & 0x7F;
+        c0 = (x > b) ? x : b;
+        c1 = x + w;
+        if (c1 > bend) c1 = bend;
+        nrows = h;                          /* байт: высота с обрезкой по низу */
+        if ((unsigned int)y + nrows > (unsigned int)LEVEL_ROWS)
+            nrows = (unsigned char)(LEVEL_ROWS - y);
+        ncols = (unsigned char)(c1 - c0);   /* <= OBJ_WIN_COLS, влезает в байт */
+        col = tile_win + (c0 - b) * LEVEL_ROWS;
+        for (c = 0; c < ncols; c++) {
+            p = col + y;
+            for (r = 0; r < nrows; r++)
+                *p++ = t;
+            col += LEVEL_ROWS;
+        }
+    }
+}
+
 /* Твёрдость ячейки мира (col,row): маска COLL_* свойства тайла (вариант C).
  * COLL_PLAT (1) — one-way опора, COLL_WALL (2) — непроходимо, 3 — и то, и др.
- * 0 — пусто. Берём тайл из tilemap (колонка-мажор) и его свойство tile_solid. */
+ * 0 — пусто. Берём тайл из RAM-окна tile_win (колонка-мажор, локальная колонка
+ * = col - tile_win_base) и его свойство tile_solid. */
 static unsigned char solid_at(int col, int row)
 {
+    int lc;
     if (col < 0 || row < 0 || col >= (int)LEVEL_COLS || row >= (int)LEVEL_ROWS)
         return 0;
-    return tile_solid[tilemap[(unsigned int)col * LEVEL_ROWS + (unsigned int)row]];
+    lc = col - (int)tile_win_base;
+    if (lc < 0 || lc >= OBJ_WIN_COLS)
+        return 0;                           /* вне окна (за границей уровня) */
+    return tile_solid[tile_win[lc * LEVEL_ROWS + row]];
 }
 
 /* Старт прыжка — только с опоры. */
@@ -173,6 +240,8 @@ int main(void)
     esc_prev = 0;
 
     gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
+    tile_win_base = 0;                 /* стартовое окно: колонки [0,64) */
+    bake_window();
     render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
     spr = pick_sprite();
     mario_draw((unsigned char)(mblk * 8), (unsigned char)my, spr);
@@ -304,6 +373,20 @@ int main(void)
                 cam_row = (unsigned char)(nc < 0 ? 0 : nc);
             }
             gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
+        }
+
+        /* ---- сдвиг окна тайлкарты: перепечь при переходе границы окна ----
+         * Окно привязано к cam шагом OBJ_WIN_STEP; пока cam в пределах окна,
+         * перепечки нет. cam остаётся непрерывным, а содержимое видимых
+         * МИРОВЫХ колонок перепечка не меняет (меняется лишь локальный
+         * индекс), поэтому обычный покадровый diff-рендер справляется сам —
+         * полный редрав здесь НЕ нужен и раньше именно он давал подвисание. */
+        {
+            unsigned int nb = (unsigned int)cam & (unsigned int)~(OBJ_WIN_STEP - 1);
+            if (nb != tile_win_base) {
+                tile_win_base = nb;
+                bake_window();
+            }
         }
 
         /* ---- отрисовка ---- */

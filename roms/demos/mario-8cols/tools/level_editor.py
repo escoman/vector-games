@@ -4,19 +4,22 @@
 Запуск:  python3 tools/level_editor.py
 Нужен Tkinter: sudo apt install python3-tk  (Pillow уже в зависимостях проекта).
 
-Что умеет:
-  * палитра всех тайлов (src/tiles/*.png) — клик выбирает кисть;
-  * поле уровня (src/level.json) — ЛКМ рисует выбранным тайлом (и перетаскиванием),
-    ПКМ берёт тайл под курсором в кисть;
-  * свойства выбранного тайла (wall / platform / transparent) — галочки справа
-    ИЛИ ПКМ на тайле карты (меню «сплошной/платформа/проходной»); применяются
-    к тайлу целиком (во всех клетках уровня);
-  * «Подсветить выбранный тайл» — жёлтая рамка на всех клетках текущего тайла;
-  * галочка «Показать твёрдость» — полупрозрачная заливка на поле:
-        без заливки — проходной,  красная — стена,  синяя — платформа;
-  * Сохранение пишет src/level.json и src/tiles.json (после — `make`).
+Два режима (переключатель «Режим» на панели):
+  * Объекты (основной) — карта как список прямоугольников {t,x,y,w,h}.
+    ЛКМ по пустому + протянуть — создать объект выбранным тайлом-кистью;
+    ЛКМ по объекту + тянуть — переместить; Del/BackSpace — удалить выбранный;
+    ПКМ — взять тайл под курсором в кисть. Рамки: бирюза — границы объектов,
+    розовый — выделенный/создаваемый. Источник истины — src/objects.json.
+  * Тайлы (фолбэк) — классическое по-тайловое рисование в сетку level.json
+    (ЛКМ рисует, ПКМ берёт тайл). При сохранении правки пересегментируются
+    в объекты.
 
-Источник истины — сами файлы; графика тайлов правится отдельно.
+Прочее:
+  * палитра всех тайлов (src/tiles/*.png) — клик выбирает кисть/тип объекта;
+  * свойства тайла (wall / platform / transparent) — галочки справа или ПКМ;
+  * «Показать твёрдость» — заливка: красная — стена, синяя — платформа;
+  * Сохранение пишет src/objects.json, src/level.json (развёрнутая grid) и
+    src/tiles.json (после — `make`).
 """
 import json
 import os
@@ -41,11 +44,19 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.abspath(os.path.join(HERE, "..", "src"))
 
+# Общие с генератором функции развёртки/сегментации объектов (один источник
+# истины для логики карты — редактор и прошивка не разъезжаются).
+sys.path.insert(0, HERE)
+import gen_assets as G                                    # noqa: E402
+from objects_from_grid import cover_rectangles            # noqa: E402
+
 COLL_RED = (224, 58, 58)      # сплошной (wall)
 COLL_BLUE = (58, 123, 224)    # платформа (platform)
 HL_COLOR = (255, 212, 0)      # жёлтая рамка «это текущий тайл-кисть» на карте
 OVERLAY_ALPHA = 0.45          # сила полупрозрачной заливки твёрдости (0..1)
 GRID_LINE = (128, 128, 128, 128)   # сетка границ тайлов: серый, 50% прозрачности
+OBJ_LINE = (78, 201, 176)     # бирюзовая рамка объекта (режим «Объекты»)
+OBJ_SEL = (255, 90, 200)      # рамка выбранного объекта
 SKY = (13, 26, 43)
 PAL_THUMB = 32
 PAL_COLS = 6
@@ -68,13 +79,17 @@ class LevelEditor:
         root.geometry("1200x760")
 
         self.level, self.tiles = self._load_json()
-        self.cols = self.level["cols"]
-        self.rows = self.level["rows"]
-        self.grid = self.level["grid"]              # col-major: grid[col*rows+row]
+        self.cols = int(self.level["cols"])
+        self.rows = int(self.level["rows"])
+        self.objects = self._load_objects()          # источник истины (Фаза 2)
+        self.grid = list(G.expand_objects(self.cols, self.rows, self.objects))
         self.tile_orig = self._load_tile_images()
         self.dirty = False
         self.selected = 0
         self.cell = 12
+        self.mode = tk.StringVar(value="object")     # "object" | "tile"
+        self.sel_obj = None                          # индекс выбранного объекта
+        self.drag = None                             # состояние перетаскивания
         self.show_overlay = tk.BooleanVar(value=True)
         self.hl_var = tk.BooleanVar(value=True)
         self.grid_var = tk.BooleanVar(value=True)
@@ -94,6 +109,16 @@ class LevelEditor:
         with open(os.path.join(SRC, "tiles.json"), encoding="utf-8") as f:
             tiles = json.load(f)
         return level, tiles
+
+    def _load_objects(self):
+        """src/objects.json как источник карты; нет/не совпал — сегментировать grid."""
+        p = os.path.join(SRC, "objects.json")
+        if os.path.isfile(p):
+            with open(p) as f:
+                ov = json.load(f)
+            if int(ov["cols"]) == self.cols and int(ov["rows"]) == self.rows:
+                return ov["objects"]
+        return cover_rectangles(self.cols, self.rows, self.level["grid"])
 
     def _load_tile_images(self):
         imgs = []
@@ -122,6 +147,11 @@ class LevelEditor:
                            command=self._on_zoom)
         z.config(width=5)
         z.pack(side=tk.LEFT)
+        ttk.Label(bar, text="  Режим:").pack(side=tk.LEFT)
+        ttk.Radiobutton(bar, text="Объекты", value="object", variable=self.mode,
+                        command=self._on_mode).pack(side=tk.LEFT)
+        ttk.Radiobutton(bar, text="Тайлы", value="tile", variable=self.mode,
+                        command=self._on_mode).pack(side=tk.LEFT)
         ttk.Button(bar, text="Сохранить", command=self.save).pack(side=tk.LEFT, padx=(14, 4))
         self.status = ttk.Label(bar, text="готово")
         self.status.pack(side=tk.LEFT, padx=8)
@@ -191,6 +221,9 @@ class LevelEditor:
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_wheel(e, -1))
         self.canvas.bind("<Button-5>", lambda e: self._on_wheel(e, 1))
+        self.canvas.bind("<ButtonRelease-1>", self._on_release)
+        self.root.bind("<Delete>", self._del_selected)
+        self.root.bind("<BackSpace>", self._del_selected)
 
         # свойства справа
         right = ttk.Frame(body, padding=8)
@@ -210,10 +243,10 @@ class LevelEditor:
             ttk.Checkbutton(right, text=txt, variable=var,
                             command=self._edit_prop).pack(anchor=tk.W, pady=2)
         ttk.Label(right, foreground="#777", justify=tk.LEFT, text=(
-            "Отметь галочками — применится ко\n"
-            "всем клеткам этого тайла на карте.\n\n"
-            "ЛКМ на карте — рисовать кистью.\n"
-            "ПКМ на карте — меню: кисть/твёрдость.\n"
+            "Объекты: ЛКМ по пустому + тянуть —\n"
+            "создать; по объекту — выделить/двинуть;\n"
+            "Del — удалить.  ПКМ — кисть/твёрдость.\n\n"
+            "Тайлы: ЛКМ рисует кистью.\n"
             "После «Сохранить» — make.")).pack(anchor=tk.W, pady=(12, 0))
 
     def _build_palette(self):
@@ -270,17 +303,28 @@ class LevelEditor:
 
     def _compose(self):
         """Финальная картинка = базовый экран + сетка границ тайлов (1px серый,
-        50% прозрачности) поверх. Сетка НЕ пишется в self.screen, чтобы
-        дорисовка одной клетки не стирала линии; толщина 1px при любом масштабе."""
-        if not self.grid_var.get():
+        50% прозрачности) + (в режиме объектов) рамки объектов поверх. Сетка
+        НЕ пишется в self.screen, чтобы дорисовка одной клетки не стирала
+        линии; толщина 1px при любом масштабе."""
+        need_grid = self.grid_var.get()
+        need_obj = self.mode.get() == "object"
+        if not need_grid and not need_obj:
             return self.screen
         W, H = self.screen.size
         ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(ov)
-        for x in range(0, W, self.cell):
-            d.line([(x, 0), (x, H)], fill=GRID_LINE, width=1)
-        for y in range(0, H, self.cell):
-            d.line([(0, y), (W, y)], fill=GRID_LINE, width=1)
+        if need_grid:
+            for x in range(0, W, self.cell):
+                d.line([(x, 0), (x, H)], fill=GRID_LINE, width=1)
+            for y in range(0, H, self.cell):
+                d.line([(0, y), (W, y)], fill=GRID_LINE, width=1)
+        if need_obj:
+            for i, o in enumerate(self.objects):
+                box = [o["x"] * self.cell, o["y"] * self.cell,
+                       (o["x"] + o["w"]) * self.cell - 1,
+                       (o["y"] + o["h"]) * self.cell - 1]
+                color = OBJ_SEL if i == self.sel_obj else OBJ_LINE
+                d.rectangle(box, outline=color + (255,), width=2)
         return Image.alpha_composite(self.screen.convert("RGBA"), ov).convert("RGB")
 
     def _repaint_cell(self, col, row):
@@ -380,10 +424,116 @@ class LevelEditor:
         self.dirty = True
 
     def _on_click(self, e):
-        self._paint(e)
+        if self.mode.get() == "tile":
+            self._paint(e)
+            return
+        c = self._cell_at(e)
+        if not c:
+            return
+        col, row = c
+        hit = self._obj_at(col, row)
+        if hit is not None:                       # по объекту — выделяем и тянем
+            self.sel_obj = hit
+            o = self.objects[hit]
+            self.drag = {"kind": "move", "index": hit,
+                         "dx": col - o["x"], "dy": row - o["y"],
+                         "cx": col, "cy": row}
+        else:                                     # по пустому — резинка-создание
+            self.sel_obj = None
+            self.drag = {"kind": "create", "t": self.selected,
+                         "x0": col, "y0": row, "x1": col, "y1": row}
+        self._clear_preview()
+        self._draw_preview()
+        self.render_all()                          # показать рамку выделения
 
     def _on_drag(self, e):
-        self._paint(e)
+        if self.mode.get() == "tile":
+            self._paint(e)
+            return
+        if not self.drag:
+            return
+        c = self._cell_at(e)
+        if not c:
+            return
+        col, row = c
+        d = self.drag
+        if d["kind"] == "create":
+            d["x1"], d["y1"] = col, row
+        else:
+            d["cx"], d["cy"] = col, row
+        self._clear_preview()                      # двигается только контур,
+        self._draw_preview()                       # печь — на отпускании
+
+    def _on_release(self, e):
+        if self.mode.get() != "object" or not self.drag:
+            self.drag = None
+            return
+        d = self.drag
+        self.drag = None
+        self._clear_preview()
+        c = self._cell_at(e)
+        if d["kind"] == "create":
+            x1, y1 = d["x1"], d["y1"]
+            if c:
+                x1, y1 = c
+            x, y, w, h = self._norm_rect(d["x0"], d["y0"], x1, y1)
+            if d["t"] != 0:                        # «небо» не заводим
+                self.objects.append({"t": d["t"], "x": x, "y": y, "w": w, "h": h})
+                self.sel_obj = len(self.objects) - 1
+        elif c:                                    # завершаем перемещение
+            o = self.objects[d["index"]]
+            o["x"] = max(0, min(self.cols - o["w"], c[0] - d["dx"]))
+            o["y"] = max(0, min(self.rows - o["h"], c[1] - d["dy"]))
+        self._recompute_grid()
+        self.dirty = True
+        self._set_status("не сохранено")
+        self.render_all()
+
+    def _del_selected(self, _=None):
+        if self.mode.get() != "object" or self.sel_obj is None:
+            return
+        del self.objects[self.sel_obj]
+        self.sel_obj = None
+        self._recompute_grid()
+        self.dirty = True
+        self._set_status("не сохранено")
+        self.render_all()
+
+    # ---- объектные хелперы ------------------------------------------------
+    def _obj_at(self, col, row):
+        """Индекс верхнего объекта на клетке (обратный обход: последние сверху)."""
+        for i in range(len(self.objects) - 1, -1, -1):
+            o = self.objects[i]
+            if o["x"] <= col < o["x"] + o["w"] and o["y"] <= row < o["y"] + o["h"]:
+                return i
+        return None
+
+    def _norm_rect(self, x0, y0, x1, y1):
+        """Углы резинки -> (x, y, w, h) в тайлах (x=колонка, y=строка)."""
+        return (min(x0, x1), min(y0, y1), abs(x1 - x0) + 1, abs(y1 - y0) + 1)
+
+    def _recompute_grid(self):
+        """grid производен от объектов — переразвернуть для рендера/коллизий."""
+        self.grid = list(G.expand_objects(self.cols, self.rows, self.objects))
+
+    def _draw_preview(self):
+        d = self.drag
+        if not d:
+            return
+        if d["kind"] == "create":
+            x, y, w, h = self._norm_rect(d["x0"], d["y0"], d["x1"], d["y1"])
+        else:
+            o = self.objects[d["index"]]
+            x = max(0, min(self.cols - o["w"], d["cx"] - d["dx"]))
+            y = max(0, min(self.rows - o["h"], d["cy"] - d["dy"]))
+            w, h = o["w"], o["h"]
+        self.canvas.create_rectangle(
+            x * self.cell, y * self.cell,
+            (x + w) * self.cell, (y + h) * self.cell,
+            outline="#%02x%02x%02x" % OBJ_SEL, width=2, tags=("preview",))
+
+    def _clear_preview(self):
+        self.canvas.delete("preview")
 
     def _on_map_menu(self, e):
         """ПКМ на карте: взять тайл под курсором в кисть + меню быстрых действий."""
@@ -425,6 +575,18 @@ class LevelEditor:
     def _on_zoom(self, _=None):
         self.cell = int(self.zoom_var.get())
         self._rebuild_scaled()
+        self.render_all()
+
+    def _on_mode(self):
+        """Переключатель режимов. grid всегда производен: в «объекты» —
+        пересегментируем тайловые правки; в «тайлы» — разворачиваем объекты
+        в grid (фолбэк-рисование по-тайлово)."""
+        self.sel_obj = None
+        self.drag = None
+        if self.mode.get() == "object":
+            self.objects = cover_rectangles(self.cols, self.rows, self.grid)
+        else:
+            self._recompute_grid()
         self.render_all()
 
     # ---- ресайз карты -----------------------------------------------------
@@ -474,14 +636,31 @@ class LevelEditor:
         self.level["cols"] = new_cols
         self.level["rows"] = new_rows
         self.level["grid"] = new
+        # в режиме объектов сдвиг grid делаем и для объектов (иначе save
+        # перезтёр бы ресайз, развернув старые координаты в новые рамки)
+        if self.mode.get() == "object":
+            self.objects = cover_rectangles(new_cols, new_rows, new)
+            self.sel_obj = None
         self.dirty = True
         self.render_all()
 
     # ---- сохранение -------------------------------------------------------
     def save(self):
+        """Объекты — источник истины: пишем objects.json, а level.json —
+        развёрнутая grid-картой копия (для фолбэка и парити-сверки)."""
+        if self.mode.get() == "tile":
+            self.objects = cover_rectangles(self.cols, self.rows, self.grid)
+        else:
+            self._recompute_grid()
+        self.level["cols"] = self.cols
+        self.level["rows"] = self.rows
         self.level["grid"] = self.grid
         with open(os.path.join(SRC, "level.json"), "w") as f:
             json.dump(self.level, f)
+        with open(os.path.join(SRC, "objects.json"), "w") as f:
+            json.dump({"cols": self.cols, "rows": self.rows,
+                       "tile": self.level.get("tile", 8),
+                       "objects": self.objects}, f)
         with open(os.path.join(SRC, "tiles.json"), "w", encoding="utf-8") as f:
             json.dump(self.tiles, f, ensure_ascii=False, indent=1)
         self.dirty = False

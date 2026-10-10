@@ -32,6 +32,8 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "..", "src")
+sys.path.insert(0, HERE)
+from objects_from_grid import cover_rectangles            # noqa: E402
 
 # ---- Геометрия уровня -------------------------------------------------------
 BAND_TOP = 176          # верх видимой полосы уровня (нативные пиксели tiles.png)
@@ -206,9 +208,20 @@ def build_level_editor():
     with open(os.path.join(SRC, "tiles.json")) as f:
         tj = json.load(f)
     cols, rows = int(lv["cols"]), int(lv["rows"])
-    tilemap = bytearray(lv["grid"])
+    # Источник карты: объекты (src/objects.json), если есть и размер сходится;
+    # иначе — сегментируем плоскую сетку level.json. Побайтовый вывод идентичен
+    # (чекпоинт паритета tools/check_parity.py).
+    o_cols, o_rows, objects = load_objects()
+    if objects is None or (o_cols, o_rows) != (cols, rows):
+        objects = cover_rectangles(cols, rows, lv["grid"])
+    # Сортировка по колонке (стабильно по y): объекты дизъюнктны (покрытие),
+    # поэтому побайтовая карта НЕ меняется (чекпоинт паритета проходит), а
+    # рантайм-перепечка окна получает список по x -> скан стартует с нужного
+    # блока (obj_start) и рано выходит (см. bake_window / write_level).
+    objects = sorted(objects, key=lambda o: (int(o["x"]), int(o["y"])))
+    tilemap = expand_objects(cols, rows, objects)
     if len(tilemap) != cols * rows:
-        sys.exit("level.json: grid не соответствует cols*rows")
+        sys.exit("level: карта не соответствует cols*rows")
     # Ограничения адресации рендера (mario.asm, 8080, 16-битные указатели):
     #   * stride = LEVEL_ROWS и cam_row — байтовые (кольцо 256 строк = 32 ряда);
     #   * cam*stride < размер tilemap = cols*rows должен влезать в 16 бит.
@@ -229,8 +242,43 @@ def build_level_editor():
     tile_nz = _compute_tile_nz(tileset)
     pair_top = _compute_pair_top(cols, rows, tilemap)
     print(f"level(editor): {cols}x{rows}, тайлов в наборе: {len(tileset)}, "
-          f"тайл {TILE_BYTES} Б (2 плоскости)")
-    return cols, rows, tileset, bytes(tilemap), bytes(tile_nz), bytes(pair_top)
+          f"тайл {TILE_BYTES} Б (2 плоскости), объектов: {len(objects)}")
+    return cols, rows, tileset, bytes(tilemap), bytes(tile_nz), bytes(pair_top), objects
+
+
+# ---------------------------------------------------------------------------
+# Объектная модель (Фаза 1): список объектов -> плоская tilemap офлайн
+# ---------------------------------------------------------------------------
+# src/objects.json (из tools/objects_from_grid.py) хранит уровень как набор
+# объектов {t, x, y, w, h} вместо 20-КиБ сетки.expand_objects разворачивает их
+# обратно в tilemap col-major — побайтово ту же карту, что и grid (чекпоинт
+# паритета tools/check_parity.py). В рантайме (Фаза 3) та же логика будет печь
+# только видимое окно, а не всю карту.
+
+def load_objects():
+    """src/objects.json -> (cols, rows, objects); нет файла -> (None, None, None)."""
+    path = os.path.join(SRC, "objects.json")
+    if not os.path.exists(path):
+        return None, None, None
+    with open(path) as f:
+        ov = json.load(f)
+    return int(ov["cols"]), int(ov["rows"]), ov["objects"]
+
+
+def expand_objects(cols, rows, objects):
+    """Объекты -> bytearray tilemap[col*rows+row]. Одно-тайловые прямоугольники."""
+    tilemap = bytearray(cols * rows)
+    for o in objects:
+        t = int(o["t"])
+        x = int(o["x"])
+        y = int(o["y"])
+        w = int(o["w"])
+        h = int(o["h"])
+        for dx in range(w):
+            base = (x + dx) * rows + y
+            for dy in range(h):
+                tilemap[base + dy] = t
+    return tilemap
 
 
 # ---------------------------------------------------------------------------
@@ -359,8 +407,56 @@ def fmt_array(f, name, data, per_line=16):
     f.write("};\n\n")
 
 
-def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid):
+def fmt_array_u16(f, name, vals, per_line=10):
+    # 16-битная таблица (unsigned int, little-endian на Z80). Читает только C
+    # (bake_window), mario.asm её не трогает.
+    f.write(f"const unsigned int {name}[{len(vals)}] = {{\n")
+    for i in range(0, len(vals), per_line):
+        chunk = vals[i:i + per_line]
+        f.write("    " + ", ".join(str(v) for v in chunk) + ",\n")
+    f.write("};\n\n")
+
+
+def pack_objects(objects):
+    """Объекты -> компактный поток по 5 байт: {flags, xlo, y, w, h}.
+
+    flags = (tile & 0x7F) | ((x >> 8) & 1) << 7 — индекс тайла (0..125) и
+    девятый бит колонки (x до 511). xlo — младший байт x. y/w/h — байты.
+    Порядок = порядок отрисовки (поздние перекрывают ранние).
+    """
+    data = bytearray()
+    for o in objects:
+        t = int(o["t"]); x = int(o["x"]); y = int(o["y"])
+        w = int(o["w"]); h = int(o["h"])
+        if not (0 <= t <= 127 and 0 <= x <= 511 and 0 <= y <= 255
+                and 0 < w <= 255 and 0 < h <= 255):
+            sys.exit(f"objects: значение вне компактного формата {o}")
+        data.append((t & 0x7F) | (((x >> 8) & 1) << 7))
+        data.append(x & 0xFF)
+        data.append(y)
+        data.append(w)
+        data.append(h)
+    return bytes(data)
+
+
+def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects):
     path = os.path.join(SRC, "level.inc")
+    obj_data = pack_objects(objects)
+    # Таблица стартов скана перепечки: объекты отсортированы по x; для окна с
+    # базой k*STEP первый релевантный объект — первый с x >= k*STEP - max_w
+    # (объект левее max_w гарантированно не достаёт до окна). bake_window()
+    # начинает скан с obj_start[base>>5] и обрывается на x >= base+OBJ_WIN_COLS.
+    step = 32
+    nblocks = (cols + step - 1) // step
+    max_w = max((int(o["w"]) for o in objects), default=0)
+    xs = [int(o["x"]) for o in objects]
+    obj_start = []
+    j = 0
+    for k in range(nblocks):
+        thr = k * step - max_w
+        while j < len(xs) and xs[j] < thr:
+            j += 1
+        obj_start.append(j)
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py (Mario 8-col, сплит по плоскостям). "
                 "Не править руками. */\n\n")
@@ -371,12 +467,22 @@ def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid):
         f.write(f"#define TILESET_N    {len(tileset)}\n")
         f.write(f"#define TILE_BYTES   {TILE_BYTES}   /* тайл фона = 2 плоскости */\n")
         f.write("#define TILE_EMPTY   0         /* чистое небо, обе плоскости 0 */\n\n")
+        # Кольцевое RAM-окно тайлкарты (Фаза 3): печём OBJ_WIN_COLS колонок,
+        # сдвиг окна шагом OBJ_WIN_STEP (<= половины окна), чтобы видимая
+        # полоса [cam, cam+VIEW_BLOCKS] всегда лежала в запеченном окне.
+        f.write("#define OBJ_WIN_COLS   64      /* колонок в RAM-окне tile_win */\n")
+        f.write("#define OBJ_WIN_STEP   32      /* шаг сдвига окна (cam>>5<<5) */\n")
+        f.write(f"#define OBJ_WIN_BLOCKS {nblocks}     /* ceil(LEVEL_COLS/OBJ_WIN_STEP) */\n")
+        f.write(f"#define OBJ_COUNT    {len(objects)}\n")
+        f.write("/* Объекты: 5 байт {flags,xlo,y,w,h}; flags=(tile&0x7F)|(x>>8<<7).\n")
+        f.write("   Развёртка в окне — функцией bake_window() в main.c. */\n")
         fmt_array(f, "level_palette", bytes(PALETTE))
         joined = b"".join(tileset)
         fmt_array(f, "tileset", joined)
-        fmt_array(f, "tilemap", tilemap)
-        fmt_array(f, "tile_nz", tile_nz)      # 2 бита: непустая плоскость веса 8 / 4
-        fmt_array(f, "pair_top", pair_top)    # верх diff'а на пару соседних колонок
+        fmt_array(f, "obj_data", obj_data)         # список объектов (вместо tilemap)
+        fmt_array_u16(f, "obj_start", obj_start)   # старт скана перепечки по блокам
+        fmt_array(f, "tile_nz", tile_nz)           # 2 бита: непустая плоскость веса 8 / 4
+        fmt_array(f, "pair_top", pair_top)         # верх diff'а на пару соседних колонок
         f.write("\n/* Коллизии (src/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
         f.write("#define COLL_WALL   2   /* непроходимо */\n")
         f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
@@ -412,10 +518,10 @@ def write_sprites(sprites):
 
 
 def main():
-    cols, rows, tileset, tilemap, tile_nz, pair_top = build_level_editor()
+    cols, rows, tileset, tilemap, tile_nz, pair_top, objects = build_level_editor()
     tile_solid = load_tile_solid(len(tileset))
     sprites = build_sprites()
-    write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid)
+    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects)
     write_sprites(sprites)
 
 
