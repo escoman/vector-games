@@ -26,11 +26,16 @@
 /* Горячие функции — см. mario.asm. */
 extern void render_window(unsigned int cam, unsigned int old_cam,
                           unsigned char blk0, unsigned char nblk) __z88dk_callee;
+extern void render_rowband(unsigned int world_row, unsigned int cam) __z88dk_callee;
 extern void mario_draw(unsigned char x, unsigned char y,
-                       const unsigned char *spr) __z88dk_callee;
+                      const unsigned char *spr) __z88dk_callee;
 extern void mario_undraw(void) __z88dk_callee;
 
 #define CAM_NO_REF   0xFFFFu    /* в VRAM пусто (первый экран) */
+
+/* Регистр вертикального скролла порта 03h (spike, Этап 2): смещение вниз =
+ * (gfx_scroll_row+1)&0xFF, кольцо по 256 строк. cam_y (px) => d2scroll. */
+#define D2SCROLL(cam_y)  ((unsigned char)(0xFF - ((cam_y) & 0xFF)))
 
 /* ----------------------------- ГЕОМЕТРИЯ ------------------------------- */
 /* Экран 256x256 = 32x32 тайла; тайл 8 px. Мир шире экрана (LEVEL_COLS тайлов),
@@ -39,6 +44,7 @@ extern void mario_undraw(void) __z88dk_callee;
 
 #define TILE_PX      8
 #define VIEW_BLOCKS  32                 /* 256 px / 8 = экран по горизонтали */
+#define VIEW_ROWS    32                 /* 256 px / 8 = экран по вертикали    */
 #define SPR_W        16                 /* спрайт Марио 16x16 = 2x2 тайла    */
 #define SPR_H        16
 
@@ -49,6 +55,12 @@ extern void mario_undraw(void) __z88dk_callee;
 #define CAM_MIN_BLK  10                 /* держим Марио в окне [10..20]      */
 #define CAM_MAX_BLK  20
 #define MAX_CAM      (LEVEL_COLS - VIEW_BLOCKS)
+
+/* Вертикальная камера держит Марио в коридоре строк экрана [8..22]. Для уровня
+ * высотой ровно экран (LEVEL_ROWS==32) MAX_CAM_ROW=0 => cam_row всегда 0 =>
+ * регрессия к прежнему поведению. */
+#define CAMR_MIN_ROW 8
+#define CAMR_MAX_ROW 22
 
 #define MOVE_DELAY   2                  /* кадров на один шаг (8 px)         */
 
@@ -63,7 +75,7 @@ static const unsigned char * const walkL[3] =
 static unsigned int  wblk;       /* мировой тайловый столбец левого края Марио */
 static unsigned int  cam;        /* мировой столбец у левого края экрана       */
 static unsigned char mblk;       /* экран столбец Марио = wblk - cam           */
-static int           my;         /* верх Марио по Y (пиксели, 0..240)          */
+static int           my;         /* верх Марио по Y в МИРОВЫХ пикселях (0..H)  */
 static int           vy;         /* вертикальная скорость, + = вниз             */
 static unsigned char facing;     /* 0 = вправо, 1 = влево                      */
 static unsigned char grounded;   /* стоит на опоре (можно прыгать)             */
@@ -72,11 +84,20 @@ static unsigned char vy_hold;    /* ↓ удерживается                
 static unsigned char moving;     /* идёт горизонтальное движение этот кадр      */
 static unsigned char space_prev; /* ПРОБЕЛ в прошлом кадре — фронт для прыжка  */
 
+/* Вертикальная камера. cam_row — МИРОВАЯ тайловая строка у верха экрана;
+ * tile_stride = LEVEL_ROWS (шаг колонки тайлкарты). Оба читаются ассемблером
+ * (EXTERN _cam_row / _tile_stride), поэтому это глобальные (не static) с
+ * внешней линковкой — компилятор обязан выпустить символы. */
+unsigned char cam_row;
+unsigned char tile_stride;
+static unsigned char max_cam_row;    /* = LEVEL_ROWS>32 ? LEVEL_ROWS-32 : 0 */
+static unsigned char old_cam_row;    /* cam_row в прошлом кадре            */
+
 /* Где Марио нарисован в последний раз (его пиксели сейчас в VRAM).
  * Пока совпадает с текущим состоянием и камера не двинулась — кадр целиком
  * пропускаем: в VRAM уже лежит готовое изображение. */
 static unsigned char drawn_blk;
-static unsigned char drawn_y;
+static int           drawn_y;    /* мировой y (совпадение по всему значению) */
 static const unsigned char *drawn_spr;
 
 /* Твёрдость ячейки мира (col,row): маска COLL_* свойства тайла (вариант C).
@@ -121,22 +142,31 @@ int main(void)
     gfx_clear(0);
     gfx_set_bmp_palette(level_palette);
 
-    /* Старт: Марио у левого края на земле (верх ряда 30 = y240, ноги там). */
+    /* Старт: Марио у земли в НИЖНЕЙ части мира, камера прижата к низу.
+     * tile_stride/cam_row читаются ассемблером до первого рендера. Для уровня
+     * высотой ровно экран (LEVEL_ROWS==32): max_cam_row=0, cam_row=0,
+     * my=(32-4)*8=224 — в точность прежнему поведению. */
+    tile_stride  = (unsigned char)LEVEL_ROWS;
+    max_cam_row  = (LEVEL_ROWS >= VIEW_ROWS)
+                       ? (unsigned char)(LEVEL_ROWS - VIEW_ROWS) : 0;
     wblk = 4;
     cam = 0;
     mblk = (unsigned char)wblk;
-    my = 224;
+    cam_row = max_cam_row;
+    old_cam_row = cam_row;
+    my = (int)(LEVEL_ROWS - 4) * TILE_PX;   /* ноги у нижней границы        */
     vy = 0;
     grounded = 1;
     facing = 0;
     walkphase = 0;
     frame = 0;
 
+    gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
     render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
     spr = pick_sprite();
     mario_draw((unsigned char)(mblk * 8), (unsigned char)my, spr);
     drawn_blk = mblk;
-    drawn_y = (unsigned char)my;
+    drawn_y = my;
     drawn_spr = spr;
 
     for (;;) {
@@ -165,6 +195,7 @@ int main(void)
         /* ---- горизонтальное движение (шаг 8 px, с проверкой стен) ---- */
         moving = 0;
         old_cam = cam;
+        old_cam_row = cam_row;
 
         if (dir && !vy_hold) {
             if (++frame >= MOVE_DELAY) {
@@ -226,31 +257,76 @@ int main(void)
             }
             my = nmy;
             if (my < 0) { my = 0; if (vy < 0) vy = 0; }
-            if (my > 240) {                 /* утонул в яме — респавн в начале */
+            if (my >= (int)LEVEL_TILE_H) {  /* утонул в яме — респавн в начале */
                 wblk = 4; cam = 0; mblk = 4;
-                my = 224; vy = 0; grounded = 1;
+                my = (int)(LEVEL_ROWS - 4) * TILE_PX;
+                cam_row = max_cam_row;
+                vy = 0; grounded = 1;
             }
+        }
+
+        /* ---- вертикальная камера: держим Марио в коридоре строк экрана ----
+         * Для уровня в один экран (max_cam_row=0) cam_row остаётся 0. ---- */
+        {
+            int mrow = my / TILE_PX;
+            int rel = mrow - (int)cam_row;
+            if (rel > CAMR_MAX_ROW && cam_row < max_cam_row) {
+                cam_row = (unsigned char)(mrow - CAMR_MAX_ROW);
+                if (cam_row > max_cam_row) cam_row = max_cam_row;
+            } else if (rel < CAMR_MIN_ROW) {
+                int nc = mrow - CAMR_MIN_ROW;
+                cam_row = (unsigned char)(nc < 0 ? 0 : nc);
+            }
+            gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
         }
 
         /* ---- отрисовка ---- */
         spr = pick_sprite();
-        if (cam != old_cam) {
-            /* Скролл: сначала стереть Марио (иначе его пиксели уедут в
-             * «фон» и останутся в VRAM), затем дорисовать разность колонок.
-             * pair_top валиден только для шага +-1, больше — полный редрав. */
-            mario_undraw();
-            if (cam == old_cam + 1 || old_cam == cam + 1)
-                render_window(cam, old_cam, 0, VIEW_BLOCKS);
-            else
-                render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
-        } else if (mblk == drawn_blk && my == drawn_y && spr == drawn_spr) {
-            continue;                   /* на экране ничего не изменилось */
-        } else {
-            mario_undraw();
+        {
+            int dv = (int)cam_row - (int)old_cam_row;
+            if (dv != 0) {
+                /* Вертикаль: регистр скролла аппаратно сдвигает готовые
+                 * строки (VRAM адресован МИРОВЫМ рядом => содержимое на
+                 * месте). Дорисовываем только открытую полосу. */
+                mario_undraw();
+                if (dv == 1 || dv == -1) {
+                    unsigned int revealed = (dv == 1)
+                        ? (unsigned int)(cam_row + VIEW_ROWS - 1) /* снизу */
+                        : (unsigned int)cam_row;                  /* сверху */
+                    render_rowband(revealed, cam);
+                    if (cam != old_cam) {
+                        if (cam == old_cam + 1 || old_cam == cam + 1)
+                            render_window(cam, old_cam, 0, VIEW_BLOCKS);
+                        else {
+                            gfx_clear(0);   /* CAM_NO_REF рисует только не-небо */
+                            render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
+                        }
+                    }
+                } else {
+                    /* >1 строки (редко): полный редрав с очисткой неба. */
+                    gfx_clear(0);
+                    render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
+                }
+            } else if (cam != old_cam) {
+                /* Только горизонталь: разность колонок (как раньше). */
+                mario_undraw();
+                if (cam == old_cam + 1 || old_cam == cam + 1)
+                    render_window(cam, old_cam, 0, VIEW_BLOCKS);
+                else {
+                    gfx_clear(0);       /* респавн/прыжок камеры: CAM_NO_REF
+                                         * рисует только не-небо, иначе останутся
+                                         * кусочки тайлов с места гибели */
+                    render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
+                }
+            } else if (mblk == drawn_blk && my == drawn_y && spr == drawn_spr) {
+                continue;                   /* на экране ничего не изменилось */
+            } else {
+                mario_undraw();
+            }
         }
         mario_draw((unsigned char)(mblk * 8), (unsigned char)my, spr);
         drawn_blk = mblk;
-        drawn_y = (unsigned char)my;
+        drawn_y = my;
         drawn_spr = spr;
     }
 

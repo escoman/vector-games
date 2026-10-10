@@ -10,27 +10,45 @@
 ;         CAM_NO_REF означает «в VRAM пусто» (первый экран) — эталоном служит
 ;         тайл 0 = чистое небо.
 ;
+;   void render_rowband(unsigned int world_row, unsigned int cam)
+;       — полная (без разности) зарисовка ОДНОЙ мировой тайловой строки
+;         world_row по всем 32 экраным колонкам для текущего cam. Используется
+;         при вертикальном скролле:Hardware сдвигает готовые 31 строку, а эта
+;         функция дорисовывает только что открытую полосу (8 px).
+;
 ;   void mario_draw(unsigned char x, unsigned char y, const unsigned char *spr)
 ;       — снять слепок VRAM под спрайтом (128 байт) и наложить спрайт 16x16.
 ;   void mario_undraw(void)
 ;       — вернуть снятый слепок (стирает Марио). Порядок кадра:
-;         undraw -> render_window -> mario_draw.
+;         undraw -> render_window/render_rowband -> mario_draw.
 ;
 ; Формат Вектора: плоскости вес 8/4/2/1 в 0x8000/0xA000/0xC000/0xE000; блок =
 ; x/8 (256 байт), байт i хранит строку y = 255 - i (строки сверху вниз идут по
 ; УБЫВАЮЩЕМУ адресу), старший бит байта = левый пиксель.
 ;
+; ВЕРТИКАЛЬНЫЙ КОЛЬЦЕВОЙ БУФЕР (скролл по обеим осям). Регистр строки порта 03h
+; (gfx_scroll_row) — аппаратный вертикальный скролл; измерено в spike:
+;     смещение_вниз_px = (gfx_scroll_row + 1) & 0xFF   (кольцо по 256 строк)
+;     => gfx_set_scroll(d2scroll(cam_y))  где  d2scroll(cam_y) = 0xFF - (cam_y & 0xFF)
+; Мирный пиксельный ряд wy кладём в линию VRAM (wy mod 256), т.е. байт в блоке =
+; 255 - (wy mod 256). Экранная строка s показывает мировую строку cam_y + s.
+; cam_row (мировая тайловая строка верха экрана, _cam_row) и TILE_STRIDE
+; (_tile_stride = LEVEL_ROWS) приходят из C. При cam_row=0 и stride=32 адресация
+; сводится к прежней (обратная совместимость регрессии).
+;
 ; Тайл 8x8 (tileset): 4 плоскости по 8 байт, порядок весов 8,4,2,1; в плоскости
 ; строки 0..7 сверху вниз. 32 байта на тайл. Тайл 0 = пустой (небо) => его
 ; первые 32 байта — нули, их используем как эталон «пусто» для первого экрана.
-; Тайлкарта (tilemap): tilemap[мировой_столбец*32 + строка] — индекс тайла.
-; tile_nz[t]: бит p = 1, если плоскость p тайла непустая.
-; pair_top[c] = min(col_top[c], col_top[c+1]) — самая верхняя строка, где в паре
-; соседних колонок есть содержимое; строки выше — небо в обеих колонках.
+; Тайлкарта (tilemap): tilemap[мировой_столбец*stride + строка] — индекс тайла
+; (stride = LEVEL_ROWS). tile_nz[t]: бит p = 1, если плоскость p тайла непустая.
+; pair_top[c] = min(col_top[c], col_top[c+1]) — самая верхняя МИРОВАЯ строка, где
+; в паре соседних колонок есть содержимое; строки выше — небо в обеих колонках.
 ;
 ; Спрайт 16x16 (mario.inc): 8 прогонов (плоскость 0..3 x колонка блока 0..1) по
 ; 16 пар (keep, set), res = (old & keep) ^ set. Прогон идёт по адресам VRAM,
-; убывающим на 1 за строку, поэтому цикл наложения — на двух указателях.
+; убывающим на 1 за строку (dcr e — кольцевой переход 0->255 внутри блока).
+; 16-px спрайт может пересечь шов кольца; dcr e держит старший байт (столбец),
+; заворачивая только младший.
 ;
 ; Соглашение вызова z88dk classic (__z88dk_callee): аргументы в 16-битных
 ; слотах, callee чистит стек. Только инструкции Intel 8080.
@@ -38,6 +56,7 @@
         SECTION code_clib
 
         PUBLIC  _render_window
+        PUBLIC  _render_rowband
         PUBLIC  _mario_draw
         PUBLIC  _mario_undraw
 
@@ -45,8 +64,10 @@
         EXTERN  _tilemap
         EXTERN  _tile_nz
         EXTERN  _pair_top
+        EXTERN  _cam_row        ; unsigned char: мировая тайловая строка верха экрана
+        EXTERN  _tile_stride    ; unsigned char: LEVEL_ROWS (шаг колонки тайлкарты)
 
-ROWS EQU 32                 ; тайлов по высоте экрана (256/8)
+ROWS EQU 32                 ; экранных тайлов по высоте (256/8) — всегда 32
 CAM_NO_REF EQU 0FFFFh       ; old_cam: в VRAM пусто (первый экран)
 MARIO_RUNS EQU 8            ; прогонов спрайта: 4 плоскости x 2 колонки
 MARIO_ROWS EQU 16           ; байт VRAM в прогоне
@@ -57,27 +78,36 @@ MARIO_ROWS EQU 16           ; байт VRAM в прогоне
         SECTION bss_clib
 
 ; --- render_window ---
-rw_cam:     defw    0           ; новый мировой столбец у левого края
-rw_ref:     defw    0           ; old_cam (или CAM_NO_REF)
+rw_cam:     defw    0           ; новый мировой столбец у левого края (+blk0)
+rw_ref:     defw    0           ; old_cam (+blk0) (или CAM_NO_REF)
 rw_blk:     defb    0           ; текущий экранный блок
 rw_end:     defb    0           ; последний блок (exclusive)
-rw_newwalk: defw    0           ; &tilemap[cam*32], шаг +32 на блок
-rw_refcell: defw    0           ; &tilemap[old*32] + top (временный)
-rw_refwalk: defw    0           ; &tilemap[old*32] (или _tileset = «пусто»)
-rw_refstep: defb    0           ; 32 или 0 для CAM_NO_REF
+rw_newwalk: defw    0           ; &tilemap[cam*stride + cam_row], шаг +stride на блок
+rw_refcell: defw    0           ; &tilemap[old*stride + cam_row] + top (временный)
+rw_refwalk: defw    0           ; &tilemap[old*stride + cam_row] (или _tileset = «пусто»)
+rw_refstep: defb    0           ; stride или 0 для CAM_NO_REF
 rw_pairwalk:defw    0           ; &pair_top[min(cam,old)], шаг +1 на блок
 rw_pairstep:defb    0           ; 1 или 0 для CAM_NO_REF
-rw_top:     defb    0           ; первая строка сканирования текущего блока
-rw_const:   defb    0           ; dst_low = rw_const - 8*lo(tilemap-указателя)
+rw_top:     defb    0           ; первая ЭКРАННАЯ строка сканирования текущего блока
+rw_dstlow_cur:defb  0           ; кольцевой dst_low текущей сканируемой строки
 rw_dsthi:   defb    0,0,0,0     ; старшие байты VRAM для 4 плоскостей блока
 rw_dstlow:  defb    0           ; младший байт VRAM для строки тайла
 rw_nzmask:  defb    0           ; bit p = 1: плоскость p надо писать
 rw_tnew:    defb    0           ; индекс нового тайла ячейки
 rw_tref:    defb    0           ; индекс старого тайла ячейки
 
+; --- render_rowband ---
+rb_blk:     defb    0           ; текущая экранная колонка 0..31
+rb_row:     defb    0           ; мировая тайловая строка
+rb_dstlow:  defb    0           ; кольцевой dst_low строки (одинаков для всех колонок)
+rb_walk:    defw    0           ; &tilemap[cam*stride + world_row], шаг +stride
+
+; --- mulstride (HL = DE * C) ---
+; только регистры, без памяти.
+
 ; --- mario_draw / mario_undraw ---
 md_blk:     defb    0           ; левый блок Марио (x/8)
-md_ytop:    defb    0           ; 255 - y (адрес верхнего байта прогона)
+md_ytop:    defb    0           ; 255 - (y mod 256) = адрес верхнего байта прогона
 md_runs:    defb    0           ; сколько прогонов спрайта осталось
 md_vtab:    defs    MARIO_RUNS * 2  ; 8 начальных адресов VRAM под спрайтом
 md_vrun:    defw    0           ; текущий адрес VRAM (между двумя проходами)
@@ -88,6 +118,36 @@ md_snap:    defs    MARIO_RUNS * MARIO_ROWS   ; слепок VRAM под спр�
 
 ; Старшие байты баз плоскостей по весам 8,4,2,1 (адрес = base<<8 | смещение).
 vram_bases: defb    080h, 0A0h, 0C0h, 0E0h
+
+; ---------------------------------------------------------------
+; _mulstride: HL = DE * C   (C — 8-битный множитель stride, DE — 16-битное
+; значение столбца). Сдвиг-сложение, 8 итераций. Портит A,B,C,D,E,HL.
+; Результат заведомо < 64K (cam*stride < размер tilemap).
+; ---------------------------------------------------------------
+        SECTION code_clib
+_mulstride:
+        mvi     h,0
+        mvi     l,0             ; HL = накопитель
+        mvi     b,8             ; 8 бит множителя
+ms_loop:
+        mov     a,c
+        ani     1
+        jz      ms_shift        ; бит сброшен — не прибавляем
+        dad     d               ; HL += DE
+ms_shift:
+        mov     a,e
+        add     a               ; DE <<= 1 (черенос из бита 7 E)
+        mov     e,a
+        mov     a,d
+        adc     a
+        mov     d,a
+        mov     a,c
+        rra                     ; C >>= 1
+        ani     7Fh             ; логический сдвиг (убрать занесённый перенос)
+        mov     c,a
+        dcr     b
+        jnz     ms_loop
+        ret
 
 ; ---------------------------------------------------------------
 ; void render_window(unsigned int cam, unsigned int old_cam,
@@ -127,8 +187,8 @@ _render_window:
 
         ; --- начальные указатели колонок ---
         ; окно может начинаться не с нуля: cam и old сдвигаем на blk0, чтобы
-        ; rw_newwalk/rw_refwalk = tilemap + (cam+blk0)*32, а min() ниже дал
-        ; min(cam,old)+blk0 — ровно то, что нужно для pair_top.
+        ; rw_newwalk/rw_refwalk = tilemap + (cam+blk0)*stride + cam_row, а min()
+        ; ниже дал min(cam,old)+blk0 — ровно то, что нужно для pair_top.
         lda     rw_blk
         mov     c,a
         lhld    rw_cam
@@ -138,16 +198,21 @@ _render_window:
         mvi     a,0
         adc     h
         mov     h,a
-        shld    rw_cam
-        ; rw_newwalk = _tilemap + cam*32
+        shld    rw_cam          ; cam += blk0
+        ; rw_newwalk = _tilemap + cam*stride + cam_row
         lhld    rw_cam
-        dad     h
-        dad     h
-        dad     h
-        dad     h
-        dad     h               ; cam*32
+        xchg                    ; DE = cam(+blk0)
+        lda     _tile_stride
+        mov     c,a
+        call    _mulstride      ; HL = cam*stride
         lxi     d,_tilemap
         dad     d
+        lda     _cam_row        ; + cam_row (смещение мировой строки верха экрана)
+        add     l
+        mov     l,a
+        mvi     a,0
+        adc     h
+        mov     h,a
         shld    rw_newwalk
 
         ; CAM_NO_REF? (h и l оба 0FFh => h & l == 0FFh)
@@ -168,7 +233,7 @@ _render_window:
         jmp     rw_walk_done
 
 rw_have_ref:
-        ; rw_refwalk = _tilemap + (old+blk0)*32
+        ; rw_refwalk = _tilemap + (old+blk0)*stride + cam_row
         lda     rw_blk
         mov     c,a
         lhld    rw_ref
@@ -179,15 +244,20 @@ rw_have_ref:
         adc     h
         mov     h,a
         shld    rw_ref          ; old += blk0: min() ниже даёт min+blk0
-        dad     h
-        dad     h
-        dad     h
-        dad     h
-        dad     h
+        xchg                    ; DE = old+blk0
+        lda     _tile_stride
+        mov     c,a
+        call    _mulstride      ; HL = old*stride
         lxi     d,_tilemap
         dad     d
+        lda     _cam_row
+        add     l
+        mov     l,a
+        mvi     a,0
+        adc     h
+        mov     h,a
         shld    rw_refwalk
-        mvi     a,ROWS
+        lda     _tile_stride
         sta     rw_refstep
         ; rw_pairwalk = _pair_top + min(cam, old) — оба уже с учётом blk0
         lhld    rw_ref          ; HL = old+blk0
@@ -213,9 +283,11 @@ rw_walk_done:
         ; --- цикл по блокам ---
 rw_block_loop:
         call    _rw_block
-        ; шаг указателями на следующий блок
+        ; шаг указателями на следующий блок (+stride для тайлкарты, +1 для pair_top)
         lhld    rw_newwalk
-        lxi     d,ROWS
+        lda     _tile_stride
+        mov     e,a
+        mvi     d,0
         dad     d
         shld    rw_newwalk
         lhld    rw_refwalk
@@ -252,18 +324,42 @@ rw_block_loop:
         ret
 
 ; ---------------------------------------------------------------
-; _rw_block: дорисовать ОДИН экранный блок (столбец из 32 тайлов).
+; _rw_block: дорисовать ОДИН экранный блок (столбец из 32 тайлов экрана).
 ;
-; Сравнивает tilemap[cam+blk] с tilemap[old+blk] построчно; строки выше
-; pair_top заведомо небо в обеих колонках, поэтому пропускаются. Ничего не
-; сохраняет (внутри только свои регистры), аргументы берёт из BSS.
+; Сравнивает tilemap[cam+blk] с tilemap[old+blk] построчно; строки экрана, чьи
+; МИРОВЫЕ ряды лежат выше pair_top, заведомо небо в обеих колонках — пропускаем.
+; Кольцевой dst_low строки держим в rw_dstlow_cur (стартует от 255-8*(cam_row+top)
+; и уменьшается на 8 за строку; 8-битное sui даёт естественное закольцовывание).
 ; ---------------------------------------------------------------
+        SECTION code_clib
 _rw_block:
+        ; --- rw_top из pair_top с учётом cam_row ---
         lhld    rw_pairwalk
-        mov     a,m             ; top = pair_top[min(cam,old) + blk]
-        cpi     ROWS
-        jz      rw_blk_ret      ; весь блок — небо в обеих колонках
+        mov     a,m             ; pt = верхняя содержимая МИРОВАЯ строка пары
+        mov     c,a             ; C = pt
+        lda     _cam_row
+        mov     b,a             ; B = cam_row
+        adi     32              ; cam_row + 32 = нижняя граница экрана (мировые строки)
+        cmp     c               ; (cam_row+32) - pt
+        jc      rw_blk_ret      ; pt > cam_row+32: содержимое ниже экрана -> блок пуст
+        jz      rw_blk_ret      ; pt == cam_row+32: rw_top=32 -> B=0 -> 256 мусорных строк
+        mov     a,c
+        sub     b               ; pt - cam_row
+        jc      rw_top0         ; pt < cam_row: содержимое выше экрана -> top = 0
+        jmp     rw_topset
+rw_top0:
+        xra     a
+rw_topset:
         sta     rw_top
+        ; rw_dstlow_cur = 255 - 8*((cam_row + rw_top) & 31) = cpl((cam_row+top)*8 mod 256)
+        mov     b,a             ; B = rw_top
+        lda     _cam_row
+        add     b               ; cam_row + rw_top  (< 256)
+        add     a
+        add     a
+        add     a               ; *8 (младший байт == (cam_row+top)*8 mod 256)
+        cma                     ; 255 - x
+        sta     rw_dstlow_cur
 
         ; dsthi[p] = vram_bases[p] + blk (адрес = hi<<8 | смещение в блоке)
         lda     rw_blk
@@ -281,16 +377,6 @@ _rw_block:
         add     c
         sta     rw_dsthi+3
 
-        ; rw_const = 8*lo(&tilemap[cam+blk]) + 255  =>  dst_low = 255-8*row
-        ; (add a, а не ral: ral заносит вылетевшие биты в младшие)
-        lhld    rw_newwalk
-        mov     a,l
-        add     a
-        add     a
-        add     a
-        adi     255
-        sta     rw_const
-
         ; BC = счётчик строк, C = top
         lda     rw_top
         mov     c,a
@@ -299,8 +385,7 @@ _rw_block:
         mov     b,a             ; B = 32 - top
 
         ; DE = rw_refwalk + top, HL = rw_newwalk + top
-        ; (после первого xchg DE содержит new+top, поэтому ref+top держим
-        ;  отдельно во временной ячейке)
+        ; (оба rw_*walk уже содержат cam_row; top — экранное смещение)
         lhld    rw_refwalk
         mvi     d,0
         mov     e,c
@@ -314,7 +399,7 @@ _rw_block:
         lhld    rw_refcell
         xchg                    ; DE = ref+top, HL = new+top
 
-        ; --- построчное сравнение: 50 T на чистую строку ---
+        ; --- построчное сравнение ---
 rw_scan:
         ldax    d               ; A = старый тайл
         cmp     m               ; совпал с новым?
@@ -327,6 +412,9 @@ rw_scan:
         pop     d
         pop     b
 rw_scan_next:
+        lda     rw_dstlow_cur
+        sui     8               ; кольцевой переход (0->255) для следующей строки
+        sta     rw_dstlow_cur
         inx     h
         inx     d
         dcr     b
@@ -338,33 +426,27 @@ rw_blk_ret:
 ; _rw_put_cell: нарисовать одну «грязную» клетку.
 ;
 ; Входе: A = индекс старого тайла, HL = &tilemap[новый]. BC/DE вызывающий
-; сохранил сам; сама routine регистры не сохраняет.
-; Плоскость пропускается, если она пуста и в старом, и в новом тайле.
+; сохранил сам; сама routine регистры не сохраняет. dst_low берётся из
+; rw_dstlow_cur (кольцевой адрес строки). Плоскость пропускается, если она
+; пуста и в старом, и в новом тайле.
 ; ---------------------------------------------------------------
+        SECTION code_clib
 _rw_put_cell:
         sta     rw_tref
         mov     a,m
         sta     rw_tnew
 
-        ; dst_low = rw_const - 8*lo(cell)
-        mov     a,l
-        add     a
-        add     a
-        add     a
-        mov     c,a
-        lda     rw_const
-        sub     c
+        ; dst_low = кольцевой адрес текущей строки
+        lda     rw_dstlow_cur
         sta     rw_dstlow
 
         ; nzmask = tile_nz[new] | tile_nz[ref]
-        ; HL и DE вызывающий сохранил сам; первый nz держим в C, а не в A:
-        ; lda rw_tref затёр бы его, и в маске остались бы только нули эталона.
         lda     rw_tnew
         mov     l,a
         mvi     h,0
         lxi     d,_tile_nz
         dad     d
-        mov     c,m             ; nz нового тайла (без масштабирования: 1 байт на тайл)
+        mov     c,m             ; nz нового тайла (1 байт на тайл)
         lda     rw_tref
         mov     l,a
         mvi     h,0
@@ -447,8 +529,12 @@ rw_pcell_ret:
 ; _rw_copy8: перенести 8 байт тайла (HL, вверх) в VRAM (DE, вниз).
 ;
 ; Байт j плоскости (строка тайла сверху вниз) идёт в адрес 255-8*row-j,
-; поэтому VRAM идёт на убывание. 8*24 = 192 T.
+; поэтому VRAM идёт на убывание. Тайл (8 пиксельных строк, кратных 8) НИКОГДА
+; не пересекает шов кольца (256 не кратно 8 со сдвигом <8), поэтому dcx d
+; безопасен: младший байт доходит до 0, но не занимает перенос в старший.
+; 8*24 = 192 T.
 ; ---------------------------------------------------------------
+        SECTION code_clib
 _rw_copy8:
         mov     a,m
         stax    d
@@ -485,14 +571,124 @@ _rw_copy8:
         ret
 
 ; ---------------------------------------------------------------
+; void render_rowband(unsigned int world_row, unsigned int cam)
+;
+; Полная (без разности) зарисовка одной мировой тайловой строки world_row по
+; всем 32 экраным колонкам для текущего cam. Пишем ВСЕ плоскости (включая небо
+; = тайл 0) — при вертикальном скролле в этих кольцевых строках лежала другая
+; мировая строка, её надо затереть.
+;   sccz80 classic: arg1 world_row (sp+4), arg2 cam (sp+2).
+; ---------------------------------------------------------------
+        SECTION code_clib
+_render_rowband:
+        lxi     h,4
+        dad     sp
+        mov     a,m             ; world_row lo
+        sta     rb_row
+        lxi     h,2
+        dad     sp
+        mov     a,m             ; cam lo
+        mov     c,a
+        inx     h
+        mov     h,m             ; cam hi
+        mov     l,a             ; HL = cam
+        xchg                    ; DE = cam
+        lda     _tile_stride
+        mov     c,a
+        call    _mulstride      ; HL = cam*stride
+        lxi     d,_tilemap
+        dad     d
+        lda     rb_row
+        add     l
+        mov     l,a
+        mvi     a,0
+        adc     h
+        mov     h,a
+        shld    rb_walk         ; rb_walk = tilemap + cam*stride + world_row
+        ; rb_dstlow = 255 - 8*(world_row & 31)
+        lda     rb_row
+        ani     1Fh
+        add     a
+        add     a
+        add     a
+        cma
+        sta     rb_dstlow
+        mvi     a,0
+        sta     rb_blk
+rb_loop:
+        lhld    rb_walk
+        mov     a,m             ; индекс тайла
+        mov     l,a
+        mvi     h,0
+        dad     h
+        dad     h
+        dad     h
+        dad     h
+        dad     h               ; *32
+        lxi     d,_tileset
+        dad     d               ; HL = &tileset[tile*32] (плоскость 0, строка 0)
+        lda     rb_blk
+        mov     c,a             ; C = blk — держим все 4 плоскости
+        ; плоскость 0
+        lda     vram_bases
+        add     c
+        mov     d,a
+        lda     rb_dstlow
+        mov     e,a
+        call    _rw_copy8       ; HL += 8
+        ; плоскость 1
+        lda     vram_bases+1
+        add     c
+        mov     d,a
+        lda     rb_dstlow
+        mov     e,a
+        call    _rw_copy8
+        ; плоскость 2
+        lda     vram_bases+2
+        add     c
+        mov     d,a
+        lda     rb_dstlow
+        mov     e,a
+        call    _rw_copy8
+        ; плоскость 3
+        lda     vram_bases+3
+        add     c
+        mov     d,a
+        lda     rb_dstlow
+        mov     e,a
+        call    _rw_copy8
+        ; rb_walk += stride
+        lhld    rb_walk
+        lda     _tile_stride
+        mov     e,a
+        mvi     d,0
+        dad     d
+        shld    rb_walk
+        ; blk++
+        lda     rb_blk
+        inr     a
+        sta     rb_blk
+        cpi     32
+        jnz     rb_loop
+        pop     de              ; адрес возврата
+        inx     sp
+        inx     sp
+        inx     sp
+        inx     sp              ; съесть world_row, cam (4 байта)
+        push    de
+        ret
+
+; ---------------------------------------------------------------
 ; void mario_draw(unsigned char x, unsigned char y, const unsigned char *spr)
 ;
 ; Два прохода по 8 прогонам спрайта (плоскость 8,4,2,1 x колонка блока 0,1):
 ;   A — снять 128 байт VRAM в md_snap (это будущий «фон под Марио»);
 ;   B — наложить res = (VRAM & keep) ^ set прямо в VRAM.
 ; x должен быть кратен 8 (марио стоит на границе блока), правая половина
-; спрайта попадает в блок x/8+1.
+; спрайта попадает в блок x/8+1. y — МИРОВОЙ пиксельный ряд верха спрайта
+; (младший байт = world_y mod 256); 16 строк идут по кольцу (dcr e).
 ; ---------------------------------------------------------------
+        SECTION code_clib
 _mario_draw:
         ; sccz80: spr (sp+2), y (sp+4), x (sp+6)
         lxi     h,6
@@ -506,7 +702,7 @@ _mario_draw:
         sta     md_blk
         lxi     h,4
         dad     sp
-        mov     a,m             ; y
+        mov     a,m             ; y (world mod 256)
         cma                     ; 255 - y = адрес верхнего байта прогона
         sta     md_ytop
         lxi     h,2
@@ -582,7 +778,7 @@ md_snap_px:
         ldax    d
         mov     m,a
         inx     h
-        dcx     d
+        dcr     e               ; вниз по кольцу (столбец = D не трогаем)
         dcr     b
         jnz     md_snap_px
         shld    md_snap_cur
@@ -601,7 +797,7 @@ md_comp_px:
         xra     m               ; ^ set
         inx     h               ; -> следующий keep
         stax    d
-        dcx     d
+        dcr     e               ; вниз по кольцу
         dcr     b
         jnz     md_comp_px
         shld    md_spr_cur
@@ -629,6 +825,7 @@ md_draw_done:
 ; Вернуть слепок md_snap в те же адреса VRAM (таблица md_vtab ещё в силе).
 ; ~3.3 kT против 113 kT на перерисовку двух блоков фоном.
 ; ---------------------------------------------------------------
+        SECTION code_clib
 _mario_undraw:
         lxi     h,md_vtab
         shld    md_vtab_cur
@@ -651,7 +848,7 @@ md_ud_px:
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e               ; вверх по кольцу (столбец = D не трогаем)
         dcr     b
         jnz     md_ud_px
         shld    md_snap_cur

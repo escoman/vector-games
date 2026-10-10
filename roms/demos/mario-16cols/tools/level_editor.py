@@ -126,6 +126,28 @@ class LevelEditor:
         self.status = ttk.Label(bar, text="готово")
         self.status.pack(side=tk.LEFT, padx=8)
 
+        # вторая панель: ресайз карты + якорь содержимого
+        bar2 = ttk.Frame(self.root, padding=(6, 0, 6, 6))
+        bar2.pack(side=tk.TOP, fill=tk.X)
+        ttk.Label(bar2, text="Размер карты:  W").pack(side=tk.LEFT)
+        self.w_var = tk.IntVar(value=self.cols)
+        ttk.Spinbox(bar2, from_=1, to=512, width=5,
+                    textvariable=self.w_var).pack(side=tk.LEFT)
+        ttk.Label(bar2, text="  H").pack(side=tk.LEFT)
+        self.h_var = tk.IntVar(value=self.rows)
+        ttk.Spinbox(bar2, from_=1, to=255, width=5,
+                    textvariable=self.h_var).pack(side=tk.LEFT)
+        ttk.Label(bar2, text="   прижать к:").pack(side=tk.LEFT, padx=(10, 0))
+        self.anchor_v = tk.StringVar(value="низу")
+        ttk.OptionMenu(bar2, self.anchor_v, "низу", "верху", "низу").pack(side=tk.LEFT)
+        self.anchor_h = tk.StringVar(value="левому")
+        ttk.OptionMenu(bar2, self.anchor_h, "левому", "левому",
+                       "правому").pack(side=tk.LEFT)
+        ttk.Button(bar2, text="Изменить размер",
+                   command=self._on_resize).pack(side=tk.LEFT, padx=(10, 0))
+        ttk.Label(bar2, foreground="#777",
+                  text="(новые поля — небо)").pack(side=tk.LEFT, padx=6)
+
         # легенда
         leg = ttk.Frame(self.root, padding=(8, 0, 8, 4))
         leg.pack(side=tk.TOP, fill=tk.X)
@@ -403,6 +425,56 @@ class LevelEditor:
     def _on_zoom(self, _=None):
         self.cell = int(self.zoom_var.get())
         self._rebuild_scaled()
+        self.render_all()
+
+    # ---- ресайз карты -----------------------------------------------------
+    def _on_resize(self):
+        try:
+            nc = int(self.w_var.get())
+            nr = int(self.h_var.get())
+        except (ValueError, tk.TclError):
+            self._set_status("некорректный размер")
+            return
+        nc = max(1, min(512, nc))
+        nr = max(1, min(255, nr))
+        if nc == self.cols and nr == self.rows:
+            self._set_status("размер не изменился")
+            self.w_var.set(nc)
+            self.h_var.set(nr)
+            return
+        self._resize(nc, nr, self.anchor_v.get(), self.anchor_h.get())
+        self.w_var.set(nc)
+        self.h_var.set(nr)
+        self._set_status(f"карта {nc}×{nr} — не забудь Сохранить")
+
+    def _resize(self, new_cols, new_rows, v_anchor, h_anchor):
+        """Изменить размер тайлкарты, прижав текущее содержимое к выбранной
+        стороне. Пустые новые поля = тайл 0 (небо). При уменьшении — обрезка
+        по противоположному краю.
+
+        Хранилище col-major: grid[col*rows + row]; при смене rows меняется
+        смысл индекса, поэтому перекладываем через 2D-промежуточный вид."""
+        old_cols, old_rows = self.cols, self.rows
+        old = self.grid
+        new = [0] * (new_cols * new_rows)
+        r_off = (new_rows - old_rows) if v_anchor == "низу" else 0
+        c_off = (new_cols - old_cols) if h_anchor == "правому" else 0
+        for c in range(old_cols):
+            nc = c + c_off
+            if nc < 0 or nc >= new_cols:
+                continue
+            src = c * old_rows
+            dst = nc * new_rows
+            for r in range(old_rows):
+                nr = r + r_off
+                if 0 <= nr < new_rows:
+                    new[dst + nr] = old[src + r]
+        self.cols, self.rows = new_cols, new_rows
+        self.grid = new
+        self.level["cols"] = new_cols
+        self.level["rows"] = new_rows
+        self.level["grid"] = new
+        self.dirty = True
         self.render_all()
 
     # ---- сохранение -------------------------------------------------------

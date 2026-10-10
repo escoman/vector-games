@@ -25,14 +25,14 @@
   {
    "index": 3,
    "file": "tiles/tile_003.png",
-   "wall": false,
-   "platform": true,
+   "wall": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 4,
    "file": "tiles/tile_004.png",
-   "wall": false,
+   "wall": true,
    "platform": false,
    "transparent": false
   },
@@ -60,7 +60,7 @@
   {
    "index": 8,
    "file": "tiles/tile_008.png",
-   "wall": false,
+   "wall": true,
    "platform": false,
    "transparent": false
   },
@@ -145,7 +145,7 @@
    "index": 20,
    "file": "tiles/tile_020.png",
    "wall": false,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
@@ -299,7 +299,7 @@
    "index": 42,
    "file": "tiles/tile_042.png",
    "wall": false,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
@@ -417,43 +417,43 @@
   {
    "index": 59,
    "file": "tiles/tile_059.png",
-   "wall": false,
-   "platform": true,
+   "wall": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 60,
    "file": "tiles/tile_060.png",
-   "wall": false,
+   "wall": true,
    "platform": false,
    "transparent": false
   },
   {
    "index": 61,
    "file": "tiles/tile_061.png",
-   "wall": false,
-   "platform": true,
+   "wall": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 62,
    "file": "tiles/tile_062.png",
-   "wall": false,
-   "platform": true,
+   "wall": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 63,
    "file": "tiles/tile_063.png",
-   "wall": false,
+   "wall": true,
    "platform": false,
    "transparent": false
   },
   {
    "index": 64,
    "file": "tiles/tile_064.png",
-   "wall": false,
-   "platform": true,
+   "wall": true,
+   "platform": false,
    "transparent": false
   },
   {
@@ -579,14 +579,14 @@
    "index": 82,
    "file": "tiles/tile_082.png",
    "wall": true,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 83,
    "file": "tiles/tile_083.png",
    "wall": true,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
@@ -614,14 +614,14 @@
    "index": 87,
    "file": "tiles/tile_087.png",
    "wall": false,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 88,
    "file": "tiles/tile_088.png",
    "wall": false,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
@@ -719,28 +719,28 @@
    "index": 102,
    "file": "tiles/tile_102.png",
    "wall": true,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 103,
    "file": "tiles/tile_103.png",
    "wall": true,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 104,
    "file": "tiles/tile_104.png",
    "wall": true,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {
    "index": 105,
    "file": "tiles/tile_105.png",
    "wall": true,
-   "platform": true,
+   "platform": false,
    "transparent": false
   },
   {

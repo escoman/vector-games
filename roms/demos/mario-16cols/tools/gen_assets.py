@@ -260,6 +260,15 @@ def build_level_editor():
     tilemap = bytearray(lv["grid"])
     if len(tilemap) != cols * rows:
         sys.exit("level.json: grid не соответствует cols*rows")
+    # Ограничения адресации рендера (mario.asm, 8080, 16-битные указатели):
+    #   * stride = LEVEL_ROWS и cam_row — байтовые (кольцо 256 строк = 32 ряда);
+    #   * cam*stride < размер tilemap = cols*rows должен влезать в 16 бит.
+    if rows > 255:
+        sys.exit(f"level.json: rows={rows} > 255 — stride/камера байтовые, "
+                 f"кольцо вертикали 256 px")
+    if cols * rows > 65535:
+        sys.exit(f"level.json: cols*rows={cols*rows} > 65535 — тайлкарта не "
+                 f"влезает в 16-битную адресацию (сделайте уже/ниже)")
     tiles = sorted(tj["tiles"], key=lambda t: t["index"])
     tileset = []
     for i, t in enumerate(tiles):
