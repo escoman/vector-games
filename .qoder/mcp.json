@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "vector-debugger": {
-      "command": "/home/alexey/Projects/vector-debug/build/v06c-mcp",
-      "args": [],
-      "disabled": false
-    }
-  }
-}
