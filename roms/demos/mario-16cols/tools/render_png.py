@@ -50,9 +50,11 @@ emu.call(S["_render_window"], args=(VIEW_BLOCKS, 0, CAM_NO_REF, cam),
          sp=SP, max_steps=4_000_000)
 assert c.pc == 0xFF00, f"render_window не вернулась: pc={c.pc:04X}"
 
-# марио в разных позах, чтобы проверить и спрайтовый путь
-for name, x, y in [("stand", 4, 208), ("walk0", 8, 208),
-                   ("jump", 12, 150), ("duck", 16, 216)]:
+# марио в разных позах, чтобы проверить и спрайтовый путь.
+# walk0/walk2/duck — #define-алиасы stand, в карте отдельных символов нет,
+# поэтому рисуем реальные уникальные образы: stand / walk1 / jump.
+for name, x, y in [("stand", 4, 208), ("walk1", 8, 208),
+                   ("jump", 12, 150), ("stand", 16, 216)]:
     spr = S[f"_mario_{name}_r"]
     emu.call(S["_mario_draw"], args=(spr, y, x * 8), sp=SP, max_steps=2_000_000)
     assert c.pc == 0xFF00, f"mario_draw {name}: pc={c.pc:04X}"

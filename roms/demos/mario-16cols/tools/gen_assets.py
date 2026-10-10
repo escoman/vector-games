@@ -2,12 +2,14 @@
 """
 gen_assets.py — ассеты демки Mario 16-цвет для Вектора-06Ц.
 
-Читает src/tiles.png (карта уровня SMB 1-1) и src/sprites.png (лист спрайтов),
-квантует всё в ОДНУ общую 16-цветную палитру Вектора и пишет:
+Читает src/tiles.png (карта уровня SMB 1-1), src/tiles.json (твёрдость тайлов,
+вариант C) и src/mario.png (лента из 18 спрайтов Small Mario), квантует
+всё в ОДНУ общую 16-цветную палитру Вектора и пишет:
 
   src/level.inc   — палитра, тайлсет 8x8 (4 плоскости), тайлкарта уровня,
-                    tile_nz (карта непустых плоскостей тайла) и pair_top
-                    (верхняя «грязная» строка пары соседних колонок);
+                    tile_nz (карта непустых плоскостей тайла), pair_top
+                    (верхняя «грязная» строка пары соседних колонок) и таблицу
+                    твёрдости tile_solid[тайл] (см. load_tile_solid);
   src/mario.inc   — спрайты Small Mario 16x16 с маской (вправо/влево).
 
 Формат Вектора (256x256, 16 цветов, 4 битовые плоскости):
@@ -202,24 +204,143 @@ def build_level():
 
 
 # ---------------------------------------------------------------------------
+# Уровень из редакторских файлов: src/level.json + src/tiles/*.png + tiles.json
+# ---------------------------------------------------------------------------
+# Это источник истины для сборки ROM: раскладка из level.json, графика из
+# tile-PNG, твёрдость из tiles.json. tiles.png служит только затравкой
+# (tools/export_assets.py), ROM из него больше не строится.
+
+def png_to_tile(path):
+    """8x8 PNG -> 32-байтный тайл (4 плоскости). Точный обратный ход export."""
+    im = Image.open(path).convert("RGB")
+    px = im.load()
+    planes = [bytearray(TILE) for _ in range(4)]      # вес 8,4,2,1
+    for r in range(TILE):
+        b8 = b4 = b2 = b1 = 0
+        for c in range(TILE):
+            idx = quantize(px[c, r])
+            bit = 7 - c
+            if idx & 8: b8 |= 1 << bit
+            if idx & 4: b4 |= 1 << bit
+            if idx & 2: b2 |= 1 << bit
+            if idx & 1: b1 |= 1 << bit
+        planes[0][r] = b8
+        planes[1][r] = b4
+        planes[2][r] = b2
+        planes[3][r] = b1
+    return bytes(planes[0] + planes[1] + planes[2] + planes[3])
+
+
+def _compute_tile_nz(tileset):
+    nz = bytearray()
+    for t in tileset:
+        m = 0
+        for p in range(4):
+            if any(t[p * TILE + r] for r in range(TILE)):
+                m |= 1 << p
+        nz.append(m)
+    return nz
+
+
+def _compute_pair_top(cols, rows, tilemap):
+    def col_top(cx):
+        for cy in range(rows):
+            if tilemap[cx * rows + cy]:
+                return cy
+        return rows
+    return bytearray(min(col_top(cx), col_top(cx + 1)) for cx in range(cols - 1))
+
+
+def build_level_editor():
+    with open(os.path.join(SRC, "level.json")) as f:
+        lv = json.load(f)
+    with open(os.path.join(SRC, "tiles.json")) as f:
+        tj = json.load(f)
+    cols, rows = int(lv["cols"]), int(lv["rows"])
+    tilemap = bytearray(lv["grid"])
+    if len(tilemap) != cols * rows:
+        sys.exit("level.json: grid не соответствует cols*rows")
+    tiles = sorted(tj["tiles"], key=lambda t: t["index"])
+    tileset = []
+    for i, t in enumerate(tiles):
+        if int(t["index"]) != i:
+            sys.exit(f"tiles.json: дыра/порядок индексов (ожидался {i})")
+        tileset.append(png_to_tile(os.path.join(SRC, t["file"])))
+    if tileset[0] != bytes(TILE * 4):
+        sys.exit("tiles.json: тайл 0 должен быть пустым (небо)")
+    tile_nz = _compute_tile_nz(tileset)
+    pair_top = _compute_pair_top(cols, rows, tilemap)
+    print(f"level(editor): {cols}x{rows}, тайлов в наборе: {len(tileset)}")
+    return cols, rows, tileset, bytes(tilemap), bytes(tile_nz), bytes(pair_top)
+
+
+# ---------------------------------------------------------------------------
+# Коллизии: вариант C — твёрдость как СВОЙСТВО ТАЙЛА (src/tiles.json)
+# ---------------------------------------------------------------------------
+# Каждый тайл несёт битовую маску:
+#   COLL_PLAT (1) — опора сверху: на него встают, но проходят сбоку/снизу
+#                   (коробки, монетные блоки, поверхность земли).
+#   COLL_WALL (2) — непроходимо: блокирует и горизонталь, и голову (трубы,
+#                   кирпич, тело земли).
+# Значение 3 = и то, и другое (земля/кирпич: сверху опора, по бокам стена).
+# tiles.json редактируется в level-редакторе; tiles2.png больше НЕ нужен.
+
+import json                                  # noqa: E402
+
+COLL_PLAT, COLL_WALL = 1, 2
+
+
+def load_tile_solid(n_tiles):
+    """src/tiles.json -> bytes длины n_tiles, каждый = маска COLL_*.
+
+    Индекс массива = индекс тайла в tileset (порядок задаёт build_level).
+    """
+    path = os.path.join(SRC, "tiles.json")
+    with open(path) as f:
+        data = json.load(f)
+    tiles = data["tiles"]
+    if len(tiles) != n_tiles:
+        sys.exit(f"tiles.json: {len(tiles)} тайлов, а tileset: {n_tiles} — "
+                 f"пересоберите затравку (tools/export_assets.py)")
+    solid = bytearray(n_tiles)
+    for t in tiles:
+        m = (COLL_WALL if t.get("wall") else 0) | (COLL_PLAT if t.get("platform") else 0)
+        solid[t["index"]] = m
+    nw = sum(1 for b in solid if b & COLL_WALL)
+    np_ = sum(1 for b in solid if b & COLL_PLAT)
+    print(f"collision (tile props): {n_tiles} тайлов, wall={nw} platform={np_}")
+    return bytes(solid)
+
+
+
+
+# ---------------------------------------------------------------------------
 # Спрайты Small Mario: 16x16 с маской, вправо и зеркально влево
 # ---------------------------------------------------------------------------
 
-# Ячейки в строке "Small Mario": x = 1 + 18*i, строки 16..31 (16 px).
-MARIO_ROW_TOP = 16
-MARIO_CELL_X0 = 1
-MARIO_CELL_PITCH = 18
-MARIO_CELL_W = 16
+# src/mario.png — лента из 18 спрайтов Small Mario 16x16, пронумерованы 1..18.
+# Смысл каждого номера — в src/mario.txt. БАЗОВЫЕ СПРАЙТЫ СМОТРЯТ ВЛЕВО
+# (кожа лица смещена влево; #08 «в камеру» и #17 «спиной» — симметричны).
+# Значит _l рисуем как есть, _r — зеркалом.
+MARIO_TOP = 14          # верх спрайтовой полосы (строки 14..29)
+MARIO_PITCH = 18        # шаг ячейки по X
+MARIO_X0 = 0            # левый край 16-px окна внутри ячейки
+MARIO_SIZE = 16
+# Прозрачны: фон ячейки (68,145,190) и поле листа (41,88,124).
+MARIO_BG = [(68, 145, 190), (41, 88, 124)]
 
-# Имена и номера ячеек (всё смотрит вправо; влево — зеркало).
+# Кадр анимации -> номер спрайта в mario.png (1..18). См. src/mario.txt.
+# stand/walk0/walk2/duck сознательно указывают на одну ячейку #1: это один и
+# тот же побайтово массив, write_sprites оставит от него ОДИН образ, а прочие
+# имена сделает #define-алиасами (экономия ROM). skid (#7) в игру не выводится —
+# не генерируем вовсе.
 FRAMES = {
-    "stand": 0,
-    "walk0": 1,
-    "walk1": 2,
-    "walk2": 3,
-    "skid":  7,
-    "jump":  8,
-    "duck":  9,
+    "stand": 1,   # 01 стоит/идёт влево
+    "walk0": 1,   # 01
+    "walk1": 2,   # 02 идёт влево
+    "walk2": 1,   # 01  (походка чередует 01<->02)
+    "jump":  3,   # 03 прыгает влево
+    "duck":  1,   # у Small Mario нет приседа — используем стойку
 }
 
 
@@ -228,22 +349,20 @@ def _near(p, key, tol=12):
         and abs(p[2] - key[2]) < tol
 
 
-def extract_cell(px, cell):
-    """Вернуть grid[16][16] индексов палитры, либо None для прозрачного.
+def extract_cell(px, num):
+    """grid[16][16] индексов палитры, None — прозрачный. num = номер 1..18.
 
-    Прозрачность — по цвету фона ВНУТРИ ячейки (угловой пиксель), а не по
-    внешнему полю листа: фоны ячеек этого листа — (68,145,190), тогда как
-    внешнее поле — (41,88,124). Сравниваем с обоими, чтобы надёжно.
+    Прозрачность — по двум фоновым цветам ленты (фон ячейки и поле листа);
+    сам Марио (чёрный контур / красный / кожа) ни с одним не совпадает.
     """
-    x0 = MARIO_CELL_X0 + MARIO_CELL_PITCH * cell
-    key = px[x0, MARIO_ROW_TOP]     # фон ячейки в левом верхнем углу
+    x0 = MARIO_X0 + MARIO_PITCH * (num - 1)
     grid = []
-    for r in range(MARIO_CELL_W):
-        y = MARIO_ROW_TOP + r
+    for r in range(MARIO_SIZE):
+        y = MARIO_TOP + r
         row = []
-        for c in range(MARIO_CELL_W):
+        for c in range(MARIO_SIZE):
             p = px[x0 + c, y]
-            if _near(p, key) or _near(p, SHEET_BG):
+            if any(_near(p, bg) for bg in MARIO_BG):
                 row.append(None)          # прозрачный пиксель
             else:
                 row.append(quantize(p))
@@ -287,13 +406,14 @@ def grid_to_sprite(grid, mirror=False):
 
 
 def build_sprites():
-    im = Image.open(os.path.join(SRC, "sprites.png")).convert("RGB")
+    im = Image.open(os.path.join(SRC, "mario.png")).convert("RGB")
     px = im.load()
     out = {}
-    for name, cell in FRAMES.items():
-        grid = extract_cell(px, cell)
-        out[name + "_r"] = grid_to_sprite(grid, mirror=False)
-        out[name + "_l"] = grid_to_sprite(grid, mirror=True)
+    for name, num in FRAMES.items():
+        grid = extract_cell(px, num)
+        # Базовый спрайт смотрит ВЛЕВО: _l — как есть, _r — зеркало.
+        out[name + "_l"] = grid_to_sprite(grid, mirror=False)
+        out[name + "_r"] = grid_to_sprite(grid, mirror=True)
     return out
 
 
@@ -310,10 +430,10 @@ def fmt_array(f, name, data, per_line=16):
     f.write("};\n\n")
 
 
-def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top):
+def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid):
     path = os.path.join(SRC, "level.inc")
     with open(path, "w") as f:
-        f.write("/* Автоген: tools/gen_assets.py из tiles.png. Не править руками. */\n\n")
+        f.write("/* Автоген: tools/gen_assets.py из tiles.png/tiles.json. Не править руками. */\n\n")
         f.write(f"#define LEVEL_COLS   {cols}\n")
         f.write(f"#define LEVEL_ROWS   {rows}\n")
         f.write(f"#define LEVEL_TILE_W {cols*TILE}\n")
@@ -326,6 +446,11 @@ def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top):
         fmt_array(f, "tilemap", tilemap)
         fmt_array(f, "tile_nz", tile_nz)      # карта непустых плоскостей на тайл
         fmt_array(f, "pair_top", pair_top)    # верхdiff'а на пару соседних колонок
+        # Твёрдость как свойство тайла (вариант C). Индекс = тайл; биты COLL_*.
+        f.write("\n/* Коллизии (src/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
+        f.write("#define COLL_WALL   2   /* непроходимо */\n")
+        f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
+        fmt_array(f, "tile_solid", tile_solid)
     print(f"wrote {path} ({os.path.getsize(path)} bytes)")
 
 
@@ -335,22 +460,32 @@ def write_sprites(sprites):
     for name in FRAMES:
         order.append((name + "_r", sprites[name + "_r"]))
         order.append((name + "_l", sprites[name + "_l"]))
+    seen = {}          # bytes -> канонический символ, уже выписанный
+    uniq = 0
     with open(path, "w") as f:
-        f.write("/* Автоген: tools/gen_assets.py из sprites.png. Не править руками. */\n")
+        f.write("/* Автоген: tools/gen_assets.py из mario.png. Не править руками. */\n")
         f.write("/* Спрайт 16x16: 8 прогонов (плоскость 8,4,2,1 x колонка 0,1) по 16 "
-                "пар (keep,set). */\n\n")
+                "пар (keep,set). Дубликаты кадров — #define-алиасы одного образа. */\n\n")
         f.write("#define MARIO_W 16\n#define MARIO_H 16\n")
         f.write("#define MARIO_BYTES 256\n")
         f.write("#define MARIO_SNAP 128      /* снимок VRAM под спрайтом */\n\n")
         for nm, data in order:
-            fmt_array(f, "mario_" + nm, data)
-    print(f"wrote {path} ({os.path.getsize(path)} bytes)")
+            sym = "mario_" + nm
+            if data in seen:
+                f.write(f"#define {sym:<18} {seen[data]}\n")
+            else:
+                seen[data] = sym
+                uniq += 1
+                f.write("\n")
+                fmt_array(f, sym, data)
+    print(f"wrote {path} ({os.path.getsize(path)} bytes), уникальных образов: {uniq}")
 
 
 def main():
-    cols, rows, tileset, tilemap, tile_nz, pair_top = build_level()
+    cols, rows, tileset, tilemap, tile_nz, pair_top = build_level_editor()
+    tile_solid = load_tile_solid(len(tileset))
     sprites = build_sprites()
-    write_level(cols, rows, tileset, tilemap, tile_nz, pair_top)
+    write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid)
     write_sprites(sprites)
 
 

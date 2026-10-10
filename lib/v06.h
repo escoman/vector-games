@@ -511,6 +511,7 @@ extern unsigned char kbd_scan(void);            /* опрос матрицы    
 extern void kbd_scan_now(void);                 /* снимок в ISR          */
 extern unsigned char kbd_read(void);            /* декод. последний снимок*/
 extern void kbd_wait_key(unsigned char key);    /* ждать нажатия         */
+extern unsigned char kbd_is_down(unsigned char code); /* код в посл. снимке матрицы */
 
 /* Снимок матрицы после kbd_scan()/kbd_scan_now(): 8 байт, строки, бит 1 =
  * клавиша нажата (колонка = номер бита). kbd_scan()/kbd_read() отдают только

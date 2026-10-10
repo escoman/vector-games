@@ -19,11 +19,11 @@ all: $(TARGET)
 
 full: clean all deploy
 
-# Ассеты: tiles.png/sprites.png -> src/level.inc, src/mario.inc
+# Ассеты: tiles.png/tiles.json/mario.png -> src/level.inc, src/mario.inc
 assets:
 	python3 tools/gen_assets.py
 
-src/level.inc src/mario.inc: src/tiles.png src/sprites.png tools/gen_assets.py
+src/level.inc src/mario.inc: src/tiles.png src/tiles.json src/mario.png tools/gen_assets.py
 	python3 tools/gen_assets.py
 
 $(TARGET): src/level.inc src/mario.inc mario.asm main.c

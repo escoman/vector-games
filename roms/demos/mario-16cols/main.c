@@ -13,7 +13,9 @@
  * пропуск; плоскость, пустая и в старой, и в новой колонке — пропуск. Марио
  * стирается слепком VRAM (mario_undraw), а не перерисовкой двух блоков.
  *
- * Управление: ← / → — ходьба, ↓ — пригнуться, ПРОБЕЛ — прыжок.
+ * Управление: ← / → — ходьба, ПРОБЕЛ — прыжок (только с опоры). Коллизии с
+ * уровнем (см. tiles2.png): земля/трубы/кирпич — стены (не пройти), коробки и
+ * верх опор — one-way платформы (запрыгнуть можно, пройти насквозь — тоже).
  */
 
 #include "v06.h"
@@ -31,11 +33,18 @@ extern void mario_undraw(void) __z88dk_callee;
 #define CAM_NO_REF   0xFFFFu    /* в VRAM пусто (первый экран) */
 
 /* ----------------------------- ГЕОМЕТРИЯ ------------------------------- */
+/* Экран 256x256 = 32x32 тайла; тайл 8 px. Мир шире экрана (LEVEL_COLS тайлов),
+ * камера cam (в тайлах) листает его шагом 8 px. Строка тайла cy -> экранный
+ * верх y = cy*8 (полоса уровня в tiles.png ложится на экран 1:1). */
 
+#define TILE_PX      8
 #define VIEW_BLOCKS  32                 /* 256 px / 8 = экран по горизонтали */
-#define GROUND_Y     224                /* строка поверхности земли (ноги)  */
-#define STAND_TOP    (GROUND_Y - 16)    /* верх Марио стоя = 208             */
-#define JUMP_APEX    120                /* верх прыжка (верх спрайта)        */
+#define SPR_W        16                 /* спрайт Марио 16x16 = 2x2 тайла    */
+#define SPR_H        16
+
+#define GRAV         1                  /* прирост вертикальной скорости/кадр */
+#define FALL_MAX     8                  /* предел скорости падения            */
+#define JUMP_V0      (-11)              /* старт прыжка: ~в 3 раза выше изначальной (~55 px) */
 
 #define CAM_MIN_BLK  10                 /* держим Марио в окне [10..20]      */
 #define CAM_MAX_BLK  20
@@ -51,16 +60,17 @@ static const unsigned char * const walkL[3] =
 
 /* ------------------------------ СОСТОЯНИЕ ------------------------------ */
 
-static unsigned int  wblk;       /* мировой тайловый столбец Марио (левый)  */
-static unsigned int  cam;        /* мировой столбец у левого края экрана     */
-static unsigned char mblk;       /* экран столбец Марио = wblk - cam         */
-static int           my;         /* верх Марио по Y (пиксели)               */
-static int           vy;         /* вертикальная скорость, + = вниз          */
-static unsigned char facing;     /* 0 = вправо, 1 = влево                    */
-static unsigned char jumping;    /* в воздухе                                */
-static unsigned char walkphase;  /* 0..2 кадр ходьбы                          */
-static unsigned char vy_hold;    /* ↓ удерживается (пригнуться)             */
-static unsigned char moving;     /* идёт горизонтальное движение этот кадр   */
+static unsigned int  wblk;       /* мировой тайловый столбец левого края Марио */
+static unsigned int  cam;        /* мировой столбец у левого края экрана       */
+static unsigned char mblk;       /* экран столбец Марио = wblk - cam           */
+static int           my;         /* верх Марио по Y (пиксели, 0..240)          */
+static int           vy;         /* вертикальная скорость, + = вниз             */
+static unsigned char facing;     /* 0 = вправо, 1 = влево                      */
+static unsigned char grounded;   /* стоит на опоре (можно прыгать)             */
+static unsigned char walkphase;  /* 0..2 кадр ходьбы                            */
+static unsigned char vy_hold;    /* ↓ удерживается                             */
+static unsigned char moving;     /* идёт горизонтальное движение этот кадр      */
+static unsigned char space_prev; /* ПРОБЕЛ в прошлом кадре — фронт для прыжка  */
 
 /* Где Марио нарисован в последний раз (его пиксели сейчас в VRAM).
  * Пока совпадает с текущим состоянием и камера не двинулась — кадр целиком
@@ -69,19 +79,29 @@ static unsigned char drawn_blk;
 static unsigned char drawn_y;
 static const unsigned char *drawn_spr;
 
-/* Старт прыжка. */
+/* Твёрдость ячейки мира (col,row): маска COLL_* свойства тайла (вариант C).
+ * COLL_PLAT (1) — one-way опора, COLL_WALL (2) — непроходимо, 3 — и то, и др.
+ * 0 — пусто. Берём тайл из tilemap (колонка-мажор) и его свойство tile_solid. */
+static unsigned char solid_at(int col, int row)
+{
+    if (col < 0 || row < 0 || col >= (int)LEVEL_COLS || row >= (int)LEVEL_ROWS)
+        return 0;
+    return tile_solid[tilemap[(unsigned int)col * LEVEL_ROWS + (unsigned int)row]];
+}
+
+/* Старт прыжка — только с опоры. */
 static void jump_start(void)
 {
-    if (!jumping) {
-        jumping = 1;
-        vy = -6;
+    if (grounded) {
+        vy = JUMP_V0;
+        grounded = 0;
     }
 }
 
 /* Вернуть указатель на нужный спрайт текущего состояния. */
 static const unsigned char *pick_sprite(void)
 {
-    if (jumping)
+    if (!grounded)
         return facing ? mario_jump_l : mario_jump_r;
     if (vy_hold)
         return facing ? mario_duck_l : mario_duck_r;
@@ -101,13 +121,13 @@ int main(void)
     gfx_clear(0);
     gfx_set_bmp_palette(level_palette);
 
-    /* Старт: Марио у левого края, камера 0. */
+    /* Старт: Марио у левого края на земле (верх ряда 30 = y240, ноги там). */
     wblk = 4;
     cam = 0;
     mblk = (unsigned char)wblk;
-    my = STAND_TOP;
+    my = 224;
     vy = 0;
-    jumping = 0;
+    grounded = 1;
     facing = 0;
     walkphase = 0;
     frame = 0;
@@ -121,32 +141,47 @@ int main(void)
 
     for (;;) {
         unsigned int  old_cam;
-        unsigned char key;
 
         gfx_next_frame();
 
-        /* ---- ввод ---- */
-        key = kbd_scan();
+        /* ---- ввод: держим несколько клавиш сразу (стрелка + пробел).
+         * kbd_scan() обновляет снимок матрицы; kbd_is_down() проверяет по нему
+         * каждую клавишу отдельно. Иначе kbd_read() отдаёт ПЕРВУЮ нажатую, а
+         * стрелки живут в строке 0 и маскировали пробел из строки 7. ---- */
+        kbd_scan();
         dir = 0;
         vy_hold = 0;
-        if (key == KBD_KEY_LEFT)  { dir = 1; facing = 1; }
-        if (key == KBD_KEY_RIGHT) { dir = 2; facing = 0; }
-        if (key == KBD_KEY_DOWN)  { vy_hold = 1; }
-        if (key == 32)            { jump_start(); }
+        if (kbd_is_down(KBD_KEY_LEFT))  { dir = 1; facing = 1; }
+        if (kbd_is_down(KBD_KEY_RIGHT)) { dir = 2; facing = 0; }
+        if (kbd_is_down(KBD_KEY_DOWN))  { vy_hold = 1; }
+        {
+            /* Прыжок по фронту ПРОБЕЛА: удержание не должно авто-подпрыгивать
+             * при приземлении. */
+            unsigned char sp = kbd_is_down(32);
+            if (sp && !space_prev) jump_start();
+            space_prev = sp;
+        }
 
-        /* ---- горизонтальное движение (шаг 8 px, не чаще раза в MOVE_DELAY) ---- */
+        /* ---- горизонтальное движение (шаг 8 px, с проверкой стен) ---- */
         moving = 0;
         old_cam = cam;
 
         if (dir && !vy_hold) {
             if (++frame >= MOVE_DELAY) {
+                int nb, edge, d = (dir == 2) ? 1 : -1;
+                int r0, r1;
                 frame = 0;
                 moving = 1;
-                if (dir == 2) {                 /* вправо */
-                    if (wblk < MAX_CAM + VIEW_BLOCKS - 2) wblk++;
-                } else {                         /* влево */
-                    if (wblk > 0) wblk--;
-                }
+                nb = (int)wblk + d;
+                if (nb < 0) nb = 0;
+                if (nb > (int)LEVEL_COLS - 2) nb = (int)LEVEL_COLS - 2;
+                edge = (d > 0) ? nb + 1 : nb;      /* вводимый столбец */
+                r0 = my / TILE_PX;
+                r1 = (my + SPR_H - 1) / TILE_PX;
+                /* в стену (бит COLL_WALL) не входим; one-way платформа не мешает */
+                if (!(solid_at(edge, r0) & COLL_WALL) &&
+                    !(solid_at(edge, r1) & COLL_WALL))
+                    wblk = (unsigned int)nb;
                 walkphase = (walkphase + 1) % 3;
             }
         }
@@ -164,12 +199,37 @@ int main(void)
             mblk = (unsigned char)(wblk - cam);
         }
 
-        /* ---- вертикаль: прыжок/гравитация (каждый кадр) ---- */
-        if (jumping) {
-            my += vy;
-            vy += 1;                            /* гравитация */
-            if (my <= JUMP_APEX) { my = JUMP_APEX; if (vy < 0) vy = 0; }
-            if (my >= STAND_TOP) { my = STAND_TOP; vy = 0; jumping = 0; }
+        /* ---- вертикаль: гравитация + коллизии (каждый кадр) ---- */
+        {
+            int nmy;
+            vy += GRAV;
+            if (vy > FALL_MAX) vy = FALL_MAX;
+            nmy = my + vy;
+            grounded = 0;
+            if (vy >= 0) {
+                /* падаем: тайл под нижним пикселем; опора (платформа или
+                 * стена) останавливает, ставим ноги на её верх */
+                int brow = (nmy + SPR_H - 1) / TILE_PX;
+                if (solid_at((int)wblk, brow) || solid_at((int)wblk + 1, brow)) {
+                    nmy = brow * TILE_PX - SPR_H;
+                    vy = 0;
+                    grounded = 1;
+                }
+            } else {
+                /* поднимаемся: головой только о непроходимую стену (бит WALL) */
+                int trow = nmy / TILE_PX;
+                if (solid_at((int)wblk, trow) & COLL_WALL ||
+                    solid_at((int)wblk + 1, trow) & COLL_WALL) {
+                    nmy = (trow + 1) * TILE_PX;
+                    vy = 0;
+                }
+            }
+            my = nmy;
+            if (my < 0) { my = 0; if (vy < 0) vy = 0; }
+            if (my > 240) {                 /* утонул в яме — респавн в начале */
+                wblk = 4; cam = 0; mblk = 4;
+                my = 224; vy = 0; grounded = 1;
+            }
         }
 
         /* ---- отрисовка ---- */

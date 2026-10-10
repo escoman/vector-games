@@ -72,7 +72,8 @@ WAV ──────────────▶ dmc2smp.py ──▶ .smp ─�
 
 - **z88dk** — локальная папка `z88dk/` (переопределяется `make Z88DK=...`)
 - **Python 3.6+** — скрипты конвертации и эмулятор
-- **Pillow** — для bmp2inc.py (заставки)
+- **Pillow** — для bmp2inc.py (заставки) и GUI-редакторов: `sudo apt install python3-pil`
+- **Tkinter** — GUI-редакторы уровня (например `roms/demos/mario-16cols/tools/level_editor.py`): `sudo apt install python3-tk python3-pil.imagetk` (второй пакет даёт `PIL.ImageTk`; на Windows оба входят в установщик Python)
 - **vector-debugger (MCP)** — эмулятор с отладчиком для реверс-инжиниринга
 
 ### Под Windows
