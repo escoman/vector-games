@@ -1,0 +1,19 @@
+# Build artifacts
+*.rom
+*.map
+*.o
+zcc_opt.def
+*.c.asm
+
+# Генерируемые ассеты: ИСТОЧНИКИ — src/tiles.png, src/sprites.png +
+# tools/gen_assets.py. level.inc/mario.inc перегенерируются на сборке.
+src/level.inc
+src/mario.inc
+
+# Диагностика офлайн-рендера (генерируется tools/render_png.py)
+tools/render_dump*.png
+
+# Sidecar отладчика (MCP) — для своего исходного проекта не нужен
+*.rdb
+
+__pycache__/

@@ -1,9 +1,9 @@
-# Makefile — демка Mario 16-цвет для Вектора-06Ц.
+# Makefile — демка Mario 8-цвет (сплит по плоскостям) для Вектора-06Ц.
 
 include ../../../config.mk
 
-TARGET = mario-16c.rom
-MAPFILE = mario-16c.map
+TARGET = mario-8c.rom
+MAPFILE = mario-8c.map
 
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
