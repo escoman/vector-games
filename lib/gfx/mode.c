@@ -85,7 +85,10 @@ void gfx_clear(unsigned char color)
 
 void gfx_set_palette(const unsigned char *colors)
 {
-    unsigned char full[16];
+    /* full[] — статический, НЕ на стеке: v06_set_palette_asm делает ei/halt,
+     * поверх приходит кадровое прерывание и вытесняет 16-байтный буфер за
+     * 0x0000 в видеопамять (стек ROM-а всего 256 байт) — зависание. */
+    static unsigned char full[16];
     const gfx_mode_t *m = &gfx_modes[gfx_current_mode];
     unsigned char i;
 
@@ -138,6 +141,8 @@ void gfx_set_palette(const unsigned char *colors)
         full[0x0C] = colors[1];
         break;
     }
+
+    /* Тень последней палитры убрана: fade.c держит своё состояние сам. */
 
     v06_set_palette_asm(full);
 

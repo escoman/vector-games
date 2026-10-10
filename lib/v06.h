@@ -95,6 +95,13 @@ extern void gfx_set_palette(const unsigned char *colors);
 extern void gfx_set_bmp_palette(const unsigned char *pal);
 extern void gfx_set_black_palette(void);
 
+/* Плавное появление / гашение экрана интерполяцией палитры (fade.c).
+ * hold — кадров на каждый промежуточный шаг (скорость: 1 = каждый кадр,
+ * больше = медленнее). gfx_fade_in разгоняет от чёрного к pal; gfx_fade_out
+ * гасит к чёрному палитру, которую показал предыдущий gfx_fade_in. */
+extern void gfx_fade_in(const unsigned char *pal, unsigned char hold);
+extern void gfx_fade_out(unsigned char hold);
+
 /* Скролл (отложенная запись в PIA PA) */
 extern void gfx_set_scroll(unsigned char row);
 extern unsigned char gfx_scroll_row;
