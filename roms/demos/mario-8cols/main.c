@@ -21,6 +21,14 @@
  * Управление: ← / → — ходьба, ПРОБЕЛ — прыжок (только с опоры). Коллизии с
  * уровнем (см. tiles2.png): земля/трубы/кирпич — стены (не пройти), коробки и
  * верх опор — one-way платформы (запрыгнуть можно, пройти насквозь — тоже).
+ *
+ * ЭКРАН ОТСТАЁТ ВДВОЕ. Вертикальная камера идёт не быстрее одной тайловой
+ * строки за CAM_RATE кадров, поэтому Марио обгоняет экран и кромки экрана
+ * становятся игровыми границами: ВЕРХНЯЯ кромка — потолок (прыгнувший выше неё
+ * Марио рисуется прижатым к ней и скользит по ней, пока экран не уйдёт выше),
+ * НИЖНЯЯ кромка — гибель (ушёл ногами за край = упал в пропасть, респаун в
+ * начале уровня). По горизонтали камера, как и раньше, идёт нога в ногу с
+ * шагом ходьбы (тот же темп: 8 px за MOVE_DELAY кадров).
  */
 
 #include "v06.h"
@@ -63,11 +71,14 @@ extern void mario_undraw(void) __z88dk_callee;
 #define CAM_MAX_BLK  20
 #define MAX_CAM      (LEVEL_COLS - VIEW_BLOCKS)
 
-/* Вертикальная камера держит Марио в коридоре строк экрана [8..22]. Для уровня
- * высотой ровно экран (LEVEL_ROWS==32) MAX_CAM_ROW=0 => cam_row всегда 0 =>
- * регрессия к прежнему поведению. */
+/* Вертикальная камера держит Марио в коридоре строк экрана [8..22] и сдвигается
+ * не быстрее одной тайловой строки за CAM_RATE кадров: экран отстаёт от Марио
+ * вдвое (его максимальное падение = 1 строка/кадр). Отставание и делает кромки
+ * экрана границами уровня: потолок сверху и гибель снизу. */
 #define CAMR_MIN_ROW 8
 #define CAMR_MAX_ROW 22
+#define CAM_RATE     2
+#define DEATH_HOLD   40                 /* кадров «замри» на месте гибели     */
 
 #define MOVE_DELAY   2                  /* кадров на один шаг (8 px)         */
 
@@ -82,11 +93,13 @@ static const unsigned char * const walkL[3] =
 static unsigned int  wblk;       /* мировой тайловый столбец левого края Марио */
 static unsigned int  cam;        /* мировой столбец у левого края экрана       */
 static unsigned char mblk;       /* экран столбец Марио = wblk - cam           */
-static int           my;         /* верх Марио по Y в МИРОВЫХ пикселях (0..H)  */
+static int           my;         /* верх Марио по Y в МИРОВЫХ пикселях; может быть выше
+                                    верха экрана — рисуем ниже (потолок кромки) */
 static int           vy;         /* вертикальная скорость, + = вниз             */
 static unsigned char facing;     /* 0 = вправо, 1 = влево                      */
 static unsigned char grounded;   /* стоит на опоре (можно прыгать)             */
 static unsigned char walkphase;  /* 0..2 кадр ходьбы                            */
+static unsigned char cam_rate;   /* фаза делителя скролла: CAM_RATE кадров/строку */
 static unsigned char vy_hold;    /* ↓ удерживается                             */
 static unsigned char moving;     /* удерживается направление — идёт ходьба     */
 static unsigned char space_prev; /* ПРОБЕЛ в прошлом кадре — фронт для прыжка  */
@@ -112,7 +125,7 @@ static unsigned char old_cam_row;    /* cam_row в прошлом кадре    
  * Пока совпадает с текущим состоянием и камера не двинулась — кадр целиком
  * пропускаем: в VRAM уже лежит готовое изображение. */
 static unsigned char drawn_blk;
-static int           drawn_y;    /* мировой y (совпадение по всему значению) */
+static int           drawn_y;    /* мировой y верха спрайта (с учётом потолка) */
 static const unsigned char *drawn_spr;
 
 /* Замечания по запеканию окна [tile_win_base, tile_win_base+OBJ_WIN_COLS):
@@ -258,11 +271,26 @@ static const unsigned char *pick_sprite(void)
     return facing ? mario_stand_l : mario_stand_r;
 }
 
+/* Возврат на точку старта после гибели: мир, камера и делитель скролла
+ * сбрасываются разом. Камера прыгает (old_cam != cam) — полный редрав ниже
+ * сделает обычный путь отрисовки. */
+static void respawn(void)
+{
+    wblk = 4; cam = 0; mblk = 4;
+    my = (int)(LEVEL_ROWS - 4) * TILE_PX;
+    cam_row = max_cam_row;
+    cam_rate = 0;
+    vy = 0; grounded = 1;
+    gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
+}
+
 int main(void)
 {
     unsigned char frame;
     unsigned char dir;
+    unsigned char hold;
     const unsigned char *spr;
+    int dy;                     /* мировой y верха спрайта с учётом потолка экрана */
 
     gfx_set_mode(GFX_MODE_256_16);
     gfx_set_black_palette();
@@ -271,9 +299,7 @@ int main(void)
      * палитре (экран скрыт), потом плавно покажем его gfx_fade_in. */
 
     /* Старт: Марио у земли в НИЖНЕЙ части мира, камера прижата к низу.
-     * tile_stride/cam_row читаются ассемблером до первого рендера. Для уровня
-     * высотой ровно экран (LEVEL_ROWS==32): max_cam_row=0, cam_row=0,
-     * my=(32-4)*8=224 — в точность прежнему поведению. */
+     * tile_stride/cam_row читаются ассемблером до первого рендера. */
     tile_stride  = (unsigned char)LEVEL_ROWS;
     max_cam_row  = (LEVEL_ROWS >= VIEW_ROWS)
                        ? (unsigned char)(LEVEL_ROWS - VIEW_ROWS) : 0;
@@ -288,6 +314,7 @@ int main(void)
     facing = 0;
     walkphase = 0;
     frame = 0;
+    cam_rate = 0;              /* делитель скролла обнулён                    */
     space_prev = 0;            /* BSS не обнуляется (--no-crt): фронта нет   */
     esc_prev = 0;
 
@@ -404,27 +431,54 @@ int main(void)
             }
             my = nmy;
             if (my < 0) { my = 0; if (vy < 0) vy = 0; }
-            if (my >= (int)LEVEL_TILE_H) {  /* утонул в яме — респавн в начале */
-                wblk = 4; cam = 0; mblk = 4;
-                my = (int)(LEVEL_ROWS - 4) * TILE_PX;
-                cam_row = max_cam_row;
-                vy = 0; grounded = 1;
-            }
+            if (my >= (int)LEVEL_TILE_H)    /* утонул за дном мира — респаун */
+                respawn();
         }
 
-        /* ---- вертикальная камера: держим Марио в коридоре строк экрана ----
-         * Для уровня в один экран (max_cam_row=0) cam_row остаётся 0. ---- */
+        /* ---- вертикальная камера: коридор строк экрана + ДЕЛИТЕЛЬ СКРОЛЛА ----
+         * Камера хочет вернуть Марио в [CAMR_MIN_ROW..CAMR_MAX_ROW], но едет не
+         * быстрее одной тайловой строки за CAM_RATE кадров: экран отстаёт от Марио
+         * вдвое (его предельное падение = 1 строка/кадр). Темп ограничен по времени,
+         * а не «половиной приращения Марио»: при прижатом к потолку Марио обратная
+         * связь «камера тянет край вверх» разгонила бы скролл до верха мира. ---- */
         {
             int mrow = my / TILE_PX;
             int rel = mrow - (int)cam_row;
-            if (rel > CAMR_MAX_ROW && cam_row < max_cam_row) {
-                cam_row = (unsigned char)(mrow - CAMR_MAX_ROW);
-                if (cam_row > max_cam_row) cam_row = max_cam_row;
+            int want = cam_row;
+            if (rel > CAMR_MAX_ROW) {
+                want = mrow - CAMR_MAX_ROW;
+                if (want > (int)max_cam_row) want = (int)max_cam_row;
             } else if (rel < CAMR_MIN_ROW) {
-                int nc = mrow - CAMR_MIN_ROW;
-                cam_row = (unsigned char)(nc < 0 ? 0 : nc);
+                want = mrow - CAMR_MIN_ROW;
+                if (want < 0) want = 0;
+            }
+            if (want != (int)cam_row) {
+                if (++cam_rate >= CAM_RATE) {
+                    cam_rate = 0;
+                    cam_row = (unsigned char)
+                        ((want > (int)cam_row) ? cam_row + 1 : cam_row - 1);
+                }
+            } else {
+                cam_rate = 0;    /* в коридоре — фаза не копится, ход начнётся сразу */
             }
             gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
+        }
+
+        /* ---- КРОМКИ ЭКРАНА. Отставание камеры делает край игровой границей:
+         * выше верхней кромки Марио не рисуется (бьётся головой и скользит по
+         * ней, пока экран не уйдёт выше), за нижнюю кромку ногами — гибель. ---- */
+        {
+            int top_px = (int)cam_row * TILE_PX;
+            dy = (my < top_px) ? top_px : my;
+            if (my + SPR_H > top_px + VIEW_ROWS * TILE_PX) {
+                /* Гибель: держим последний кадр, затем респаун. В гибнущей
+                 * позиции спрайт НЕ рисуем — VRAM кольцевой (256 строк), и
+                 * строка за нижним краем закрутилась бы в верх экрана. */
+                for (hold = 0; hold < DEATH_HOLD; hold++)
+                    gfx_next_frame();
+                respawn();
+                dy = my;
+            }
         }
 
         /* ---- сдвиг окна тайлкарты: перепечь при переходе границы окна ----
@@ -480,7 +534,7 @@ int main(void)
                                          * кусочки тайлов с места гибели */
                     render_window(cam, CAM_NO_REF, 0, VIEW_BLOCKS);
                 }
-            } else if (mblk == drawn_blk && my == drawn_y && spr == drawn_spr) {
+            } else if (mblk == drawn_blk && dy == drawn_y && spr == drawn_spr) {
                 continue;                   /* на экране ничего не изменилось */
             }
         }
@@ -488,11 +542,14 @@ int main(void)
          * перерисовка фона не трогает Марио: стираем и рисуем его одним быстрым
          * шагом уже ПОСЛЕ фона. Раньше mario_undraw() шёл до тяжёлого
          * render_window() — развёртка заставала Марио стёртым → мерцание при
-         * ходьбе. */
+         * ходьбе.
+         * Рисуем по dy, а не по my: dy — тот же мировой y, но не выше верхней
+         * кромки экрана (потолок), поэтому undraw/draw всегда идут по одним
+         * и тем же строкам VRAM. */
         mario_undraw();
-        mario_draw((unsigned char)(mblk * 8), (unsigned char)my, spr);
+        mario_draw((unsigned char)(mblk * 8), (unsigned char)dy, spr);
         drawn_blk = mblk;
-        drawn_y = my;
+        drawn_y = dy;
         drawn_spr = spr;
     }
 
