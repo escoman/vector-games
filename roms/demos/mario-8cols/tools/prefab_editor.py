@@ -56,10 +56,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from prefablib import (                                     # noqa: E402
-    PREFAB_FILE, TILES_FILE, SKY, COLL_RED, COLL_BLUE, PF_SECTIONS,
-    MAX_COLS, MAX_ROWS, TILE_INDEX_LIMIT, INST_BYTES, RECT_BYTES, VAR_BYTES,
-    load_tiles, tile_props, load_tile_images, load_prefabs, prefab_comment,
-    save_prefabs, section_of, sort_key_prefabs, stamp_size,
+    PREFAB_FILE, OBJECTS_FILE, TILES_FILE, SKY, COLL_RED, COLL_BLUE, PF_SECTIONS,
+    MAX_COLS, MAX_ROWS, TILE_INDEX_LIMIT, MAX_VARIANTS, INST_BYTES, RECT_BYTES, VAR_BYTES,
+    load_tiles, tile_props, load_tile_images, load_prefabs, load_instances,
+    prefab_comment,
+    save_prefabs, save_instances, section_of, sort_key_prefabs, stamp_size,
     stamp_cells, stamp_objects)
 from uiutil import maximize                                # noqa: E402
 
@@ -87,7 +88,8 @@ PAL_LBL_W = 22                 # ширина подписи под палитр
                                # панель (иначе она дёргает окно на каждом выборе
                                # тайла); 22 — максимум, при котором подпись ещё
                                # умещается в ширину сетки тайлов с прокруткой
-PREV_SCALE = 8                 # превью «как будет при w×h»: px на тайл
+PREV_SCALE = 8                 # превью «как будет при w×h»: не используется,
+                               # масштаб берём из «Масштаб» (self.cell)
 HL_COLOR = (255, 212, 0)       # жёлтая рамка «это текущая кисть»
 SEL_COLOR = (78, 201, 176)     # бирюза: выбранный префаб в списке
 VIOLET = (186, 85, 211)        # wall + platform
@@ -96,10 +98,21 @@ EMPTY_A = (30, 30, 34)         # «пусто» (тайл 0): шахматка �
 EMPTY_B = (40, 40, 46)
 GRID_LINE = (128, 128, 128)
 STRETCH_MODES = ("нет", "замостить", "9-slice", "окно")
+STRETCH_MODE_W = 12           # фиксированная ширина переключателя режима: без неё
+                              # OptionMenu то расширяется под «замостить», то
+                              # сжимается под «нет» — и всё слева дёргается
+STRETCH_HELP = (
+    "режимы оси (X — ширина/столбцы, Y — высота/строки):\n"
+    "  нет        — ось не тянется, размер фиксирован;\n"
+    "  замостить  — паттерн циклически повторяется целиком;\n"
+    "  9-slice k  — колонки/строки 0..k целые, k тянется, далее хвост;\n"
+    "  окно [a,b] — повторяется только окно a..b, углы целые.\n"
+    "k — граница шапки (9-slice); a, b — границы окна;\n"
+    "min — минимальный размер штампа по этой оси (в тайлах).")
 
 # ---------------------------------------------------------------------------
-# Палитра ограничена тем, что вообще можно зашить: t = 7 бит (TILE_INDEX_LIMIT)
-# и нативный размер паттерна не больше карты.
+# Палитра ограничена набором тайлов: t — полный байт rect'а (0..255), но зашить
+# в ROM можно только те, что реально есть в tiles.json (валидация t < n_tiles).
 MAX_PAT = 64                   # паттерн шире/выше 64 тайлов всё равно не нужен:
 #                               тянется stretch, а не раздутым шаблоном
 
@@ -139,6 +152,9 @@ class PrefabEditor:
         self.props = tile_props(self.tiles_meta)
         self.tile_orig = load_tile_images(self.tiles_meta)
         self.prefabs = sort_key_prefabs(load_prefabs(self.path, self.n_tiles))
+        # имена, с которыми библиотека лежит на диске: по ним (=id объекта)
+        # отслеживаем переименования, чтобы прошить уровень при сохранении
+        self._orig_name = {id(pf): pf["name"] for pf in self.prefabs}
         self.comment = prefab_comment(self.path)   # _comment переносим как есть
         self.cur = None                  # редактируемый префаб (ссылка в списке)
         self.selected = 0                # тайл-кисть
@@ -306,18 +322,25 @@ class PrefabEditor:
 
         Ряды 4 и 5 той же сетки, что и холст: панель остаётся своей
         запрашиваемой высоты, а освобождённая холстом четверть уходит ряду 5,
-        где превью тянется на всю высоту (картинки центрирует _prev_top)."""
+        где превью тянется на всю высоту. Справа от органов управления —
+        постоянная пояснялка про режимы и k/a/b/min (раньше на её месте
+        висело сменяющееся поле «здесь: N rect …», которое путало вместо
+        того, чтобы объяснять)."""
         fr = ttk.LabelFrame(parent, text="4) Растяжение (как паттерн ведёт себя при "
                                        "размере ≠ нативному)", padding=6)
         fr.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        ctl = ttk.Frame(fr)                    # левая колонка: сами органы
+        ctl.pack(side=tk.LEFT, fill=tk.X)
         self.sv = {}
         for axis, lab in (("x", "ось X (ширина)"), ("y", "ось Y (высота)")):
-            r = ttk.Frame(fr)
+            r = ttk.Frame(ctl)
             r.pack(side=tk.TOP, fill=tk.X, pady=1)
             ttk.Label(r, text=lab, width=14, anchor=tk.W).pack(side=tk.LEFT)
             mode = tk.StringVar(value="нет")
-            ttk.OptionMenu(r, mode, "нет", *STRETCH_MODES,
-                           command=self._apply_stretch).pack(side=tk.LEFT)
+            om = ttk.OptionMenu(r, mode, "нет", *STRETCH_MODES,
+                                command=self._apply_stretch)
+            om.config(width=STRETCH_MODE_W)    # фикс. ширина: иначе переключатель
+            om.pack(side=tk.LEFT)              # тянет за собой всё слева
             k = tk.IntVar(value=0)
             ttk.Label(r, text="k").pack(side=tk.LEFT, padx=(8, 0))
             kb = ttk.Spinbox(r, from_=0, to=MAX_PAT - 1, width=3, textvariable=k,
@@ -340,7 +363,7 @@ class PrefabEditor:
             mb.pack(side=tk.LEFT)
             self.sv[axis] = (mode, k, a, b, mn, (kb, ab, bb, mb))
 
-        pr = ttk.Frame(fr)
+        pr = ttk.Frame(ctl)
         pr.pack(side=tk.TOP, fill=tk.X, pady=(6, 0))
         ttk.Label(pr, text="превью при").pack(side=tk.LEFT)
         self.pw_var = tk.IntVar(value=12)
@@ -352,15 +375,16 @@ class PrefabEditor:
                     command=self._sync_preview).pack(side=tk.LEFT)
         ttk.Label(pr, text="(слева — нативный размер; тянутся только оси со "
                             "stretch)").pack(side=tk.LEFT, padx=6)
+
+        ttk.Label(fr, text=STRETCH_HELP, justify=tk.LEFT, foreground="#888",
+                  font=("DejaVu Sans", 8)).pack(side=tk.LEFT, padx=(14, 0))
+
         self.pfr = ttk.Frame(parent)
         self.pfr.grid(row=5, column=0, sticky="nsew", pady=(4, 0))
         self.pfcv = tk.Canvas(self.pfr, height=PREV_MIN_H, bg="#0d1a2b",
                               highlightthickness=1, highlightbackground="#333")
         self.pfcv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.pfcv.bind("<Configure>", self._on_prev_size)
-        self.prev_info = ttk.Label(self.pfr, text="", foreground="#777",
-                                   justify=tk.LEFT)
-        self.prev_info.pack(side=tk.LEFT, padx=8, anchor=tk.N)
 
     def _draw_legend(self):
         c = self._leg
@@ -713,6 +737,7 @@ class PrefabEditor:
         except ValueError:
             return
         self.render()
+        self._sync_preview()
 
     # ---- палитра ----------------------------------------------------------
     def _build_palette(self):
@@ -884,14 +909,12 @@ class PrefabEditor:
             return default
 
     def _prev_top(self, img_h):
-        """Верх блока превью: по центру свободной высоты. Ряд 5 может достать
-        больше PREV_MIN_H (четверть освобождённой холстом высоты), а рисовать
-        впритык к верхней границе тогда некрасиво. До map окна winfo_height()
-        = 1 — считаем по запрашиваемой высоте."""
-        h = self.pfcv.winfo_height()
-        if h <= 1:
-            h = self.pfcv.winfo_reqheight()
-        return max(2, (h - 12 - img_h) // 2)
+        """Верх блока превью: прижат к началу поля (отступ 2 px). Раньше
+        картинка центрировалась по высоте ряда 5 — из-за этого образцы висели
+        посреди поля; теперь масштаб берётся из «Масштаб», и превью может быть
+        выше ряда, поэтому держим его у верхней границы (переполнение уходит
+        в скролл)."""
+        return 2
 
     def _on_prev_size(self, e):
         """Превью перерисовываем, только когда изменилась ВЫСОТА: картинка
@@ -906,15 +929,14 @@ class PrefabEditor:
         self.pfcv.delete("all")
         self._prev_photos = []
         if self.cur is None:
-            self.prev_info.config(text="")
             return
         pf = self.cur
         nat_w, nat_h = len(pf["grid"][0]), len(pf["grid"])
         w, h = stamp_size(pf, self._ival(self.pw_var, nat_w),
                           self._ival(self.ph_var, nat_h))
-        base = self._grid_image(stamp_cells(pf, nat_w, nat_h), PREV_SCALE,
+        base = self._grid_image(stamp_cells(pf, nat_w, nat_h), self.cell,
                                 hardness=False)
-        big = self._grid_image(stamp_cells(pf, w, h), PREV_SCALE, hardness=False)
+        big = self._grid_image(stamp_cells(pf, w, h), self.cell, hardness=False)
         p1 = ImageTk.PhotoImage(base)
         p2 = ImageTk.PhotoImage(big)
         self._prev_photos += [p1, p2]
@@ -931,14 +953,6 @@ class PrefabEditor:
         self.pfcv.create_image(x, top + 12, anchor=tk.NW, image=p2)
         self.pfcv.configure(scrollregion=(0, 0, x + big.width + 4,
                                           top + 12 + img_h + 6))
-        rects = stamp_objects(pf, 0, 0, w, h)
-        axes = [n for n, has in (("X", pf.get("stretch_x")),
-                                 ("Y", pf.get("stretch_y"))) if has]
-        self.prev_info.config(text=(
-            "здесь: %d rect → %d Б варианта + %d Б экземпляра\n"
-            "тянется: %s" % (
-                len(rects), VAR_BYTES + RECT_BYTES * len(rects), INST_BYTES,
-                " + ".join(axes) if axes else "—")))
 
     # ---- ROM-вид ----------------------------------------------------------
     def rom_view(self):
@@ -973,10 +987,11 @@ class PrefabEditor:
                        len(rects), body, INST_BYTES))
         txt.insert(tk.END, "вся библиотека (%d префабов, %d rect): %d Б "
                    "словаря\n" % (len(self.prefabs), lib_rects, total))
-        txt.insert(tk.END, "\nлимиты: вариант ≤ %d (id 7 бит), тайл ≤ %d, "
-                   "x ≤ %d, y ≤ %d\nразмер rect — байт, потому и паттерн, и "
-                   "stretch-размер ограничены %d×%d\n" % (
-                       TILE_INDEX_LIMIT, TILE_INDEX_LIMIT, MAX_COLS - 1,
+        txt.insert(tk.END, "\nлимиты: вариант ≤ %d (id 12 бит), тайл ≤ %d "
+                   "(в наборе %d, макс индекс %d), x ≤ %d, y ≤ %d\nразмер rect — "
+                   "байт, потому и паттерн, и stretch-размер ограничены %d×%d\n" % (
+                       MAX_VARIANTS, TILE_INDEX_LIMIT, self.n_tiles,
+                       self.n_tiles - 1, MAX_COLS - 1,
                        MAX_ROWS - 1, MAX_COLS - 1, MAX_ROWS - 1))
         txt.config(state=tk.DISABLED)
 
@@ -1004,8 +1019,14 @@ class PrefabEditor:
                         bad.append("%s: тайл %r — не положительное число" % (tag, t))
                         break
                     if t > TILE_INDEX_LIMIT:
-                        bad.append("%s: тайл %d > %d — в ROM t занимает 7 бит"
+                        bad.append("%s: тайл %d > %d — не влезает в байт rect'а"
                                    % (tag, t, TILE_INDEX_LIMIT))
+                        break
+                    if t >= self.n_tiles:
+                        bad.append("%s: тайла %d нет в наборе (всего %d, "
+                                   "макс индекс %d) — в ROM tileset/tile_solid "
+                                   "столько записей, ссылка вылезет за границу"
+                                   % (tag, t, self.n_tiles, self.n_tiles - 1))
                         break
                 else:
                     continue
@@ -1041,11 +1062,49 @@ class PrefabEditor:
             messagebox.showerror("Не сохраняется", "\n".join(bad[:8]))
             self._touch("не сохранено: %d замечания" % len(bad))
             return False
+        renames = self._collect_renames()
         save_prefabs(self.prefabs, self.path, comment=self.comment)
+        rewired = self._propagate_renames(renames)
+        self._orig_name = {id(pf): pf["name"] for pf in self.prefabs}
         self.dirty = False
-        self.status.config(text="записано %d префабов в %s" % (
-            len(self.prefabs), os.path.relpath(self.path)))
+        msg = "записано %d префабов в %s" % (
+            len(self.prefabs), os.path.relpath(self.path))
+        if rewired:
+            msg += " · переименования прошиты в objects.json (%d экз.)" % rewired
+        self.status.config(text=msg)
         return True
+
+    def _collect_renames(self):
+        """Переименования с момента загрузки/прошлого сохранения: имя на диске
+        (по id объекта) != текущее, и старое имя больше никем не занято. Имя —
+        единственный ключ связи уровня с библиотекой, поэтому его смену надо
+        прошивать в objects.json, иначе редактор уровня и make упадут на висячей
+        ссылке. -> {старое: новое}."""
+        cur = {pf["name"] for pf in self.prefabs}
+        renames = {}
+        for pf in self.prefabs:
+            old = self._orig_name.get(id(pf))
+            if old is not None and old != pf["name"] and old not in cur:
+                renames[old] = pf["name"]
+        return renames
+
+    def _propagate_renames(self, renames):
+        """Перешить экземпляры уровня со старых имён на новые (src/objects.json).
+        -> сколько экземпляров изменено."""
+        if not renames or not os.path.isfile(OBJECTS_FILE):
+            return 0
+        cols, rows, inst = load_instances()
+        if inst is None:
+            return 0
+        changed = 0
+        for o in inst:
+            new = renames.get(o["pf"])
+            if new:
+                o["pf"] = new
+                changed += 1
+        if changed:
+            save_instances(cols, rows, inst)
+        return changed
 
     def _touch(self, text):
         self.dirty = True

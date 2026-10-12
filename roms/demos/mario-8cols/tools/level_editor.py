@@ -102,13 +102,21 @@ from uiutil import maximize as _maximize                  # noqa: E402
 
 OVERLAY_ALPHA = 0.45          # сила полупрозрачной заливки твёрдости (0..1)
 GRID_LINE = (128, 128, 128, 128)   # сетка границ тайлов: серый, 50% прозрачности
+BLOCK_LINE = (176, 176, 190, 255)  # границы 32-колоночных блоков: жирнее (2 px)
+#                                   и полностью непрозрачны — тайловая сетка лишь 50%
 OBJ_LINE = (78, 201, 176)     # бирюзовая рамка экземпляра
 OBJ_SEL = (255, 90, 200)      # рамка выбранного экземпляра
 OBJ_WARN = (255, 150, 60)     # рамка: у экземпляра есть z-конфликт с блоком
+OBJ_BROKEN = (220, 40, 40)    # рамка: экземпляр ссылается на несуществующий префаб
+BROKEN_SECTION = "битые ссылки"   # служебная секция плейсхолдеров: вне PF_SECTIONS,
+#                                   в палитру не попадает
 PAL_THUMB = 32
 PAL_GAP = 6
 PF_THUMB = 3 * TILE_PX       # превью в палитре: px на тайл (3 => тайл 24 px)
 PF_COL_W = 236               # ширина строки палитры префабов, px
+PF_HDR_H = 18                # высота строки «— раздел —» в палитре (как в редакторе
+#                               префабов)
+PF_SEC_GAP = 14              # пустая строка МЕЖДУ разделами палитры
 STAMP_ALPHA = 130            # 0..255 непрозрачность призрака штампа на карте
 SINGLE_SECTION = "одиночные"  # секция авто-префабов «Тайл N» (фильтр по умолчанию)
 _UNSET = object()            # _set_sel(i): группа = ровно один якорь
@@ -151,6 +159,9 @@ class LevelEditor:
         self.prefabs = self._load_prefabs()
         self.by_name = {pf["name"]: pf for pf in self.prefabs}
         self.inst = self._load_instances()          # источник истины (v2)
+        self.broken = {}                            # имя -> число висячих ссылок
+        self._broken_warned = False                 # диалог — один раз за сессию
+        self._sync_broken(warn=True)                # плейсхолдеры + предупреждение
         self.grid = bytearray()                     # производная тайлкарта
         self.dirty = False
         self.cell = 12
@@ -507,19 +518,22 @@ class LevelEditor:
 
     # ---- палитра префабов -------------------------------------------------
     def _pf_list(self):
-        """Префабы палитры: порядок section. Секция «одиночные» (авто-тайлы
-        «Тайл N») не показывается вовсе: уровнем правят целыми объектами, а не
-        отдельными плитками."""
+        """Префабы палитры: группировка по секциям (PF_SECTIONS), внутри секции —
+        по имени. Секция «одиночные» (авто-тайлы «Тайл N») не показывается вовсе:
+        уровнем правят целыми объектами, а не отдельными плитками."""
+        by_name = lambda pf: (pf.get("name") or "").lower()
+        pool = [pf for pf in self.prefabs if not pf.get("_broken")]
+        known = [pf for pf in pool if section_of(pf) in PF_SECTIONS]
         out = []
         for sec in PF_SECTIONS:
-            for pf in self.prefabs:
-                if section_of(pf) != sec or sec == SINGLE_SECTION:
-                    continue
-                out.append(pf)
-        for pf in self.prefabs:                  # секции нет в списке — в конец
-            if section_of(pf) not in PF_SECTIONS and section_of(pf) != SINGLE_SECTION:
-                if pf not in out:
-                    out.append(pf)
+            if sec == SINGLE_SECTION:
+                continue
+            out.extend(sorted((pf for pf in known if section_of(pf) == sec),
+                              key=by_name))
+        # секции нет в PF_SECTIONS — в конец, тоже по имени
+        out.extend(sorted((pf for pf in pool
+                           if section_of(pf) not in PF_SECTIONS),
+                          key=by_name))
         return out
 
     def _grid_image(self, cells, scale, alpha=255):
@@ -552,10 +566,16 @@ class LevelEditor:
         for i, pf in enumerate(self._pf_shown):
             s = section_of(pf)
             if s != sec:
+                if sec is not None:
+                    y += PF_SEC_GAP        # пустая строка перед новым разделом
                 sec = s
-                c.create_text(6, y, anchor=tk.NW, text="— " + s + " —",
-                              fill="#888", font=("DejaVu Sans", 8, "bold"))
-                y += 15
+                # заголовок по центру колонки (как в редакторе префабов): он не
+                # привязан к строке префаба и на левом краю читается ещё одной
+                # карточкой
+                c.create_text(PF_COL_W // 2, y, anchor=tk.N,
+                              text="— " + s + " —", fill="#888",
+                              font=("DejaVu Sans", 9, "bold"))
+                y += PF_HDR_H
             cells = stamp_cells(pf, len(pf["grid"][0]), len(pf["grid"]))
             im = self._grid_image(cells, PF_THUMB)
             photo = ImageTk.PhotoImage(im)
@@ -574,6 +594,8 @@ class LevelEditor:
             c.tag_bind(hit, "<Button-1>", lambda e, idx=i: self.select_stamp(idx))
             self._pf_rows.append((y - 3, y + row_h + 3))
             y += row_h + 10
+        if sec is not None:
+            y += PF_SEC_GAP                # и после последнего раздела
         c.configure(scrollregion=(0, 0, PF_COL_W, y))
         self._update_prefab_sel()
 
@@ -733,7 +755,13 @@ class LevelEditor:
         d = ImageDraw.Draw(ov)
         if need_grid:
             for x in range(0, W, self.cell):
-                d.line([(x, 0), (x, H)], fill=GRID_LINE, width=1)
+                # каждая OBJ_WIN_STEP-я колонка — шов блока (x>>5 меняет
+                # номер блока, а блок задаёт порядок наложения в ROM): его
+                # линию ведём жирнее (2 px) и плотнее тайловой сетки
+                if (x // self.cell) % OBJ_WIN_STEP == 0:
+                    d.line([(x, 0), (x, H)], fill=BLOCK_LINE, width=2)
+                else:
+                    d.line([(x, 0), (x, H)], fill=GRID_LINE, width=1)
             for y in range(0, H, self.cell):
                 d.line([(0, y), (W, y)], fill=GRID_LINE, width=1)
         warn = self._conflict_set()
@@ -741,9 +769,42 @@ class LevelEditor:
             box = [x * self.cell, y * self.cell,
                    (x + w) * self.cell - 1, (y + h) * self.cell - 1]
             color = OBJ_SEL if i in self.sel_group else (
+                OBJ_BROKEN if self.inst[i]["pf"] in self.broken else
                 OBJ_WARN if i in warn else OBJ_LINE)
             d.rectangle(box, outline=color + (255,), width=2)
         return Image.alpha_composite(self.screen.convert("RGBA"), ov).convert("RGB")
+
+    def _sync_broken(self, warn=False):
+        """Старт/редакт с висячей ссылкой (префаб переименовали или удалили, а
+        уровень не обновили): НЕ падаем KeyError. Заводим безобидный плейсхолдер
+        (пустой штамп 1×1, вне палитры), чтобы все lookup'ы by имени разрешились,
+        помечаем такие экземпляры красной рамкой и один раз предупреждаем.
+        Лечится: вернуть префабу то имя (правильно — переименовать В редакторе
+        префабов, он прошивает уровень) либо переназначить объект. Пока не
+        долечено — make собьётся (validate_instances назовёт эти же имена)."""
+        real = {pf["name"] for pf in self.prefabs if not pf.get("_broken")}
+        broken = {}
+        for o in self.inst:
+            if o["pf"] not in real:
+                broken[o["pf"]] = broken.get(o["pf"], 0) + 1
+        self.broken = broken
+        for nm in broken:
+            if nm not in self.by_name:
+                pf = {"name": nm, "section": BROKEN_SECTION,
+                      "grid": [[0]], "_broken": True}
+                self.prefabs.append(pf)
+                self.by_name[nm] = pf
+        if warn and broken and not self._broken_warned:
+            self._broken_warned = True
+            lines = "\n".join("  • %s — %d экз." % (n, c)
+                              for n, c in sorted(broken.items()))
+            messagebox.showwarning(
+                "Битые ссылки на префабы",
+                "Экземпляры ссылаются на префабы, которых нет в библиотеке "
+                "(их переименовали или удалили):\n\n%s\n\nПоказаны красной "
+                "рамкой без тайлов. Верните префабам эти имена или переназначьте "
+                "объекты. Правильное переименование, само прошивающее уровень, "
+                "— в редакторе префабов (Сохранить)." % lines)
 
     # ---- экземплярная модель ----------------------------------------------
     def _recompute_grid(self):
@@ -752,6 +813,7 @@ class LevelEditor:
         генератора). Отличие от «чистого» порядка списка — z-конфликт; считаем
         его, чтобы не выдавать превью, которого железка не повторит."""
         prefabs, inst = self.prefabs, self.inst
+        self._sync_broken()                 # держать плейсхолдеры/red-рамки в тоне
         self.grid = bytearray(expand_by_blocks(self.cols, self.rows,
                                                prefabs, inst))
         nat = expand_instances(self.cols, self.rows, prefabs, inst)

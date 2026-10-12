@@ -338,17 +338,18 @@ def pack_instances(instances, ids):
     return bytes(data)
 
 
-def pack_rects(variants):
+def pack_rects(variants, n_tiles):
     """Словарь -> поток по 5 байт {t, dx, dy, w, h}; dx/dy — смещение внутри."""
     data = bytearray()
     for v in variants:
         for r in v["rects"]:
             t = int(r["t"]); dx = int(r["dx"]); dy = int(r["dy"])
             w = int(r["w"]); h = int(r["h"])
-            if not (0 <= t <= PL.TILE_INDEX_LIMIT and 0 <= dx <= 255
+            if not (0 <= t <= PL.TILE_INDEX_LIMIT and t < n_tiles and 0 <= dx <= 255
                     and 0 <= dy <= 255 and 0 < w <= 255 and 0 < h <= 255):
                 sys.exit(f"rects: значение вне компактного формата {r} "
-                         f"(вариант {v['name']} {v['w']}x{v['h']})")
+                         f"(вариант {v['name']} {v['w']}x{v['h']}; "
+                         f"тайл должен быть ≤ {PL.TILE_INDEX_LIMIT} и < {n_tiles})")
             data += bytearray([t, dx, dy, w, h])
     return bytes(data)
 
@@ -542,7 +543,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
     inst = model["instances"]
     variants = model["variants"]
     pf_data = pack_instances(inst, model["ids"])
-    pf_rects = pack_rects(variants)
+    pf_rects = pack_rects(variants, len(tileset))
     var_ofs, var_n = var_tables(variants)
     pf_start = model["pf_start"]
     # Сколько блоков назад надо начинать скан полосы, чтобы не потерять широкие

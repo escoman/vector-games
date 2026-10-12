@@ -708,10 +708,10 @@ def report(ref, res, objects, counts, bad, debug):
     print("проходы скана: %s — выбран «%s»"
           % (", ".join("%s: %d экз. -> %d Б" % p for p in res["passes"]),
              res["winner"]))
-    if len(variants) > P.TILE_INDEX_LIMIT:
+    if len(variants) > P.VAR_ID_LO7:
         print("id варианта: %d > %d — 7 бит байта 0 не хватает; формат несёт "
               "12 бит (7 в байте 0 + 5 в байте резерва экземпляра, лимит %d)"
-              % (len(variants), P.TILE_INDEX_LIMIT, P.MAX_VARIANTS))
+              % (len(variants), P.VAR_ID_LO7, P.MAX_VARIANTS))
     print()
     print("сколько экземпляров какого префаба:")
     per = defaultdict(lambda: [0, 0, 0, 0])      # экз, вар, rect, байты

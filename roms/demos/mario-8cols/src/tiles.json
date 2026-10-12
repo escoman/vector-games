@@ -882,6 +882,34 @@
    "wall": false,
    "platform": false,
    "transparent": false
+  },
+  {
+   "index": 126,
+   "file": "tiles/tile_126.png",
+   "wall": false,
+   "platform": false,
+   "transparent": false
+  },
+  {
+   "index": 127,
+   "file": "tiles/tile_127.png",
+   "wall": false,
+   "platform": false,
+   "transparent": false
+  },
+  {
+   "index": 128,
+   "file": "tiles/tile_128.png",
+   "wall": false,
+   "platform": false,
+   "transparent": false
+  },
+  {
+   "index": 129,
+   "file": "tiles/tile_129.png",
+   "wall": false,
+   "platform": false,
+   "transparent": false
   }
  ]
 }

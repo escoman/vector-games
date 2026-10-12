@@ -59,7 +59,12 @@ MAX_ROWS = 255               # y ≤ 255; tile_stride/cam_row — байт
 MIN_COLS = 64                # RAM-окно tile_win = OBJ_WIN_COLS(64) колонок
 MIN_ROWS = 32                # экран VIEW_ROWS = 32 строки, иначе камере тесно
 TILEMAP_LIMIT = 65535        # cols*rows: 16-битная адресация тайлкарты (asm)
-TILE_INDEX_LIMIT = 127       # tile: 7 бит в первом байте rect'а
+TILE_INDEX_LIMIT = 255       # tile: первый байт rect'а — полный байт (0..255).
+                             # Legacy-потолок 127 был ошибочным: бит 7 тайла ничем
+                             # не занят, bake (main.c t=o[0]) и рендер (mario.asm
+                             # tile*16) берут все 8 бит. Фактический предел — размер
+                             # набора (проверка t < n_tiles), а не 7 бит.
+VAR_ID_LO7 = 127             # нижние 7 бит id варианта в байте 0 (байт 3 — ещё 5)
 MAX_VARIANTS = 4095          # id варианта: 7 бит байта 0 + 5 бит байта 3
                              # (байт 3 = резерв: старшие биты id + будущий mirror);
                              # карта требует >127 только из-за тайлов-одиночек
@@ -213,9 +218,12 @@ def section_of(pf):
 
 
 def sort_key_prefabs(prefabs):
-    """Порядок библиотеки: по секциям (PF_SECTIONS), внутри — как заведены."""
+    """Порядок библиотеки: по секциям (PF_SECTIONS), внутри секции — по имени.
+    Регистр не важен: «Труба» и «трава» в одной секции идут в алфавите, а не
+    разбросанные заглавными буквами в начало."""
     idx = {s: i for i, s in enumerate(PF_SECTIONS)}
-    return sorted(prefabs, key=lambda p: idx.get(section_of(p), len(idx)))
+    return sorted(prefabs, key=lambda p: (idx.get(section_of(p), len(idx)),
+                                          (p.get("name") or "").lower()))
 
 
 # ---------------------------------------------------------------------------
@@ -543,16 +551,25 @@ def validate_instances(cols, rows, prefabs, instances, variants=None):
     """
     errs = []
     by_name = {pf["name"]: pf for pf in prefabs}
+    # Битые ссылки ловим ПЕРВЫМИ: build_variants берёт префаб по имени и на
+    # отсутствующем падает KeyError, а нужен внятный список, не трейсбек. Пока
+    # есть висячие имена — остальное не проверяем (размеры неизвестны).
+    broken = {}
+    for inst in instances:
+        if inst["pf"] not in by_name:
+            broken[inst["pf"]] = broken.get(inst["pf"], 0) + 1
+    if broken:
+        for nm, cnt in sorted(broken.items()):
+            errs.append("нет префаба %r в библиотеке (%d экз. на карте)"
+                        % (nm, cnt))
+        return errs
     if variants is None:
         variants, _ = build_variants(prefabs, instances)
     if len(variants) > MAX_VARIANTS:
         errs.append("вариантов %d > %d (id варианта 12 бит)"
                     % (len(variants), MAX_VARIANTS))
     for i, inst in enumerate(instances):
-        pf = by_name.get(inst["pf"])
-        if pf is None:
-            errs.append("#%d: нет префаба %r в библиотеке" % (i, inst["pf"]))
-            continue
+        pf = by_name[inst["pf"]]
         x, y = int(inst["x"]), int(inst["y"])
         w, h = instance_size(pf, inst)
         if not 0 <= x <= MAX_COLS - 1:
