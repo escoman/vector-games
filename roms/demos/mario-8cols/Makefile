@@ -29,8 +29,13 @@ assets:
 # правит оба файла (и дописывает одиночные тайлы в prefabs.json). Без них make
 # молча линкует ROM из устаревшего level.inc — карта в железе расходится с
 # тем, что нарисовано в редакторе.
+# $(wildcard src/tiles/*.png): gen_assets читает НЕ мастер src/tiles.png, а
+# нарезку src/tiles/tile_NNN.png. Правим отдельный тайл (например, дизеринг
+# оранжевой площадки) — без этой строки make считает level.inc свежим, и ROM
+# печётся из старых тайлов: штриховка «пропадает».
 src/level.inc src/mario.inc: src/tiles.png src/tiles.json src/mario.png \
                              src/objects.json src/prefabs.json \
+                             $(wildcard src/tiles/*.png) \
                              tools/gen_assets.py tools/prefablib.py
 	python3 tools/gen_assets.py
 
