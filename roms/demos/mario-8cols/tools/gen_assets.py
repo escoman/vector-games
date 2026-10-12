@@ -13,12 +13,18 @@ gen_assets.py — ассеты демки Mario 8-цвет (сплит по пл
 спрайта CH[ch] (один и тот же RGB во всех четырёх «рядах» bg). Пустой пиксель =
 индекс 0 = небо, поэтому тайл из чистого неба = все нули и в VRAM не пишется.
 
-Источник истины: src/level.json (раскладка), src/tiles/*.png (графика тайлов),
+Источник истины: src/objects.json (список экземпляров префабов, схема v2) +
+src/prefabs.json (библиотека), src/tiles/*.png (графика тайлов),
 src/tiles.json (твёрдость, вариант C), src/mario.png (лента спрайтов Mario).
+src/level.json — плоская сетка, из которой исторически выросли объекты; она
+обязана побайтово совпадать с развёрнутым списком экземпляров (чекпоинт
+паритета tools/check_parity.py).
 
 Выход:
   src/level.inc  — палитра (16 слотов), тайлсет 8x8 (2 плоскости, 16 Б),
-                   тайлкарта, tile_nz (2 бита), pair_top, tile_solid;
+                   словарь вариантов префабов (pf_rects/pf_var_ofs/pf_var_n),
+                   список экземпляров (pf_data) и старты групп по блокам
+                   (pf_start), tile_nz (2 бита), pair_top, tile_solid;
   src/mario.inc  — спрайты 16x16 (2 плоскости, 64 Б, без маски).
 
 Формат Вектора (256x256, блок = x/8 = 256 байт, байт i = строка y=255-i,
@@ -33,7 +39,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "..", "src")
 sys.path.insert(0, HERE)
-from objects_from_grid import cover_rectangles            # noqa: E402
+import prefablib as PL                                     # noqa: E402
 
 # ---- Геометрия уровня -------------------------------------------------------
 BAND_TOP = 176          # верх видимой полосы уровня (нативные пиксели tiles.png)
@@ -203,31 +209,55 @@ def _compute_pair_top(cols, rows, tilemap):
 
 
 def build_level_editor():
+    """src/objects.json v2 (экземпляры) + src/prefabs.json -> модель уровня."""
     with open(os.path.join(SRC, "level.json")) as f:
         lv = json.load(f)
     with open(os.path.join(SRC, "tiles.json")) as f:
         tj = json.load(f)
     cols, rows = int(lv["cols"]), int(lv["rows"])
-    # Источник карты: объекты (src/objects.json), если есть и размер сходится;
-    # иначе — сегментируем плоскую сетку level.json. Побайтовый вывод идентичен
-    # (чекпоинт паритета tools/check_parity.py).
-    o_cols, o_rows, objects = load_objects()
-    if objects is None or (o_cols, o_rows) != (cols, rows):
-        objects = cover_rectangles(cols, rows, lv["grid"])
-    # Сортировка по колонке (стабильно по y): объекты дизъюнктны (покрытие),
-    # поэтому побайтовая карта НЕ меняется (чекпоинт паритета проходит), а
-    # рантайм-перепечка окна получает список по x -> скан стартует с нужного
-    # блока (obj_start) и рано выходит (см. bake_window / write_level).
-    objects = sorted(objects, key=lambda o: (int(o["x"]), int(o["y"])))
-    tilemap = expand_objects(cols, rows, objects)
+    # Источник карты — список экземпляров префабов. Плоскую сетку level.json
+    # больше не сегментируем: ROM хранит словарь вариантов и разворачивает
+    # экземпляр в тайлы при запекании окна (bake_groups в main.c).
+    prefabs = PL.load_prefabs()
+    o_cols, o_rows, instances = PL.load_instances()
+    if instances is None:
+        sys.exit("нет src/objects.json — уровень собирается из списка "
+                 "экземпляров: python3 tools/prefab_migrate.py --apply --force "
+                 "или tools/level_editor.py")
+    if (o_cols, o_rows) != (cols, rows):
+        sys.exit(f"objects.json: {o_cols}x{o_rows} != level.json {cols}x{rows}")
+    errs = PL.validate_instances(cols, rows, prefabs, instances)
+    if errs:
+        sys.exit("objects.json: " + "; ".join(errs[:5]))
+    variants, ids = PL.build_variants(prefabs, instances)
+    # Сортировка списка: (32-колоночный блок, порядок в списке). Внутри блока
+    # порядок списка = z-order (первый печётся первым), между блоками порядок
+    # задаёт блок — поэтому перепечка полосы читает непрерывный отрезок списка,
+    # начинаясь с pf_start[блок] (см. write_level / bake_groups).
+    order = sorted(range(len(instances)),
+                   key=lambda i: (int(instances[i]["x"]) // PL.OBJ_WIN_STEP, i))
+    model = {"instances": [instances[i] for i in order],
+             "ids": [ids[i] for i in order],
+             "variants": variants,
+             "pf_start": block_starts(instances, cols)}
+    # Картой «что лежит в tile_win» считаем то, что реально напечатает ROM,
+    # то есть порядок групп. Он же равен порядку списка (z-order редактора),
+    # если ни одна перекрывающаяся пара не пересекает границу 32 колонок.
+    tilemap = PL.expand_instances(cols, rows, prefabs, model["instances"])
+    zdiff = sum(1 for i, v in enumerate(PL.expand_instances(cols, rows,
+                                                             prefabs, instances))
+                if v != tilemap[i])
+    if zdiff:
+        print(f"ВНИМАНИЕ: z-order воюет с блочной группировкой в {zdiff} "
+              f"клетках: на границе 32 колонок порядок наложения задаёт блок")
     if len(tilemap) != cols * rows:
         sys.exit("level: карта не соответствует cols*rows")
     # Ограничения адресации рендера (mario.asm, 8080, 16-битные указатели):
     #   * stride = LEVEL_ROWS и cam_row — байтовые (кольцо 256 строк = 32 ряда);
     #   * cam*stride < размер tilemap = cols*rows должен влезать в 16 бит.
-    if rows > 255:
-        sys.exit(f"level.json: rows={rows} > 255 — stride/камера байтовые, "
-                 f"кольцо вертикали 256 px")
+    if rows > PL.MAX_ROWS:
+        sys.exit(f"level.json: rows={rows} > {PL.MAX_ROWS} — stride/камера "
+                 f"байтовые, кольцо вертикали 256 px")
     if cols * rows > 65535:
         sys.exit(f"level.json: cols*rows={cols*rows} > 65535 — тайлкарта не "
                  f"влезает в 16-битную адресацию (сделайте уже/ниже)")
@@ -241,27 +271,117 @@ def build_level_editor():
         sys.exit("tiles.json: тайл 0 должен быть пустым (небо = все нули)")
     tile_nz = _compute_tile_nz(tileset)
     pair_top = _compute_pair_top(cols, rows, tilemap)
+    nrect = sum(len(v["rects"]) for v in variants)
     print(f"level(editor): {cols}x{rows}, тайлов в наборе: {len(tileset)}, "
-          f"тайл {TILE_BYTES} Б (2 плоскости), объектов: {len(objects)}")
-    return cols, rows, tileset, bytes(tilemap), bytes(tile_nz), bytes(pair_top), objects
+          f"тайл {TILE_BYTES} Б (2 плоскости), экземпляров: "
+          f"{len(model['instances'])}, вариантов: {len(variants)}, rect'ов в "
+          f"словаре: {nrect}")
+    print(f"  смета уровня: {PL.level_bytes(model['instances'], variants)} Б "
+          f"({P_INST}×{len(model['instances'])} + {P_VAR}×{len(variants)} + "
+          f"{P_RECT}×{nrect}) — словарь экземпляров вместо 5 Б на прямоугольник")
+    return (cols, rows, tileset, bytes(tilemap), bytes(tile_nz),
+            bytes(pair_top), model)
 
 
 # ---------------------------------------------------------------------------
-# Объектная модель (Фаза 1): список объектов -> плоская tilemap офлайн
+# Словарь вариантов: список экземпляров -> таблицы ROM
 # ---------------------------------------------------------------------------
-# src/objects.json (из tools/objects_from_grid.py) хранит уровень как набор
-# объектов {t, x, y, w, h} вместо 20-КиБ сетки.expand_objects разворачивает их
-# обратно в tilemap col-major — побайтово ту же карту, что и grid (чекпоинт
-# паритета tools/check_parity.py). В рантайме (Фаза 3) та же логика будет печь
-# только видимое окно, а не всю карту.
+# ROM не хранит 20-КиБ тайлкарту и не хранит rect'ы карты. Он хранит СЛОВАРЬ
+# вариантов префаба (различные (префаб, w, h) -> список тайловых прямоугольни-
+# ков) и список экземпляров {вариант, x, y}; при запекании окна экземпляр
+# разворачивается в тайлы на лету (bake_groups в main.c). Таблица pf_start
+# разбивает список на группы 32-колоночных блоков: скан полосы читает ровно
+# свою группу плюс чуть левее (PF_BACK блоков — широкие экземпляры).
+
+P_INST = PL.INST_BYTES            # экземпляр: {v_low7|x8, xlo, y, v_high5}
+P_RECT = PL.RECT_BYTES            # прямоугольник варианта: {t, dx, dy, w, h}
+P_VAR = PL.VAR_BYTES              # таблица варианта: ofs(u16) + n(u8)
+
+
+def block_starts(instances, cols):
+    """Экземпляры (в ROM-порядке) -> pf_start[блок]: начало группы блока.
+
+    Список уже отсортирован по (блок, порядок списка), поэтому стартом группы
+    b будет сумма количеств экземпляров в блоках < b. Последний элемент =
+    PF_COUNT (sentinel): сдвиг окна за правый край уровня читает пустую группу.
+    """
+    step = PL.OBJ_WIN_STEP
+    nblocks = (cols + step - 1) // step
+    counts = [0] * nblocks
+    for o in instances:
+        counts[min(int(o["x"]) // step, nblocks - 1)] += 1
+    starts = [0]
+    for c in counts:
+        starts.append(starts[-1] + c)
+    return starts
+
+
+def pack_instances(instances, ids):
+    """Экземпляры -> 4 байта: {v_low7|x8, xlo, y, v_high5}.
+
+    Байт 0: младшие 7 бит id варианта + 9-й бит колонки (x ≤ 511); байт 1:
+    младший байт x; байт 2: y (≤ 255); байт 3: старшие 5 бит id варианта
+    (вариантов до 4095), 3 бита — резерв (например под future mirror).
+    Порядок = порядок списка = z-order внутри блока.
+    """
+    data = bytearray()
+    for o, v in zip(instances, ids):
+        x = int(o["x"])
+        y = int(o["y"])
+        if not (0 <= v <= PL.MAX_VARIANTS and 0 <= x <= PL.MAX_COLS - 1
+                and 0 <= y <= PL.MAX_ROWS - 1):
+            sys.exit(f"instances: значение вне компактного формата {o} (v={v})")
+        data.append((v & 0x7F) | (((x >> 8) & 1) << 7))
+        data.append(x & 0xFF)
+        data.append(y)
+        data.append((v >> 7) & 0x1F)
+    return bytes(data)
+
+
+def pack_rects(variants):
+    """Словарь -> поток по 5 байт {t, dx, dy, w, h}; dx/dy — смещение внутри."""
+    data = bytearray()
+    for v in variants:
+        for r in v["rects"]:
+            t = int(r["t"]); dx = int(r["dx"]); dy = int(r["dy"])
+            w = int(r["w"]); h = int(r["h"])
+            if not (0 <= t <= PL.TILE_INDEX_LIMIT and 0 <= dx <= 255
+                    and 0 <= dy <= 255 and 0 < w <= 255 and 0 < h <= 255):
+                sys.exit(f"rects: значение вне компактного формата {r} "
+                         f"(вариант {v['name']} {v['w']}x{v['h']})")
+            data += bytearray([t, dx, dy, w, h])
+    return bytes(data)
+
+
+def var_tables(variants):
+    """-> (ofs u16 по вариантам, n u8 по вариантам)."""
+    ofs = []
+    ns = []
+    acc = 0
+    for v in variants:
+        ofs.append(acc)
+        ns.append(len(v["rects"]))
+        acc += len(v["rects"])
+    return ofs, ns
+
+
+# ---------------------------------------------------------------------------
+# Чтение старого формата (rect'ы) — нужно мигратору и чекпоинту паритета
+# ---------------------------------------------------------------------------
+# src/objects.json версии 1 хранил уровень как набор объектов {t, x, y, w, h}.
+# expand_objects разворачивает их обратно в tilemap col-major побайтово к той же
+# карте, что и grid (чекпоинт паритета tools/check_parity.py). ROM этот формат
+# больше не читает: v2 — словарь вариантов + список экземпляров.
 
 def load_objects():
-    """src/objects.json -> (cols, rows, objects); нет файла -> (None, None, None)."""
+    """src/objects.json v1 -> (cols, rows, objects); v2/нет файла -> None."""
     path = os.path.join(SRC, "objects.json")
     if not os.path.exists(path):
         return None, None, None
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         ov = json.load(f)
+    if int(ov.get("version", 1)) != 1:
+        return int(ov["cols"]), int(ov["rows"]), None
     return int(ov["cols"]), int(ov["rows"]), ov["objects"]
 
 
@@ -417,49 +537,23 @@ def fmt_array_u16(f, name, vals, per_line=10):
     f.write("};\n\n")
 
 
-def pack_objects(objects):
-    """Объекты -> компактный поток по 5 байт: {flags, xlo, y, w, h}.
-
-    flags = (tile & 0x7F) | ((x >> 8) & 1) << 7 — индекс тайла (0..125) и
-    девятый бит колонки (x до 511). xlo — младший байт x. y/w/h — байты.
-    Порядок = порядок отрисовки (поздние перекрывают ранние).
-    """
-    data = bytearray()
-    for o in objects:
-        t = int(o["t"]); x = int(o["x"]); y = int(o["y"])
-        w = int(o["w"]); h = int(o["h"])
-        if not (0 <= t <= 127 and 0 <= x <= 511 and 0 <= y <= 255
-                and 0 < w <= 255 and 0 < h <= 255):
-            sys.exit(f"objects: значение вне компактного формата {o}")
-        data.append((t & 0x7F) | (((x >> 8) & 1) << 7))
-        data.append(x & 0xFF)
-        data.append(y)
-        data.append(w)
-        data.append(h)
-    return bytes(data)
-
-
-def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects):
+def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
     path = os.path.join(SRC, "level.inc")
-    obj_data = pack_objects(objects)
-    # Таблица стартов скана перепечки: объекты отсортированы по x; для окна с
-    # базой k*STEP первый релевантный объект — первый с x >= k*STEP - max_w
-    # (объект левее max_w гарантированно не достаёт до окна). bake_cols() начинает
-    # скан с obj_start[блок] и обрывается на x >= конца полосы. Последний элемент —
-    # sentinel (= OBJ_COUNT): инкрементальный сдвиг на последний блок читает
-    # obj_start[nblocks] (правая половина за концом уровня -> пуста, скан пустой).
-    step = 32
-    nblocks = (cols + step - 1) // step
-    max_w = max((int(o["w"]) for o in objects), default=0)
-    xs = [int(o["x"]) for o in objects]
-    obj_start = []
-    j = 0
-    for k in range(nblocks):
-        thr = k * step - max_w
-        while j < len(xs) and xs[j] < thr:
-            j += 1
-        obj_start.append(j)
-    obj_start.append(len(objects))   # sentinel для инкрементального сдвига на край
+    inst = model["instances"]
+    variants = model["variants"]
+    pf_data = pack_instances(inst, model["ids"])
+    pf_rects = pack_rects(variants)
+    var_ofs, var_n = var_tables(variants)
+    pf_start = model["pf_start"]
+    # Сколько блоков назад надо начинать скан полосы, чтобы не потерять широкие
+    # экземпляры: экземпляр блока b' достаёт до колонки 32b, если 32(b-b') <
+    # max_w + 32, то есть не дальше ceil(max_w/32) блоков. Внутренний клип по
+    # [wstart, wend) отсекает лишнее, поэтому запас безопасен.
+    max_w = max((v["w"] for v in variants), default=0)
+    pf_back = (max_w + PL.OBJ_WIN_STEP - 1) // PL.OBJ_WIN_STEP
+    nrect = sum(len(v["rects"]) for v in variants)
+    budget = (len(pf_data) + len(pf_rects) + 2 * len(var_ofs) + len(var_n)
+              + 2 * len(pf_start))
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py (Mario 8-col, сплит по плоскостям). "
                 "Не править руками. */\n\n")
@@ -475,21 +569,34 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects):
         # полоса [cam, cam+VIEW_BLOCKS] всегда лежала в запеченном окне.
         f.write("#define OBJ_WIN_COLS   64      /* колонок в RAM-окне tile_win */\n")
         f.write("#define OBJ_WIN_STEP   32      /* шаг сдвига окна (cam>>5<<5) */\n")
-        f.write(f"#define OBJ_WIN_BLOCKS {nblocks}     /* ceil(LEVEL_COLS/OBJ_WIN_STEP) */\n")
-        f.write(f"#define OBJ_COUNT    {len(objects)}\n")
-        f.write("/* Объекты: 5 байт {flags,xlo,y,w,h}; flags=(tile&0x7F)|(x>>8<<7).\n")
-        f.write("   Развёртка в окне — функцией bake_window() в main.c. */\n")
+        f.write(f"#define OBJ_WIN_BLOCKS {len(pf_start) - 1}     /* ceil(LEVEL_COLS/OBJ_WIN_STEP) */\n")
+        f.write(f"#define PF_COUNT     {len(inst)}   /* экземпляров уровня */\n")
+        f.write(f"#define PF_VARIANTS  {len(variants)}   /* различных (префаб, w, h) */\n")
+        f.write(f"#define PF_RECTS     {nrect}   /* тайловых прямоугольников в словаре */\n")
+        f.write(f"#define PF_BACK      {pf_back}     /* блоков назад за широкие экземпляры */\n")
+        f.write("/* Экземпляр: 4 байта {v&0x7F | (x>>8)<<7, x&0xFF, y, v>>7}.\n")
+        f.write("   Вариант: pf_var_ofs[v] (u16, индекс rect'а) + pf_var_n[v] (u8, число\n")
+        f.write("   rect'ов); rect: 5 байт {t, dx, dy, w, h} — смещение внутри экземпляра.\n")
+        f.write("   Список отсортирован по (x>>5, z-order), pf_start[блок] — начало группы;\n")
+        f.write("   pf_start[OBJ_WIN_BLOCKS] = PF_COUNT (sentinel). Развёртка в окне —\n")
+        f.write("   bake_groups() в main.c. */\n")
         fmt_array(f, "level_palette", bytes(PALETTE))
         joined = b"".join(tileset)
         fmt_array(f, "tileset", joined)
-        fmt_array(f, "obj_data", obj_data)         # список объектов (вместо tilemap)
-        fmt_array_u16(f, "obj_start", obj_start)   # старт скана перепечки по блокам
+        fmt_array(f, "pf_data", pf_data)           # список экземпляров
+        fmt_array(f, "pf_rects", pf_rects)         # словарь прямоугольников вариантов
+        fmt_array_u16(f, "pf_var_ofs", var_ofs)    # вариант -> первый rect
+        fmt_array(f, "pf_var_n", var_n)            # вариант -> число rect'ов
+        fmt_array_u16(f, "pf_start", pf_start)     # старт группы блока экземпляров
         fmt_array(f, "tile_nz", tile_nz)           # 2 бита: непустая плоскость веса 8 / 4
         fmt_array(f, "pair_top", pair_top)         # верх diff'а на пару соседних колонок
         f.write("\n/* Коллизии (src/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
         f.write("#define COLL_WALL   2   /* непроходимо */\n")
         f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
         fmt_array(f, "tile_solid", tile_solid)
+    print(f"  словари уровня: {budget} Б (pf_data {len(pf_data)} + pf_rects "
+          f"{len(pf_rects)} + варианты {2 * len(var_ofs) + len(var_n)} + "
+          f"pf_start {2 * len(pf_start)})")
     print(f"wrote {path} ({os.path.getsize(path)} bytes)")
 
 
@@ -521,10 +628,10 @@ def write_sprites(sprites):
 
 
 def main():
-    cols, rows, tileset, tilemap, tile_nz, pair_top, objects = build_level_editor()
+    cols, rows, tileset, tilemap, tile_nz, pair_top, model = build_level_editor()
     tile_solid = load_tile_solid(len(tileset))
     sprites = build_sprites()
-    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, objects)
+    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model)
     write_sprites(sprites)
 
 

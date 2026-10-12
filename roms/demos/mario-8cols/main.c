@@ -113,7 +113,8 @@ unsigned char cam_row;
 unsigned char tile_stride;
 
 /* Кольцевое RAM-окно тайлкарты (Фаза 3). Вместо 20-КиБ tilemap в ROM держим в
- * RAM только OBJ_WIN_COLS колонок, запечённых из obj_data. Читают и C (pesh,
+ * RAM только OBJ_WIN_COLS колонок, запечённых из словаря вариантов и списка
+ * экземпляров (pf_data/pf_rects). Читают и C (pesh,
  * solid_at), и mario.asm (EXTERN _tile_win / _tile_win_base) — поэтому глобальные.
  * tile_win_base — МИРОВАЯ колонка окна[0] (кратна OBJ_WIN_STEP). */
 unsigned char tile_win[OBJ_WIN_COLS * LEVEL_ROWS];
@@ -135,9 +136,10 @@ static const unsigned char *drawn_spr;
  *     (сравнение с <=64 инлайнится cp), иначе sccz80 на КАЖДУЮ ячейку вставлял
  *     вызов 16-битного сравнения (l_uge/l_ge) -> миллионы вызовов -> секунды
  *     фриза;
- *   * объекты отсортированы по x, скан начинается с obj_start[блок] (первый,
- *     способный достать до полосы с учётом max_w) и обрывается на x >= конца
- *     полосы -> охватываем только узкую полосу, а не весь список. */
+ *   * список экземпляров отсортирован по 32-колоночным блокам, скан полосы
+ *     начинается с pf_start[блок] и обрывается на конце полосы -> охватываем
+ *     только узкую полосу, а не весь список. За назад отступаем на PF_BACK
+ *     блоков: широкий экземпляр живёт в группе своего левого края. */
 
 /* Обнуление локальных колонок окна [cstart, cend). */
 static void bake_clear(unsigned char cstart, unsigned char cend)
@@ -149,39 +151,64 @@ static void bake_clear(unsigned char cstart, unsigned char cend)
             *p++ = 0;
 }
 
-/* Запечь в окно МИРОВЫЕ колонки [wstart, wend), начиная с индекса i списка
- * объектов. Клип по [wstart, wend), поэтому пережившую половину можно занести
- * отдельно (memmove в bake_shift), а сюда подавать только новую половину. */
-static void bake_cols(unsigned int wstart, unsigned int wend, unsigned int i)
+/* Запечь в окно МИРОВЫЕ колонки [wstart, wend) — обе кратны OBJ_WIN_STEP.
+ * Клип по [wstart, wend), поэтому пережившую половину можно занести отдельно
+ * (memmove в bake_shift), а сюда подавать только новую половину.
+ *
+ * Список экземпляров отсортирован по (x>>5, z-order), поэтому полоса —
+ * непрерывный отрезок [pf_start[b0], pf_start[b1+1]); влево отступаем на
+ * PF_BACK блоков, иначе теряется прогон земли, лежащий в группе соседа. Клип
+ * каждого прямоугольника по [wstart, wend) делает этот запас безвредным.
+ * Прямоугольники пишутся в порядке словаря, экземпляры — в порядке списка, то
+ * есть поздние перекрывают ранних (z-order). */
+static void bake_groups(unsigned int wstart, unsigned int wend)
 {
     unsigned int  base = tile_win_base;
-    unsigned int  x, c0, c1;
-    unsigned char c, r, y, w, h, nrows, ncols, t;
-    const unsigned char *o;
-    unsigned char *p, *col;
+    unsigned int  b0 = wstart >> 5, b1 = (wend - 1) >> 5;
+    unsigned int  i, end, x, v, vofs, c0, c1;
+    unsigned char y, dy, nn, k, c, r, nrows, ncols, t;
+    const unsigned char *p, *o;
+    unsigned char *q, *col;
 
-    o = obj_data + i * 5;
-    for (; i < (unsigned int)OBJ_COUNT; i++, o += 5) {
-        x = (unsigned int)o[1] | ((unsigned int)(o[0] & 0x80) << 1);
-        if (x >= wend)
-            break;                          /* дальше только правее полосы */
-        y = o[2]; w = o[3]; h = o[4];
-        if (x + w <= wstart)
-            continue;                       /* левее запекаемой полосы */
-        t = o[0] & 0x7F;
-        c0 = (x > wstart) ? x : wstart;
-        c1 = x + w;
-        if (c1 > wend) c1 = wend;
-        nrows = h;                          /* байт: высота с обрезкой по низу */
-        if ((unsigned int)y + nrows > (unsigned int)LEVEL_ROWS)
-            nrows = (unsigned char)(LEVEL_ROWS - y);
-        ncols = (unsigned char)(c1 - c0);   /* <= OBJ_WIN_COLS, влезает в байт */
-        col = tile_win + (c0 - base) * LEVEL_ROWS;
-        for (c = 0; c < ncols; c++) {
-            p = col + y;
-            for (r = 0; r < nrows; r++)
-                *p++ = t;
-            col += LEVEL_ROWS;
+    if (b0 > (unsigned int)PF_BACK)
+        b0 -= PF_BACK;
+    else
+        b0 = 0;
+    if (b1 >= (unsigned int)OBJ_WIN_BLOCKS)
+        b1 = (unsigned int)OBJ_WIN_BLOCKS - 1;
+    end = pf_start[b1 + 1];
+    i = pf_start[b0];
+    p = pf_data + i * 4;
+    for (; i < end; i++, p += 4) {
+        x = (unsigned int)p[1] | ((unsigned int)(p[0] & 0x80) << 1);
+        y = p[2];
+        v = (unsigned int)(p[0] & 0x7F) | ((unsigned int)(p[3] & 0x1F) << 7);
+        vofs = pf_var_ofs[v];
+        nn = pf_var_n[v];
+        for (k = 0; k < nn; k++) {
+            o = pf_rects + (vofs + (unsigned int)k) * 5;
+            c0 = x + (unsigned int)o[1];              /* dx */
+            if (c0 < wstart)
+                c0 = wstart;
+            c1 = x + (unsigned int)o[1] + (unsigned int)o[3];   /* dx + w */
+            if (c1 > wend)
+                c1 = wend;
+            if (c0 >= c1)
+                continue;                     /* прямоугольник вне полосы */
+            dy = o[2];
+            nrows = o[4];
+            if ((unsigned int)y + (unsigned int)dy + nrows
+                    > (unsigned int)LEVEL_ROWS)
+                nrows = (unsigned char)(LEVEL_ROWS - y - dy);
+            ncols = (unsigned char)(c1 - c0);         /* <= OBJ_WIN_COLS */
+            t = o[0];
+            col = tile_win + (c0 - base) * LEVEL_ROWS;
+            for (c = 0; c < ncols; c++) {
+                q = col + y + dy;
+                for (r = 0; r < nrows; r++)
+                    *q++ = t;
+                col += LEVEL_ROWS;
+            }
         }
     }
 }
@@ -192,7 +219,7 @@ static void bake_window(void)
 {
     unsigned int b = tile_win_base;
     bake_clear(0, OBJ_WIN_COLS);
-    bake_cols(b, b + OBJ_WIN_COLS, obj_start[b >> 5]);
+    bake_groups(b, b + OBJ_WIN_COLS);
 }
 
 /* Инкрементальный сдвиг базы на ОДИН шаг окна: сдвигаем выжившую половину
@@ -216,7 +243,7 @@ static unsigned char bake_shift(unsigned int nb)
                 *d++ = *s++;
         tile_win_base = nb;
         bake_clear(OBJ_WIN_STEP, OBJ_WIN_COLS);
-        bake_cols(nb + OBJ_WIN_STEP, nb + OBJ_WIN_COLS, obj_start[(nb >> 5) + 1]);
+        bake_groups(nb + OBJ_WIN_STEP, nb + OBJ_WIN_COLS);
         return 1;
     }
     if (nb + OBJ_WIN_STEP == old) {
@@ -229,7 +256,7 @@ static unsigned char bake_shift(unsigned int nb)
                 *d++ = *s++;
         tile_win_base = nb;
         bake_clear(0, OBJ_WIN_STEP);
-        bake_cols(nb, nb + OBJ_WIN_STEP, obj_start[nb >> 5]);
+        bake_groups(nb, nb + OBJ_WIN_STEP);
         return 1;
     }
     return 0;                               /* прыжок: нужна полная перепечка */

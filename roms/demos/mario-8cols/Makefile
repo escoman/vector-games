@@ -20,11 +20,18 @@ all: $(TARGET)
 
 full: clean all deploy
 
-# Ассеты: tiles.png/tiles.json/mario.png -> src/level.inc, src/mario.inc
+# Ассеты: tiles.png/tiles.json/mario.png + объекты уровня -> src/*.inc
 assets:
 	python3 tools/gen_assets.py
 
-src/level.inc src/mario.inc: src/tiles.png src/tiles.json src/mario.png tools/gen_assets.py
+# src/objects.json и src/prefabs.json ОБЯЗАТЕЛЬНЫ в списке зависимостей:
+# level.inc печёт словарь вариантов и список экземпляров, а редактор уровня
+# правит оба файла (и дописывает одиночные тайлы в prefabs.json). Без них make
+# молча линкует ROM из устаревшего level.inc — карта в железе расходится с
+# тем, что нарисовано в редакторе.
+src/level.inc src/mario.inc: src/tiles.png src/tiles.json src/mario.png \
+                             src/objects.json src/prefabs.json \
+                             tools/gen_assets.py tools/prefablib.py
 	python3 tools/gen_assets.py
 
 $(TARGET): src/level.inc src/mario.inc mario.asm main.c
