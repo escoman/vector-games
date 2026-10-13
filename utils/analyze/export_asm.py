@@ -10,8 +10,8 @@ ASM пишет экспортер из отладчика, а не Python: па�
 патча лежат нули, и round-trip обязан это воспроизводить (см.
 `roundtrip_verify`).
 
-Поиск бинаря: $V06C_ASM_EXPORT → --exporter → PATH → ../vector-debugger →
-~/Projects/vector-debugger/debugger/build. Пересборка целевого проекта не
+Поиск бинаря: $V06C_ASM_EXPORT → --exporter → PATH → ../vector-debug →
+~/Projects/vector-debug/build. Пересборка целевого проекта не
 входит в задачи пакета.
 """
 from __future__ import annotations
@@ -47,11 +47,11 @@ def find_exporter(explicit=None, root=None):
     candidates = [explicit, os.environ.get(EXPORTER_ENV),
                   shutil.which("v06c-asm-export")]
     candidates += [
-        os.path.join(root, "..", "vector-debugger", "debugger", "build",
+        os.path.join(root, "..", "vector-debug", "build",
                      "v06c-asm-export"),
-        os.path.expanduser("~/Projects/vector-debugger/debugger/build/"
+        os.path.expanduser("~/Projects/vector-debug/build/"
                            "v06c-asm-export"),
-        "/home/alexey/Projects/vector-debugger/debugger/build/v06c-asm-export",
+        "/home/alexey/Projects/vector-debug/build/v06c-asm-export",
     ]
     for path in candidates:
         if path and os.path.isfile(path) and os.access(path, os.X_OK):

@@ -51,7 +51,7 @@ from analyze.pipeline_state import PipelineFatal
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 DEFAULT_Z80ASM = os.path.join(REPO, "z88dk", "bin", "z88dk-z80asm")
-DEFAULT_EXPORTER = ("/home/alexey/Projects/vector-debugger/debugger/build/"
+DEFAULT_EXPORTER = ("/home/alexey/Projects/vector-debug/build/"
                     "v06c-asm-export")
 
 # Статусы stage (ТЗ §13).

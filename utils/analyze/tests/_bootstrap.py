@@ -31,7 +31,7 @@ PUTUP_RDB = os.path.join(REPO, "roms/redesign/putup/src/putup.rdb")
 PUTUP_SPEC = os.path.join(REPO, "roms/redesign/putup/tools/music_spec.json")
 TESTAY_ROM = os.path.join(REPO, "roms/redesign/testay/src/TESTAY.ROM")
 TESTAY_RDB = os.path.join(REPO, "roms/redesign/testay/src/TESTAY.rdb")
-MCP_SERVER = "/home/alexey/Projects/vector-debugger/debugger/build/v06c-mcp"
+MCP_SERVER = "/home/alexey/Projects/vector-debug/build/v06c-mcp"
 RISEOUT_ROM = os.path.join(REPO, "roms/redesign/riseout/src/riseout.rom")
 
 

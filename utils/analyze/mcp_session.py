@@ -34,7 +34,7 @@ import time
 
 DEFAULT_SERVER = os.environ.get(
     "V06C_MCP",
-    "/home/alexey/Projects/vector-debugger/debugger/build/v06c-mcp",
+    "/home/alexey/Projects/vector-debug/build/v06c-mcp",
 )
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "v06c-analyze", "version": "1"}
