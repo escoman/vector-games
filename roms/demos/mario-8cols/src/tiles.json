@@ -599,14 +599,14 @@
   {
    "index": 85,
    "file": "tiles/tile_085.png",
-   "wall": false,
+   "wall": true,
    "platform": false,
    "transparent": false
   },
   {
    "index": 86,
    "file": "tiles/tile_086.png",
-   "wall": false,
+   "wall": true,
    "platform": false,
    "transparent": false
   },
