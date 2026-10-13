@@ -1,0 +1,57 @@
+{
+ "note": "Профиль pipeline для run_pipeline.sh (ТЗ Launcher §5/§14/§31). Формат — JSON, не YAML. exolon — свежий ROM без .rdb: он родится первым debug_save_rdb внутри seed_rdb. Игровой процесс: boot → info → RUS → title (music) → RUS → stars → 1 → gameplay. Клавиши: RUS (переход между экранами + огонь), 1 (старт игры), стрелки (движение).",
+ "stage_args": {
+  "seed_rdb": {
+   "--max-depth": "12",
+   "--max-instructions": "100000"
+  },
+  "probe": {
+   "--seconds": "15",
+   "--snapshot": true,
+   "--key": [
+    "1:RUS",
+    "4:RUS",
+    "6:1",
+    "7:LEFT",
+    "7.5:RIGHT",
+    "8:UP",
+    "8.5:DOWN",
+    "9:RUS",
+    "10:RUS",
+    "12:SPACE"
+   ]
+  },
+  "io_signature": {
+   "--seconds": "15"
+  },
+  "memory_diff": {
+   "--run-seconds": "15"
+  },
+  "abi_scan": {
+   "--limit": "32",
+   "--run": "5",
+   "--key": [
+    "1:RUS",
+    "3:RUS",
+    "5:1",
+    "6:LEFT",
+    "7:RIGHT"
+   ]
+  },
+  "table_shape": {
+   "--runtime": true,
+   "--limit": "200"
+  },
+  "strings_scan": {
+   "--allow-ya": true,
+   "--min-len": "4"
+  }
+ },
+ "persistence": {
+  "max_unsaved_objects": 10,
+  "max_checkpoint_seconds": 300,
+  "save_after_stage": true,
+  "verify_after_save": true,
+  "checkpoint_after_save": true
+ }
+}

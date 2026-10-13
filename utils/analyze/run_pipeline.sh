@@ -32,7 +32,7 @@ REPO="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # §5/§29: таблица профилей. Единственное место launcher'а, где живёт
 # ROM-специфика (пути), — политика прогона остаётся в pipeline/config.
-PROFILES="riseout putup testay"
+PROFILES="riseout putup testay exolon"
 
 available_roms() {
     local p
@@ -69,7 +69,7 @@ NAME="$1"; shift
 
 ROM=""; CONFIG=""; PROFILE=0
 case "$NAME" in
-    riseout|putup|testay)
+    riseout|putup|testay|exolon)
         PROFILE=1
         case "$NAME" in
             riseout) ROM="$REPO/roms/redesign/riseout/src/riseout.rom"
@@ -78,6 +78,8 @@ case "$NAME" in
                      CONFIG="$REPO/roms/redesign/putup/pipeline.json" ;;
             testay)  ROM="$REPO/roms/redesign/testay/src/TESTAY.ROM"
                      CONFIG="$REPO/roms/redesign/testay/pipeline.json" ;;
+            exolon)  ROM="$REPO/roms/redesign/exolon/src/exolon.rom"
+                     CONFIG="$REPO/roms/redesign/exolon/pipeline.json" ;;
         esac
         ;;
     *.rom|*.ROM|*.bin)

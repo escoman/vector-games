@@ -1,0 +1,335 @@
+# Исследование ROM ./src/exolon.rom с помощью mcp-сервиса и python-фреймворка `analyze`
+
+Объект: `./src/exolon.rom`, 32512 байт, SHA256
+`92be64d153b4286d01d1ed4ac9c673987542b4629dfb0e0f3208ab73347c4962`.
+Первые байты — `C3 6B 78` (`JMP 786Bh`), entry `0x0100`, верх образа `0x7FFF`.
+Инициализация на `0x786B`: `DI`, `LXI SP,0100h`, `XRA A`, `OUT 10h` (отключить
+квазидиск), `OUT 03h` (скроллинг), `CALL 0103h`, `CALL 1DFBh`.
+
+В ROM читаются транслит-тексты (кодинг: `[`=Ш, `]`=Я, `^`=Ч, `Q`=Я(оконч.),
+`X`=Ь, `Y`=Ы, `V`=Ж, `W`=Щ):
+`EXOLON L COPYRIGHT 1994`, `KLAWI[I UPRAWLENIQ:`,
+`KLAWI[I KURSORA-PEREME]ENIE`, `RUS/LAT-WYSTREL`,
+`DLITELXNOE UDERVANIE-RAKETA`, `DLQ NA^ALA IGRY NAVMITE RUS/LAT`,
+`START GAME`, `GAME OVER`, `EXOLON BONUS SCREEN!`,
+`PRESS FIRE TO STOP POINTER`, `PRESS FIRE TO RESUME PLAY`,
+`CONGRATULATIONS!`, `YOU HAVE PROVEN YOUR`, `COMBAT ABILITIES`,
+`BRAVERY BONUS`, `00000 POINTS`.
+
+Игровой процесс (подтверждено пользователем, проверить через MCP):
+1. После старта — **информационный экран** (автор, адрес, управление).
+2. Нажатие **РУС/ЛАТ** (порт 01h, бит 7, active-0) — **заставка** с мелодией.
+3. Повторное нажатие **РУС/ЛАТ** — **мигание звёзд** (подготовка).
+4. Нажатие **«1»** (матрица, строка 2 бит 1) — **первый игровой экран**.
+
+В игре одна мелодия — на заставке; выгружается в MIDI.
+
+Методика учитывает, что для механических шагов
+есть готовый детерминированный фреймворк `utils/analyze` (устройства и команды
+модулей — в `utils/analyze/README.MD`, здесь они не дублируются). Все Stage,
+где нужно лишь «вызвать MCP → посчитать → оформить», делает фреймворк; ИИ
+включается только там, где нужна семантика.
+
+## Stage 0. Автоматизированное исследование (главный вход)
+
+Весь детерминированный слой поднимается **одной командой**:
+
+```bash
+utils/analyze/run_pipeline.sh exolon            # полный прогон (apply по умолчанию)
+utils/analyze/run_pipeline.sh exolon --dry-run  # строго read-only, ничего не пишет
+utils/analyze/run_pipeline.sh exolon --resume   # продолжить с чекпоинта
+utils/analyze/run_pipeline.sh exolon --clean    # стереть чекпоинт и начать заново
+```
+
+Launcher берёт профиль `exolon` (пути ROM/RDB + профильный `pipeline.json`) и
+прогоняет DAG стадий в топологическом порядке:
+
+`probe → coverage → disassembly → seed_rdb → rdb_lint → memory_diff →
+io_signature → abi_scan → strings_scan → table_shape → vram_credits →
+export_asm → toolchain_lint → symbolic_operand_lint → syntax_check →
+roundtrip_verify → measure_sizes`.
+
+Что даёт автоматика:
+
+- **RDB-файл `src/exolon.rdb` рождается здесь.** Стадия `seed_rdb` в apply-режиме
+  досевает функции/метки/ссылки до fixpoint и в конце вызывает `debug_save_rdb`.
+  Ручной «холодный старт» больше не нужен: launcher и pipeline сами держат порядок
+  «не открывать `--rdb`, пока файла нет», а отсутствующий `.rdb` — не ошибка.
+- **Сырые результаты:** JSON каждой стадии в `.scratch/pipeline/exolon/` +
+  `statistics.json` + отчёт прогона `pipeline.md` + атомарный чекпоинт
+  `pipeline_state.json` (с `--resume`). Всё это — единственный источник
+  сводного механического отчёта Stage 1; отдельных отчётов по поднаборам
+  стадий больше не делается.
+
+Профильный `pipeline.json` разворачивает **максимальное** автоматическое
+исследование через `stage_args` (переопределение флагов любой стадии без
+разрастания CLI): глубокий посев (`seed_rdb --max-depth`), длинные рантайм-трассы
+с нажатием клавиш (`probe`/`io_signature`/`memory_diff`/`abi_scan`
+`--seconds`/`--run-seconds`/`--key`), расширенные `abi_scan`/`table_shape`.
+Клавиши для exolon: `RUS` (заставка), `1` (старт игры), стрелки (управление),
+`SPACE` (огонь/ракета). Они заводят ROM через все 4 экрана — это ловит больше
+IO-портов, RAM-патчей и функций, чем короткий простой.
+
+**Где автоматика упирается (и дальше только ИИ):** статическое покрытие сходится
+на достижимом из entry; `table_shape`/`vram_credits`/`music2midi` молчат, пока ИИ
+не занесёт в RDB таблицы, строки-кредиты и музыкальные спеки (Stage 6, 9a ниже).
+
+## Stage 0'. Принципы и разделение ответственности
+
+Именование объектов в RDB — префиксы `func_`, `data_`, `str_`, `music_`, `var_`,
+`lbl_`; суффикс `_unknown` для недообследованного (снимается, когда назначение
+установлено). Единственный источник правил именования — `utils/analyze/naming.py`.
+
+| слой | кто | что делает |
+|---|---|---|
+| **A. Facts** | Python (`utils/analyze`) | загрузка ROM, покрытие, round-trip сборки, VRAM-кредиты, размеры объектов, MIDI по готовой спеке |
+| **B. Candidates** | Python находит с пометкой | сигнатуры ABI, форма таблиц, строки транслит/RUS, порт-сигнатуры I/O, границы гэпов |
+| **C. Semantics** | только ИИ/человек | «эта функция — драйвер музыки», «эта таблица — частоты», имена и комментарии |
+
+Политика доступа: Python-скрипты идут к эмулятору **только** через MCP
+`v06c-mcp`; единственный легальный внешний бинарь — `v06c-asm-export`. Декодировать
+опкоды и строить CFG скриптам запрещено — это делает отладчик. Ad-hoc py-ки в
+обход пакета не пишутся: общего алгоритма нет в `utils/analyze` — расширяем пакет;
+в `tools/` держим только ROM-специфичное (адреса дорожек, layout, спеки).
+
+Канонический старт — только `debug_load_rom`; **не** `debug_reset` (вешает CPU на
+busy-wait `OUT 1C / IN 1B`, BP не достигается). Промежуточные отчёты —
+`./reports/StageN.md`; RDB — `./src/exolon.rdb`; ASM — `./asm/`; спеки —
+`./tools/`; готовый MIDI — `./exolon_title.mid`.
+
+## Stage 1. Механические факты: карта памяти, посев RDB, экспорт и round-trip
+
+Объединяет прежние Stage 1, 2 и 8 в один: они питались результатами одного и того
+же прогона Stage 0, а раздельные отчёты на их основе выходили клонами друг друга.
+Полностью делает `run_pipeline.sh` (`probe → coverage → disassembly → seed_rdb →
+rdb_lint → memory_diff → io_signature → export_asm → toolchain_lint →
+symbolic_operand_lint → syntax_check → roundtrip_verify → measure_sizes`).
+
+Отчёт `./reports/Stage1.md` — один сводный, генерируется `report_gen.py` по
+**всем** JSON-результатам прогона:
+
+```bash
+PYTHONPATH=utils python3 -m analyze.report_gen \
+  --results .scratch/pipeline/exolon \
+  --statistics .scratch/pipeline/exolon/statistics.json \
+  --stage 1 --title "Stage 1. Механические факты (exolon.rom)" \
+  --out roms/redesign/exolon/reports/Stage1.md
+```
+
+Что фиксирует отчёт:
+
+- **Карта памяти и активность чтения/записи** (`probe`, `disassembly`, `coverage`,
+  `memory_diff`, `io_signature`): entry `0x0100` → `JMP 0x786B`, RAM-патчи
+  относительно образа, порт-сигнатуры IN/OUT из трассы и из статики;
+- **Посев RDB до fixpoint** (`seed_rdb → rdb_lint → coverage`): здесь **создаётся
+  `src/exolon.rdb`**; объекты получают только технические имена (`func_0100`,
+  `data_3b00`), `size = 0`, если отладчик не дал размер; один адрес — один объект
+  (AFTER.md §5), вторые имена — в `properties.aliases`;
+- **Экспорт в ASM и побайтовый round-trip** (`export_asm → toolchain_lint →
+  symbolic_operand_lint → syntax_check → roundtrip_verify`): экспорт через
+  `v06c-asm-export` в формате z88dk (`DEFB/DEFW/DEFM`, `INCBIN`, метки без точки),
+  символьные имена там, где адрес совпал с началом RDB-объекта (иначе hex,
+  внутри функций `loc_XXXX`); `0 расхождений = Fact`. Это же **правило
+  символьных имён экспорта** действует и на Stage 8;
+- **Candidates (с пометкой, решает ИИ):** ABI-параметры (`abi_scan`),
+  транслит-строки (`strings_scan`), формы таблиц (`table_shape`),
+  порт-сигнатуры I/O (`io_signature`), глифы (`glyph_scan`),
+  VRAM-предсказание (`vram_credits`), размеры объектов (`measure_sizes`).
+
+Verified Facts / Inferences / Limitations. Руками ничего не переснимается.
+Round-trip — сквозной контракт: после каждой пачки ручных правок RDB
+(Stage 2–9a) пересобирать экспорт (`utils/analyze/run_pipeline.sh exolon
+--from export_asm`; `--resume` после правок вне pipeline не проходит — защита
+`RDB_CHANGED_OUTSIDE_PIPELINE`) и обновлять этот отчёт —
+байт-в-байт идентичность обязана сохраняться вплоть до Stage 10.
+
+## Stage 2. Подробное исследование функций (семантика — за ИИ)
+
+Python дал кандидатов — ИИ называет. Для каждой функции из RDB: осмысленное имя
+(снимает `_unknown`), комментарий-назначение (русский текст), свойства
+`params`/`reads`/`writes`/`calls`; связи `debug_add_rdb_link`
+(function→function/data/music/interrupt). Сохранение RDB — только
+`debug_save_rdb`, не правкой JSON на диске. Отчёт `./reports/Stage2.md`.
+
+## Stage 3. Параметры функций
+
+Кандидатов ABI даёт `abi_scan` (`--all --limit …`). ИИ подтверждает/переименовывает
+и пишет в RDB `properties.params` (рег/стек/накопитель, размер, семантика).
+Отчёт `./reports/Stage3.md`.
+
+## Stage 4. Прерывания
+
+Векторы: `0x0008/0x0010/0x0018/0x0020` (RST 0/8/16/24), `0x0038` (RST 32),
+`0x003C` INTERPT (`docs/VECTOR_VERIFIED.md`). Особое внимание — `RST 7`
+(аппаратный VBlank 50 Гц): кадровый тикер, потенциальный драйвер звука/анимации.
+В exolon на `0x7893` встречается `RST 7` (0xDF) прямо в инициализации — проверить,
+не является ли он переходом в прерывание или прямой установкой вектора.
+Порт-сигнатуры из `io_signature` совмещаются с адресами обработчиков; каждый
+обработчик — объект `func_irq_*` с комментарием. Отчёт `./reports/Stage4.md`.
+
+## Stage 5. Главный игровой цикл и экраны
+
+ROM проходит через 4 экрана (подтверждено пользователем, проверить через MCP):
+
+1. **Информационный экран** (boot): показывает `EXOLON L COPYRIGHT 1994`,
+   адрес автора (`310106, HARXKOW, UL.MOHNA^ANSKAQ`, `DOM 8-A KIT^ENKO MAKSIM`),
+   телефон, описание управления (`KLAWI[I UPRAWLENIQ:…`).
+   Ожидает нажатие РУС/ЛАТ (`IN 01h`, `ANI 80h`, переход по active-0).
+
+2. **Заставка** (title screen): играет мелодия; показывает текст
+   `DLQ NA^ALA IGRY NAVMITE RUS/LAT` и логотип EXOLON.
+   Ожидает повторное РУС/ЛАТ.
+
+3. **Мигание звёзд** (stars blink): анимация фоновых звёзд; показывает
+   `START GAME`, `2. KEYBOARD`, `3. JOYSTICK PU…`.
+   Ожидает клавишу «1» (строка 2 матрицы, бит 1: порт 03h→`0FDh`, порт 02h→бит 1).
+
+4. **Игровой экран**: сайд-скроллинг-шутер (защита от alien-десанта),
+   HUD с `00000 POINTS`; пауза `PRESS FIRE TO RESUME PLAY`;
+   `GAME OVER`; бонус-уровень `EXOLON BONUS SCREEN!` /
+   `CONGRATULATIONS!` / `YOU HAVE PROVEN YOUR COMBAT ABILITIES` /
+   `BRAVERY BONUS` / `PRESS FIRE TO STOP POINTER`.
+
+Найти через MCP: функцию перехода между экранами, игровой цикл (спрайт-движение,
+столкновения, счёт), бонус-режим. Выявить игровые переменные: `var_score`,
+`var_lives`, `var_player_x`, `var_player_y`, `var_bullets`, `var_enemies`,
+`var_level_progress`. Отчёт `./reports/Stage5.md`.
+
+## Stage 6. Вывод текста на экран
+
+Строки-кандидатов находит `strings_scan` (ROM-тексты на транслите + английском).
+ИИ подтверждает, классифицирует, создаёт объекты `str_*` (комментарий = расшифровка
+транслита в русский). Найти функцию вывода строк и её базовый адрес глифов
+(`data_glyph_block`); растровую сетку подтвердить `glyph_scan` (PNG на адресе блока),
+предсказание картинки сверить с реальностью `vram_credits`. Задача выполнена, когда
+найдены глифы всех строк и определён кодировщик (таблица: `[`→Ш, `]`→Я, `^`→Ч,
+`Q`→Я, `X`→Ь, `Y`→Ы, `V`→Ж, `W`→Щ). Отчёт `./reports/Stage6.md`.
+
+## Stage 7. Игровые данные: карты волн, паттерны врагов, спрайты
+
+Exolon — сайд-скроллинг-шутер с волнами противников (высадка alien с неба).
+Из ROM и рантайма найти:
+- паттерны/таблицы появления врагов (волны, типы);
+- спрайты (корабль игрока, враги, снаряды, бонусы);
+- параметры бонус-экрана (указатель POINTS, порог «BRAVERY BONUS»);
+- таблицу очков за типы врагов (`data_score_table`, `000025 000050 000100 000125…`
+  @0x3E33 — подтверждается в ROM).
+
+В RDB: `data_enemy_patterns`, `data_sprites_*`, `data_score_table`,
+`data_bonus_config`, `var_wave_counter`, `var_enemy_count`. Подтвердить
+`table_shape` и `measure_sizes`. Отчёт `./reports/Stage7.md`.
+
+## Stage 8. Выгрузка данных в ASM
+
+Для каждого data-объекта RDB — файл `./asm/<имя>.asm` (z88dk). ROM-backed
+(`data_*`/`str_*`/`music_*`, таблицы указателей) — фактические байты (`DEFB` по
+8/16, `DEFW` для слов, `DEFM`+явный терминатор `0x00`/`0xFF`); RAM-backed
+(`var_*`, runtime-буферы, векторы, растр `0x6000…`) — только EQU/метки, без байтов.
+В таблицах указателей — символьные имена по правилу Stage 1. Крупные блоки
+(глифы/спрайты/паттерны) допустимо выгружать `INCBIN asm/bin/<имя>.bin` (бинарь —
+прямой `debug_read_memory_range`, без пост-обработки). Отчёт `./reports/Stage8.md`.
+
+## Stage 9a. Мелодия ЗАСТАВКИ → `exolon_title.mid`
+
+1) Драйвер: `RST 7` (VBlank ~50 Гц) или явный тикер в цикле заставки; функция,
+   пишущая в звуковые порты (0x09/0x0A/0x0B — каналы/строб VI53;
+   0x0B/0x0D — AY регистр/данные). В RDB: `func_music_driver_title` + комментарий
+   («вызывается из…», «пишет в порты…», «шаг = N тиков VBlank»).
+2) Партитуры: базы дорожек (по голосу) и таблица указателей (или `base + N*stride`);
+   текущие указатели чтения в RAM (`var_music_ptr_title_NN`); признаки конца/петли.
+   В RDB: `data_music_scores_title`, `data_music_track_title_NN`, `var_music_ptr_title_NN`.
+3) Формат ноты: разделение байта на «тон/делитель таймера» и «длительность в
+   шагах»; спец-коды (пауза/повтор/темп/громкость/цикл); таблица
+   `data_note_freq_table_title` (период VI53 или регистр AY) — проверить
+   равнотемперированность `period[i] ≈ round(K/2^(i/12))`, `K ≈ 3822` при 1.5 МГц,
+   A4=440. **offset кода → MIDI note** ставим экспериментально.
+4) Порт-вывод по каналам: чип/голос, последовательность `OUT` (регистр→данные→строб),
+   преобразование «код ноты → значение в порт»; сверка с `docs/VECTOR_VERIFIED.md`.
+5) Спека `./tools/music_spec_title.json` по схеме `v06c-music-spec/1`;
+   обязательные поля
+   `schema/title/rom/org/output/format/ppq/tempo/note_offset/rest_code/velocity`,
+   `provenance.facts_from`, `tracks[]` (`name/address/length/source`
+   `image|runtime`/`midi_channel/gm_program/step_ticks/expect` — дамп кодов,
+   сверяется побайтово). Markdown-спека: `./reports/Stage9a_music_spec.md`.
+6) MIDI: `music2midi --spec tools/music_spec_title.json -o exolon_title.mid
+   --rom src/exolon.rom` (с `--runtime`, если дорожка читается из RAM — ROM должен
+   работать на заставке). Обновить связи RDB (`func_music_driver_title` ↔
+   `data_music_*` ↔ `var_music_ptr_*`) и комментарий «код → частота», `debug_save_rdb`.
+7) Критерий приёмки: MIDI открывается, ноты/длительности соответствуют слуху,
+   `expect`-дампы совпали. Отчёт `./reports/Stage9a.md`.
+
+## Stage 10. Сборка нового `EXOLON_NEW.ROM` из `./asm/`
+
+1) Мастер компоновки `asm/exolon_new.asm` + генератор `tools/gen_layout.py`
+   раскладывает объекты RDB по адресам
+   оригинала; для гэпов пишет `asm/bin/gap_*.bin` verbatim из `debug_read_memory_range`.
+2) `Makefile`: `layout`, `src/EXOLON_NEW.ROM`
+   (z80asm `-b -m=8080_strict -s`), `verify` (побайтовая сверка с `exolon.rom`:
+   0 расхождений), `deploy` (по `finally.mk`).
+3) Цель — ROM, работающий как оригинал (допустимо со сдвинутым адресным
+   пространством); байт-в-байт идентичность — достаточный, но не обязательный
+   критерий.
+4) Проверка поведения через MCP (boot-регистры, info-экран, РУС/ЛАТ→заставка,
+   мелодия, РУС/ЛАТ→звёзды, «1»→игра, HUD/VRAM,
+   порты звука 0x09/0x0A/0x0B). Отчёт `./reports/Stage10.md`.
+
+## Приоритеты и порядок
+
+- **Stage 0 (`run_pipeline.sh`) — точка входа**: он механикой закрывает весь
+  Stage 1 и значительную часть 3/6/7/8. Затем ИИ добирает Level C (семантику,
+  имена, таблицы, данные волн) и Stage 9a (обязателен — экспорт MIDI).
+- Порядок ручных этапов: 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9a → 10.
+- **Правила исполнения (обязательны для исполнителя, чтобы не зациклиться):**
+  1. **Один Stage = один заход.** Ручные этапы идут строго последовательно,
+     **нельзя** делегировать пачку Stage одному агенту/под-агенту за раз. Каждый
+     этап — отдельный проход и отдельный `reports/StageN.md`.
+  2. **Сохранять RDB инкрементально.** Каждую пачку правок (имена/комментарии/
+     `params`/связи) сразу фиксировать `debug_save_rdb` и проверять сохранение;
+     не копить все правки до конца этапа. Единственный канал записи —
+     `debug_save_rdb` (`.rdb` руками не править).
+  3. **Механический Stage 1 — отчёт только через `report_gen.py`** по всем
+     результатам прогона (команда в Stage 1). Ручные этапы 2–8 пишут
+     `reports/StageN.md` ИИ-текстом, ссылаясь на JSON прогона; факты руками
+     не переснимаются.
+- После ручных правок RDB — пересобрать экспорт/round-trip (`run_pipeline.sh
+  exolon --from export_asm`) и обновить Stage1.md.
+
+## Итоговые артефакты, которые должны существовать на выходе
+
+```
+roms/redesign/exolon/
+├── TZ.md                              (этот файл)
+├── pipeline.json                      (профиль запуска: stage_args, persistence)
+├── Makefile
+├── exolon_title.mid                   (Stage 9a)
+├── src/
+│   ├── exolon.rom                     (исходник)
+│   ├── exolon.rdb                     (рождается Stage 0; финал — после Stage 10)
+│   └── EXOLON_NEW.ROM                 (Stage 10)
+├── reports/
+│   ├── Stage1.md … Stage10.md
+│   └── Stage9a_music_spec.md
+├── asm/                               (экспортированные функции и данные)
+│   ├── exolon_new.asm                 (мастер компоновки)
+│   ├── func_*.asm, data_*.asm, str_*.asm, music_*.asm, var_*.asm
+│   └── bin/gap_*.bin                  (вербатим-дампы гэпов)
+└── tools/
+    ├── gen_layout.py
+    ├── sizes.json                     (для measure_sizes)
+    ├── measure_order.json
+    └── music_spec_title.json          (Stage 9a)
+```
+
+## Примечания по ROM
+
+- **Адресное пространство**: 0x0100–0x7FFF (32512 байт) — ROM занимает всё
+  доступное пространство ниже VRAM (0x8000+).
+- **Текстовый кодировщик**: не KOI8, а транслит-подмножество с заменой
+  кириллических специфических букв на латинские сигнатуры. Требуется
+  составить полную таблицу `data_glyph_encoding` (глифы → коды → символы)
+  на этапе Stage 6.
+- **Управление**: РУС/ЛАТ проверяется через `IN 01h / ANI 80h` (бит 7, active-0).
+  Игровое управление — через матрицу 8×8 (порт 03h строка → порт 02h столбцы).
+  «1» на старте игры — строка 2 (маска `FBh`), бит 1.
+- **RST 7** (0xDF) в кодовой области 0x7893 может означать запись в вектор 0x0038
+  или прямой вызов VBlank-ожидания (аналог HALT+прерывания). Уточнить на Stage 4.
