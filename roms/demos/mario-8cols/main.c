@@ -116,9 +116,25 @@ unsigned char tile_stride;
  * RAM только OBJ_WIN_COLS колонок, запечённых из словаря вариантов и списка
  * экземпляров (pf_data/pf_rects). Читают и C (pesh,
  * solid_at), и mario.asm (EXTERN _tile_win / _tile_win_base) — поэтому глобальные.
- * tile_win_base — МИРОВАЯ колонка окна[0] (кратна OBJ_WIN_STEP). */
+ * tile_win_base — МИРОВАЯ колонка окна[0] (кратна OBJ_WIN_STEP).
+ *
+ * tile_win_prevcol — колонка-«страж» НЕПОСРЕДСТВЕННО перед окном. На кадре
+ * перехода окна вперёд (base: b -> b+32, cam = b+32, old_cam = b+31) ref-указатель
+ * блока 0 считается как tile_win + (old_cam - base)*LEVEL_ROWS = tile_win-64,
+ * т.е. попадает ровно в tile_win_prevcol. Если там мусор, пустые клетки левой
+ * колонки экрана «совпадают» с эталоном и не стираются — на границе перепечки
+ * остаются кусочки уехавшего фона (измерено: 75 байт VRAM в нулевом блоке).
+ * bake_shift заносит сюда УЕХАВШУЮ за левый край МИРОВУЮ колонку base-1, так
+ * что diff сравнивает с настоящими старыми тайлами и правка бесплатна.
+ * Порядок объявлений в одном модуле = порядок в BSS; смежность проверяется
+ * tools/check_boundary.py по map-файлу. */
+unsigned char tile_win_prevcol[LEVEL_ROWS];
 unsigned char tile_win[OBJ_WIN_COLS * LEVEL_ROWS];
 unsigned int    tile_win_base;
+/* log2(tile_stride) для умножения «шаг колонки окна» сдвигом в mario.asm;
+ * 0xFF, если LEVEL_ROWS не степень двойки — тогда ассемблер идёт через
+ * _mulstride. Считается один раз на старте, читается ассемблером. */
+unsigned char   tile_stride_shl;
 static unsigned char max_cam_row;    /* = LEVEL_ROWS>32 ? LEVEL_ROWS-32 : 0 */
 static unsigned char old_cam_row;    /* cam_row в прошлом кадре            */
 
@@ -235,7 +251,14 @@ static unsigned char bake_shift(unsigned int nb)
 
     if (nb == old + OBJ_WIN_STEP) {
         /* Камера вперёд: мир ушёл влево, выживает старшая половина
-         * local[32..64) -> local[0..32); справа входит новая половина. */
+         * local[32..64) -> local[0..32); справа входит новая половина.
+         * Перед сдвигом сохраняем колонку, которая уезжает за левый край:
+         * это МИРОВАЯ колонка nb-1, её diff-рендер следующего кадра использует
+         * как эталон нулевого блока (см. tile_win_prevcol). */
+        d = tile_win + (OBJ_WIN_STEP - 1) * LEVEL_ROWS;
+        s = tile_win_prevcol;
+        for (rr = 0; rr < LEVEL_ROWS; rr++)
+            *s++ = *d++;
         d = tile_win;
         s = tile_win + OBJ_WIN_STEP * LEVEL_ROWS;
         for (cc = 0; cc < OBJ_WIN_STEP; cc++)
@@ -328,6 +351,13 @@ int main(void)
     /* Старт: Марио у земли в НИЖНЕЙ части мира, камера прижата к низу.
      * tile_stride/cam_row читаются ассемблером до первого рендера. */
     tile_stride  = (unsigned char)LEVEL_ROWS;
+    /* шаг окна = степень двойки? ищем s, что 1<<s == LEVEL_ROWS. */
+    {
+        unsigned char s = 0;
+        while (s < 8 && (1 << s) < LEVEL_ROWS)
+            s++;
+        tile_stride_shl = ((1 << s) == LEVEL_ROWS) ? s : 0xFF;
+    }
     max_cam_row  = (LEVEL_ROWS >= VIEW_ROWS)
                        ? (unsigned char)(LEVEL_ROWS - VIEW_ROWS) : 0;
     wblk = 4;

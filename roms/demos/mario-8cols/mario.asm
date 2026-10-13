@@ -82,6 +82,7 @@
         EXTERN  _pair_top
         EXTERN  _cam_row        ; unsigned char: мировая тайловая строка верха экрана
         EXTERN  _tile_stride    ; unsigned char: LEVEL_ROWS (шаг колонки тайлкарты)
+        EXTERN  _tile_stride_shl ; log2(LEVEL_ROWS) либо 0xFF (см. _mulshift)
 
 ROWS EQU 32                 ; экранных тайлов по высоте (256/8) — всегда 32
 CAM_NO_REF EQU 0FFFFh       ; old_cam: в VRAM пусто (первый экран)
@@ -99,18 +100,12 @@ rw_ref:     defw    0           ; old_cam (+blk0) (или CAM_NO_REF)
 rw_blk:     defb    0           ; текущий экранный блок
 rw_end:     defb    0           ; последний блок (exclusive)
 rw_newwalk: defw    0           ; &tile_win[local*stride + cam_row], шаг +stride на блок
-rw_refcell: defw    0           ; &tile_win[local*stride + cam_row] + top (временный)
 rw_refwalk: defw    0           ; &tile_win[local*stride + cam_row] (или _tileset = «пусто»)
 rw_refstep: defb    0           ; stride или 0 для CAM_NO_REF
 rw_pairwalk:defw    0           ; &pair_top[min(cam,old)], шаг +1 на блок
 rw_pairstep:defb    0           ; 1 или 0 для CAM_NO_REF
 rw_top:     defb    0           ; первая ЭКРАННАЯ строка сканирования текущего блока
-rw_dstlow_cur:defb  0           ; кольцевой dst_low текущей сканируемой строки
 rw_dsthi:   defb    0,0         ; старшие байты VRAM для 2 фоновых плоскостей блока
-rw_dstlow:  defb    0           ; младший байт VRAM для строки тайла
-rw_nzmask:  defb    0           ; bit p = 1: фоновая плоскость p надо писать
-rw_tnew:    defb    0           ; индекс нового тайла ячейки
-rw_tref:    defb    0           ; индекс старого тайла ячейки
 
 ; --- render_rowband ---
 rb_blk:     defb    0           ; текущая экранная колонка 0..31
@@ -118,7 +113,7 @@ rb_row:     defb    0           ; мировая тайловая строка
 rb_dstlow:  defb    0           ; кольцевой dst_low строки (одинаков для всех колонок)
 rb_walk:    defw    0           ; &tile_win[local*stride + world_row], шаг +stride
 
-; --- mulstride (HL = DE * C) ---
+; --- mulstride / mulshift (HL = DE * stride) ---
 ; только регистры, без памяти.
 
 ; --- mario_draw / mario_undraw ---
@@ -162,6 +157,33 @@ ms_shift:
         mov     c,a
         dcr     b
         jnz     ms_loop
+        ret
+
+; ---------------------------------------------------------------
+; _mulshift: HL = DE * stride. Когда stride — степень двойки, умножение это
+; просто сдвиг: HL = DE, затем _tile_stride_shl раз «dad h» (HL += HL, 11 T и
+; НЕ трогает флаги) — ~90 T вместо ~700 T на 8-итерационном сдвиг-сложении.
+; Показатель степени считает main.c один раз на старте. Если LEVEL_ROWS не
+; степень двойки, _tile_stride_shl = 0xFF и уходим в общий _mulstride.
+; Контракт тот же, что у _mulstride: DE — множится, C = stride (нужен только
+; для fallback). Портит A,B,C,D,E,HL.
+; ---------------------------------------------------------------
+        SECTION code_clib
+_mulshift:
+        lda     _tile_stride_shl
+        cpi     0FFh
+        jz      _mulstride              ; не степень двойки — общий умножитель
+        mov     h,d
+        mov     l,e                     ; HL = DE
+        mov     b,a                     ; B = число сдвигов
+        mvi     a,0
+        ora     b
+        jz      msh_done                ; stride == 1
+msh_loop:
+        dad     h               ; HL <<= 1
+        dcr     b
+        jnz     msh_loop
+msh_done:
         ret
 
 ; ---------------------------------------------------------------
@@ -229,7 +251,7 @@ _render_window:
         xchg                    ; DE = local
         lda     _tile_stride
         mov     c,a
-        call    _mulstride      ; HL = local*stride
+        call    _mulshift       ; HL = local*stride
         lxi     d,_tile_win
         dad     d
         lda     _cam_row        ; + cam_row (смещение мировой строки верха экрана)
@@ -258,7 +280,7 @@ _render_window:
         jmp     rw_walk_done
 
 rw_have_ref:
-        ; rw_refwalk = _tile_win + (old+blk0 - base)*stride + cam_row
+        ; old += blk0 (мировая — нужна и для min/pair_top, и для разницы с cam)
         lda     rw_blk
         mov     c,a
         lhld    rw_ref
@@ -268,11 +290,63 @@ rw_have_ref:
         mvi     a,0
         adc     h
         mov     h,a
-        shld    rw_ref          ; old += blk0 (мировая, для min/pair_top)
+        shld    rw_ref          ; old += blk0
+        ; refwalk = newwalk + (old - cam)*stride. При обычном скролле
+        ; |old-cam| == 1, поэтому умножать не нужно вовсе: refwalk =
+        ; newwalk ∓ один шаг окна (со знаком, обратным ходу камеры). Это
+        ; ~40 T вместо ~750 T на каждый кадр скролла; на границе перепечки
+        ; newwalk - stride указывает ровно в колонку-страж tile_win_prevcol.
+        lhld    rw_cam
+        xchg                    ; DE = cam+blk0
+        lhld    rw_ref          ; HL = old+blk0
+        mov     a,l
+        sub     e
+        mov     c,a             ; C = младшая разница
+        mov     a,h
+        sbb     d
+        mov     b,a             ; B = старшая разница: BC = old - cam
+        cpi     0FFh
+        jnz     rw_ref_hi
+        mov     a,c
+        cpi     01h
+        jnz     rw_ref_slow     ; это не -1
+        ; delta = -1 (скролл вперёд): refwalk = newwalk - stride
+        lda     _tile_stride
+        mov     c,a
+        lhld    rw_newwalk
+        mov     a,l
+        sub     c
+        mov     l,a
+        mov     a,h
+        sbi     0
+        mov     h,a
+        shld    rw_refwalk
+        jmp     rw_ref_step
+rw_ref_hi:
+        ora     a               ; hi != 0 -> редкий случай (дальний прыжок)
+        jnz     rw_ref_slow
+        mov     a,c
+        cpi     01h
+        jnz     rw_ref_slow     ; delta = +1 только при lo == 1
+        ; delta = +1 (скролл назад): refwalk = newwalk + stride
+        lda     _tile_stride
+        mov     c,a
+        lhld    rw_newwalk
+        mov     a,l
+        add     c
+        mov     l,a
+        mov     a,h
+        aci     0
+        mov     h,a
+        shld    rw_refwalk
+        jmp     rw_ref_step
+rw_ref_slow:
+        ; общий случай: refwalk = _tile_win + (old+blk0 - base)*stride + cam_row
         lda     _tile_win_base
         mov     c,a
         lda     _tile_win_base+1
         mov     b,a             ; BC = base
+        lhld    rw_ref          ; HL = old+blk0 (мировая)
         mov     a,l
         sub     c
         mov     l,a
@@ -282,7 +356,7 @@ rw_have_ref:
         xchg                    ; DE = local
         lda     _tile_stride
         mov     c,a
-        call    _mulstride      ; HL = local*stride
+        call    _mulshift       ; HL = local*stride
         lxi     d,_tile_win
         dad     d
         lda     _cam_row
@@ -292,6 +366,7 @@ rw_have_ref:
         adc     h
         mov     h,a
         shld    rw_refwalk
+rw_ref_step:
         lda     _tile_stride
         sta     rw_refstep
         ; rw_pairwalk = _pair_top + min(cam, old) — оба уже с учётом blk0
@@ -363,8 +438,9 @@ rw_block_loop:
 ;
 ; Сравнивает tile_win[local(cam+blk)] с tile_win[local(old+blk)] построчно; строки экрана, чьи
 ; МИРОВЫЕ ряды лежат выше pair_top, заведомо небо в обеих колонках — пропускаем.
-; Кольцевой dst_low строки держим в rw_dstlow_cur (стартует от 255-8*(cam_row+top)
-; и уменьшается на 8 за строку; 8-битное sui даёт естественное закольцовывание).
+; Кольцевой dst_low строки живёт в C (стартует от 255-8*(cam_row+top) и
+; уменьшается на 8 за строку; 8-битное sui даёт естественное закольцовывание),
+; счётчик строк — в B, поэтому вызывающий пушит пару BC вокруг грязной клетки.
 ; ---------------------------------------------------------------
         SECTION code_clib
 _rw_block:
@@ -386,7 +462,7 @@ rw_top0:
         xra     a
 rw_topset:
         sta     rw_top
-        ; rw_dstlow_cur = 255 - 8*((cam_row + rw_top) & 31) = cpl((cam_row+top)*8 mod 256)
+        ; dst_low = 255 - 8*((cam_row + rw_top) & 31) = cpl((cam_row+top)*8 mod 256)
         mov     b,a             ; B = rw_top
         lda     _cam_row
         add     b               ; cam_row + rw_top  (< 256)
@@ -394,39 +470,39 @@ rw_topset:
         add     a
         add     a               ; *8 (младший байт == (cam_row+top)*8 mod 256)
         cma                     ; 255 - x
-        sta     rw_dstlow_cur
+        mov     c,a             ; C = кольцевой dst_low (дальше по циклу в C)
 
         ; dsthi[p] = vram_bases[p] + blk (адрес = hi<<8 | смещение в блоке)
         lda     rw_blk
-        mov     c,a
+        mov     e,a             ; E = blk (C беречь!)
         lda     vram_bases
-        add     c
+        add     e
         sta     rw_dsthi
         lda     vram_bases+1
-        add     c
+        add     e
         sta     rw_dsthi+1
 
-        ; BC = счётчик строк, C = top
-        lda     rw_top
-        mov     c,a
-        mvi     a,ROWS
-        sub     c
-        mov     b,a             ; B = 32 - top
-
         ; DE = rw_refwalk + top, HL = rw_newwalk + top
-        ; (оба rw_*walk уже содержат cam_row; top — экранное смещение)
-        lhld    rw_refwalk
-        mvi     d,0
-        mov     e,c
-        dad     d
-        shld    rw_refcell      ; ref+top
+        ; (оба rw_*walk уже содержат cam_row; top — экранное смещение).
+        ; обоих указателей хватает на стеке: это раз в блок, а не раз в клетку
+        lda     rw_top
+        mov     e,a
+        mvi     d,0             ; DE = top
         lhld    rw_newwalk
-        mvi     d,0
-        mov     e,c
         dad     d               ; HL = new+top
-        xchg                    ; DE = new+top, HL = 0:top
-        lhld    rw_refcell
-        xchg                    ; DE = ref+top, HL = new+top
+        push    h
+        lhld    rw_refwalk
+        dad     d               ; HL = ref+top
+        push    h
+        pop     d               ; DE = ref+top
+        pop     h               ; HL = new+top
+
+        ; B = счётчик строк (32 - top)
+        lda     rw_top
+        mov     b,a
+        mvi     a,ROWS
+        sub     b
+        mov     b,a
 
         ; --- построчное сравнение ---
 rw_scan:
@@ -441,9 +517,9 @@ rw_scan:
         pop     d
         pop     b
 rw_scan_next:
-        lda     rw_dstlow_cur
+        mov     a,c
         sui     8               ; кольцевой переход (0->255) для следующей строки
-        sta     rw_dstlow_cur
+        mov     c,a
         inx     h
         inx     d
         dcr     b
@@ -454,40 +530,27 @@ rw_blk_ret:
 ; ---------------------------------------------------------------
 ; _rw_put_cell: нарисовать одну «грязную» клетку (2 фоновые плоскости).
 ;
-; Входе: A = индекс старого тайла, HL = &tile_win[новый]. BC/DE вызывающий
-; сохранил сам; сама routine регистры не сохраняет. dst_low берётся из
-; rw_dstlow_cur (кольцевой адрес строки). Плоскость пропускается, если она
-; пуста и в старом, и в новом тайле.
+; Входе: A = индекс СТАРОГО тайла, HL = &tile_win[новый], C = кольцевой dst_low
+; строки. Вызывающий сохранил B/D/H (и пару BC), поэтому здесь свободно
+; портяся A,B,D,E,H,L; C не трогаем. Все промежуточные значения (новый тайл,
+; nzmask) живут в регистрах — BSS-переменных нет. Плоскость пропускается, если
+; она пуста и в старом, и в новом тайле (карта tile_nz).
 ; ---------------------------------------------------------------
         SECTION code_clib
 _rw_put_cell:
-        sta     rw_tref
-        mov     a,m
-        sta     rw_tnew
-
-        ; dst_low = кольцевой адрес текущей строки
-        lda     rw_dstlow_cur
-        sta     rw_dstlow
-
-        ; nzmask = tile_nz[new] | tile_nz[ref]
-        lda     rw_tnew
-        mov     l,a
+        mov     b,m             ; B = новый тайл
+        ; nzmask = tile_nz[new] | tile_nz[ref] -> A (DE = база tile_nz держим)
+        mov     l,a             ; A = ref ещё цел
         mvi     h,0
         lxi     d,_tile_nz
         dad     d
-        mov     c,m             ; nz нового тайла (1 байт на тайл)
-        lda     rw_tref
-        mov     l,a
+        mov     a,m             ; A = nz[ref]
+        mov     l,b
         mvi     h,0
-        lxi     d,_tile_nz
-        dad     d
-        mov     a,c
-        ora     m
-        sta     rw_nzmask
-
-        ; HL = &_tileset[new*16]
-        lda     rw_tnew
-        mov     l,a
+        dad     d               ; HL = &nz[new], DE = база не тронута
+        ora     m               ; A = nzmask
+        ; HL = &_tileset[new*16] (плоскость веса 8, строка 0)
+        mov     l,b
         mvi     h,0
         dad     h
         dad     h
@@ -495,9 +558,9 @@ _rw_put_cell:
         dad     h
         lxi     d,_tileset
         dad     d
+        mov     b,a             ; B = nzmask (новый тайл больше не нужен)
 
         ; --- плоскость 0 (вес 8) ---
-        lda     rw_nzmask
         ani     01h
         jnz     rw_p0w
         lxi     d,8
@@ -506,19 +569,17 @@ _rw_put_cell:
 rw_p0w:
         lda     rw_dsthi
         mov     d,a
-        lda     rw_dstlow
-        mov     e,a
-        call    _rw_copy8
+        mov     e,c               ; dst_low уже в C
+        call    _rw_copy8         ; HL += 8 -> плоскость веса 4
 
         ; --- плоскость 1 (вес 4) ---
 rw_p1:
-        lda     rw_nzmask
+        mov     a,b
         ani     02h
         jz      rw_pcell_ret
         lda     rw_dsthi+1
         mov     d,a
-        lda     rw_dstlow
-        mov     e,a
+        mov     e,c
         call    _rw_copy8
 rw_pcell_ret:
         ret
@@ -604,7 +665,7 @@ _render_rowband:
         xchg                    ; DE = local
         lda     _tile_stride
         mov     c,a
-        call    _mulstride      ; HL = local*stride
+        call    _mulshift       ; HL = local*stride
         lxi     d,_tile_win
         dad     d
         lda     rb_row
