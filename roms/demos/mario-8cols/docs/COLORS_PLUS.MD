@@ -10,8 +10,8 @@
 «расточительное» дублирование как раз и делает трюк рабочим. Ниже — замер,
 цена и план.
 
-Механика (см. [`src/palette.json`](src/palette.json), `build_palette()` в
-[`tools/gen_assets.py`](tools/gen_assets.py)):
+Механика (см. [`src/palette.json`](../src/palette.json), `build_palette()` в
+[`tools/gen_assets.py`](../tools/gen_assets.py)):
 
 - индекс пикселя = `bg * 4 + ch`, где `bg` — код фона из плоскостей `8/4`,
   `ch` — биты из плоскостей `2/1`;
@@ -25,7 +25,7 @@
 ## Гарантии изоляции
 
 Стена действительно никогда не под боксом спрайта — это держится на трёх
-проверках в [`main.c`](main.c):
+проверках в [`main.c`](../main.c):
 
 ```c
 if (!(solid_at(edge, r0) & COLL_WALL) && !(solid_at(edge, r1) & COLL_WALL)) wblk = nb;  // в стену не входим
@@ -112,7 +112,7 @@ wall-клеток на шаг, но они зелёные (`48B600` = наш ж�
 
 ### План по файлам
 
-1. [`tools/gen_assets.py`](tools/gen_assets.py) — квантование wall-тайлов по
+1. [`tools/gen_assets.py`](../tools/gen_assets.py) — квантование wall-тайлов по
    расширенной палитре (6 цветов + дизер между ними), запись старших
    плоскостей; **жёсткая проверка**: у тайла без `COLL_WALL` старшие биты обязаны
    быть нулём, иначе decor-бит уедет в проходимый тайл и спрайт его сотрёт.
@@ -123,14 +123,14 @@ wall-клеток на шаг, но они зелёные (`48B600` = наш ж�
 3. `tile_nz` — 2 → 4 бита на тайл (маска ненулевых плоскостей), 16 → 32 Б на
    колонку кольца; `bake_groups` / `bake_shift` сдвигают на один `movdd`
    больше (~+1,3k T/шаг — в шуме).
-4. [`mario.asm`](mario.asm) `_rw_put_cell` — цикл по 4 плоскостям через уже
+4. [`mario.asm`](../mario.asm) `_rw_put_cell` — цикл по 4 плоскостям через уже
    существующую `_vram_bases` (`defw $+3, 0A0h, 0C0h, 0E0h`), ход в `0C0h/0E0h`
    движок умеет и так.
-5. [`main.c`](main.c) — сброс грязных клеток при прижиме к верху экрана (пункт 1
+5. [`main.c`](../main.c) — сброс грязных клеток при прижиме к верху экрана (пункт 1
    «Гарантий»).
-6. [`tools/level_editor.py`](tools/level_editor.py),
-   [`tools/tile_editor.py`](tools/tile_editor.py),
-   [`tools/check_parity.py`](tools/check_parity.py) — PNG-раундтрип
+6. [`tools/level_editor.py`](../tools/level_editor.py),
+   [`tools/tile_editor.py`](../tools/tile_editor.py),
+   [`tools/check_parity.py`](../tools/check_parity.py) — PNG-раундтрип
    4-плоскостных тайлов. Скучно, но это ~40 % оценки.
 
 ### Риски
