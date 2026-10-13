@@ -15,15 +15,17 @@ gen_assets.py — ассеты демки Mario 8-цвет (сплит по пл
 
 Источник истины: src/objects.json (список экземпляров префабов, схема v2) +
 src/prefabs.json (библиотека), src/tiles/*.png (графика тайлов),
-src/tiles.json (твёрдость, вариант C), src/mario.png (лента спрайтов Mario).
+src/tiles.json (твёрдость, вариант C), src/mario.png (лента спрайтов Mario),
+src/palette.json (финальные цвета: 4 кода фона + 4 кода персонажа).
 src/level.json — плоская сетка, из которой исторически выросли объекты; она
 обязана побайтово совпадать с развёрнутым списком экземпляров (чекпоинт
 паритета tools/check_parity.py).
 
 Выход:
-  src/level.inc  — палитра (16 слотов), тайлсет 8x8 (2 плоскости, 16 Б),
-                   словарь вариантов префабов (pf_rects/pf_var_ofs/pf_var_n),
-                   список экземпляров (pf_data) и старты групп по блокам
+  src/level.inc  — палитра (16 слотов из palette.json), тайлсет 8x8
+                   (2 плоскости, 16 Б), словарь вариантов префабов
+                   (pf_rects/pf_var_ofs/pf_var_n), список экземпляров
+                   (pf_data) и старты групп по блокам
                    (pf_start), tile_nz (2 бита), pair_top, tile_solid;
   src/mario.inc  — спрайты 16x16 (2 плоскости, 64 Б, без маски).
 
@@ -49,15 +51,51 @@ TILE_BYTES = TILE * 2   # тайл фона = 2 плоскости по 8 бай
 VEC_BYTES = 0x8000      # размер видеопамяти (для проверки)
 
 # ---- Палитра 4+4: фон (старшие 2 бита) + персонаж (младшие 2 бита) ----------
-# Байт порта 0C = RRRGGGBB.
-#
-# Коды фона (bg = старшие 2 бита индекса): 0..3.
-BG_SKY, BG_BLACK, BG_WHITE, BG_GREEN = 0, 1, 2, 3
-BG_LIST = [0xFD, 0x00, 0xFF, 0x2A]        # небо, чёрный, белый, зелёный (база)
+# Байт порта 0C = RRRGGGBB. Источник истины — src/palette.json (редактируется
+# руками): 4 кода фона + 4 кода персонажа. Порядок элементов в файле задаёт код
+# цвета, имена нужны дизерингу (green/sky в bg_quantize). Из этих же цветов
+# считается BG_RGB/CH_RGB, поэтому правка цвета перепекает и фон, и спрайты.
+PALETTE_FILE = os.path.join(SRC, "palette.json")
 
-# Коды персонажа (ch = младшие 2 бита): 0 = прозрачно, 1..3 = цвета.
-CH_RED, CH_PINK, CH_BLACK = 1, 2, 3
-CH_LIST = [None, 0x0D, 0xF7, 0x00]        # прозрачн, красный, розовый(кожа), чёрный
+# Имена, без которых не работают ветки квантования; порядок — код цвета.
+BG_NAMES = ("sky", "black", "white", "green")   # коды фона (bg) 0..3
+CH_NAMES = ("transparent", "red", "pink", "black")
+
+
+def load_palette(path=PALETTE_FILE):
+    """src/palette.json -> (BG_LIST, CH_LIST); ch[0] = None (прозрачность)."""
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    lists = []
+    for layer, names, key in (("bg", BG_NAMES, "bg"), ("ch", CH_NAMES, "ch")):
+        got = doc[key]
+        if len(got) != 4:
+            sys.exit(f"{os.path.basename(path)}: {key} должен ровно 4 кода "
+                     f"(2 бита слоя), найдено {len(got)}")
+        pal = []
+        for item in got:
+            v = item["vec"]
+            if v is None:
+                pal.append(None)              # прозрачность, код без цвета
+                continue
+            code = v if isinstance(v, int) else int(v, 0)
+            if not 0 <= code <= 0xFF:
+                sys.exit(f"{os.path.basename(path)}: {layer} {item['name']}: "
+                         f"{v} не байт порта 0C")
+            pal.append(code)
+        if [i["name"] for i in got] != list(names):
+            sys.exit(f"{os.path.basename(path)}: {layer} — имена обязаны идти "
+                     f"по порядку {', '.join(names)} (порядок = код цвета)")
+        lists.append(pal)
+    if lists[1][0] is not None:
+        sys.exit(f"{os.path.basename(path)}: ch[0] обязан быть null — "
+                 f"это прозрачность спрайта (код 0 = пустой пиксель)")
+    return lists
+
+
+BG_LIST, CH_LIST = load_palette()
+BG_SKY, BG_BLACK, BG_WHITE, BG_GREEN = range(4)     # небо, чёрный, белый, зелёный
+CH_TRANSPARENT, CH_RED, CH_PINK, CH_BLACK = range(4)   # 0 = прозрачн, 1..3 = цвета
 
 
 def build_palette():
@@ -581,6 +619,8 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
         f.write("   Список отсортирован по (x>>5, z-order), pf_start[блок] — начало группы;\n")
         f.write("   pf_start[OBJ_WIN_BLOCKS] = PF_COUNT (sentinel). Развёртка в окне —\n")
         f.write("   bake_groups() в main.c. */\n")
+        # Палитра берётся из src/palette.json; слот = bg*4 + ch (см. build_palette).
+        f.write("/* Палитра ниже — из src/palette.json (слот = bg*4 + ch). */\n")
         fmt_array(f, "level_palette", bytes(PALETTE))
         joined = b"".join(tileset)
         fmt_array(f, "tileset", joined)
