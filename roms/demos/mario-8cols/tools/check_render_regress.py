@@ -56,6 +56,30 @@ def main():
         cam = c
         print(f"cam {c:>3} base {base:>3} row{cam_row:<3} "
               f"{hashlib.sha1(vram_of(cpu)).hexdigest()[:16]}")
+    # Покрытие cam_row на горизонтальных шагах: и выровненных по байту,
+    # и нет. Любая оптимизация, которая читает cam_row (сдвиг окна, пропуск
+    # строк, маска-фильтр), обязана давать тот же VRAM при любом cam_row —
+    # вход одинаков для baseline и кандидата, поэтому расхождение хэша сразу
+    # указывает на ошибку сдвига/клипа. (#1 - маска грязных строк - измерена и
+    # откачена, см. docs/OPTIMIZATION.MD «Не прошло»; покрытие оставлено.)
+    for cam_row in (0, 4, 8, 13, 16, 27):
+        cpu.wb(a["_cam_row"], cam_row)
+        for _ in range(3):
+            cam += 1
+            nb = cam & ~(lv["WIN_STEP"] - 1)
+            if nb != base:
+                pc = outgoing_col(win, base, nb, lv)
+                if bake_shift(win, base, nb, lv) is None:
+                    win = bake_window(lv, nb)
+                    install_window(cpu, a, win, nb, lv)
+                else:
+                    install_window(cpu, a, win, nb, lv, prevcol=pc)
+                base = nb
+            call_asm(cpu, a["_render_window"], [cam, cam - 1, 0, VIEW])
+            print(f"cam {cam:>3} base {base:>3} row{cam_row:<3} "
+                  f"{hashlib.sha1(vram_of(cpu)).hexdigest()[:16]}")
+    cpu.wb(a["_cam_row"], 32)
+    cam_row = 32
     # вертикальная составляющая: одна открытая полоса + diff-кадр.
     # world_row передаём СВОИМ ходом, а cam — последний отрисованный: с чужим
     # cam local = cam - base уйдёт за окно, и чтение мусора за его пределами

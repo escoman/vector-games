@@ -308,7 +308,7 @@ rw_have_ref:
         cpi     0FFh
         jnz     rw_ref_hi
         mov     a,c
-        cpi     01h
+        cpi     0FFh
         jnz     rw_ref_slow     ; это не -1
         ; delta = -1 (скролл вперёд): refwalk = newwalk - stride
         lda     _tile_stride
@@ -560,19 +560,50 @@ _rw_put_cell:
         dad     d
         mov     b,a             ; B = nzmask (новый тайл больше не нужен)
 
-        ; --- плоскость 0 (вес 8) ---
+        ; --- плоскость 0 (вес 8): копия инлайн, без call/ret (#7) ---
         ani     01h
         jnz     rw_p0w
         lxi     d,8
-        dad     d
+        dad     d               ; HL += 8 -> плоскость веса 4 (пропуск)
         jmp     rw_p1
 rw_p0w:
         lda     rw_dsthi
         mov     d,a
         mov     e,c               ; dst_low уже в C
-        call    _rw_copy8         ; HL += 8 -> плоскость веса 4
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d               ; HL += 8 -> плоскость веса 4
 
-        ; --- плоскость 1 (вес 4) ---
+        ; --- плоскость 1 (вес 4): копия инлайн (#7) ---
 rw_p1:
         mov     a,b
         ani     02h
@@ -580,7 +611,38 @@ rw_p1:
         lda     rw_dsthi+1
         mov     d,a
         mov     e,c
-        call    _rw_copy8
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
+        mov     a,m
+        stax    d
+        inx     h
+        dcx     d
 rw_pcell_ret:
         ret
 
