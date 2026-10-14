@@ -10,6 +10,7 @@
       ],
       "name": "func_entry_jmp",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "entry",
         "seed_from": "0x0100",
         "seed_source": "debug_analyze_code"
@@ -22,6 +23,7 @@
       "comment": "Обнуление RAM (BSS): затирает 0600h байт стековым методом (PUSH D), затем восстанавливает SP.",
       "name": "func_clear_ram",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x6B75",
         "seed_source": "debug_analyze_code"
@@ -44,6 +46,7 @@
       "comment": "Очистка текстовой страницы VRAM (область 0FFE0h): заливает 60 строк по 11 знаков, восстанавливает SP.",
       "name": "func_clear_vram_text",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x5993",
         "seed_source": "debug_analyze_code"
@@ -76,6 +79,7 @@
       "comment": "Кадровая синхронизация: ждёт ВBlank по счётчику луча (IN 0Ah), выставляет палитру (func_2142), стробирует клавиатуру (OUT 03h=FE, IN 02h -> [0197]).",
       "name": "func_frame_sync",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x01F4",
         "seed_source": "debug_analyze_code"
@@ -98,6 +102,7 @@
       "comment": "Преобразование координат DE (строка/позиция) в адрес текстовой страницы VRAM (HL).",
       "name": "func_text_addr_from_coord",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксельная пара D=X E=Y для адреса текстовой страницы}",
         "seed_evidence": "call",
         "seed_from": "0x01AD",
         "seed_source": "debug_analyze_code"
@@ -113,6 +118,7 @@
       ],
       "name": "func_xor_sprite8",
       "properties": {
+        "params": "p0{name=режим;carrier=reg:A;size=8;sem=код плоскости/стиля вывода (задаётся MVI A перед вызовом)} | p1{name=координата;carrier=pair:DE;size=16;sem=пиксель D=X E=Y}",
         "seed_evidence": "call",
         "seed_from": "0x0546",
         "seed_source": "debug_analyze_code"
@@ -135,6 +141,7 @@
       "comment": "Программная выдержка: пустой цикл декремента BC (~B*C итераций).",
       "name": "func_delay_bc",
       "properties": {
+        "params": "p0{name=задержка;carrier=pair:BC;size=16;sem=число циклов счётчика DCX B; BC=0 даёт полный оборот FFFF}",
         "seed_evidence": "call",
         "seed_from": "0x6B6F",
         "seed_source": "debug_analyze_code"
@@ -157,6 +164,7 @@
       "comment": "Генератор индексов/псевдослучайных: шаг счётчика [0463] (умножение на 7 через сдвиги) -> A, перенос в H.",
       "name": "func_rng_step",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x0553",
         "seed_source": "debug_analyze_code"
@@ -169,6 +177,7 @@
       "comment": "Адрес в битплоскости: DE -> смещение кадра (D ограничен <18) через общий хвост label_6AEF.",
       "name": "func_plane_addr",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель D=X E=Y; прозрачно передаётся общему хвосту метки 6AEF}",
         "seed_evidence": "call",
         "seed_from": "0x0484",
         "seed_source": "debug_analyze_code"
@@ -181,6 +190,7 @@
       "comment": "Адрес пиксела в плоскости 1: смещение func_0465 + 9800h.",
       "name": "func_plane1_addr",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель D=X E=Y для адреса плоскости 1}",
         "seed_evidence": "call",
         "seed_from": "0x0A29",
         "seed_source": "debug_analyze_code"
@@ -193,6 +203,7 @@
       "comment": "Адрес пиксела в плоскости 2: смещение func_0465 + 9B00h.",
       "name": "func_plane2_addr",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель D=X E=Y для адреса плоскости 2}",
         "seed_evidence": "call",
         "seed_from": "0x04B2",
         "seed_source": "debug_analyze_code"
@@ -205,6 +216,7 @@
       "comment": "Проверка коллизии клетки справа (OR соседних ячеек в плоскости); A != 0 = попадание.",
       "name": "func_collide_right",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри из DE}",
         "seed_evidence": "call",
         "seed_from": "0x0566",
         "seed_source": "debug_analyze_code"
@@ -227,6 +239,7 @@
       "comment": "Проверка коллизии клетки слева.",
       "name": "func_collide_left",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри из DE}",
         "seed_evidence": "call",
         "seed_from": "0x0560",
         "seed_source": "debug_analyze_code"
@@ -249,6 +262,7 @@
       "comment": "Проверка коллизии клетки снизу.",
       "name": "func_collide_down",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри из DE}",
         "seed_evidence": "call",
         "seed_from": "0x058A",
         "seed_source": "debug_analyze_code"
@@ -271,6 +285,7 @@
       "comment": "Проверка коллизии клетки сверху.",
       "name": "func_collide_up",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри из DE}",
         "seed_evidence": "call",
         "seed_from": "0x0584",
         "seed_source": "debug_analyze_code"
@@ -296,6 +311,7 @@
       ],
       "name": "func_move_objects_main",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x6F95",
         "seed_source": "debug_analyze_code"
@@ -394,6 +410,7 @@
       "comment": "Обнуление таблицы объектов 05B1 (60h байт).",
       "name": "func_clear_table_05b1",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x597E",
         "seed_source": "debug_analyze_code"
@@ -449,6 +466,7 @@
       "comment": "Табличный доступ: чтение из 0690 по индексу A (карта смещений/паттернов движения).",
       "name": "func_lookup_table_0690",
       "properties": {
+        "params": "p0{name=индекс;carrier=reg:A;size=8;sem=смещение в таблице 0690h}",
         "seed_evidence": "call",
         "seed_from": "0x064C",
         "seed_source": "debug_analyze_code"
@@ -464,6 +482,7 @@
       ],
       "name": "func_update_objects_06f6",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x6FA1",
         "seed_source": "debug_analyze_code"
@@ -496,6 +515,7 @@
       "comment": "Обнуление большой таблицы объектов 06F6 (0258h = 600 байт).",
       "name": "func_clear_table_06f6",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x5975",
         "seed_source": "debug_analyze_code"
@@ -518,6 +538,7 @@
       "comment": "Отрисовка объекта в 4 битплоскости: выбор шаблона из 0B99 по A, XOR-растеризация, счётчик кадров [0B98].",
       "name": "func_draw_object_4plane",
       "properties": {
+        "params": "p0{name=трафарет;carrier=reg:A;size=8;sem=номер трафарета спрайта} | p1{name=координата;carrier=pair:DE;size=16;sem=пиксель D=X E=Y}",
         "seed_evidence": "call",
         "seed_from": "0x413D",
         "seed_source": "debug_analyze_code"
@@ -649,6 +670,7 @@
       "comment": "Растеризация 8 элементов (обёртка func_0B6C с B=8).",
       "name": "func_raster8_wrap",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x0AAD",
         "seed_source": "debug_analyze_code"
@@ -661,6 +683,7 @@
       "comment": "XOR-строчная растеризация маски в плоскости (B элементов, шаг DE=29h).",
       "name": "func_xor_plane_run",
       "properties": {
+        "params": "p0{name=источник;carrier=pair:HL;size=16;sem=указатель читаемых байт растровой строки} | p1{name=приёмник;carrier=pair:DE;size=16;sem=адрес назначения под маской} | p2{name=счётчик;carrier=reg:B;size=8;sem=число итераций строки}",
         "seed_evidence": "call",
         "seed_from": "0x0AAA",
         "seed_source": "debug_analyze_code"
@@ -683,6 +706,7 @@
       "comment": "Инициализация поля звёзд: заполнение области 9700h псевдослучайным узором 4-й битплоскости.",
       "name": "func_fill_star_plane",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x6F29",
         "seed_source": "debug_analyze_code"
@@ -725,6 +749,7 @@
       "comment": "Проверка правого края игрового поля для объекта DE (OR соседних клеток).",
       "name": "func_probe_edge_right",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри}",
         "seed_evidence": "call",
         "seed_from": "0x1F97",
         "seed_source": "debug_analyze_code"
@@ -747,6 +772,7 @@
       "comment": "Проверка левого края поля.",
       "name": "func_probe_edge_left",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри}",
         "seed_evidence": "call",
         "seed_from": "0x1F91",
         "seed_source": "debug_analyze_code"
@@ -769,6 +795,7 @@
       "comment": "Проверка нижней границы поля (e < 74h).",
       "name": "func_probe_edge_down",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри}",
         "seed_evidence": "call",
         "seed_from": "0x1F34",
         "seed_source": "debug_analyze_code"
@@ -791,6 +818,7 @@
       "comment": "Проверка верхней границы поля.",
       "name": "func_probe_edge_up",
       "properties": {
+        "params": "p0{name=координата;carrier=pair:DE;size=16;sem=пиксель спрайта D=X E=Y; адрес выборки считается внутри}",
         "seed_evidence": "call",
         "seed_from": "0x1F76",
         "seed_source": "debug_analyze_code"
@@ -813,6 +841,7 @@
       "comment": "Инициализация канала 1 КР580ВИ53: режим (OUT 08h=74h), данные (OUT 0Ah), пуск (OUT 08h=43h).",
       "name": "func_vi53_ch1_init",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x6F13",
         "seed_source": "debug_analyze_code"
@@ -825,6 +854,7 @@
       "comment": "Инициализация канала 2 КР580ВИ53 (OUT 08h=0B5h, OUT 09h).",
       "name": "func_vi53_ch2_init",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x6F16",
         "seed_source": "debug_analyze_code"
@@ -840,6 +870,7 @@
       ],
       "name": "func_plot_object_color",
       "properties": {
+        "params": "p0{name=трафарет;carrier=reg:A;size=8;sem=номер трафарета спрайта} | p1{name=координата;carrier=pair:DE;size=16;sem=пиксель D=X E=Y}",
         "seed_evidence": "call",
         "seed_from": "0x2401",
         "seed_source": "debug_analyze_code"
@@ -918,6 +949,7 @@
       "comment": "Палитровая рампа: шаг 8 элементов (обёртка func_1DC2 с B=8).",
       "name": "func_ramp_step8",
       "properties": {
+        "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x17A3",
         "seed_source": "debug_analyze_code"
