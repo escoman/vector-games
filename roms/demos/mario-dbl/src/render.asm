@@ -81,26 +81,19 @@ cap_s:      defw    0         ; курсор колонки shadow0 (+BAND_STEP)
 cap_t:      defw    0         ; курсор колонки shadow1 (+BAND_STEP)
 
 ; --- рабочие переменные сдвига тетрады (mario_draw_sprite, frac=4) ---
+;   Стратегия «В-чистовой»: сдвинутую колонку (32×{op,b0,b1}) собрать
+;   один раз в ds_buf (96 B), затем прогнать её через тот же быстрый
+;   путь dr_p0/dr_p1, что и обычные спрайты. drs_stage полностью
+;   unroll'ен на 96 SBYTE-макросов: HL прибит к &ds_t, OR идёт через
+;   mov m,a / add m (без push/pop), запись в ds_buf — фиксированные
+;   sta+ofs (HL больше не курсор), счётчик строк не нужен.
 ds_ncols:   defb    0         ; wcells (ширина спрайта в клетках)
 ds_cc:      defb    0         ; счётчик колонок вывода (wcells+1 .. 0)
-ds_cnt:     defb    0         ; счётчик строк внутри колонки (32..0)
 ds_cptr:    defw    0         ; база данных текущей клетки (cur)
 ds_pptr:    defw    0         ; база данных соседней клетки (prev, слева)
-ds_vtop0:   defw    0         ; VRAM-верх колонки вывода, плоскость бита0
-ds_vtop1:   defw    0         ; то же для плоскости бита1
-ds_v0:      defw    0         ; бегущий VRAM-указатель плоскости бита0
-ds_v1:      defw    0         ; бегущий VRAM-указатель плоскости бита1
-ds_co:      defb    0         ; cur op / cur b0 / cur b1 текущей строки
-ds_cb0:     defb    0
-ds_cb1:     defb    0
-ds_po:      defb    0         ; prev op / prev b0 / prev b1 текущей строки
-ds_pb0:     defb    0
-ds_pb1:     defb    0
-ds_op:      defb    0         ; собранный op (сдвинутый на 4)
-ds_bit:     defb    0         ; собранный bit плоскости (сдвинутый на 4)
 ds_t:       defb    0         ; временный накопитель nibble-OR (через ADD M)
-ds_t2:       defb    0        ; временный (cur^bit)&op
-ds_v:       defb    0         ; прочитанный байт фона (VRAM)
+ds_buf:     defs    96        ; сдвинутая колонка (32 тройки op/b0/b1),
+                              ; формат идентичен обычным данным спрайта
         ; Нулевой блок-клетка (96 байт) для отсутствующего соседа: клетка
         ; слева от 0-й и cur для spill-колонки справа. Обнуляется в начале
         ; drs_start (секция bss при --no-crt не зануляется).
@@ -132,7 +125,41 @@ dr_col:
         xchg                          ; DE = данные колонки
         lhld    _rs_p0                ; HL = VRAM (верх колонки)
         mvi     b,ROWS
-dr_row0:
+        call    dr_p0
+
+        ; ================= проход 1: плоскость бита 1 =================
+        lhld    _rs_data              ; DE = данные колонки (сначала)
+        xchg
+        lhld    _rs_p1
+        mvi     b,ROWS
+        call    dr_p1
+
+        ; ------------------- сдвиг на следующую колонку ----------------
+        lhld    _rs_data              ; старт + 96 (DE после dr_p1)
+        lxi     d,0060h
+        dad     d
+        shld    _rs_data
+        lda     _rs_p0+1
+        inc     a                     ; VRAM += 0x100 (блок следующий)
+        sta     _rs_p0+1
+        lda     _rs_p1+1
+        inc     a
+        sta     _rs_p1+1
+        lda     _rs_cols
+        inc     a
+        sta     _rs_cols
+        jnz     dr_col                ; INR задал Z
+        ret
+
+; ---------------------------------------------------------------
+; dr_p0 / dr_p1 — внутренний цикл одной колонки, вызывается и из
+; быстрого пути (dr_col), и из сдвинутого (после набора ds_buf).
+; Вход: HL = VRAM-курсор (верх колонки), DE = данные колонки,
+;   B = счётчик строк (ROWS=32). Побайтовая композиция
+;   res = vram ^ ((vram ^ bit) & op). HL уменьшается (y+1), DE +3/строку.
+; Выход: HL = низ колонки, DE = следующая колонка, B=0; Z=1.
+; ---------------------------------------------------------------
+dr_p0:
         ldax    d                     ; op
         mov     c,a
         inx     d                     ; -> b0
@@ -147,14 +174,10 @@ dr_row0:
         inx     d                     ; -> op следующей строки
         dcx     h                     ; y+1 => адрес -1
         dcr     b
-        jnz     dr_row0
+        jnz     dr_p0
+        ret
 
-        ; ================= проход 1: плоскость бита 1 =================
-        lhld    _rs_data              ; DE = данные колонки (сначала)
-        xchg
-        lhld    _rs_p1
-        mvi     b,ROWS
-dr_row1:
+dr_p1:
         ldax    d                     ; op
         mov     c,a
         inx     d                     ; пропуск b0
@@ -169,35 +192,50 @@ dr_row1:
         mov     m,a
         dcx     h                     ; y+1 => адрес -1
         dcr     b
-        jnz     dr_row1
-
-        ; ------------------- сдвиг на следующую колонку ----------------
-        mov     a,e                   ; DE уже = старт_колонки + 96
-        sta     _rs_data
-        mov     a,d
-        sta     _rs_data+1
-        lda     _rs_p0+1
-        inc     a                     ; VRAM += 0x100 (блок следующий)
-        sta     _rs_p0+1
-        lda     _rs_p1+1
-        inc     a
-        sta     _rs_p1+1
-        lda     _rs_cols
-        inc     a
-        sta     _rs_cols
-        jnz     dr_col                ; INR задал Z
+        jnz     dr_p1
         ret
 
 ; ---------------------------------------------------------------
-; Сдвиг тетрады (frac=4): вывод спрайта со сдвигом вправо на 4px.
+; SBYTE — макро-конструктор одного байта сдвинутой колонки.
+;   A = (cur >> 4) | (prev << 4);  запись в ds_buf+ofs;  DE,BC += 1.
+; HL должен указывать на &ds_t и НЕ двигается в makro'е —
+; therefore OR идёт напрямую (mov m,a пишет prev<<4 в (HL),
+; add m читает обратно ds_t и складывает с cur>>4), без push/pop.
+; ---------------------------------------------------------------
+SBYTE   MACRO   ofs
+        ldax    b                     ; prev byte
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h                  ; high nibble = prev<<4
+        mov     m,a                   ; (HL)=ds_t = prev<<4
+        ldax    d                     ; cur byte
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh                   ; low nibble = cur>>4
+        add     m                     ; A = (cur>>4)+(prev<<4) == OR
+        sta     ds_buf+ofs            ; фиксированный адрес, HL не трогаем
+        inx     b
+        inx     d
+        ENDM
+
+; ---------------------------------------------------------------
+; Сдвиг тетрады (frac=4) — «В-чистовой»: вывод спрайта со сдвигом
+; вправо на 4px.
 ;
 ; Выходной байт клетки col+j собирается из двух клеток спрайта:
 ;   low  nibble <- high nibble клетки j     (cur >> 4)
 ;   high nibble <- low  nibble клетки j-1   (prev << 4)
 ; j пробегает 0..wcells (wcells+1 колонок): слева prev=zcol, справа для
-; spill-колонки cur=zcol. Прозрачность op сдвигается так же; композиция
-; res = cur ^ ((cur ^ bit) & op) — как в быстром пути, но побитово по
-; собранному байту. 8080 не имеет сдвига на 4 — делаем 4x RRC/RLC.
+; spill-колонки cur=zcol. 8080 не имеет сдвига на 4 — делаем 4x RRC/RLC.
+;
+; На каждой колонке:
+;   1) drs_stage — собрать 32 тройки (op,b0,b1) в ds_buf (96 B);
+;   2) CALL dr_p0 / CALL dr_p1 — быстрый путь, ровно как для frac=0.
+; Внутренняя композиция и VRAM-стейджинг из старого drs_row удалены.
 ; ---------------------------------------------------------------
 drs_start:
         ; --- занулить zcol (96 байт): bss при --no-crt не инициализирован ---
@@ -223,14 +261,9 @@ drs_zclr:
         shld    ds_cptr
         lxi     h, zcol
         shld    ds_pptr
-        ; --- вершины колонок вывода ---
-        lhld    _rs_p0
-        shld    ds_vtop0
-        lhld    _rs_p1
-        shld    ds_vtop1
 
 drs_col:
-        ; DE = cur источник (zcol на spill-колонке, cc==1)
+        ; DE = cur (zcol на spill-колонке, cc==1), BC = prev
         lda     ds_cc
         sui     1
         jz      drs_cur_z
@@ -243,150 +276,135 @@ drs_cur_ok:
         lhld    ds_pptr               ; BC = prev
         mov     b, h
         mov     c, l
-        lhld    ds_vtop0              ; рабочие VRAM = вершины колонки
-        shld    ds_v0
-        lhld    ds_vtop1
-        shld    ds_v1
-        mvi     a, ROWS
-        sta     ds_cnt
+        lxi     h, ds_t               ; HL = &ds_t, стоит весь drs_stage
 
-drs_row:
-        ; ---- op_sh = (cur_op>>4) | (prev_op<<4). Читаем cur(DE)/prev(BC)
-        ;      напрямую (без стейджинга в память). CY-грязь от 4 ротаций
-        ;      попадает в маскируемую половину и теряется под ANI. ----
-        ldax    d                     ; cur op
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     0Fh                   ; cur_op>>4 (в младшем ниббле)
-        sta     ds_t
-        ldax    b                     ; prev op
-        rlc
-        rlc
-        rlc
-        rlc
-        ani     0F0h                  ; prev_op<<4 (в старшем ниббле)
-        lxi     h, ds_t
-        add     m                     ; ADD == OR (нибблы не пересекаются)
-        sta     ds_op
-        ora     a
-        jz      drs_skip              ; прозрачный байт -> в VRAM ничего не меняется
+; ---------------------------------------------------------------
+; drs_stage — полный unroll 32 строк × 3 байта = 96 SBYTE-макросов.
+;HL/DE/BC инициализированы в drs_col; после 96 макросов
+; DE/BC = cur+96 / prev+96 (не используются — drs_col перезагрузит),
+; ds_buf забит целиком. Falling-through в dr_p0/dr_p1 ниже.
+; ---------------------------------------------------------------
+drs_stage:
+        SBYTE   0
+        SBYTE   1
+        SBYTE   2
+        SBYTE   3
+        SBYTE   4
+        SBYTE   5
+        SBYTE   6
+        SBYTE   7
+        SBYTE   8
+        SBYTE   9
+        SBYTE   10
+        SBYTE   11
+        SBYTE   12
+        SBYTE   13
+        SBYTE   14
+        SBYTE   15
+        SBYTE   16
+        SBYTE   17
+        SBYTE   18
+        SBYTE   19
+        SBYTE   20
+        SBYTE   21
+        SBYTE   22
+        SBYTE   23
+        SBYTE   24
+        SBYTE   25
+        SBYTE   26
+        SBYTE   27
+        SBYTE   28
+        SBYTE   29
+        SBYTE   30
+        SBYTE   31
+        SBYTE   32
+        SBYTE   33
+        SBYTE   34
+        SBYTE   35
+        SBYTE   36
+        SBYTE   37
+        SBYTE   38
+        SBYTE   39
+        SBYTE   40
+        SBYTE   41
+        SBYTE   42
+        SBYTE   43
+        SBYTE   44
+        SBYTE   45
+        SBYTE   46
+        SBYTE   47
+        SBYTE   48
+        SBYTE   49
+        SBYTE   50
+        SBYTE   51
+        SBYTE   52
+        SBYTE   53
+        SBYTE   54
+        SBYTE   55
+        SBYTE   56
+        SBYTE   57
+        SBYTE   58
+        SBYTE   59
+        SBYTE   60
+        SBYTE   61
+        SBYTE   62
+        SBYTE   63
+        SBYTE   64
+        SBYTE   65
+        SBYTE   66
+        SBYTE   67
+        SBYTE   68
+        SBYTE   69
+        SBYTE   70
+        SBYTE   71
+        SBYTE   72
+        SBYTE   73
+        SBYTE   74
+        SBYTE   75
+        SBYTE   76
+        SBYTE   77
+        SBYTE   78
+        SBYTE   79
+        SBYTE   80
+        SBYTE   81
+        SBYTE   82
+        SBYTE   83
+        SBYTE   84
+        SBYTE   85
+        SBYTE   86
+        SBYTE   87
+        SBYTE   88
+        SBYTE   89
+        SBYTE   90
+        SBYTE   91
+        SBYTE   92
+        SBYTE   93
+        SBYTE   94
+        SBYTE   95
 
-        ; ---- плоскость бита 0: bit = (cur_b0>>4)|(prev_b0<<4) ----
-        inx     d                     ; -> cur b0
-        inx     b                     ; -> prev b0
-        ldax    d
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     0Fh
-        sta     ds_t
-        ldax    b
-        rlc
-        rlc
-        rlc
-        rlc
-        ani     0F0h
-        lxi     h, ds_t
-        add     m
-        sta     ds_bit
-        lhld    ds_v0
-        mov     a, m
-        sta     ds_v
-        lda     ds_bit
-        lxi     h, ds_v
-        xra     m                     ; t2 = vram ^ bit
-        sta     ds_t2
-        lda     ds_t2
-        lxi     h, ds_op
-        ana     m                     ; t2 = t2 & op
-        sta     ds_t2
-        lda     ds_v
-        lxi     h, ds_t2
-        xra     m                     ; res = vram ^ t2
-        lhld    ds_v0
-        mov     m, a
-        dcx     h                     ; y+1 => адрес -1
-        shld    ds_v0
+        ; ---- плоскость 0: dr_p0(ds_buf -> _rs_p0) ----
+        lxi     d, ds_buf
+        lhld    _rs_p0
+        mvi     b, ROWS
+        call    dr_p0
+        ; ---- плоскость 1: dr_p1(ds_buf -> _rs_p1) ----
+        lxi     d, ds_buf
+        lhld    _rs_p1
+        mvi     b, ROWS
+        call    dr_p1
 
-        ; ---- плоскость бита 1: bit = (cur_b1>>4)|(prev_b1<<4) ----
-        inx     d                     ; -> cur b1
-        inx     b                     ; -> prev b1
-        ldax    d
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     0Fh
-        sta     ds_t
-        ldax    b
-        rlc
-        rlc
-        rlc
-        rlc
-        ani     0F0h
-        lxi     h, ds_t
-        add     m
-        sta     ds_bit
-        lhld    ds_v1
-        mov     a, m
-        sta     ds_v
-        lda     ds_bit
-        lxi     h, ds_v
-        xra     m
-        sta     ds_t2
-        lda     ds_t2
-        lxi     h, ds_op
-        ana     m
-        sta     ds_t2
-        lda     ds_v
-        lxi     h, ds_t2
-        xra     m
-        lhld    ds_v1
-        mov     m, a
-        dcx     h
-        shld    ds_v1
-
-        inx     d                     ; -> cur op следующей строки
-        inx     b                     ; -> prev op следующей строки
-        jmp     drs_next
-
-drs_skip:
-        ; Прозрачный байт: только сдвигаем cur/prev (+3) и VRAM-указатели (-1).
-        inx     d
-        inx     d
-        inx     d
-        inx     b
-        inx     b
-        inx     b
-        lhld    ds_v0
-        dcx     h
-        shld    ds_v0
-        lhld    ds_v1
-        dcx     h
-        shld    ds_v1
-drs_next:
-        ; ---- следующая строка ----
-        lda     ds_cnt
-        sui     1
-        sta     ds_cnt
-        jnz     drs_row
-
-        ; ---- следующая колонка: prev=cur, cur+=96, вершины+=0x100 ----
+        ; ---- следующая колонка: prev=cur, cur+=96, VRAM += 0x100 ----
         lhld    ds_cptr
         shld    ds_pptr
         lxi     d, 0060h
         dad     d
         shld    ds_cptr
-        lhld    ds_vtop0
-        lxi     d, 0100h
-        dad     d
-        shld    ds_vtop0
-        lhld    ds_vtop1
-        dad     d
-        shld    ds_vtop1
+        lda     _rs_p0+1
+        inc     a
+        sta     _rs_p0+1
+        lda     _rs_p1+1
+        inc     a
+        sta     _rs_p1+1
         lda     ds_cc
         sui     1
         sta     ds_cc
