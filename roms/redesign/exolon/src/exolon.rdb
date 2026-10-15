@@ -2,6 +2,15 @@
   "format": "rdb",
   "objects": [
     {
+      "address": "0x0038",
+      "comment": "Обработчик аппаратного VBlank: RST 7 (opcode 0FFh), вектор 0038h, ~50 Гц. Содержимое — одиночный RET (0C9h), который ROM пишет сюда в func_init_palette_vblank (MVI A,0C9h + STA 0038h). Это однократный будильник для EI/HLT при старте: CPU встаёт на HLT, первый VBlank дёргает RST 7, RET возвращает к DI. Не постоянный драйвер. Подтверждено вживую: BP на 0038h срабатывает при инициализации (PC=0038h, IFF=1, A=0C9h); в игровом цикле IFF=0 (прерывания замаскированы).",
+      "name": "func_irq_vblank",
+      "properties": {
+        "irq_role": "RST7/VBlank (~50Hz); handler=RET(0C9h); use=однократный EI/HLT/DI sync при старте; геймплей — polling"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x0100",
       "comment": "Точка входа ROM: JMP на текущий экран; патчится self-modifying кодом (SHLD 0101h) при смене экрана.",
       "links": [
@@ -76,13 +85,14 @@
     },
     {
       "address": "0x0147",
-      "comment": "Кадровая синхронизация: ждёт ВBlank по счётчику луча (IN 0Ah), выставляет палитру (func_2142), стробирует клавиатуру (OUT 03h=FE, IN 02h -> [0197]).",
+      "comment": "Кадровая синхронизация поллингом IN 0Ah (счётчик ВИ53 ~50Гц) до окна 07h..74h, затем lbl_0164: настройка бордюра (OUT 02h + palette latch), скролла (OUT 03h), опрос клавиатуры (IN 02h -> 0197h). Три OUT 00h: 88h(SET PC0), 8Ah(SET PC2), 88h(SET PC0) — поднимает TapeOut(PC0) каждый кадр; в паре с RESET-ами из func_update_objects_06f6/func_beam_delay это часть озвучки боя.",
       "name": "func_frame_sync",
       "properties": {
         "params": "(нет)",
         "seed_evidence": "call",
         "seed_from": "0x01F4",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "timing": "polled: IN 0Ah (счётчик VI53) для синхронизации кадра; прерывания не используются (IFF=0)"
       },
       "size": 4294967295,
       "type": "function"
@@ -135,6 +145,13 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x01FF",
+      "comment": "Таблица 8x8 спрайтов. База источника func_xor_sprite8 0x01A9: 01FFh + idx*64 + color*16. 9 спрайтов × 64 байта (4 цветовых варианта × 16), строки по 2 байта (8 пикс. в старшем). idx0=корабль(левый), idx1=корабль(правый), idx7@03BF=снаряд, idx8@03FF=взрыв. Байты 0260h раньше авто-дизасемблировались как NOP — это битмапы.",
+      "name": "data_sprites",
+      "size": 576,
+      "type": "data"
     },
     {
       "address": "0x043F",
@@ -476,7 +493,7 @@
     },
     {
       "address": "0x0698",
-      "comment": "Обновление объектов таблицы 06F6 (6-байтные записи): движение, границы 78h/A9h, палитра через OUT 00h.",
+      "comment": "Обновление объектов таблицы 06F6 (6-байтные записи {flag,X,Y,dx,dy,color}): движение, границы 78h/A9h, отрисовка спрайтом 01A9h. Третий OUT 00h (0x06E1: mov a,e; rrc; ani 01h) = ЗВУК БОЯ: пишет в TapeOut(PC0) RESET для каждой живой частицы. Частицы-осколки сыплет func_update_bullet_trail(4A84) при попаданиях; вместе с SET PC0 в func_frame_sync(0147) это даёт аудиомодуляцию PC0 (проверено io_trace: 57 RESET/с в бою против 0 в idle).",
       "links": [
         "0x0147"
       ],
@@ -838,7 +855,7 @@
     },
     {
       "address": "0x16A2",
-      "comment": "Инициализация канала 1 КР580ВИ53: режим (OUT 08h=74h), данные (OUT 0Ah), пуск (OUT 08h=43h).",
+      "comment": "Инициализация КР580ВИ53 канал1: CW OUT 08h=74h, данные OUT 0Ah=00h,75h => счёт 0x7500=29952, пуск OUT 08h=43h. При такте ВИ53 1.5МГц => 1.5e6/29952 ≈ 50.08 Гц — это КАДРОВЫЙ ТАЙМЕР синхронизации (IN 0Ah поллинг, boot-комментарий), а НЕ музыка/тон мелодии. Мелодия заставки — бипер ВВ55 (OUT 00h), см. func_blink_toggle @0x7335. Вызывается из инициализаций экранов (0x6F13, 0x7651).",
       "name": "func_vi53_ch1_init",
       "properties": {
         "params": "(нет)",
@@ -851,7 +868,7 @@
     },
     {
       "address": "0x16B2",
-      "comment": "Инициализация канала 2 КР580ВИ53 (OUT 08h=0B5h, OUT 09h).",
+      "comment": "Инициализация КР580ВИ53 канал2: CW OUT 08h=0B5h, данные OUT 09h=73h дважды => счёт 0x7373=29555, 1.5e6/29555 ≈ 50.8 Гц. Второй кадровый/синхронизирующий таймер, НЕ мелодия. Мелодия заставки — 1-битный бипер ВВ55 через OUT 00h (func_blink_toggle @0x7335 / data_music_seq_title @0x70B4). Вызывается из инициализаций экранов (0x6F16).",
       "name": "func_vi53_ch2_init",
       "properties": {
         "params": "(нет)",
@@ -993,9 +1010,13 @@
     },
     {
       "address": "0x1DFB",
-      "comment": "Инициализация палитры и привязка к ВBlank: ставит RET в 0038h, EI/HLT (ожидание 1 кадра), DI; далее загрузка палитры.",
+      "comment": "Инициализация палитры и привязка к VBlank. DI; MVI A,0C9h; STA 0038h (обработчик VBlank = RET); EI; HLT (ожидание первого ВBlank — единственное включение прерываний во всём ROM); DI; далее загрузка палитры (OUT 02h индекс + OUT 0Ch строб, 16 цветов). После DI прерывания больше никогда не включаются — остальной тайминг кадра поллингом (func_frame_sync/func_beam_delay).",
+      "links": [
+        "0x0038"
+      ],
       "name": "func_init_palette_vblank",
       "properties": {
+        "interrupts": "единственный EI в ROM: однократный EI/HLT/DI sync к первому кадру; вектор 0038h=RET",
         "seed_evidence": "call",
         "seed_from": "0x6F0A",
         "seed_source": "debug_analyze_code"
@@ -1005,12 +1026,13 @@
     },
     {
       "address": "0x1E2F",
-      "comment": "Выдержка по лучу: IN 09h с масштабированием для точной синхронизации отрисовки (B итераций).",
+      "comment": "Выдержка по лучу (beam-racing): IN 09h (счётчик ВИ53) с масштабированием для точной синхронизации отрисовки (B итераций). ПОБОЧНЫЙ ЗВУК: each итерация пишет бит счётчика ВИ53 в TapeOut(PC0) (in 09h; rrc; ani 01h; out 00h), затем xra a; out 00h (RESET). Вызывается из enemy-fire(43A3), alien-обработки(4978) и др. путей отрисовки => участвует в озвучке боя (модуляция PC0 на аудиочастоте).",
       "name": "func_beam_delay",
       "properties": {
         "seed_evidence": "call",
         "seed_from": "0x4046",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "timing": "polled beam-racing: IN 09h (счётчик VI53) + OUT 00h; задержка гонок с лучом, не прерывание"
       },
       "size": 4294967295,
       "type": "function"
@@ -1231,6 +1253,13 @@
       "type": "function"
     },
     {
+      "address": "0x1FFB",
+      "comment": "Счётчик текущего уровня/волны (TZ var_wave_counter). Читает func_select_wave_entry 0x2153 (cmp с data_wave_table), func_round_end_sequence, func_level_advance. Init=0 @lbl_6f01; 0FFh=sentinel game-over (sta 1ffbh в ветке [1FFB]=7Ch); ROM-static=0.",
+      "name": "var_wave_counter",
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x2013",
       "name": "lbl_2013",
       "properties": {
@@ -1425,6 +1454,13 @@
       "type": "label"
     },
     {
+      "address": "0x2188",
+      "comment": "Карта волн/уровней (читает func_select_wave_entry 0x2153). 70 записей × 5 байт {номер_уровня, ptr_паттерна(word), p1, p2}, терминатор 0FFh @0x22E6. Уровни 3..124. ptr ∈ {2429,2468,24B3,24E8,24F1,2506}. Совпадение с [1FFB] активирует волну ([2187]=1), ptr->[2341], p1->[23FB], p2->[2362].",
+      "name": "data_wave_table",
+      "size": 351,
+      "type": "table"
+    },
+    {
       "address": "0x22E7",
       "comment": "Генерация врагов: обход таблицы 252B, создание новых сущностей сверху поля, выбор паттерна.",
       "links": [
@@ -1550,6 +1586,20 @@
       "type": "label"
     },
     {
+      "address": "0x2429",
+      "comment": "Паттерны движения врагов (bytecode, обходит func_move_enemies 0x236E). 6 скриптов, терминатор 0C3h @0x2467/0x24B2/0x24E7/0x24F0/0x2505/0x252A. Формат: 0C4 <n>=задержка n кадров; иначе пара <dx><dy> знакового смещения (0FFh=-1). A@0x2429 B@0x2468 C@0x24B3 D@0x24E8 E@0x24F1 F@0x2506.",
+      "name": "data_enemy_patterns",
+      "size": 258,
+      "type": "data"
+    },
+    {
+      "address": "0x252B",
+      "comment": "Очередь активных врагов (TZ var_enemy_count). Итерируют func_spawn_enemies 0x22E7 (шаг 0x0A, поиск свободного слота где byte=0) и func_move_enemies 0x236E. ROM-инициализация = 3 шаблонных врага (ptr паттерна D 0x24E8) @0x252B/0x2535/0x253F, дальше слоты=0. Число активных врагов = занятость очереди до терминатора 0.",
+      "name": "var_spawn_queue",
+      "size": 30,
+      "type": "data"
+    },
+    {
       "address": "0x2568",
       "comment": "Обнуление очереди спавна 252B (3Ch байт).",
       "name": "func_clear_spawn_queue",
@@ -1652,6 +1702,13 @@
       "type": "label"
     },
     {
+      "address": "0x2630",
+      "comment": "Латиница/цифры: блок глифов 8 байт/глиф (0x2630-0x282F, коды 0x20-0x5F). Адрес глифа = базовый регистр [3B19] + code*8; базовый регистр по умолчанию = 0x2530 (= блок - 0x20*8, codes 0x00-0x1F не рендерятся и попадают в код). Используется HUD, меню, бонус, GAME OVER (англ. тексты). Подтверждено: glyph_scan + рендер ASCII-артом + живой скриншот title.",
+      "name": "data_glyph_block_latin",
+      "size": 512,
+      "type": "data"
+    },
+    {
       "address": "0x3A91",
       "comment": "Перенос/сдвиг строки глифа (8 пикселей) в буфер с учётом сдвига [3A90]; режим заливки/очистки.",
       "name": "func_blt_glyph_row",
@@ -1690,7 +1747,7 @@
     },
     {
       "address": "0x3B5B",
-      "comment": "Рисование глифа с базовым указателем [3B19] (вывод текста на экран).",
+      "comment": "Рисование глифа: адрес источника = [3B19] + code*8 (трассировка: ADD A; DAD H x2 => 8*code; LHLD 3B19; DAD B). База [3B19]: по умолчанию 0x2530 (латиница/цифры, data_glyph_block_latin @0x2630), либо 0x732D (кириллица, data_glyph_block_cyrillic @0x742D) ставится опкодом 0xE6 интерпретатора func_display_interpreter 0x3CC1. Дефолт базы: LXI H,2530 / SHLD 3B19.",
       "links": [
         "0x3A91"
       ],
@@ -1995,7 +2052,7 @@
     },
     {
       "address": "0x3DF1",
-      "comment": "Вывод BCD-значения (6 разрядов) из DE в HUD по адресу [3E8F], база 3E31h.",
+      "comment": "ASCII-decimal ADD (не табличный ридер): складывает 6 ASCII-цифр поля [DE] в аккумулятор-строку 0x3E2C-0x3E31, затем рендерит display-list 0x3E24 (func_display_interpreter). Источники = data_score_table 0x3E33..0x3E6E (10×6-digit ASCII, шаг 6). Вызывающие передают ФИКСОВАННЫЙ DE на последнюю цифру поля: 0x3E38(HUD score, func_refresh_hud), 0x3E4A, 0x3E6E(round/bonus award, func_round_end_sequence). Реализует TZ data_score_table @0x3E33.",
       "name": "func_render_bcd_value",
       "properties": {
         "seed_evidence": "call",
@@ -2024,6 +2081,13 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x3E33",
+      "comment": "10 полей ASCII-очков (TZ data_score_table — значения ПОДТВЕРЖДЕНЫ в ROM). 6-значные ASCII-dec @0x3E33..0x3E6E шаг6: 000025 000050 000100 000125 000150 000200 000250 000300 000350 001000. Очки за типы врагов (25..350) + бонус раунда (1000). NUANCE: func_render_bcd_value читает их как независимые 6-байтные ASCII-поля по ФИКСОВАННЫМ DE (0x3E38/0x3E3E/../0x3E6E, стр.6), не по индексу; в рантайме это RAM-переменные накопления счёта, ROM=init-значения.",
+      "name": "data_score_table",
+      "size": 60,
+      "type": "table"
     },
     {
       "address": "0x3E6F",
@@ -2202,6 +2266,41 @@
       },
       "size": 4294967295,
       "type": "function"
+    },
+    {
+      "address": "0x3F54",
+      "comment": "HUD-подпись 'AMMO ' (англ., боезапас). Рядом значения через func_render_bcd_value/счётчики.",
+      "name": "str_hud_ammo",
+      "size": 5,
+      "type": "string"
+    },
+    {
+      "address": "0x3F5A",
+      "comment": "HUD-подпись 'GRENADES ' (англ., гранаты)",
+      "name": "str_hud_grenades",
+      "size": 9,
+      "type": "string"
+    },
+    {
+      "address": "0x3F64",
+      "comment": "HUD-подпись 'POINTS ' (англ., очки/счёт)",
+      "name": "str_hud_points",
+      "size": 7,
+      "type": "string"
+    },
+    {
+      "address": "0x3F6C",
+      "comment": "HUD-подпись 'LIVES ' (англ., жизни)",
+      "name": "str_hud_lives",
+      "size": 6,
+      "type": "string"
+    },
+    {
+      "address": "0x3F73",
+      "comment": "HUD-подпись 'ZONES' (англ., зона/уровень)",
+      "name": "str_hud_zones",
+      "size": 5,
+      "type": "string"
     },
     {
       "address": "0x3F82",
@@ -3347,7 +3446,7 @@
     },
     {
       "address": "0x48FF",
-      "comment": "Агрегатор обновления объектов: вызывает подсистемы 49C4/49E7/4A05/4A85 и движение игрока func_20F4.",
+      "comment": "Агрегатор обновления объектов: подсистемы 49C4/49E7/4A05/4A85 + движение игрока func_20F4. Stage5 live-diff: таблица активных объектов/врагов ~0x25E6 (записи x/y/type), физический рабочий набор (пули/скорости/эффекты) 0x0BAE-0x0C27, координаты игрока 0x2090/0x2091.",
       "links": [
         "0x0147",
         "0x49C4",
@@ -3574,7 +3673,7 @@
     },
     {
       "address": "0x4A85",
-      "comment": "Обновление/отрисовка трасс пуль (4787): накопление попаданий, при 25 — очистка func_3E6F.",
+      "comment": "Обновление трасс пуль (4787): накопление попаданий; когда счётчик [478Bh] доходит до 19h(25), пачкой сыплет частицы-осколки в таблицу 06F6 через func_plot_from_table_067b (B=478Ah раз) и чистит трассу. ЭТИ частицы затем анимируются func_update_objects_06f6(0698), которая пишет RESET PC0 на каждую из них => источник звука взрыва/попадения на TapeOut.",
       "name": "func_update_bullet_trail",
       "properties": {
         "seed_evidence": "call",
@@ -3821,7 +3920,7 @@
     },
     {
       "address": "0x4C8E",
-      "comment": "Визуальная вспышка: быстрое переключение маски OUT 00h — эффект взрыва/мигания.",
+      "comment": "ЗВУКОВОЙ ЭФФЕКТ (НЕ видео!): быстрый нисходящий chirp бипера ВВ55 (OUT 00h BSR PC0, xri 01h). Структура: внешний цикл D=0x1020, средний H=10, внутренний B=E (E инкрементируется на каждой внешней итерации → период растёт → частота падает). ~41280 переключений PC0 за вызов. Вызывается из func_bonus_award @0x557A ×5 (10 chirps при сборе бонуса). Единственный игровой SFX в exolon.",
       "name": "func_flash_video",
       "properties": {
         "seed_evidence": "call",
@@ -3867,7 +3966,8 @@
       "links": [
         "0x3CC1",
         "0x3EC6",
-        "0x3ED2"
+        "0x3ED2",
+        "0x4C8E"
       ],
       "name": "func_bonus_award",
       "properties": {
@@ -4204,7 +4304,7 @@
     },
     {
       "address": "0x6B10",
-      "comment": "Обработка конца волны/раунда: отрисовка 6C78, вывод счёта; при [1FFB]=7Ch — экран GAME OVER.",
+      "comment": "Конец волны/раунда (Stage5): отрисовка списка 0x6C78 = 'BRAVERY BONUS'(@0x6CD0)/'LIVES BONUS'(@0x6CE8)/'PRESS FIRE TO RESUME PLAY'; вывод счёта из 0x3E6E (func_render_bcd_value); затем CALL func_bonus_pointer_screen 0x6BE9; при [1FFB]=7Ch -> GAME OVER (0x7048).",
       "links": [
         "0x741C",
         "0x6BE9"
@@ -4285,14 +4385,22 @@
       "type": "label"
     },
     {
+      "address": "0x6BD7",
+      "comment": "Конфиг бонус-экрана (TZ порог BRAVERY BONUS). 0x6BD7: word 0x0DFF — гейт func_round_end_sequence 0x6B10 (func_scale_de_x8, сравнение с x игрока [0x2090], rc). 0x6BDA: таблица level->player_start 5×{level(0,25,50,75,100), ptr(word)} -> [0x208E/0x2090]. Списки BRAVERY BONUS(0x6CD0)/LIVES BONUS(0x6CE8) рендерятся из display-list 0x6C78.",
+      "name": "data_bonus_config",
+      "size": 18,
+      "type": "data"
+    },
+    {
       "address": "0x6BE9",
-      "comment": "Экран GAME OVER: очистка RAM (func_0103), рендер списка 6E23h, мигание, ожидание func_1E55.",
+      "comment": "Stage5-переименовано (был func_game_over_screen): рендерит список 0x6E23 = 'EXOLON BONUS SCREEN! / PRESS FIRE TO STOP POINTER' — бонусная мини-игра со стоп-указателем, НЕ game-over. Вызывается из func_round_end_sequence 0x6B10. Мигание [6C77], вывод счёта из 0x3E6E. Настоящий GAME OVER — список 0x7066 на lbl_7048.",
       "links": [
         "0x0103",
         "0x3CC1",
-        "0x1E55"
+        "0x1E55",
+        "0x6D0B"
       ],
-      "name": "func_game_over_screen",
+      "name": "func_bonus_pointer_screen",
       "properties": {
         "seed_evidence": "call",
         "seed_from": "0x6B92",
@@ -4338,7 +4446,107 @@
       "type": "label"
     },
     {
+      "address": "0x6C77",
+      "comment": "Фаза POINTS-указателя бонус-мини-игры (TZ указатель POINTS). func_bonus_pointer_screen 0x6BE9: inr [6C77]; колонка=([6C77]&7)+0x0D (13..20), row 0x16, глиф '*'(0x2A). По FIRE награда = func_render_bcd_value(0x3E6E) повторённое ([6C77]&7) раз.",
+      "name": "var_bonus_pointer_phase",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x6CD0",
+      "comment": "Round-end (конец волны), 'BRAVERY BONUS' (англ., лат. шрифт 0x2530). Список 0x6C78, рендерит func_round_end_sequence 0x6B10.",
+      "name": "str_re_bravery_bonus",
+      "size": 13,
+      "type": "string"
+    },
+    {
+      "address": "0x6CE8",
+      "comment": "Round-end, 'LIVES BONUS' (англ.)",
+      "name": "str_re_lives_bonus",
+      "size": 11,
+      "type": "string"
+    },
+    {
+      "address": "0x6CFF",
+      "comment": "Round-end, 'PRESS FIRE TO' (англ.) — первая строка 'PRESS FIRE TO / RESUME PLAY'",
+      "name": "str_re_press_fire",
+      "size": 13,
+      "type": "string"
+    },
+    {
+      "address": "0x6D0E",
+      "comment": "Round-end, 'RESUME PLAY' (англ.)",
+      "name": "str_re_resume_play",
+      "size": 11,
+      "type": "string"
+    },
+    {
+      "address": "0x6D54",
+      "comment": "Bravo-экран (список ~0x6D52), 'CONGRATULATIONS!' (англ.)",
+      "name": "str_bravo_congrats",
+      "size": 16,
+      "type": "string"
+    },
+    {
+      "address": "0x6D67",
+      "comment": "Bravo-экран, 'YOU HAVE PROVEN YOUR' (англ.)",
+      "name": "str_bravo_proven",
+      "size": 20,
+      "type": "string"
+    },
+    {
+      "address": "0x6D7E",
+      "comment": "Bravo-экран, 'COMBAT ABILITIES' (англ.) — вместе с предыдущей: 'YOU HAVE PROVEN YOUR COMBAT ABILITIES'",
+      "name": "str_bravo_combat",
+      "size": 16,
+      "type": "string"
+    },
+    {
+      "address": "0x6D91",
+      "comment": "Bravo-экран, 'TO THE FULL' (англ.)",
+      "name": "str_bravo_to_the_full",
+      "size": 11,
+      "type": "string"
+    },
+    {
+      "address": "0x6D9F",
+      "comment": "Bravo-экран, 'PRESS FIRE TO' (англ., повтор на другом экране)",
+      "name": "str_bravo_press_fire",
+      "size": 13,
+      "type": "string"
+    },
+    {
+      "address": "0x6DAF",
+      "comment": "Bravo-экран, 'RESUME PLAY' (англ., повтор)",
+      "name": "str_bravo_resume_play",
+      "size": 11,
+      "type": "string"
+    },
+    {
+      "address": "0x6E23",
+      "comment": "Список отображения бонус-экрана со стоп-указателем (рендерит func_bonus_pointer_screen 0x6BE9: LXI H,6E23). Содержит str_bonus_exolon_screen 'EXOLON BONUS SCREEN!' @0x6E5C и str_bonus_stop_pointer 'PRESS FIRE TO STOP POINTER' @0x6E74. Stage6: исправлен адрес (Stage5 ошибочно ставил метку на 0x6D0B — внутри строки 'PRESS FIRE TO').",
+      "name": "data_bonus_pointer_display_list",
+      "type": "label"
+    },
+    {
+      "address": "0x6E5C",
+      "comment": "Бонус-экран со стоп-указателем (список 0x6E23, func_bonus_pointer_screen 0x6BE9), 'EXOLON BONUS SCREEN!' (англ.)",
+      "name": "str_bonus_exolon_screen",
+      "size": 20,
+      "type": "string"
+    },
+    {
+      "address": "0x6E74",
+      "comment": "Бонус-экран, 'PRESS FIRE TO STOP POINTER' (англ.)",
+      "name": "str_bonus_stop_pointer",
+      "size": 26,
+      "type": "string"
+    },
+    {
       "address": "0x6F01",
+      "links": [
+        "0x6F6D"
+      ],
       "name": "lbl_6f01",
       "properties": {
         "seed_evidence": "jcc",
@@ -4355,6 +4563,12 @@
         "seed_from": "0x6F35",
         "seed_source": "debug_analyze_code"
       },
+      "type": "label"
+    },
+    {
+      "address": "0x6F6D",
+      "comment": "Главный игровой цикл (Stage5, live-verified): ~45 CALL/кадр — update_all_objects 0x48FF, HUD refresh, beam-racing. Выход на паузу/round-end 0x6B10/game-over 0x6BE9/level-advance 0x5941.",
+      "name": "lbl_game_loop",
       "type": "label"
     },
     {
@@ -4415,6 +4629,10 @@
     },
     {
       "address": "0x7048",
+      "comment": "Экран GAME OVER (Stage5): LXI H,7066 ('GAME OVER' @0x706E); CALL func_render_and_blink; цикл func_wait_key; при [1E4B]!=0 -> func_entry_jmp (рестарт). Достигается из round_end при [1FFB]=7Ch.",
+      "links": [
+        "0x7066"
+      ],
       "name": "lbl_7048",
       "properties": {
         "seed_evidence": "jcc",
@@ -4434,8 +4652,47 @@
       "type": "label"
     },
     {
+      "address": "0x7066",
+      "name": "data_game_over_display_list",
+      "type": "label"
+    },
+    {
+      "address": "0x706E",
+      "comment": "GAME OVER (список 0x7066, рендер lbl_7048 func_render_and_blink), 'GAME OVER' (англ., двойной пробел)",
+      "name": "str_gameover_text",
+      "size": 10,
+      "type": "string"
+    },
+    {
+      "address": "0x7079",
+      "comment": "Партитура GAME OVER: 19 нот по 3 байта {A=длительность, hi-idx, lo-idx}, терминатор 00h на 0x70B2 (57B). A=0x0F(15) для 18 нот и 0x2D(45) для финальной = 3 шага. DUR_BASE=15 (не 18 как title), шаг ≈98.6 мс. Индексы обращены к data_beeper_period_table @0x7300. Читается func_play_blink_sequence @0x73BE через func_render_and_blink @0x7413 (LXI H,7079h). MIDI: tools/music_spec_gameover.json → exolon_gameover.mid. Пауз нет (все hi≥23, lo≥35).",
+      "links": [
+        "0x7300"
+      ],
+      "name": "data_music_seq_gameover",
+      "size": 57,
+      "type": "data"
+    },
+    {
+      "address": "0x70B4",
+      "comment": "Партитура мелодии ЗАСТАВКИ: 195 нот по 3 байта {A=длительность, hi-idx, lo-idx}, терминатор 00h на 0x72FD (длина 585B). Читается func_play_blink_sequence @0x73BE (LXI H,70B4 в lbl_title_init @0x767A) — играется ОДИН раз. A∈{12h,24h,36h,48h,5Ah}={18,36,54,72,90} = 1..5 муз.шагов (шаг=256*18 итераций). hi-idx/lo-idx — индексы в data_beeper_period_table @0x7300. Звук = 1-битный бипер ВВ55 (порт C бит0 через OUT 00h BSR), НЕ КР580ВИ53. Двухголосно: низ=2*(256-tab[hi]), верх=2*(256-tab[lo]) итераций. MIDI: tools/music_spec_title.json → exolon_title.mid. Пауз (hi=0&lo=0) здесь нет.",
+      "links": [
+        "0x7300"
+      ],
+      "name": "data_music_seq_title",
+      "size": 585,
+      "type": "data"
+    },
+    {
+      "address": "0x7300",
+      "comment": "Таблица периодов бипера (53 байта, 0x7300..0x7334): монотонно возрастающая шкала 01h..F4h. Значение value → период огибающей тона = 2*(256-value) итераций быстрого цикла func_blink_toggle. Индексируется двумя байтами ноты раздельно: hi-idx даёт D (низкий тон), lo-idx даёт E (верхний тон). Значения после idx 52 (0x7335+) — уже код func_blink_toggle, не таблица. Проверено измерением: прогон 0x7335 в v06_emu, автокорреляция фронтов бипера даёт ровно 2*(256-value) (7/7 значений). f=3_000_000/(77*период) Гц (docs: эффективный CPU≈3МГц VERIFIED; 77=ручной подсчёт T-состояний быстрого пути).",
+      "name": "data_beeper_period_table",
+      "size": 53,
+      "type": "table"
+    },
+    {
       "address": "0x7335",
-      "comment": "Мигание: быстрая передача периода DE в OUT 00h (переключение видео-маски) — анимация звёзд.",
+      "comment": "ГЕНЕРАТОР ТОНА бипера (НЕ видео-маска): OUT 00h = управляющее слово ВВ55 в формате BSR (00h/01h => сброс/установка порта C бит0 = 1-битный аудиовыход/магнитофон, docs §8.1/§11.5). A=длительность (73FC), DE=период (D=hi, E=lo из таблицы 0x7300). Быстрый путь = 77 T-состояний/итерация, два OUT за итерацию (значения H,L). Биты H0/L0 переключаются при переполнении E/D-счётчиков => две огибающие: низ=2*(256-D), верх=2*(256-E) итераций; когда H0==L0 — тишина. Имерено прогоном в v06_emu. Вызывается из func_play_blink_sequence @0x73BE (0x73F6).",
       "name": "func_blink_toggle",
       "properties": {
         "seed_evidence": "call",
@@ -4487,7 +4744,7 @@
     },
     {
       "address": "0x737A",
-      "comment": "Пауза мигания: вариант func_7335 без вывода в порт (NOP-задержка, темнот фаза).",
+      "comment": "Пауза/тишина мелодии: вариант func_blink_toggle БЕЗ вывода в порт (NOP-задержка). Вызывается из func_play_blink_sequence, когда hi-idx==0 И lo-idx==0 (DE=0) => тишина на A длительности. Ни в data_music_seq_title @0x70B4, ни в data_music_seq_gameover @0x7079 таких нот нет — все двухголосые. func_blink_pause определён на будущее/оставлен движком.",
       "name": "func_blink_pause",
       "properties": {
         "seed_evidence": "call",
@@ -4538,11 +4795,20 @@
       "type": "label"
     },
     {
+      "address": "0x73BC",
+      "comment": "RAM-указатель чтения партитуры заставки (var, 2 байта). func_play_blink_sequence: SHLD 73BCh сохраняет HL, LHLD 73BCh читает текущий указатель; терминатор 00h останавливает. Инициализируется = 0x70B4 из lbl_title_init. Смежные рабочие RAM-ячейки внутри func_blink_toggle/pause: 0x7378/0x7379 — защёлки периодов E/D (self-modifying слоты), 0x73FC — текущая длительность A ноты (sta 73Fch). Объекты там не создаются (лежат внутри тел функций).",
+      "name": "var_music_ptr_title",
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x73BE",
-      "comment": "Проигрыватель последовательности мигания из таблицы (указатель 73BC): тон/пауза (func_7335/func_737A), параметры из буфера 7300h.",
+      "comment": "Проигрыватель мелодии/мигания (двухголосый бипер-синтез). Указатель чтения в [73BC]; каждый шаг читает тройку {A,hi,lo}: A→[73FC] длительность, DE=(buf[hi],buf[lo]) период. Если DE!=0 => func_blink_toggle (тон), иначе func_blink_pause (тишина). Терминатор 00h выходит. Опрос РУС (func_poll_rus_continue) позволяет пропустить. Источник: data_music_seq_title @0x70B4 (заставка), @0x7079 (GAME OVER). NOT прерывание/RST7: играется в основном цикле; звук — бипер ВВ55 (порт C бит0), а КР580ВИ53 (порты 08/09/0A) здесь = кадровый таймер синхронизации (~50Гц, IN 0Ah поллинг), НЕ музыка.",
       "links": [
         "0x7335",
-        "0x737A"
+        "0x737A",
+        "0x70B4",
+        "0x7300"
       ],
       "name": "func_play_blink_sequence",
       "properties": {
@@ -4593,7 +4859,8 @@
       "comment": "Рендер списка отображения func_3CC1 + запуск последовательности мигания func_73BE (от 7079h).",
       "links": [
         "0x3CC1",
-        "0x73BE"
+        "0x73BE",
+        "0x7079"
       ],
       "name": "func_render_and_blink",
       "properties": {
@@ -4632,6 +4899,23 @@
       "type": "function"
     },
     {
+      "address": "0x742D",
+      "comment": "Кириллица: блок глифов 8 байт/глиф (0x742D-0x762C, коды 0x20-0x5F). Ставится опкодом 0xE6 в info-списке 0x7890 и title-списке 0x7782: базовый регистр [3B19]=0x732D (= блок - 0x20*8). Адрес глифа = 0x732D + code*8. Конец блока 0x762C — прямо перед lbl_title_init 0x762D. Кодолист: A-Я см. отчёт Stage6 (]=Щ, W=В, Q=Я). Подтверждено рендером ASCII-артом и живым info-скриншотом.",
+      "name": "data_glyph_block_cyrillic",
+      "size": 512,
+      "type": "data"
+    },
+    {
+      "address": "0x762D",
+      "comment": "Title-init (цель entry-JMP после boot): DI; SP=0100; сброс портов; CALL 1DFB; заполнение 0x9800/0x9B00; рендер title-списка 0x7782 (CALL 3CC1); запуск мелодии через blink 0x70B4/0x73BE; переход в menu-loop 0x76B1.",
+      "links": [
+        "0x76B1",
+        "0x7782"
+      ],
+      "name": "lbl_title_init",
+      "type": "label"
+    },
+    {
       "address": "0x7658",
       "name": "lbl_7658",
       "properties": {
@@ -4659,6 +4943,16 @@
         "seed_from": "0x7686",
         "seed_source": "debug_analyze_code"
       },
+      "type": "label"
+    },
+    {
+      "address": "0x76B1",
+      "comment": "Menu-loop (Stage5, live-verified): строб 0187=0FB; CALL 0147; опрос [0197]; клавиши 1(0FD)->gameplay 0x6F01, 2(0FB)->клавиатура, 3(0F7)->джойстик PU, 4(0EF)->джойстик P; выбор режима -> [1E46]; анимация звёзд func_title_stars_menu 0x76FC.",
+      "links": [
+        "0x6F01",
+        "0x76FC"
+      ],
+      "name": "lbl_menu_loop",
       "type": "label"
     },
     {
@@ -4718,6 +5012,158 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x7782",
+      "comment": "Title-экран (список отображения): логотип EXOLON, RIVECCO AND NB INC, START GAME / 2.KEYBOARD / 3.JOYSTICK PU / 4.JOYSTICK P, EXOLON L COPYRIGHT 1994, адрес (HARXKOW, UL.MOHNA^ANSKAQ, DOM 8-A KIT^ENKO MAKSIM, TEL. 99-26-23).",
+      "links": [
+        "0x742D",
+        "0x2630"
+      ],
+      "name": "data_title_display_list",
+      "type": "label"
+    },
+    {
+      "address": "0x7792",
+      "comment": "Title-экран, 'RIVECCO AND NB INC' (англ., лат. шрифт 0x2530). Ведущий 'D'=0x44 на самом деле операнд цвета 0xE0 0x44, не текст.",
+      "name": "str_title_company",
+      "size": 18,
+      "type": "string"
+    },
+    {
+      "address": "0x77AA",
+      "comment": "Title-экран, ' START GAME' (англ.) — пункт меню 1",
+      "name": "str_title_menu_start",
+      "size": 11,
+      "type": "string"
+    },
+    {
+      "address": "0x77BA",
+      "comment": "Title-экран, ' KEYBOARD' (англ.) — пункт меню 2 (клавиатура)",
+      "name": "str_title_menu_keyboard",
+      "size": 9,
+      "type": "string"
+    },
+    {
+      "address": "0x77C9",
+      "comment": "Title-экран, ' JOYSTICK PU' (англ.) — пункт меню 3",
+      "name": "str_title_menu_joy_pu",
+      "size": 12,
+      "type": "string"
+    },
+    {
+      "address": "0x77DB",
+      "comment": "Title-экран, ' JOYSTICK P' (англ.) — пункт меню 4",
+      "name": "str_title_menu_joy_p",
+      "size": 11,
+      "type": "string"
+    },
+    {
+      "address": "0x77EA",
+      "comment": "Title-экран, ' EXOLON L COPYRIGHT 1994 ' (англ.) — копирайт на заставке, НЕ на info-экране",
+      "name": "str_title_copyright",
+      "size": 28,
+      "type": "string"
+    },
+    {
+      "address": "0x780E",
+      "comment": "Title-экран, '310106, HARXKOW, UL.MOHNA^ANSKAQ' → 310106, ХАРЬКОВ, УЛ.МОХНАЧАНСКАЯ (кириллица; H=Х, X=Ь → ХАРЬКОВ; ^=Ч, Q=Я)",
+      "name": "str_title_addr_street",
+      "size": 32,
+      "type": "string"
+    },
+    {
+      "address": "0x7831",
+      "comment": "Title-экран, ' DOM 8-A KIT^ENKO MAKSIM ' → ДОМ 8-А КИТЧЕНКО МАКСИМ (кириллица; ^=Ч)",
+      "name": "str_title_addr_house",
+      "size": 27,
+      "type": "string"
+    },
+    {
+      "address": "0x784F",
+      "comment": "Title-экран, 'TEL. 99-26-23, KOD - (0572)' → ТЕЛ. 99-26-23, КОД - (0572) (кириллица)",
+      "name": "str_title_addr_phone",
+      "size": 27,
+      "type": "string"
+    },
+    {
+      "address": "0x786B",
+      "comment": "Boot/info-экран (Stage5, live-verified): DI; SP=0100; инициализация палитры/ВИ53 (CALL 1DFB); рендер info-списка 0x7890 (CALL 3CC1); self-patch SHLD 0101 -> JMP на 0x762D (title); далее 0x7886 жмёт РУС/ЛАТ.",
+      "links": [
+        "0x762D",
+        "0x7890"
+      ],
+      "name": "lbl_boot_entry",
+      "type": "label"
+    },
+    {
+      "address": "0x7886",
+      "comment": "Ожидание РУС/ЛАТ на boot: IN 01; ANI 80; JZ 0100 (выход через entry-JMP, уже пропатченный на 0x762D).",
+      "name": "lbl_boot_wait_rus",
+      "type": "label"
+    },
+    {
+      "address": "0x7890",
+      "comment": "Info-экран (список отображения): подсказка управления. Транслит-тексты: KLAWI[I UPRAWLENIQ / KLAWI[I KURSORA-PEREM]NIE / RUS/LAT-VYSTREL / RUS/LAT+CC+YC-PEREZAPUSK / DLYA NACHALA IGRY NAVMITE RUS/LAT.",
+      "links": [
+        "0x742D"
+      ],
+      "name": "data_info_display_list",
+      "type": "label"
+    },
+    {
+      "address": "0x7898",
+      "comment": "Info-экран, транслит 'KLAWI[I UPRAWLENIQ:' → КЛАВИШИ УПРАВЛЕНИЯ: (кириллица, база 0x732D; [=Ш, Q=Я)",
+      "name": "str_info_keys_controls",
+      "size": 19,
+      "type": "string"
+    },
+    {
+      "address": "0x78B0",
+      "comment": "Info-экран, 'KLAWI[I KURSORA-PEREME]ENIE' → КЛАВИШИ КУРСОРА-ПЕРЕМЕЩЕНИЕ (]=Щ)",
+      "name": "str_info_keys_cursor",
+      "size": 27,
+      "type": "string"
+    },
+    {
+      "address": "0x78D0",
+      "comment": "Info-экран, 'RUS/LAT-WYSTREL' → РУС/ЛАТ-ВЫСТРЕЛ (W=В, Y=Ы)",
+      "name": "str_info_ruslat_fire",
+      "size": 15,
+      "type": "string"
+    },
+    {
+      "address": "0x78E4",
+      "comment": "Info-экран, 'DLITELXNOE UDERVANIE-RAKETA' → ДЛИТЕЛЬНОЕ УДЕРЖАНИЕ-РАКЕТА (X=Ь, V=Ж)",
+      "name": "str_info_hold_rocket",
+      "size": 27,
+      "type": "string"
+    },
+    {
+      "address": "0x7904",
+      "comment": "Info-экран, 'RUS/LAT+SS+US-PEREZAPUSK IGRY' → РУС/ЛАТ+СС+УС-ПЕРЕЗАПУСК ИГРЫ",
+      "name": "str_info_restart",
+      "size": 29,
+      "type": "string"
+    },
+    {
+      "address": "0x7926",
+      "comment": "Info-экран, 'DLQ NA^ALA IGRY NAVMITE RUS/LAT' → ДЛЯ НАЧАЛА ИГРЫ НАЖМИТЕ РУС/ЛАТ (Q=Я, ^=Ч, V=Ж)",
+      "name": "str_info_press_start",
+      "size": 31,
+      "type": "string"
+    },
+    {
+      "address": "0x795A",
+      "comment": "Недосягаемый бутстрап установки векторов (остаток загрузчика). LXI SP,8000h; MVI A,C3h; STA 0000h; STA 0038h; LXI H,0103h + SHLD 0002h (в reset-вектор JMP 0103h); LXI H,5567h + SHLD 0039h (в VBlank-вектор JMP 0x5567h); затем бесконечный JMP 795A (схема «всё крутится от прерываний»). В реальном пути НЕ вызывается: вход только из собственного цикла (xref 0x7973), BP на 0x5567/0x795A не срабатывает на полном прогоне, IFF остаётся 0. Цель 0x5567 — обычный подпроцесс рендера (XTHL-трюки, CALL 3CB5/4514/3CC1), НЕ ISR; отдельным объектом не заведён, т.к. лежит внутри покрытой кодовой области и function-объект там ломает побайтовый round-trip. Фактический обработчик VBlank — func_irq_vblank.",
+      "links": [
+        "0x0038"
+      ],
+      "name": "func_irq_vblank_install",
+      "properties": {
+        "reachability": "dead (нет достижимых ссылок; BP не срабатывает; IFF=0 в рантайме)"
+      },
+      "type": "function"
     }
   ],
   "platform": "vector06c",
