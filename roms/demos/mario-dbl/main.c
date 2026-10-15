@@ -25,7 +25,8 @@
  * Спрайт перекрывает текст, а когда уходит — текст возвращается из тени.
  *
  * Марио набран кубиками 8x8 (как на NES): поза = 3 клетки вширь x 4 ввысь.
- * Движение — каждый кадр: ходьба 4 px, бег (Shift) 8 px. Когда x кратен 8 —
+ * Движение — каждый кадр: бег 4 px, ходьба — те же 4 px раз в 2 кадра (вдвое
+ * медленнее). Когда x кратен 8 —
  * спрайт выровнен по сетке, вывод идёт целыми байтами плоскостей (быстрый
  * путь). Когда x кратно 4, но не 8 (шаг ходьбы), Марио сдвинут внутри клетки
  * на 4 px = одну тетраду: вывод собирает каждый выходной байт из двух соседних
@@ -151,9 +152,17 @@ static const unsigned char walk_seq[4] = {0, 1, 2, 1}; /* 01->02->03->02 */
 static const unsigned char run_seq[4]  = {0, 1, 2, 1}; /* 11->12->13->12 */
 static unsigned char anim_timer;
 static unsigned char move_timer;
+static unsigned char walk_phase;        /* фаза ходьбы: шаг 4 px раз в 2 кадра */
 static unsigned char space_prev;
 static unsigned char land_played;       /* 1 = чпок приземления уже сыгран (early) */
 static unsigned int  tick;
+
+/* HUD частоты кадров: показанных (draw_frame) кадров за окно VBlank -> FPS.
+ * Считаем за ~50 VBlank (≈1 с при 50 Гц): если тяжёлые кадры пропускают
+ * VSync, кадров в окне меньше 50 — число «плавает» вниз. */
+static char         fps_str[7]  = "FPS=50";   /* фикс. ширина — перекрывает без остатка */
+static unsigned int fps_vbl;                    /* VBlank накоплено в окне          */
+static unsigned int fps_frames;                 /* показанных кадров в окне          */
 
 /* ------------------------------- УТИЛИТЫ -------------------------------- */
 
@@ -298,14 +307,20 @@ static unsigned char update_state(void)
         }
     }
 
-    /* Двигаемся каждый кадр: ходьба 4 px (тетрада), бег 8 px (клетка). */
+    /* Двигаемся. Бег: 4 px каждый кадр. Ходьба: те же 4 px, но раз в 2 кадра
+     * (вдвое медленнее бега). mx всегда кратен 4 → frac ∈ {0,4}; шаг 2 px дал
+     * бы frac=2 и сломал бы сдвиговый рендер (он фиксирован на тетраду). */
     if (moving) {
-        unsigned char step = running ? 8 : 4;
-        int nx = (int)mx + (facing ? (int)step : -(int)step);
-        if (nx >= MIN_MX && nx <= MAX_MX) mx = (unsigned char)nx;
-        anim_step = (anim_step + 1) & 3;
+        unsigned char advance = 1;
+        if (!running) { walk_phase ^= 1; advance = walk_phase; }
+        if (advance) {
+            int nx = (int)mx + (facing ? 4 : -4);
+            if (nx >= MIN_MX && nx <= MAX_MX) mx = (unsigned char)nx;
+            anim_step = (anim_step + 1) & 3;   /* ноги шагают вместе с шагом */
+        }
     } else {
         move_timer = 0;
+        walk_phase = 0;                     /* сброс: со старта шагнём сразу */
         /* Мавок хвостом на месте — медленный таймер. */
         if (++anim_timer >= 16) { anim_timer = 0; anim_step = (anim_step + 1) & 3; }
     }
@@ -347,6 +362,14 @@ static unsigned char update_state(void)
     return ev;
 }
 
+/* Пересчитать окно измерений в строку "FPS=NN" (6 симв., NN в индексах 4,5). */
+static void fps_refresh(void)
+{
+    unsigned char v = (unsigned char)((fps_frames * 50u) / fps_vbl);
+    fps_str[4] = (char)('0' + v / 10u);
+    fps_str[5] = (char)('0' + v % 10u);
+}
+
 /* present != 0 — показать наполненный буфер: переключить палитру-маску
  * (= свап видимого буфера, VSync-синхронно) и активные плоскости.
  * present == 0 — только нарисовать в скрытый буфер, экран НЕ трогать
@@ -371,6 +394,15 @@ static void draw_frame(unsigned char present)
     old_y[back] = (unsigned char)my;
     old_w[back] = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
     old_valid[back] = 1;
+
+    /* HUD: частота кадров по центру вверху — в тот же скрытый (back) буфер.
+     * Пишем только в плоскости back-буфера (маска 0x03 для A / 0x0C для B),
+     * поэтому обновление не даёт tearing; строка фикс. ширины перекрывает
+     * прежние цифры без остатка. Row 0 (пикс. 0..7) выше полосы BAND_TOP=104 —
+     * erase_sprite её не задевает. */
+    gfx_active_planes = (back == 0) ? 0x03 : 0x0C;
+    gfx_print(13, 0, fps_str, (back == 0) ? 2 : 8);
+    gfx_active_planes = 0x0F;
 
     /* Этот буфер теперь держит текущий кадр — независимо от показа. */
     front = back;
@@ -434,6 +466,9 @@ static void init_background(void)
 void main(void)
 {
     unsigned char ev;
+    unsigned char n, i;
+    unsigned char fc, last_fc, raw;
+    volatile unsigned char *fc_lo;
 
     build_palettes();
     mario_sfx_init();
@@ -455,10 +490,42 @@ void main(void)
     gfx_fade_in(palA, FADE_HOLD);   /* проявить A уже с Марио */
     front = 0;
 
+    /* fixed timestep. Младший байт frame_count (его инкрементирует VBlank-ISR
+     * на startup.asm) читаем одним LDA — atomic на 8080. Дельта по нему =
+     * сколько настоящих VBlank ушло на предыдущий виток цикла. */
+    fc_lo   = (volatile unsigned char *)&frame_count;
+    last_fc = *fc_lo;
+    fps_vbl = 0; fps_frames = 0;
+
     for (;;) {
-        kbd_scan();                          /* обновить kbd_rows + shift */
-        ev = update_state();                 /* физика + битки звуковых событий */
-        mario_sfx_update(running);           /* голоса + ветер (непрерывный)  */
+        /* Неблокирующий снимок матрицы: сами мы прямо сейчас в гасящем
+         * интервале — только что вернулись из ei/halt прошлого draw_frame
+         * (смена палитры синхронизирована с VSync). kbd_scan() сделал бы ЕЩЁ
+         * один halt и удвоил бы цену кадра (2 VBlank/цикл → ~16 Гц); здесь мы
+         * переиспользуем уже достигнутый VBlank → 1 VBlank/цикл. */
+        kbd_scan_now();                       /* обновить kbd_rows + shift, без halt */
+
+        /* Догон симуляции/звука по числу реально прошедших VBlank. Тяжёлый
+         * кадр (сдвиг тетрады) может не влезть в 20 мс и пропустить VSync —
+         * тогда цикл отстал, frame_count вырос на 2+, и update_state/sfx
+         * крутятся столько же раз, чтобы скорость игры и темп звука остались
+         * честными 50 Гц (взамен — лёгкий джаггер отрисовки на пропусках). */
+        fc = *fc_lo;
+        raw = (unsigned char)(fc - last_fc); /* mod 256: РЕАЛЬНО ушло VBlank за виток */
+        last_fc = fc;
+        /* Догон симуляции клампим (иначе spiral: лишний догон добавляет CPU и
+         * усиливает пропуск), но для HUD копит СЫРОЙ raw — иначе кламп прячет
+         * правдивое число (пол 50/3≈16). */
+        n = raw;
+        if (n == 0) n = 1;                   /* не стоять: минимум шаг за виток */
+        if (n > 3)  n = 3;                    /* после долгого простоя — догон с потолка */
+
+        ev = 0;
+        for (i = 0; i < n; i++) {
+            ev |= update_state();            /* физика + битки звуковых событий */
+            mario_sfx_update(running);       /* голоса + ветер (непрерывный)     */
+        }
+
         draw_frame(1);                       /* рендер + свап палитры на VSync */
         /* Звук событий — СРАЗУ после показа кадра: draw_frame блокируется в
          * ei/halt до VSync, и только теперь новый кадр виден. Если запускать
@@ -466,5 +533,12 @@ void main(void)
         if (ev & EV_JUMP) mario_sfx_jump();
         if (ev & EV_LAND) mario_sfx_land();
         tick++;
+
+        /* Частота показанных кадров: виток = один shown-кадр; в знаменатель
+         * кладём СЫРОЙ raw (не клампованный n), чтобы HUD не врал при просадке
+         * ниже пола. Окно ~50 VBlank. */
+        fps_frames++;
+        fps_vbl   += raw;
+        if (fps_vbl >= 50) { fps_refresh(); fps_vbl = 0; fps_frames = 0; }
     }
 }
