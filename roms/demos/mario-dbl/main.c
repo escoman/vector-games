@@ -52,11 +52,19 @@ extern void mario_copy_AB(void);          /* копия A -> B, 2x8 КБ        
 extern void mario_capture_shadow(void);   /* слепок полосы в тени        */
 
 /* Звук (src/sfx_mario.c): прыжок/приземление — тон (sfx.c), ветер при беге —
- * шум канала C AY (drums.asm). На КР580ВИ53 ветер отсутствует (нет шума). */
+ * шум канала C AY (drums.asm). На КР580ВИ53 ветер отсутствует (нет шума).
+ * Покадровый движок живёт в прерывании (frame_handler = mario_frame), НО ПОСЛЕ
+ * смены палитры — так звук не сдвигает raster-критичный цикл записи 0C.
+ * Из цикла лишь выставляем флаг бега (mario_sfx_running) и просим эффекты. */
 extern void mario_sfx_init(void);
 extern void mario_sfx_jump(void);
 extern void mario_sfx_land(void);
-extern void mario_sfx_update(unsigned char running);
+extern void mario_sfx_frame(void);
+extern unsigned char mario_sfx_running;   /* зеркало флага бега для ISR-движка */
+
+/* Загрузка палитры ИЗ ISR: тот же v06_pal_write, но БЕЗ ei/halt (мы уже в
+ * прерывании, в гасящем интервале; ei внутри ISR открыл бы реентерабельный вход). */
+extern void v06_set_palette_isr(const unsigned char *pal);
 
 /* ------------------------------- ГЕОМЕТРИЯ ------------------------------ */
 #define SCR_W        256
@@ -73,6 +81,19 @@ extern void mario_sfx_update(unsigned char running);
 
 #define MIN_MX       0
 #define MAX_MX       (SCR_W - 3 * 8)  /* правый край (x верха клетки)*/
+
+/* Тиков (по 1/VSync) на один 4px-шаг. Шаг обязан быть 4px (mx кратно 4 →
+ * frac ∈ {0,4}); 2px сломал бы тетрадный сдвиговый рендер, поэтому скорость
+ * задаём частотой шага, а не размером. Ходьба вдвое медленнее бега. */
+#define RUN_STEP     2                 /* бег:   4px раз в 2 тика  (~100 px/с) */
+#define WALK_STEP    4                 /* ходьба: 4px раз в 4 тика (~50 px/с)  */
+
+/* Прыжок: вертикальную физику (my+=vy, vy+=1) интегрируем раз в JUMP_STEP
+ * тиков — вдвое медленнее дуга, как замедляли шаг бега/ходьбы. Импульс
+ * vy=-12 и гравитация +1 задают ВЫСОТУ (сумма приращений по шагам), а
+ * JUMP_STEP меняет лишь ДЛИТЕЛЬНОСТЬ, поэтому высота прыжка не меняется —
+ * тормозится только его темп. */
+#define JUMP_STEP    2                 /* прыжок: шаг физики раз в 2 тика      */
 
 /* ------------------------------ СТАРТ ПОЗИЦИИ --------------------------- */
 #define START_MX       26*8       /* x левого верха Марио на старте (кратен 8)  */
@@ -107,6 +128,12 @@ extern unsigned char kbd_shift_state;
 
 static unsigned char palA[16], palB[16];
 static unsigned char front;              /* 0 = виден A, 1 = виден B          */
+/* Flip буфера выполняет ISR (mario_frame): main выставляет жедаемую палитру в
+ * show_pal и поднимает pal_dirty; ISR грузит её ПЕРВОЙ (до звука) и сбрасывает
+ * флаг. Флаг нужен, чтобы на лишних VBlank тяжёлого/пропущенного кадра палитру
+ * не перезаписывать впустую (между показами она не меняется). */
+static const unsigned char *show_pal;    /* палитра, которую ISR грузит на VBlank */
+static volatile unsigned char pal_dirty; /* 1 = show_pal_changed → перезаписать   */
 
 /* RAM-тень фона полосы: ДВЕ колоночные матрицы (для asm-копирования):
  * байт = col * BAND_STRIDE + (y - BAND_TOP). Буферы берутся из кучи
@@ -134,6 +161,12 @@ unsigned char rs_frac;                   /* суб-клеточный сдвиг
  * оставлял нестёртый кусок. */
 static unsigned char old_x[2], old_y[2], old_w[2];   /* old_w в клетках, h=MARIO_HPIX */
 static unsigned char old_valid[2];
+/* Поза (указатель спрайта), реально нарисованная в паре A/B. Вместе с
+ * old_x/old_y задаёт «состояние сцены спрайта» в этом буфере: пока все три
+ * совпадают с текущими — кадр в этой паре идентичен уже нарисованному, и
+ * erase+draw можно пропустить. При ходьбе спрайт меняется раз в WALK_STEP
+ * тиков, а рисуемся каждый тик → лишние перерисовки и есть просадка в ране. */
+static const unsigned char *last_spr[2];
 
 /* Физика/анимация Марио. */
 static unsigned char mx;                 /* x верха клетки (кратно 8)         */
@@ -152,7 +185,8 @@ static const unsigned char walk_seq[4] = {0, 1, 2, 1}; /* 01->02->03->02 */
 static const unsigned char run_seq[4]  = {0, 1, 2, 1}; /* 11->12->13->12 */
 static unsigned char anim_timer;
 static unsigned char move_timer;
-static unsigned char walk_phase;        /* фаза ходьбы: шаг 4 px раз в 2 кадра */
+static unsigned char step_timer;      /* счётчик тиков между 4px-шагами   */
+static unsigned char jump_timer;      /* счётчик тиков между шагами физики */
 static unsigned char space_prev;
 static unsigned char land_played;       /* 1 = чпок приземления уже сыгран (early) */
 static unsigned int  tick;
@@ -160,7 +194,8 @@ static unsigned int  tick;
 /* HUD частоты кадров: показанных (draw_frame) кадров за окно VBlank -> FPS.
  * Считаем за ~50 VBlank (≈1 с при 50 Гц): если тяжёлые кадры пропускают
  * VSync, кадров в окне меньше 50 — число «плавает» вниз. */
-static char         fps_str[7]  = "FPS=50";   /* фикс. ширина — перекрывает без остатка */
+static unsigned char fps_val = 50;            /* текущее показываемое число FPS (0..99) */
+static unsigned char hud_val[2] = { 0xFF, 0xFF }; /* значение FPS, уже напечатанное в паре A / B */
 static unsigned int fps_vbl;                    /* VBlank накоплено в окне          */
 static unsigned int fps_frames;                 /* показанных кадров в окне          */
 
@@ -307,20 +342,19 @@ static unsigned char update_state(void)
         }
     }
 
-    /* Двигаемся. Бег: 4 px каждый кадр. Ходьба: те же 4 px, но раз в 2 кадра
-     * (вдвое медленнее бега). mx всегда кратен 4 → frac ∈ {0,4}; шаг 2 px дал
-     * бы frac=2 и сломал бы сдвиговый рендер (он фиксирован на тетраду). */
+    /* Двигаемся. Шаг всегда 4 px (см. RUN_STEP/WALK_STEP выше), скорость —
+     * частотой шага: раз в RUN_STEP тиков бегом, раз в WALK_STEP — ходьбой. */
     if (moving) {
-        unsigned char advance = 1;
-        if (!running) { walk_phase ^= 1; advance = walk_phase; }
-        if (advance) {
-            int nx = (int)mx + (facing ? 4 : -4);
+        if (++step_timer >= (running ? RUN_STEP : WALK_STEP)) {
+            int nx;
+            step_timer = 0;
+            nx = (int)mx + (facing ? 4 : -4);
             if (nx >= MIN_MX && nx <= MAX_MX) mx = (unsigned char)nx;
             anim_step = (anim_step + 1) & 3;   /* ноги шагают вместе с шагом */
         }
     } else {
         move_timer = 0;
-        walk_phase = 0;                     /* сброс: со старта шагнём сразу */
+        step_timer = 0;                       /* сброс: со старта отсчёт заново */
         /* Мавок хвостом на месте — медленный таймер. */
         if (++anim_timer >= 16) { anim_timer = 0; anim_step = (anim_step + 1) & 3; }
     }
@@ -331,14 +365,17 @@ static unsigned char update_state(void)
         if (sp && !space_prev && grounded && !crouch) {
             vy = -12;                /* импульс вверх (высокий прыжок) */
             grounded = 0;
+            jump_timer = 0;          /* новый полёт — отсчёт дуги заново */
             land_played = 0;         /* новый полёт — приземление ещё не сыграно */
             ev |= EV_JUMP;           /* свист прыжка — после показа кадра */
         }
         space_prev = sp;
     }
 
-    /* Вертикальная физика. */
-    if (!grounded) {
+    /* Вертикальная физика. Интегрируем раз в JUMP_STEP тиков (см. выше):
+     * тормозит дугу прыжка, не меняя её высоты. */
+    if (!grounded && ++jump_timer >= JUMP_STEP) {
+        jump_timer = 0;
         /* Приземление на КАДР раньше фактического касания: пока падаем и
          * через две интегрирования (my+vy, затем +(vy+1)) упрёмся в землю —
          * запускаем чпок сейчас. Звук ляжет чуть раньше удара стопы.
@@ -362,12 +399,40 @@ static unsigned char update_state(void)
     return ev;
 }
 
-/* Пересчитать окно измерений в строку "FPS=NN" (6 симв., NN в индексах 4,5). */
+/* Пересчитать окно измерений в текущее число FPS (0..99). */
 static void fps_refresh(void)
 {
     unsigned char v = (unsigned char)((fps_frames * 50u) / fps_vbl);
-    fps_str[4] = (char)('0' + v / 10u);
-    fps_str[5] = (char)('0' + v % 10u);
+    if (v > 99u) v = 99u;                /* два разряда «NN», больше не влезает */
+    fps_val = v;
+}
+
+/* Нарисовать ТОЛЬКО две цифры FPS (колонки 17,18; строка 0) в плоскости
+ * back-буфера: A — маска 0x03 / цвет 2, B — маска 0x0C / цвет 8. Приставка
+ * «FPS=» статична и печатается один раз при инициализации. */
+static void hud_paint_digits(unsigned char back)
+{
+    unsigned char col = (back == 0) ? 2 : 8;
+    gfx_active_planes = (back == 0) ? 0x03 : 0x0C;
+    gfx_put_char(17, 0, (char)('0' + fps_val / 10u), col);
+    gfx_put_char(18, 0, (char)('0' + fps_val % 10u), col);
+    gfx_active_planes = 0x0F;
+}
+
+/* Обработчик кадрового прерывания (50 Гц). ПОРЯДОК важен:
+ * 1) если запрошен flip — загрузить палитру ПЕРВОЙ: она пишется в порт 0C
+ *    «под лучом», цикл из 16 записей обязан стартовать в начале гашения.
+ *    pal_dirty выставляется на каждый показанный кадр и снимается здесь же
+ *    (ack), поэтому на лишних VBlank тяжёлого кадра палитра не трогается.
+ * 2) затем — покадровый звук. Он долгий, но пишет только ВИ53/AY-порты
+ *    (не 02/0C), поэтому после палитры безопасен, даже если вылезет из гашения. */
+static void mario_frame(void)
+{
+    if (pal_dirty) {
+        v06_set_palette_isr(show_pal);
+        pal_dirty = 0;                     /* ack: main спит до этого момента */
+    }
+    mario_sfx_frame();                     /* ровно 1 такт звука за VBlank    */
 }
 
 /* present != 0 — показать наполненный буфер: переключить палитру-маску
@@ -380,37 +445,56 @@ static void draw_frame(unsigned char present)
     const unsigned char *spr = pick_sprite();
     unsigned char wcells = spr[0];
 
-    /* 1. Стереть прежнего Марио в скрытом буфере (возврат фона из тени). */
-    if (old_valid[back])
-        erase_sprite(back, old_x[back], old_y[back], old_w[back]);
+    /* Пропуск перерисовки: если спрайт уже нарисован в этой паре плоскостей
+     * с тем же состоянием (x/y/поза) — кадр идентичен, erase+draw не нужны.
+     * Фон полосы (тень) и HUD-строка 0 вне спрайтовой области не меняются,
+     * поэтому совпадение этих трёх полей полностью задаёт картинку буфера.
+     * Каждой паре нужен ровно ОДИН показ состояния → при постоянном кадре
+     * рисуем 2 кадра из 4, остальные пропускаем. Свап палитры ниже всё равно
+     * происходит (он даёт ei/halt-синхронизацию с VSync и не трогает VRAM). */
+    if (old_valid[back] && spr == last_spr[back]
+        && mx == old_x[back] && (unsigned char)my == old_y[back]) {
+        /* спрайтовая сцена в back-буфере уже верна — ничего не рисуем */
+    } else {
+        /* 1. Стереть прежнего Марио в скрытом буфере (возврат фона из тени). */
+        if (old_valid[back])
+            erase_sprite(back, old_x[back], old_y[back], old_w[back]);
 
-    /* 2. Нарисовать нового. */
-    draw_sprite(back, mx, (unsigned int)my, spr);
+        /* 2. Нарисовать нового. */
+        draw_sprite(back, mx, (unsigned int)my, spr);
 
-    /* 3. Запомнить прямоугольник для следующего обращения к этому буферу.
-     * При сдвиге тетрады (mx & 7 == 4) спрайг занимает на одну клетку
-     * шире (spill вправо) — стирать надо покрывать ровно отрисованное. */
-    old_x[back] = mx;
-    old_y[back] = (unsigned char)my;
-    old_w[back] = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
-    old_valid[back] = 1;
+        /* 3. Запомнить прямоугольник для следующего обращения к этому буферу.
+         * При сдвиге тетрады (mx & 7 == 4) спрайг занимает на одну клетку
+         * шире (spill вправо) — стирать надо покрывать ровно отрисованное. */
+        old_x[back] = mx;
+        old_y[back] = (unsigned char)my;
+        old_w[back] = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
+        old_valid[back] = 1;
+        last_spr[back] = spr;
+    }
 
-    /* HUD: частота кадров по центру вверху — в тот же скрытый (back) буфер.
-     * Пишем только в плоскости back-буфера (маска 0x03 для A / 0x0C для B),
-     * поэтому обновление не даёт tearing; строка фикс. ширины перекрывает
-     * прежние цифры без остатка. Row 0 (пикс. 0..7) выше полосы BAND_TOP=104 —
-     * erase_sprite её не задевает. */
-    gfx_active_planes = (back == 0) ? 0x03 : 0x0C;
-    gfx_print(13, 0, fps_str, (back == 0) ? 2 : 8);
-    gfx_active_planes = 0x0F;
+    /* HUD: цифры FPS в тот же скрытый (back) буфер — но только когда это
+     * число ещё не напечатано именно в данной паре плоскостей (меняется
+     * ~раз в секунду, а не каждый кадр). hud_val[2] хранит значение, уже
+     * отрисованное в паре A / B; печатаем по расхождению — tearing нет
+     * (пишем лишь в back-маску), а обе пары сходятся к новому числу за 2
+     * кадра. Row 0 (пикс. 0..7) выше полосы BAND_TOP=104 — erase_sprite её
+     * не задевает. */
+    if (hud_val[back] != fps_val) {
+        hud_paint_digits(back);
+        hud_val[back] = fps_val;
+    }
 
     /* Этот буфер теперь держит текущий кадр — независимо от показа. */
     front = back;
 
-    /* 4. Показать этот буфер (смена палитры = VSync-синхронно). */
+    /* 4. Показать этот буфер: НЕ грузим палитру напрямую (это делало ei/halt),
+     *    а просим ISR сделать flip на ближайшем VBlank (палитра — первой в
+     *    mario_frame). Само ожидание VBlank даёт v06_wait_frame в main-цикле. */
     if (present) {
         gfx_active_planes = 0x0F;
-        gfx_set_bmp_palette(back == 0 ? palA : palB);
+        show_pal = (back == 0) ? palA : palB;
+        pal_dirty = 1;
     }
 }
 
@@ -460,6 +544,16 @@ static void init_background(void)
     gfx_print(24, 0, "BUFFER 2", 8);
     gfx_active_planes = 0x0F;
 
+    /* FPS-приставка «FPS=» статична — печатаем один раз в обе пары плоскостей
+     * (как индикаторы буферов). Цифры поверх обновляет draw_frame по требованию.
+     * Начальные цифры (fps_val=50) кладём сразу в обе пары, чтобы до первого
+     * окна измерений не было расхождения A/B. */
+    gfx_active_planes = 0x03; gfx_print(13, 0, "FPS=", 2);
+    gfx_active_planes = 0x0C; gfx_print(13, 0, "FPS=", 8);
+    gfx_active_planes = 0x0F;
+    hud_paint_digits(0); hud_val[0] = fps_val;
+    hud_paint_digits(1); hud_val[1] = fps_val;
+
     capture_shadow();                       /* тень полосы с буфера A */
 }
 
@@ -490,6 +584,13 @@ void main(void)
     gfx_fade_in(palA, FADE_HOLD);   /* проявить A уже с Марио */
     front = 0;
 
+    /* Кадровое прерывание ведёт flip буфера (палитра ПЕРВОЙ) + звук. Назначаем
+     * после фейда: пока идёт fade, палитрой владеет gfx_fade_in. A уже показан,
+     * так что стартовый flip не нужен (pal_dirty=0). */
+    show_pal = palA;
+    pal_dirty = 0;
+    frame_handler = mario_frame;
+
     /* fixed timestep. Младший байт frame_count (его инкрементирует VBlank-ISR
      * на startup.asm) читаем одним LDA — atomic на 8080. Дельта по нему =
      * сколько настоящих VBlank ушло на предыдущий виток цикла. */
@@ -499,17 +600,18 @@ void main(void)
 
     for (;;) {
         /* Неблокирующий снимок матрицы: сами мы прямо сейчас в гасящем
-         * интервале — только что вернулись из ei/halt прошлого draw_frame
-         * (смена палитры синхронизирована с VSync). kbd_scan() сделал бы ЕЩЁ
-         * один halt и удвоил бы цену кадра (2 VBlank/цикл → ~16 Гц); здесь мы
+         * интервале — только что вернулись из v06_wait_frame прошлого витка
+         * (cadence синхронизирована с VSync). kbd_scan() сделал бы ЕЩЁ один
+         * halt и удвоил бы цену кадра (2 VBlank/цикл → ~16 Гц); здесь мы
          * переиспользуем уже достигнутый VBlank → 1 VBlank/цикл. */
         kbd_scan_now();                       /* обновить kbd_rows + shift, без halt */
 
-        /* Догон симуляции/звука по числу реально прошедших VBlank. Тяжёлый
-         * кадр (сдвиг тетрады) может не влезть в 20 мс и пропустить VSync —
-         * тогда цикл отстал, frame_count вырос на 2+, и update_state/sfx
-         * крутятся столько же раз, чтобы скорость игры и темп звука остались
-         * честными 50 Гц (взамен — лёгкий джаггер отрисовки на пропусках). */
+        /* Догон симуляции по числу реально прошедших VBlank. Тяжёлый кадр
+         * (сдвиг тетрады) может не влезть в 20 мс и пропустить VSync — тогда
+         * цикл отстал, frame_count вырос на 2+, и update_state крутится столько
+         * же раз, чтобы скорость игры осталась честной 50 Гц (взамен — лёгкий
+         * джаггер отрисовки на пропусках). Звук тем временем сам идёт по 1 разу
+         * за VBlank из ISR — его темпу догон цикла не нужен. */
         fc = *fc_lo;
         raw = (unsigned char)(fc - last_fc); /* mod 256: РЕАЛЬНО ушло VBlank за виток */
         last_fc = fc;
@@ -519,19 +621,26 @@ void main(void)
         n = raw;
         if (n == 0) n = 1;                   /* не стоять: минимум шаг за виток */
         if (n > 3)  n = 3;                    /* после долгого простоя — догон с потолка */
+        /* Anti-latch: стоя на земле нечего догонять — принудительно 1 тик. Иначе
+         * цикл залипает в тяжёлом равновесии «3 тика/кадр» (звук ×3 раздувает
+         * виток → raw=3 → снова 3 тика) и FPS в покое не поднимается с ~16. */
+        if (!moving && grounded && vy == 0 && !crouch) n = 1;
 
         ev = 0;
-        for (i = 0; i < n; i++) {
+        for (i = 0; i < n; i++)
             ev |= update_state();            /* физика + битки звуковых событий */
-            mario_sfx_update(running);       /* голоса + ветер (непрерывный)     */
-        }
+        mario_sfx_running = running;         /* зеркало флага бега для ISR-ветра */
 
-        draw_frame(1);                       /* рендер + свап палитры на VSync */
-        /* Звук событий — СРАЗУ после показа кадра: draw_frame блокируется в
-         * ei/halt до VSync, и только теперь новый кадр виден. Если запускать
-         * звук в update_state (до draw_frame), он опережал картинку на кадр. */
+        draw_frame(1);                       /* рендер в скрытый буфер + заявка flip */
+        /* Звук событий — только просим (байтовый флаг), исполнит ISR на
+         * ближайшем VBlank (движок принадлежит ISR, прямого sfx_play из main нет). */
         if (ev & EV_JUMP) mario_sfx_jump();
         if (ev & EV_LAND) mario_sfx_land();
+
+        /* Синхронизация с VSync: сон до ближайшего VBlank, на котором ISR
+         * применит запрошенный flip (палитру — первой) и отзвучит звук. Теперь
+         * это единственная блокировка цикла (свап палитры больше не halt-ит). */
+        v06_wait_frame();
         tick++;
 
         /* Частота показанных кадров: виток = один shown-кадр; в знаменатель
