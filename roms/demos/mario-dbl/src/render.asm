@@ -23,6 +23,11 @@
 ;   _rs_s0    старт тени прямоугольника для _rs_p0 (shadow0), erase
 ;   _rs_s1    старт тени прямоугольника для _rs_p1 (shadow1), erase
 ;   _rs_cols  знаковый счётчик колонок: от -wcells до 0
+;   _rs_frac  суб-клеточный сдвиг: 0 = выровнен по сетке 8px (быстрый путь,
+;             побайтовая композиция), 4 = сдвиг вправо на 4px — каждая тетрада
+;             выходного байта собирается из двух соседних клеток спрайта
+;             (старший nibble <- младший nibble левой клетки,
+;              младший nibble <- старший nibble текущей).
 ;
 ; Примитивы инициализации (замена медленных C-циклов, ~5 c -> ~0.3 c):
 ;   mario_fill_ground    — тайл земли 224..255 во все 4 плоскости,
@@ -50,6 +55,7 @@
         EXTERN  _rs_s0
         EXTERN  _rs_s1
         EXTERN  _rs_cols
+        EXTERN  _rs_frac
         EXTERN  _shadow0
         EXTERN  _shadow1
 
@@ -74,6 +80,32 @@ cap_q:      defw    0         ; курсор колонки C000 (capture)
 cap_s:      defw    0         ; курсор колонки shadow0 (+BAND_STEP)
 cap_t:      defw    0         ; курсор колонки shadow1 (+BAND_STEP)
 
+; --- рабочие переменные сдвига тетрады (mario_draw_sprite, frac=4) ---
+ds_ncols:   defb    0         ; wcells (ширина спрайта в клетках)
+ds_cc:      defb    0         ; счётчик колонок вывода (wcells+1 .. 0)
+ds_cnt:     defb    0         ; счётчик строк внутри колонки (32..0)
+ds_cptr:    defw    0         ; база данных текущей клетки (cur)
+ds_pptr:    defw    0         ; база данных соседней клетки (prev, слева)
+ds_vtop0:   defw    0         ; VRAM-верх колонки вывода, плоскость бита0
+ds_vtop1:   defw    0         ; то же для плоскости бита1
+ds_v0:      defw    0         ; бегущий VRAM-указатель плоскости бита0
+ds_v1:      defw    0         ; бегущий VRAM-указатель плоскости бита1
+ds_co:      defb    0         ; cur op / cur b0 / cur b1 текущей строки
+ds_cb0:     defb    0
+ds_cb1:     defb    0
+ds_po:      defb    0         ; prev op / prev b0 / prev b1 текущей строки
+ds_pb0:     defb    0
+ds_pb1:     defb    0
+ds_op:      defb    0         ; собранный op (сдвинутый на 4)
+ds_bit:     defb    0         ; собранный bit плоскости (сдвинутый на 4)
+ds_t:       defb    0         ; временный накопитель nibble-OR (через ADD M)
+ds_t2:       defb    0        ; временный (cur^bit)&op
+ds_v:       defb    0         ; прочитанный байт фона (VRAM)
+        ; Нулевой блок-клетка (96 байт) для отсутствующего соседа: клетка
+        ; слева от 0-й и cur для spill-колонки справа. Обнуляется в начале
+        ; drs_start (секция bss при --no-crt не зануляется).
+zcol:       defs    96
+
 ; ---------------------------------------------------------------
 ; void mario_draw_sprite(void)
 ;   Нарисовать весь спрайт (_rs_spr) в пару плоскостей _rs_p0/_rs_p1.
@@ -83,6 +115,7 @@ cap_t:      defw    0         ; курсор колонки shadow1 (+BAND_STEP)
 _mario_draw_sprite:
         lhld    _rs_spr               ; HL = спрайт
         mov     a,m                   ; wcells
+        sta     ds_ncols              ; ширина в клетках (нужна shift-пути)
         cma
         inr     a
         sta     _rs_cols              ; _rs_cols = -wcells
@@ -90,7 +123,9 @@ _mario_draw_sprite:
         inx     h
         inx     h                     ; spr + 3 = старт данных
         shld    _rs_data
-
+        lda     _rs_frac              ; суб-клеточный сдвиг?
+        ora     a
+        jnz     drs_start             ; frac!=0 -> сдвиг тетрады (4px)
 dr_col:
         ; ================= проход 0: плоскость бита 0 =================
         lhld    _rs_data
@@ -151,6 +186,203 @@ dr_row1:
         inc     a
         sta     _rs_cols
         jnz     dr_col                ; INR задал Z
+        ret
+
+; ---------------------------------------------------------------
+; Сдвиг тетрады (frac=4): вывод спрайта со сдвигом вправо на 4px.
+;
+; Выходной байт клетки col+j собирается из двух клеток спрайта:
+;   low  nibble <- high nibble клетки j     (cur >> 4)
+;   high nibble <- low  nibble клетки j-1   (prev << 4)
+; j пробегает 0..wcells (wcells+1 колонок): слева prev=zcol, справа для
+; spill-колонки cur=zcol. Прозрачность op сдвигается так же; композиция
+; res = cur ^ ((cur ^ bit) & op) — как в быстром пути, но побитово по
+; собранному байту. 8080 не имеет сдвига на 4 — делаем 4x RRC/RLC.
+; ---------------------------------------------------------------
+drs_start:
+        ; --- занулить zcol (96 байт): bss при --no-crt не инициализирован ---
+        lxi     h, zcol
+        mvi     a, 0
+        mvi     c, 96
+drs_zclr:
+        mov     m, a
+        inx     h
+        dcr     c
+        jnz     drs_zclr
+        ; --- cc = wcells + 1 (колонок вывода) ---
+        lda     ds_ncols
+        mov     c, a
+        inr     c
+        mov     a, c
+        sta     ds_cc
+        ; --- базы данных: cur = spr+3, prev = zcol ---
+        lhld    _rs_spr
+        inx     h
+        inx     h
+        inx     h
+        shld    ds_cptr
+        lxi     h, zcol
+        shld    ds_pptr
+        ; --- вершины колонок вывода ---
+        lhld    _rs_p0
+        shld    ds_vtop0
+        lhld    _rs_p1
+        shld    ds_vtop1
+
+drs_col:
+        ; DE = cur источник (zcol на spill-колонке, cc==1)
+        lda     ds_cc
+        sui     1
+        jz      drs_cur_z
+        lhld    ds_cptr
+        jmp     drs_cur_ok
+drs_cur_z:
+        lxi     h, zcol
+drs_cur_ok:
+        xchg                          ; DE = cur
+        lhld    ds_pptr               ; BC = prev
+        mov     b, h
+        mov     c, l
+        lhld    ds_vtop0              ; рабочие VRAM = вершины колонки
+        shld    ds_v0
+        lhld    ds_vtop1
+        shld    ds_v1
+        mvi     a, ROWS
+        sta     ds_cnt
+
+drs_row:
+        ; ---- сырые байки текущей строки: cur(DE) и prev(BC), шаг +3 ----
+        ldax    d
+        sta     ds_co
+        inx     d
+        ldax    d
+        sta     ds_cb0
+        inx     d
+        ldax    d
+        sta     ds_cb1
+        inx     d
+        ldax    b
+        sta     ds_po
+        inx     b
+        ldax    b
+        sta     ds_pb0
+        inx     b
+        ldax    b
+        sta     ds_pb1
+        inx     b
+        ; ---- op = (cur_op>>4) | (prev_op<<4) ----
+        lda     ds_po
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h
+        sta     ds_t
+        lda     ds_co
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh
+        lxi     h, ds_t
+        add     m                     ; nibbles не пересекаются -> ADD == OR
+        sta     ds_op
+
+        ; ---- плоскость бита 0: bit = (cur_b0>>4)|(prev_b0<<4) ----
+        lda     ds_pb0
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h
+        sta     ds_t
+        lda     ds_cb0
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh
+        lxi     h, ds_t
+        add     m
+        sta     ds_bit
+        lhld    ds_v0
+        mov     a, m
+        sta     ds_v
+        lda     ds_bit
+        lxi     h, ds_v
+        xra     m                     ; t2 = vram ^ bit
+        sta     ds_t2
+        lda     ds_t2
+        lxi     h, ds_op
+        ana     m                     ; t2 = t2 & op
+        sta     ds_t2
+        lda     ds_v
+        lxi     h, ds_t2
+        xra     m                     ; res = vram ^ t2
+        lhld    ds_v0
+        mov     m, a
+        dcx     h                     ; y+1 => адрес -1
+        shld    ds_v0
+
+        ; ---- плоскость бита 1: bit = (cur_b1>>4)|(prev_b1<<4) ----
+        lda     ds_pb1
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h
+        sta     ds_t
+        lda     ds_cb1
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh
+        lxi     h, ds_t
+        add     m
+        sta     ds_bit
+        lhld    ds_v1
+        mov     a, m
+        sta     ds_v
+        lda     ds_bit
+        lxi     h, ds_v
+        xra     m
+        sta     ds_t2
+        lda     ds_t2
+        lxi     h, ds_op
+        ana     m
+        sta     ds_t2
+        lda     ds_v
+        lxi     h, ds_t2
+        xra     m
+        lhld    ds_v1
+        mov     m, a
+        dcx     h
+        shld    ds_v1
+
+        ; ---- следующая строка ----
+        lda     ds_cnt
+        sui     1
+        sta     ds_cnt
+        jnz     drs_row
+
+        ; ---- следующая колонка: prev=cur, cur+=96, вершины+=0x100 ----
+        lhld    ds_cptr
+        shld    ds_pptr
+        lxi     d, 0060h
+        dad     d
+        shld    ds_cptr
+        lhld    ds_vtop0
+        lxi     d, 0100h
+        dad     d
+        shld    ds_vtop0
+        lhld    ds_vtop1
+        dad     d
+        shld    ds_vtop1
+        lda     ds_cc
+        sui     1
+        sta     ds_cc
+        jnz     drs_col
         ret
 
 ; ---------------------------------------------------------------
@@ -327,9 +559,9 @@ _mario_capture_shadow:
         shld    cap_p
         lxi     h,0C000h
         shld    cap_q
-        lxi     h,_shadow0              ; АДРЕС массива тени (не lhld —
-        shld    cap_s                   ; это прочитал бы первые 2 байта!)
-        lxi     h,_shadow1
+        lhld    _shadow0              ; АДРЕС буфера из кучи (значение
+        shld    cap_s                   ; указателя; lxi дал бы адрес переменной)
+        lhld    _shadow1
         shld    cap_t
         mvi     c,NCOLS
 cs_col:

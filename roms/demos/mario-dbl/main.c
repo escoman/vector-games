@@ -25,8 +25,12 @@
  * Спрайт перекрывает текст, а когда уходит — текст возвращается из тени.
  *
  * Марио набран кубиками 8x8 (как на NES): поза = 3 клетки вширь x 4 ввысь.
- * Шаг движения 8 px => спрайт всегда выровнен по сетке => вывод целыми байтами
- * плоскостей, без побитового RMW.
+ * Движение — каждый кадр: ходьба 4 px, бег (Shift) 8 px. Когда x кратен 8 —
+ * спрайт выровнен по сетке, вывод идёт целыми байтами плоскостей (быстрый
+ * путь). Когда x кратно 4, но не 8 (шаг ходьбы), Марио сдвинут внутри клетки
+ * на 4 px = одну тетраду: вывод собирает каждый выходной байт из двух соседних
+ * клеток спрайта (сдвиг тетрады при выводе), поэтому спрайт занимает на одну
+ * клетку шире (spill вправо).
  *
  * Вывод спрайта — на 8080-ассемблере (src/render.asm): спрайт закодирован
  * КОЛОНОЧНО, столбец VRAM проходится линейно (данные +3, адрес -1),
@@ -46,6 +50,13 @@ extern void mario_fill_ground(void);      /* тайл земли во 4 плос
 extern void mario_copy_AB(void);          /* копия A -> B, 2x8 КБ          */
 extern void mario_capture_shadow(void);   /* слепок полосы в тени        */
 
+/* Звук (src/sfx_mario.c): прыжок/приземление — тон (sfx.c), ветер при беге —
+ * шум канала C AY (drums.asm). На КР580ВИ53 ветер отсутствует (нет шума). */
+extern void mario_sfx_init(void);
+extern void mario_sfx_jump(void);
+extern void mario_sfx_land(void);
+extern void mario_sfx_update(unsigned char running);
+
 /* ------------------------------- ГЕОМЕТРИЯ ------------------------------ */
 #define SCR_W        256
 #define BAND_TOP     104      /* верх полосы-тени (самый верх прыжка Марио)   */
@@ -57,8 +68,15 @@ extern void mario_capture_shadow(void);   /* слепок полосы в тен
 #define GROUND_ROWS  (256 - GROUND_TOP)
 #define GROUND_MY    (GROUND_TOP - MARIO_HPIX)  /* top стоящего Марио = 192    */
 
+#define FADE_HOLD    2       /* кадров на шаг фейда появления (больше — медленнее) */
+
 #define MIN_MX       0
-#define MAX_MX       (SCR_W - MARIO_HCELLS * 8)  /* правый край (x верха клетки)*/
+#define MAX_MX       (SCR_W - 3 * 8)  /* правый край (x верха клетки)*/
+
+/* ------------------------------ СТАРТ ПОЗИЦИИ --------------------------- */
+#define START_MX       26*8       /* x левого верха Марио на старте (кратен 8)  */
+#define START_MY       GROUND_MY /* y стоящего Марио на старте                  */
+#define START_FACING   0         /* 0 = лицом влево, 1 = вправо                 */
 
 /* ---------------------------- ПЛОСКОСТИ-БУФЕРЫ -------------------------- */
 /* p0 = плоскость веса 1 (лог. бит0), p1 = плоскость веса 2 (лог. бит1). */
@@ -81,13 +99,23 @@ extern void mario_capture_shadow(void);   /* слепок полосы в тен
 extern unsigned char kbd_shift_state;
 
 /* ------------------------------ СОСТОЯНИЕ ------------------------------- */
+/* Битки звуковых событий за кадр (из update_state, исполняются после показа
+ * кадра — см. main-цикл; иначе звук опережает картинку на целый кадр). */
+#define EV_JUMP      1
+#define EV_LAND      2
+
 static unsigned char palA[16], palB[16];
 static unsigned char front;              /* 0 = виден A, 1 = виден B          */
 
 /* RAM-тень фона полосы: ДВЕ колоночные матрицы (для asm-копирования):
- * байт = col * BAND_STRIDE + (y - BAND_TOP). Заполняются на старте. */
-unsigned char shadow0[32 * BAND_STRIDE];  /* плоскость веса 1 (E000/A000) */
-unsigned char shadow1[32 * BAND_STRIDE];  /* плоскость веса 2 (C000/8000) */
+ * байт = col * BAND_STRIDE + (y - BAND_TOP). Буферы берутся из кучи
+ * (mem/heap.c): куча стартует от конца образа __tail и в ROM-файл не
+ * попадает — 8 KB теней не раздувают образ. Освобождения нет: буфер
+ * живёт от capture_shadow() до перезапуска.
+ * НЕ static — символы читают render.asm (lhld _shadow0/_shadow1). */
+#define SHADOW_BYTES  (32 * BAND_STRIDE)   /* 4 KB на плоскость        */
+unsigned char *shadow0;                    /* плоскость веса 1 (E000/A000) */
+unsigned char *shadow1;                    /* плоскость веса 2 (C000/8000) */
 
 /* Параметры для render.asm (ассемблер читает/пишет их напрямую).
  * НЕ static — символы должны быть видны линкеру. */
@@ -96,9 +124,14 @@ unsigned int  rs_data;                   /* колонка данных (счи�
 unsigned int  rs_p0, rs_p1;              /* VRAM-указатели верха колонки     */
 unsigned int  rs_s0, rs_s1;              /* старт тени колонки               */
 unsigned char rs_cols;                   /* знаковый счётчик колонок (-w..0) */
+unsigned char rs_frac;                   /* суб-клеточный сдвиг: 0 или 4 px */
 
-/* Прямоугольник последнего спрайта в каждом буфере (для стирания). */
-static unsigned char old_x[2], old_y[2], old_w;   /* old_w в клетках, h=MARIO_HPIX */
+/* Прямоугольник последнего спрайта в каждом буфере (для стирания).
+ * ВСЕ поля — по буферам: спрайг в скрытом буфере был нарисован 2 кадра
+ * назад и мог иметь ДРУГУЮ ширину (frac=4 шире на spill-клетку), чем
+ * последний спрайт в другом буфере. Общий old_w стирал бы не ту ширину и
+ * оставлял нестёртый кусок. */
+static unsigned char old_x[2], old_y[2], old_w[2];   /* old_w в клетках, h=MARIO_HPIX */
 static unsigned char old_valid[2];
 
 /* Физика/анимация Марио. */
@@ -119,6 +152,7 @@ static const unsigned char run_seq[4]  = {0, 1, 2, 1}; /* 11->12->13->12 */
 static unsigned char anim_timer;
 static unsigned char move_timer;
 static unsigned char space_prev;
+static unsigned char land_played;       /* 1 = чпок приземления уже сыгран (early) */
 static unsigned int  tick;
 
 /* ------------------------------- УТИЛИТЫ -------------------------------- */
@@ -156,9 +190,14 @@ static void copy_A_to_B(void)
 }
 
 /* Снять RAM-тень фона полосы с плоскостей буфера A (колоночные
- * матрицы) — asm-циклом. */
+ * матрицы) — asm-циклом. Буферы теней выделяем из кучи прямо перед
+ * слепком: дальше они только читаются erase_sprite(). */
 static void capture_shadow(void)
 {
+    /* 8 KB из кучи до 0x8000 — заведомо хватает, поэтому проверки OOM нет
+     * (пустой for(;;){} + &&/|| ломает кодогенерацию sccz80). */
+    shadow0 = (unsigned char *)heap_alloc(SHADOW_BYTES);
+    shadow1 = (unsigned char *)heap_alloc(SHADOW_BYTES);
     mario_capture_shadow();
 }
 
@@ -181,7 +220,8 @@ static void erase_sprite(unsigned char buf, unsigned char x, unsigned char y,
 
 /* Нарисовать спрайт-позу в буфер buf: asm-композиция колонок с
  * прозрачностью. Марио всегда целиком в полосе BAND_TOP..BAND_BOT
- * (my клампится), выровнен по сетке 8 px — клип не нужен. */
+ * (my клампится). Шаг движения 4 px => x кратен 4; младший бит клетки
+ * (x & 7 == 4) asm трактует как сдвиг тетрады вправо на 4 px. */
 static void draw_sprite(unsigned char buf, unsigned char x, unsigned int y,
                         const unsigned char *spr)
 {
@@ -190,6 +230,7 @@ static void draw_sprite(unsigned char buf, unsigned char x, unsigned int y,
     rs_p0  = base + col * 0x100u + (255u - y);
     rs_p1  = rs_p0 - 0x2000u;
     rs_spr = (unsigned int)spr;
+    rs_frac = (unsigned char)(x & 7u);
     mario_draw_sprite();
 }
 
@@ -214,9 +255,10 @@ static const unsigned char *pick_sprite(void)
     return mario_frames[f][facing ? 1 : 0];
 }
 
-static void update_state(void)
+static unsigned char update_state(void)
 {
     unsigned char left, right, down;
+    unsigned char ev = 0;
 
     left  = kbd_is_down(KEY_LEFT);
     right = kbd_is_down(KEY_RIGHT);
@@ -256,15 +298,12 @@ static void update_state(void)
         }
     }
 
-    /* Шаг 8 px: ходьба медленнее бега. */
+    /* Двигаемся каждый кадр: ходьба 4 px (тетрада), бег 8 px (клетка). */
     if (moving) {
-        unsigned char rate = running ? 1 : 3;
-        if (++move_timer >= rate) {
-            int nx = (int)mx + (facing ? 8 : -8);
-            move_timer = 0;
-            if (nx >= MIN_MX && nx <= MAX_MX) mx = (unsigned char)nx;
-            anim_step = (anim_step + 1) & 3;
-        }
+        unsigned char step = running ? 8 : 4;
+        int nx = (int)mx + (facing ? (int)step : -(int)step);
+        if (nx >= MIN_MX && nx <= MAX_MX) mx = (unsigned char)nx;
+        anim_step = (anim_step + 1) & 3;
     } else {
         move_timer = 0;
         /* Мавок хвостом на месте — медленный таймер. */
@@ -277,20 +316,42 @@ static void update_state(void)
         if (sp && !space_prev && grounded && !crouch) {
             vy = -12;                /* импульс вверх (высокий прыжок) */
             grounded = 0;
+            land_played = 0;         /* новый полёт — приземление ещё не сыграно */
+            ev |= EV_JUMP;           /* свист прыжка — после показа кадра */
         }
         space_prev = sp;
     }
 
     /* Вертикальная физика. */
     if (!grounded) {
+        /* Приземление на КАДР раньше фактического касания: пока падаем и
+         * через две интегрирования (my+vy, затем +(vy+1)) упрёмся в землю —
+         * запускаем чпок сейчас. Звук ляжет чуть раньше удара стопы.
+         * my+vy < GROUND_MY — в этом кадре ещё не коснулись;
+         * my+2*vy+1 >= GROUND_MY — коснёмся в следующем. */
+        if (!land_played && vy > 0 &&
+            (my + vy) < (int)GROUND_MY && (my + 2 * vy + 1) >= (int)GROUND_MY) {
+            ev |= EV_LAND;
+            land_played = 1;
+        }
         my += vy;
         vy += 1;                      /* гравитация */
-        if (my >= GROUND_MY) { my = GROUND_MY; vy = 0; grounded = 1; }
+        if (my >= GROUND_MY) {
+            my = GROUND_MY; vy = 0; grounded = 1;
+            if (!land_played) ev |= EV_LAND;   /* подстраховка, если окно пропущено */
+            land_played = 0;
+        }
         if (my < (int)(BAND_TOP)) { my = BAND_TOP; if (vy < 0) vy = 0; }
     }
+
+    return ev;
 }
 
-static void draw_frame(void)
+/* present != 0 — показать наполненный буфер: переключить палитру-маску
+ * (= свап видимого буфера, VSync-синхронно) и активные плоскости.
+ * present == 0 — только нарисовать в скрытый буфер, экран НЕ трогать
+ * (нужно для пред-фейдового кадра: иначе палитра мигнёт ярким кадром до fade). */
+static void draw_frame(unsigned char present)
 {
     unsigned char back = (unsigned char)(front ^ 1u);
     const unsigned char *spr = pick_sprite();
@@ -298,20 +359,27 @@ static void draw_frame(void)
 
     /* 1. Стереть прежнего Марио в скрытом буфере (возврат фона из тени). */
     if (old_valid[back])
-        erase_sprite(back, old_x[back], old_y[back], old_w);
+        erase_sprite(back, old_x[back], old_y[back], old_w[back]);
 
     /* 2. Нарисовать нового. */
     draw_sprite(back, mx, (unsigned int)my, spr);
 
-    /* 3. Запомнить прямоугольник для следующего обращения к этому буферу. */
+    /* 3. Запомнить прямоугольник для следующего обращения к этому буферу.
+     * При сдвиге тетрады (mx & 7 == 4) спрайг занимает на одну клетку
+     * шире (spill вправо) — стирать надо покрывать ровно отрисованное. */
     old_x[back] = mx;
     old_y[back] = (unsigned char)my;
-    old_w = wcells;
+    old_w[back] = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
     old_valid[back] = 1;
 
-    /* 4. Показать этот буфер (смена палитры = VSync-синхронно). */
-    gfx_set_bmp_palette(back == 0 ? palA : palB);
+    /* Этот буфер теперь держит текущий кадр — независимо от показа. */
     front = back;
+
+    /* 4. Показать этот буфер (смена палитры = VSync-синхронно). */
+    if (present) {
+        gfx_active_planes = 0x0F;
+        gfx_set_bmp_palette(back == 0 ? palA : palB);
+    }
 }
 
 /* --------------------------------- MAIN --------------------------------- */
@@ -330,14 +398,19 @@ static void init_background(void)
     /* Текст — в полосе движения Марио, чтобы спрайт его перекрывал.
      * x = колонка (0..31): старт с кол.1, строки <= 30 символов
      * (32-я колонка переполняется и хвост заворачивается влево). */
-    y = BAND_TOP;
+    y = 48;
     draw_text_line(1,  y,       "VECTOR-06C DOUBLE BUFFER");
+    draw_text_line(1,  y += 12, "");
     draw_text_line(1,  y += 12, "THIS ROM SHOWS DOUBLE");
     draw_text_line(1,  y += 12, "BUFFERING FOR VECTOR-06C");
     draw_text_line(1,  y += 12, "2 PLANE PAIRS SWAP PALETTE");
-    draw_text_line(1,  y += 12, "------------------------------");
+    draw_text_line(1,  y += 12, "");
+    draw_text_line(1,  y += 12, "GOAL: ACHIEVE MAXIMUM");
+    draw_text_line(1,  y += 12, "SMOOTHNESS IN MARIOS MOVEMENT");
+    draw_text_line(1,  y += 12, "");
     draw_text_line(1,  y += 12, "ARROWS - WALK    SHIFT - RUN");
     draw_text_line(1,  y += 12, "SPACE  - JUMP    DOWN  - DUCK");
+    draw_text_line(1,  y += 12, "");
     draw_text_line(1,  y += 12, "MARIO OVERLAPS THIS TEXT");
 
     copy_A_to_B();                          /* фон одинаков в A и B */
@@ -350,9 +423,9 @@ static void init_background(void)
      * Цвет = бит той же весовой плоскости: A — лог. 2 (w2), B — 8 (w8),
      * под palB (i>>2)&3 = 2 — тот же розовый. */
     gfx_active_planes = 0x03;               /* только буфер A */
-    gfx_print(0, 0, "1", 2);
+    gfx_print(0, 0, "BUFFER 1", 2);
     gfx_active_planes = 0x0C;               /* только буфер B */
-    gfx_print(31, 0, "2", 8);
+    gfx_print(24, 0, "BUFFER 2", 8);
     gfx_active_planes = 0x0F;
 
     capture_shadow();                       /* тень полосы с буфера A */
@@ -360,23 +433,38 @@ static void init_background(void)
 
 void main(void)
 {
+    unsigned char ev;
+
     build_palettes();
+    mario_sfx_init();
     init_background();
 
-    mx = 40;
-    my = GROUND_MY;
+    mx = START_MX;
+    my = START_MY;
     vy = 0;
-    facing = 0;
+    facing = START_FACING;
     grounded = 1;
     old_valid[0] = old_valid[1] = 0;
 
-    gfx_set_bmp_palette(palA);              /* стартово виден A */
+    /* Первый кадр рисуем в A (front=1 → back=0=A), НО не показываем
+     * (present=0): экран остаётся чёрным, fade_in ниже сам проявит A с
+     * Марио — без лишней вспышки палитры. */
+    front = 1;
+    draw_frame(0);
+
+    gfx_fade_in(palA, FADE_HOLD);   /* проявить A уже с Марио */
     front = 0;
 
     for (;;) {
         kbd_scan();                          /* обновить kbd_rows + shift */
-        update_state();
-        draw_frame();
+        ev = update_state();                 /* физика + битки звуковых событий */
+        mario_sfx_update(running);           /* голоса + ветер (непрерывный)  */
+        draw_frame(1);                       /* рендер + свап палитры на VSync */
+        /* Звук событий — СРАЗУ после показа кадра: draw_frame блокируется в
+         * ei/halt до VSync, и только теперь новый кадр виден. Если запускать
+         * звук в update_state (до draw_frame), он опережал картинку на кадр. */
+        if (ev & EV_JUMP) mario_sfx_jump();
+        if (ev & EV_LAND) mario_sfx_land();
         tick++;
     }
 }
