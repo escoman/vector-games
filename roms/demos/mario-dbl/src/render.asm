@@ -251,57 +251,44 @@ drs_cur_ok:
         sta     ds_cnt
 
 drs_row:
-        ; ---- сырые байки текущей строки: cur(DE) и prev(BC), шаг +3 ----
-        ldax    d
-        sta     ds_co
-        inx     d
-        ldax    d
-        sta     ds_cb0
-        inx     d
-        ldax    d
-        sta     ds_cb1
-        inx     d
-        ldax    b
-        sta     ds_po
-        inx     b
-        ldax    b
-        sta     ds_pb0
-        inx     b
-        ldax    b
-        sta     ds_pb1
-        inx     b
-        ; ---- op = (cur_op>>4) | (prev_op<<4) ----
-        lda     ds_po
-        rlc
-        rlc
-        rlc
-        rlc
-        ani     0F0h
+        ; ---- op_sh = (cur_op>>4) | (prev_op<<4). Читаем cur(DE)/prev(BC)
+        ;      напрямую (без стейджинга в память). CY-грязь от 4 ротаций
+        ;      попадает в маскируемую половину и теряется под ANI. ----
+        ldax    d                     ; cur op
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh                   ; cur_op>>4 (в младшем ниббле)
         sta     ds_t
-        lda     ds_co
-        rrc
-        rrc
-        rrc
-        rrc
-        ani     0Fh
+        ldax    b                     ; prev op
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h                  ; prev_op<<4 (в старшем ниббле)
         lxi     h, ds_t
-        add     m                     ; nibbles не пересекаются -> ADD == OR
+        add     m                     ; ADD == OR (нибблы не пересекаются)
         sta     ds_op
+        ora     a
+        jz      drs_skip              ; прозрачный байт -> в VRAM ничего не меняется
 
         ; ---- плоскость бита 0: bit = (cur_b0>>4)|(prev_b0<<4) ----
-        lda     ds_pb0
-        rlc
-        rlc
-        rlc
-        rlc
-        ani     0F0h
-        sta     ds_t
-        lda     ds_cb0
+        inx     d                     ; -> cur b0
+        inx     b                     ; -> prev b0
+        ldax    d
         rrc
         rrc
         rrc
         rrc
         ani     0Fh
+        sta     ds_t
+        ldax    b
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h
         lxi     h, ds_t
         add     m
         sta     ds_bit
@@ -325,19 +312,21 @@ drs_row:
         shld    ds_v0
 
         ; ---- плоскость бита 1: bit = (cur_b1>>4)|(prev_b1<<4) ----
-        lda     ds_pb1
-        rlc
-        rlc
-        rlc
-        rlc
-        ani     0F0h
-        sta     ds_t
-        lda     ds_cb1
+        inx     d                     ; -> cur b1
+        inx     b                     ; -> prev b1
+        ldax    d
         rrc
         rrc
         rrc
         rrc
         ani     0Fh
+        sta     ds_t
+        ldax    b
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h
         lxi     h, ds_t
         add     m
         sta     ds_bit
@@ -360,6 +349,25 @@ drs_row:
         dcx     h
         shld    ds_v1
 
+        inx     d                     ; -> cur op следующей строки
+        inx     b                     ; -> prev op следующей строки
+        jmp     drs_next
+
+drs_skip:
+        ; Прозрачный байт: только сдвигаем cur/prev (+3) и VRAM-указатели (-1).
+        inx     d
+        inx     d
+        inx     d
+        inx     b
+        inx     b
+        inx     b
+        lhld    ds_v0
+        dcx     h
+        shld    ds_v0
+        lhld    ds_v1
+        dcx     h
+        shld    ds_v1
+drs_next:
         ; ---- следующая строка ----
         lda     ds_cnt
         sui     1
