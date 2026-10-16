@@ -4,16 +4,16 @@
 ; короткие строковые циклы dcr b / jnz, xchg для загрузки DE, dcr e-поход
 ; по строкам убывающего адреса.
 ;
-; Формат спрайта (gen_assets.py): заголовок [wcells,hcells,hpix=32],
-; далее КОЛОНОЧНЫЕ тройки (op,b0,b1): для каждой клетки-столбца — 32
-; пиксель-строки подряд (шаг 3 байта). Столбец VRAM при росте y идёт
-; по убывающему адресу: addr = base + col*0x100 + (255 - y),
-; поэтому внутренний цикл = data += 3 (INX D), vram -= 1 (DCX H).
+; Формат спрайта (gen_assets.py) — тайл-ПРЕФАБ: заголовок
+; [wcells,hcells,hpix=32,nTiles], затем nTiles записей [pos]+8 троек
+; (op,b0,b1): pos=(col<<2)|row, тайлы только с непустым содержимым.
+; Столбец VRAM при росте y идёт по убывающему адресу:
+; addr = base + col*0x100 + (255 - y), поэтому внутренний цикл =
+; data += 3 (INX D), vram -= 1 (DCX H).
 ;
-; Композиция: res = cur ^ ((cur ^ bit) & op). Строка пишется ВСЕГДА
-; (даже при op=0): результат тогда равен cur — запись идентичного
-; значения в скрытую (замаскированную палитрой) плоскость безопасна
-; и дешевле ветвления.
+; Композиция: res = cur ^ ((cur ^ bit) & op). Пустые тайлы (op=0 во
+; всех строках) не пишутся вовсе: res = cur — побитовый no-op; frac=0
+; их просто нет в данных, frac=4 пропускает пары пустых соседних тайлов.
 ;
 ; Глобалы (определены в main.c; asm читает/пишет напрямую):
 ;   _rs_spr   указатель на спрайт (заголовок), только mario_draw_sprite
@@ -73,38 +73,47 @@ fg_tile:    defw    0         ; база tile_ground
 fg_cur:     defw    0         ; курсор колонки E000 (+0x100 на колонку)
 
 ; --- рабочие переменные сдвига тетрады (mario_draw_sprite, frac=4) ---
-;   Стратегия «В-чистовой»: сдвинутую колонку (32×{op,b0,b1}) собрать
-;   один раз в ds_buf (96 B), затем прогнать её через тот же быстрый
-;   путь dr_p0/dr_p1, что и обычные спрайты. drs_stage полностью
-;   unroll'ен на 96 SBYTE-макросов: HL прибит к &ds_t, OR идёт через
-;   mov m,a / add m (без push/pop), запись в ds_buf — фиксированные
+;   Плитный стейджинг: ds_buf хранит ОДИН тайл сдвинутой колонки (24 B =
+;   8 троек op/b0/b1), заполняется 24 SBYTE-макросами: HL прибит к &ds_t,
+;   OR идёт mov m,a / add m (без push/pop), запись в ds_buf — фиксированные
 ;   sta+ofs (HL больше не курсор), счётчик строк не нужен.
 ds_ncols:   defb    0         ; wcells (ширина спрайта в клетках)
 ds_cc:      defb    0         ; счётчик колонок вывода (wcells+1 .. 0)
-ds_cptr:    defw    0         ; база данных текущей клетки (cur)
-ds_pptr:    defw    0         ; база данных соседней клетки (prev, слева)
 ds_t:       defb    0         ; временный накопитель nibble-OR (через ADD M)
-ds_buf:     defs    96        ; сдвинутая колонка (32 тройки op/b0/b1),
-                              ; формат идентичен обычным данным спрайта
-        ; Нулевой блок-клетка (96 байт) для отсутствующего соседа: клетка
-        ; слева от 0-й и cur для spill-колонки справа. Обнуляется в начале
-        ; drs_start (секция bss при --no-crt не зануляется).
+ds_buf:     defs    24        ; staged-тайл (8 троек), формат = payload записи
+        ; Нулевой блок-клетка (96 байт = 4 нуля-тайла 8x8) для отсутствующих
+        ; соседей: клетка слева от 0-й и cur для spill-колонки справа.
+        ; Обнуляется в начале drs_start (секция bss при --no-crt не зануляется).
 zcol:       defs    96
 
 ; --- рабочие переменные тайл-префаба (mario_draw_sprite) ---
 ;   Спрайт = [wcells,hcells,hpix,nTiles] + nTiles записей [pos]+8 троек.
 ;   pos = (col<<2)|row. frac=0 рисует только присутствующие тайлы (dr_tile);
-;   frac=4 реконструирует плотные колонки в dr_scr и гоняет штатный drs.
+;   frac=4 стейджерит и рисует тайлами через таблицу указателей tab2.
 MAXWC   EQU 4              ; запас по ширине (макс wcells=3)
 dt_rec:     defw    0      ; курсор текущей записи тайла (src)
 dt_nc:      defb    0      ; счётчик оставшихся записей
 dt_v0:      defw    0      ; VRAM-курсор тайла, плоскость бита0
 dt_v1:      defw    0      ; VRAM-курсор тайла, плоскость бита1
-rbi:        defb    0      ; текущий слот реконструкции (col*4+row)
+rbi:        defb    0      ; строящийся слот (col*4+row)
 rb_cnt:     defb    0      ; оставшихся слотов (wcells*4)
-rb_dst:     defw    0      ; курсор записи в dr_scr (плотные колонки)
-; плотная реконструкция: заголовок[3] + MAXWC*96 (dr_scr = указатель для drs)
-dr_scr:     defs    3 + (MAXWC * 96)
+rb_dst:     defw    0      ; временное: 16-бит значение для записи в (HL)
+
+; --- frac=4 tile-цикл: указатели тайлов и presence ---
+;   pres_buf[j]: 1 = тайл присутствует. [0..3]=sentinel (prev кол.0),
+;   [4+k*4+r]=слот (k,r); хвост [4+wc*4..]=0 — пустые тайлы spill-колонки.
+;   tab2[j] (defw): адрес данных тайла; предзаполнение = zcol+(j&3)*24
+;   (нулевой тайл), для присутствующих слотов — адрес payload записи.
+;   Курсоры колонки k: prev = tab2+k*8, cur = tab2+(k+1)*8 — сами идут
+;   +2/тайл и +4 записи/колонку (prev след. колонки = cur текущей).
+ds_td:      defb    0      ; VRAM-delta тайла: 0,8,16,24
+ds_tc:      defb    0      ; счётчик тайлов 4..0 (dr_p0 clobbers B/C — память)
+ds_ctab:    defw    0      ; курсор defw-записи tab2 для cur-тайла
+ds_ptab:    defw    0      ; курсор defw-записи tab2 для prev-тайла
+ds_pres_p:  defw    0      ; курсор prev pres-байтов (шаг +1/тайл)
+ds_pres_c:  defw    0      ; курсор cur pres-байтов
+pres_buf:   defs    (MAXWC + 2) * 4
+tab2:       defs    (MAXWC + 2) * 8
 
 ; ---------------------------------------------------------------
 ; void mario_draw_sprite(void)
@@ -125,7 +134,7 @@ _mario_draw_sprite:
         shld    dt_rec
         lda     _rs_frac
         ora     a
-        jnz     rec_build             ; frac!=0 -> плотная реконструкция + drs
+        jnz     rec_build             ; frac!=0 -> сборка tab2/pres + tile-drs
 
 ; -----------------------------------------------------------------
 ; dr_tile — быстрый путь frac=0: цикл по присутствующим тайлам.
@@ -201,68 +210,110 @@ dr_ret:
         ret
 
 ; -----------------------------------------------------------------
-; rec_build — frac=4: разложить тайлы обратно в ПЛОТНЫЕ колонки
-;   (dr_scr = заголовок[3] + wcells*96), затем штатный drs_stage.
-;   Идём по всем слотам 0..wcells*4-1 (row-мажорно, col=slot>>2):
-;   если следующая запись=pos==slot — копируем 24 байта, иначе 0.
-;   Умножений нет: dst растёт на 24/слот, presence = сравнение pos/slot.
-;   Результат dr_scr побайтово равен исходным колончатым данным.
+; rec_build — frac=4 подготовка: построить таблицу указателей тайлов
+;   tab2 и карту присутствия pres_buf. Идём по слотам 0..wcells*4-1
+;   (row-мажорно): если следующая запись pos==slot — tab2[4+slot] =
+;   адрес payload записи, pres=1, запись += 25; иначе слот сохраняет
+;   предзаполненный указатель нулевого тайла (zcol + (slot&3)*24).
+;   Копирований нет: стейджер читает байты записей напрямую по указателям.
 ; -----------------------------------------------------------------
 rec_build:
-        lhld    _rs_spr               ; переложить заголовок [0..2]
-        mov     a,m
-        sta     dr_scr                ; [0]=wcells
+        ; --- занулить pres_buf ((MAXWC+2)*4 = 24 B): sentinel/хвост/пустые ---
+        lxi     h, pres_buf
+        mvi     b, (MAXWC + 2) * 4
+        mvi     a, 0
+rb_zpres:
+        mov     m, a
         inx     h
-        mov     a,m
-        sta     dr_scr+1
+        dcr     b
+        jnz     rb_zpres
+        ; --- tab2[0..3] = zcol + {0,24,48,72} (указатели нуля-тайлов) ---
+        lxi     h, tab2
+        lxi     d, zcol
+        mov     m, e
         inx     h
-        mov     a,m
-        sta     dr_scr+2
-        ; слотов = wcells*4
+        mov     m, d
+        inx     h
+        lxi     d, zcol+24
+        mov     m, e
+        inx     h
+        mov     m, d
+        inx     h
+        lxi     d, zcol+48
+        mov     m, e
+        inx     h
+        mov     m, d
+        inx     h
+        lxi     d, zcol+72
+        mov     m, e
+        inx     h
+        mov     m, d
+        inx     h
+        ; --- период 8 B: размножить tab2[0..7] в 5 следующих блоков (24 defw) ---
+        mvi     b, 5
+        lxi     h, tab2+8
+rb_blk:
+        mvi     c, 8
+        lxi     d, tab2
+rb_byt:
+        ldax    d
+        mov     m, a
+        inx     d
+        inx     h
+        dcr     c
+        jnz     rb_byt
+        dcr     b
+        jnz     rb_blk
+        ; --- обход слотов: count = wcells*4 ---
         lda     ds_ncols
         rlc
         rlc
         sta     rb_cnt
-        mvi     a,0
+        mvi     a, 0
         sta     rbi
-        lxi     h, dr_scr+3
-        shld    rb_dst
 rb_loop:
         lda     rb_cnt
         ora     a
         jz      rb_done
         lda     dt_nc
         ora     a
-        jz      rb_zero               ; записи кончились — остаток нули
+        jz      rb_done               ; записи кончились: остаток — нуль-тайлы
         lhld    dt_rec
-        mov     a,m                   ; pos
-        mov     b,a
+        mov     a, m                  ; pos
+        mov     b, a
         lda     rbi
         cmp     b                     ; slot == pos ?
-        jnz     rb_zero
-        ; присутствует: DE=dt_rec+1 (src), HL=rb_dst (dst), 24 байта
+        jnz     rb_adv                ; нет — оставляем предзаполненный указатель
+        ; --- присутствует: pres_buf[4+slot]=1; tab2[4+slot]=dt_rec+1 ---
+        lda     rbi
+        mov     e, a
+        mvi     d, 0
+        lxi     h, pres_buf+4
+        dad     d
+        mvi     m, 1
         lhld    dt_rec
         inx     h
-        xchg                          ; DE = src
-        lhld    rb_dst
-        call    copy24
-        ; dt_rec += 25 ; dt_nc--
+        shld    rb_dst                ; значение = адрес payload тайла
+        lda     rbi
+        mov     l, a
+        mvi     h, 0
+        dad     h                     ; HL = 2*slot
+        lxi     d, tab2+8
+        dad     d                     ; HL = &tab2[4+slot]
+        lda     rb_dst
+        mov     m, a
+        inx     h
+        lda     rb_dst+1
+        mov     m, a
+        ; --- запись += 25 ---
         lhld    dt_rec
-        lxi     d,25
+        lxi     d, 25
         dad     d
         shld    dt_rec
         lda     dt_nc
         dcr     a
         sta     dt_nc
-        jmp     rb_adv
-rb_zero:
-        lhld    rb_dst
-        call    zero24
 rb_adv:
-        lhld    rb_dst                ; dst += 24
-        lxi     d,24
-        dad     d
-        shld    rb_dst
         lda     rbi
         inr     a
         sta     rbi
@@ -271,30 +322,7 @@ rb_adv:
         sta     rb_cnt
         jmp     rb_loop
 rb_done:
-        lxi     h, dr_scr             ; drs читает колонки из dr_scr
-        shld    _rs_spr
         jmp     drs_start
-
-; --- подпрограммы переноса 24 байт тайла (HL=dst, DE=src) ---
-copy24:
-        mvi     b,24
-c24:
-        ldax    d
-        mov     m,a
-        inx     d
-        inx     h
-        dcr     b
-        jnz     c24
-        ret
-zero24:
-        mvi     b,24
-        mvi     a,0
-z24:
-        mov     m,a
-        inx     h
-        dcr     b
-        jnz     z24
-        ret
 
 ; ---------------------------------------------------------------
 ; dr_p0 / dr_p1 — внутренний цикл одной колонки, вызывается и из
@@ -368,19 +396,21 @@ SBYTE   MACRO   ofs
         ENDM
 
 ; ---------------------------------------------------------------
-; Сдвиг тетрады (frac=4) — «В-чистовой»: вывод спрайта со сдвигом
-; вправо на 4px.
+; Сдвиг тетрады (frac=4) — tile-стейджинг: вывод спрайта со сдвигом
+; вправо на 4px за один обход тайлов (без плотной реконструкции).
 ;
 ; Выходной байт клетки col+j собирается из двух клеток спрайта:
 ;   low  nibble <- high nibble клетки j     (cur >> 4)
 ;   high nibble <- low  nibble клетки j-1   (prev << 4)
 ; j пробегает 0..wcells (wcells+1 колонок): слева prev=zcol, справа для
-; spill-колонки cur=zcol. 8080 не имеет сдвига на 4 — делаем 4x RRC/RLC.
+; spill-колонки cur=zcol (шлёпки tab2 sentinel/хвост указывают на
+; нуля-тайлы zcol). 8080 не имеет сдвига на 4 — делаем 4x RRC/RLC.
 ;
-; На каждой колонке:
-;   1) drs_stage — собрать 32 тройки (op,b0,b1) в ds_buf (96 B);
-;   2) CALL dr_p0 / CALL dr_p1 — быстрый путь, ровно как для frac=0.
-; Внутренняя композиция и VRAM-стейджинг из старого drs_row удалены.
+; ds_tloop идёт по 4 тайлам колонки:
+;   pres_prev|pres_cur оба нуля -> пропускаем и стейджинг, и вывод
+;   (staged op заведомо 0, результат побитово = полный проход);
+;   иначе стейдим 24 байта в ds_buf (24 SBYTE, источники — payload
+;   записей по указателям tab2) и рисуем 8 строк dr_p0/dr_p1 (B=8).
 ; ---------------------------------------------------------------
 drs_start:
         ; --- занулить zcol (96 байт): bss при --no-crt не инициализирован ---
@@ -398,38 +428,45 @@ drs_zclr:
         inr     c
         mov     a, c
         sta     ds_cc
-        ; --- базы данных: cur = spr+3, prev = zcol ---
-        lhld    _rs_spr
-        inx     h
-        inx     h
-        inx     h
-        shld    ds_cptr
-        lxi     h, zcol
-        shld    ds_pptr
+        ; --- курсоры tab2: prev = sentinel [0..3], cur = слоты [4..] ---
+        lxi     h, tab2
+        shld    ds_ptab
+        lxi     h, tab2+8
+        shld    ds_ctab
+        ; --- pres-курсоры: prev = sentinel[0..3], cur = pres_buf+4 (col 0) ---
+        lxi     h, pres_buf
+        shld    ds_pres_p
+        lxi     h, pres_buf+4
+        shld    ds_pres_c
 
 drs_col:
-        ; DE = cur (zcol на spill-колонке, cc==1), BC = prev
-        lda     ds_cc
-        sui     1
-        jz      drs_cur_z
-        lhld    ds_cptr
-        jmp     drs_cur_ok
-drs_cur_z:
-        lxi     h, zcol
-drs_cur_ok:
-        xchg                          ; DE = cur
-        lhld    ds_pptr               ; BC = prev
+        ; --- начало колонки: 4 тайла, delta=0 ---
+        mvi     a, 4
+        sta     ds_tc
+        mvi     a, 0
+        sta     ds_td
+ds_tloop:
+        lhld    ds_pres_p             ; pres_prev[r] | pres_cur[r]
+        mov     a, m
+        lhld    ds_pres_c
+        ora     m
+        jz      ds_tskip              ; оба тайла пусты -> нечего стейдить
+        ; --- стейджинг 24 B: cur-тайл -> DE ---
+        lhld    ds_ctab               ; HL = *ctab (payload записи или zcol-тайл)
+        mov     a, m
+        inx     h
+        mov     h, m
+        mov     l, a
+        xchg                          ; DE = src cur
+        ; --- prev-тайл -> BC ---
+        lhld    ds_ptab               ; HL = *ptab
+        mov     a, m
+        inx     h
+        mov     h, m
+        mov     l, a
         mov     b, h
-        mov     c, l
-        lxi     h, ds_t               ; HL = &ds_t, стоит весь drs_stage
-
-; ---------------------------------------------------------------
-; drs_stage — полный unroll 32 строк × 3 байта = 96 SBYTE-макросов.
-;HL/DE/BC инициализированы в drs_col; после 96 макросов
-; DE/BC = cur+96 / prev+96 (не используются — drs_col перезагрузит),
-; ds_buf забит целиком. Falling-through в dr_p0/dr_p1 ниже.
-; ---------------------------------------------------------------
-drs_stage:
+        mov     c, l                  ; BC = src prev
+        lxi     h, ds_t               ; накопитель, HL стоит весь стейджинг
         SBYTE   0
         SBYTE   1
         SBYTE   2
@@ -454,96 +491,59 @@ drs_stage:
         SBYTE   21
         SBYTE   22
         SBYTE   23
-        SBYTE   24
-        SBYTE   25
-        SBYTE   26
-        SBYTE   27
-        SBYTE   28
-        SBYTE   29
-        SBYTE   30
-        SBYTE   31
-        SBYTE   32
-        SBYTE   33
-        SBYTE   34
-        SBYTE   35
-        SBYTE   36
-        SBYTE   37
-        SBYTE   38
-        SBYTE   39
-        SBYTE   40
-        SBYTE   41
-        SBYTE   42
-        SBYTE   43
-        SBYTE   44
-        SBYTE   45
-        SBYTE   46
-        SBYTE   47
-        SBYTE   48
-        SBYTE   49
-        SBYTE   50
-        SBYTE   51
-        SBYTE   52
-        SBYTE   53
-        SBYTE   54
-        SBYTE   55
-        SBYTE   56
-        SBYTE   57
-        SBYTE   58
-        SBYTE   59
-        SBYTE   60
-        SBYTE   61
-        SBYTE   62
-        SBYTE   63
-        SBYTE   64
-        SBYTE   65
-        SBYTE   66
-        SBYTE   67
-        SBYTE   68
-        SBYTE   69
-        SBYTE   70
-        SBYTE   71
-        SBYTE   72
-        SBYTE   73
-        SBYTE   74
-        SBYTE   75
-        SBYTE   76
-        SBYTE   77
-        SBYTE   78
-        SBYTE   79
-        SBYTE   80
-        SBYTE   81
-        SBYTE   82
-        SBYTE   83
-        SBYTE   84
-        SBYTE   85
-        SBYTE   86
-        SBYTE   87
-        SBYTE   88
-        SBYTE   89
-        SBYTE   90
-        SBYTE   91
-        SBYTE   92
-        SBYTE   93
-        SBYTE   94
-        SBYTE   95
-
-        ; ---- плоскость 0: dr_p0(ds_buf -> _rs_p0) ----
-        lxi     d, ds_buf
+        ; ---- VRAM-курсоры: dt_v0/v1 = _rs_p0/p1 - delta (заём -> dcr h) ----
         lhld    _rs_p0
-        mvi     b, ROWS
-        call    dr_p0
-        ; ---- плоскость 1: dr_p1(ds_buf -> _rs_p1) ----
-        lxi     d, ds_buf
+        lda     ds_td
+        mov     e, a
+        mov     a, l
+        sub     e
+        mov     l, a
+        jnc     dsv0
+        dcr     h
+dsv0:   shld    dt_v0
         lhld    _rs_p1
-        mvi     b, ROWS
+        lda     ds_td
+        mov     e, a
+        mov     a, l
+        sub     e
+        mov     l, a
+        jnc     dsv1
+        dcr     h
+dsv1:   shld    dt_v1
+        ; ---- вывод 8 строк плоскость 0 ----
+        lxi     d, ds_buf
+        lhld    dt_v0
+        mvi     b, 8
+        call    dr_p0
+        ; ---- плоскость 1 ----
+        lxi     d, ds_buf
+        lhld    dt_v1
+        mvi     b, 8
         call    dr_p1
+ds_tskip:
+        lda     ds_td                 ; delta += 8
+        adi     8
+        sta     ds_td
+        lhld    ds_ctab               ; tab-курсоры += 2 (defw; за колонку +8
+        inx     h                     ; = 4 записи, prev след. кол. = cur текущей)
+        inx     h
+        shld    ds_ctab
+        lhld    ds_ptab
+        inx     h
+        inx     h
+        shld    ds_ptab
+        lhld    ds_pres_p             ; pres-курсоры += 1
+        inx     h
+        shld    ds_pres_p
+        lhld    ds_pres_c
+        inx     h
+        shld    ds_pres_c
+        lda     ds_tc
+        dcr     a
+        sta     ds_tc
+        jnz     ds_tloop
 
-        ; ---- следующая колонка: prev=cur, cur+=96, VRAM += 0x100 ----
-        lhld    ds_cptr
-        shld    ds_pptr
-        lxi     d, 0060h
-        dad     d
-        shld    ds_cptr
+        ; ---- следующая колонка: VRAM += 0x100 (курсоры tab/pres уже смещены) ----
         lda     _rs_p0+1
         inc     a
         sta     _rs_p0+1
