@@ -20,8 +20,8 @@
 ;   _rs_data  старт блока данных текущей колонки (считает сам asm)
 ;   _rs_p0    байт VRAM верха спрайта, плоскость бита0 (вес 1: E000/A000)
 ;   _rs_p1    то же для плоскости бита1 (вес 2: C000/8000) = p0 - 0x2000
-;   _rs_s0    старт тени прямоугольника для _rs_p0 (shadow0), erase
-;   _rs_s1    старт тени прямоугольника для _rs_p1 (shadow1), erase
+;   _rs_s0    старт относительного патча для _rs_p0 (плоскость бита0), erase/capture
+;   _rs_s1    старт относительного патча для _rs_p1 (плоскость бита1), erase/capture
 ;   _rs_cols  знаковый счётчик колонок: от -wcells до 0
 ;   _rs_frac  суб-клеточный сдвиг: 0 = выровнен по сетке 8px (быстрый путь,
 ;             побайтовая композиция), 4 = сдвиг вправо на 4px — каждая тетрада
@@ -34,11 +34,12 @@
 ;                          указатель tile_ground передаётся в _rs_spr;
 ;   mario_copy_AB        — копия буфера A -> B (E000->A000, C000->8000,
 ;                          2 блока по 8 КБ, ручной цикл — плоскости непрерывны);
-;   mario_capture_shadow — слепок полосы BAND_TOP..BAND_BOT из плоскостей
-;                          A в колоночные тени shadow0/shadow1.
+;   mario_capture_patch — слепок прямоугольника под НОВЫМ спрайтом из
+;                          VRAM-буфера в относительный патч (источник для erase).
 ;
-; Геометрия ниже зеркалит main.c (BAND_TOP=104, BAND_BOT=223, GROUND_TOP=224,
-; BAND_STRIDE=128). Менять синхронно в обоих файлах.
+; Геометрия ниже зеркалит main.c (GROUND_TOP=224; ROWS=32 = MARIO_HPIX).
+; Патч относительный: байт = relcol*ROWS + row, старт = верх-лево пятна,
+; шаг колонки = ROWS (32). Менять синхронно с main.c.
 ;
 
         SECTION code_clib
@@ -46,7 +47,7 @@
         PUBLIC  _mario_erase_sprite
         PUBLIC  _mario_fill_ground
         PUBLIC  _mario_copy_AB
-        PUBLIC  _mario_capture_shadow
+        PUBLIC  _mario_capture_patch
 
         EXTERN  _rs_spr
         EXTERN  _rs_data
@@ -56,8 +57,6 @@
         EXTERN  _rs_s1
         EXTERN  _rs_cols
         EXTERN  _rs_frac
-        EXTERN  _shadow0
-        EXTERN  _shadow1
 
 ROWS EQU 32                 ; строк спрайта (hcells=4 x CELL=8)
 
@@ -65,9 +64,6 @@ ROWS EQU 32                 ; строк спрайта (hcells=4 x CELL=8)
 NCOLS      EQU 32            ; колонок экрана (256/8)
 GROUND_OFS EQU 31            ; 255 - GROUND_TOP: адрес байта верха земли
 GROUND_ROWS EQU 32           ; строк земли (224..255)
-BAND_OFS   EQU 151           ; 255 - BAND_TOP: адрес байта верха полосы
-BAND_ROWS  EQU 120           ; строк полосы (BAND_TOP..BAND_BOT)
-BAND_STEP  EQU 128           ; BAND_STRIDE: шаг колонки тени
 
 ;
 ; Рабочие переменные примитивов инициализации (не видны из C).
@@ -75,10 +71,6 @@ BAND_STEP  EQU 128           ; BAND_STRIDE: шаг колонки тени
         SECTION bss_clib
 fg_tile:    defw    0         ; база tile_ground
 fg_cur:     defw    0         ; курсор колонки E000 (+0x100 на колонку)
-cap_p:      defw    0         ; курсор колонки E000 (capture)
-cap_q:      defw    0         ; курсор колонки C000 (capture)
-cap_s:      defw    0         ; курсор колонки shadow0 (+BAND_STEP)
-cap_t:      defw    0         ; курсор колонки shadow1 (+BAND_STEP)
 
 ; --- рабочие переменные сдвига тетрады (mario_draw_sprite, frac=4) ---
 ;   Стратегия «В-чистовой»: сдвинутую колонку (32×{op,b0,b1}) собрать
@@ -99,6 +91,21 @@ ds_buf:     defs    96        ; сдвинутая колонка (32 тройк
         ; drs_start (секция bss при --no-crt не зануляется).
 zcol:       defs    96
 
+; --- рабочие переменные тайл-префаба (mario_draw_sprite) ---
+;   Спрайт = [wcells,hcells,hpix,nTiles] + nTiles записей [pos]+8 троек.
+;   pos = (col<<2)|row. frac=0 рисует только присутствующие тайлы (dr_tile);
+;   frac=4 реконструирует плотные колонки в dr_scr и гоняет штатный drs.
+MAXWC   EQU 4              ; запас по ширине (макс wcells=3)
+dt_rec:     defw    0      ; курсор текущей записи тайла (src)
+dt_nc:      defb    0      ; счётчик оставшихся записей
+dt_v0:      defw    0      ; VRAM-курсор тайла, плоскость бита0
+dt_v1:      defw    0      ; VRAM-курсор тайла, плоскость бита1
+rbi:        defb    0      ; текущий слот реконструкции (col*4+row)
+rb_cnt:     defb    0      ; оставшихся слотов (wcells*4)
+rb_dst:     defw    0      ; курсор записи в dr_scr (плотные колонки)
+; плотная реконструкция: заголовок[3] + MAXWC*96 (dr_scr = указатель для drs)
+dr_scr:     defs    3 + (MAXWC * 96)
+
 ; ---------------------------------------------------------------
 ; void mario_draw_sprite(void)
 ;   Нарисовать весь спрайт (_rs_spr) в пару плоскостей _rs_p0/_rs_p1.
@@ -106,49 +113,187 @@ zcol:       defs    96
 ; ---------------------------------------------------------------
         SECTION code_clib
 _mario_draw_sprite:
-        lhld    _rs_spr               ; HL = спрайт
-        mov     a,m                   ; wcells
-        sta     ds_ncols              ; ширина в клетках (нужна shift-пути)
-        cma
-        inr     a
-        sta     _rs_cols              ; _rs_cols = -wcells
-        inx     h
-        inx     h
-        inx     h                     ; spr + 3 = старт данных
-        shld    _rs_data
-        lda     _rs_frac              ; суб-клеточный сдвиг?
+        lhld    _rs_spr               ; HL = заголовок префаба
+        mov     a,m                   ; [0]=wcells
+        sta     ds_ncols              ; ширина (нужна frac=4 и реконструкции)
+        inx     h                     ; [1]=hcells
+        inx     h                     ; [2]=hpix
+        inx     h                     ; [3]=nTiles
+        mov     a,m
+        sta     dt_nc
+        inx     h                     ; [4]=старт записей тайлов
+        shld    dt_rec
+        lda     _rs_frac
         ora     a
-        jnz     drs_start             ; frac!=0 -> сдвиг тетрады (4px)
-dr_col:
-        ; ================= проход 0: плоскость бита 0 =================
-        lhld    _rs_data
-        xchg                          ; DE = данные колонки
-        lhld    _rs_p0                ; HL = VRAM (верх колонки)
-        mvi     b,ROWS
-        call    dr_p0
+        jnz     rec_build             ; frac!=0 -> плотная реконструкция + drs
 
-        ; ================= проход 1: плоскость бита 1 =================
-        lhld    _rs_data              ; DE = данные колонки (сначала)
-        xchg
+; -----------------------------------------------------------------
+; dr_tile — быстрый путь frac=0: цикл по присутствующим тайлам.
+;   Для записи pos: col=pos>>2, row=pos&3, delta=row*8.
+;   VRAM0 = _rs_p0 + col*0x100 - delta ; VRAM1 = _rs_p1 + то же.
+;   col добавляется в старший байт (0x100/col), delta вычитается из
+;   младшего с займом в старший (dcr h). Рисуем 8 строк dr_p0 / dr_p1.
+; -----------------------------------------------------------------
+dr_tile:
+        lda     dt_nc
+        ora     a
+        jz      dr_ret
+        lhld    dt_rec
+        mov     a,m                   ; pos
+        mov     e,a                   ; сохранить pos
+        ani     03h                   ; row
+        rlc
+        rlc
+        rlc                           ; delta = row*8
+        mov     d,a                   ; D = delta
+        mov     a,e                   ; pos
+        ora     a                     ; CY=0
+        rar
+        rar                           ; col = pos>>2
+        ani     0Fh
+        mov     e,a                   ; E = col
+        ; --- VRAM0 = _rs_p0 + col*0x100 - delta ---
+        lhld    _rs_p0
+        mov     a,h
+        add     e                     ; H += col
+        mov     h,a
+        mov     a,l
+        sub     d                     ; L -= delta (CY = заём)
+        mov     l,a
+        jnc     tv0
+        dcr     h                     ; заём -> H--
+tv0:    shld    dt_v0
+        ; --- VRAM1 = _rs_p1 + col*0x100 - delta ---
         lhld    _rs_p1
-        mvi     b,ROWS
+        mov     a,h
+        add     e
+        mov     h,a
+        mov     a,l
+        sub     d
+        mov     l,a
+        jnc     tv1
+        dcr     h
+tv1:    shld    dt_v1
+        ; --- плоскость 0 ---
+        lhld    dt_rec
+        inx     h
+        xchg                          ; DE = данные тайла (pos+1)
+        lhld    dt_v0
+        mvi     b,8
+        call    dr_p0
+        ; --- плоскость 1 ---
+        lhld    dt_rec
+        inx     h
+        xchg
+        lhld    dt_v1
+        mvi     b,8
         call    dr_p1
-
-        ; ------------------- сдвиг на следующую колонку ----------------
-        lhld    _rs_data              ; старт + 96 (DE после dr_p1)
-        lxi     d,0060h
+        ; --- следующая запись ---
+        lhld    dt_rec
+        lxi     d,25
         dad     d
-        shld    _rs_data
-        lda     _rs_p0+1
-        inc     a                     ; VRAM += 0x100 (блок следующий)
-        sta     _rs_p0+1
-        lda     _rs_p1+1
-        inc     a
-        sta     _rs_p1+1
-        lda     _rs_cols
-        inc     a
-        sta     _rs_cols
-        jnz     dr_col                ; INR задал Z
+        shld    dt_rec
+        lda     dt_nc
+        dcr     a
+        sta     dt_nc
+        jmp     dr_tile
+dr_ret:
+        ret
+
+; -----------------------------------------------------------------
+; rec_build — frac=4: разложить тайлы обратно в ПЛОТНЫЕ колонки
+;   (dr_scr = заголовок[3] + wcells*96), затем штатный drs_stage.
+;   Идём по всем слотам 0..wcells*4-1 (row-мажорно, col=slot>>2):
+;   если следующая запись=pos==slot — копируем 24 байта, иначе 0.
+;   Умножений нет: dst растёт на 24/слот, presence = сравнение pos/slot.
+;   Результат dr_scr побайтово равен исходным колончатым данным.
+; -----------------------------------------------------------------
+rec_build:
+        lhld    _rs_spr               ; переложить заголовок [0..2]
+        mov     a,m
+        sta     dr_scr                ; [0]=wcells
+        inx     h
+        mov     a,m
+        sta     dr_scr+1
+        inx     h
+        mov     a,m
+        sta     dr_scr+2
+        ; слотов = wcells*4
+        lda     ds_ncols
+        rlc
+        rlc
+        sta     rb_cnt
+        mvi     a,0
+        sta     rbi
+        lxi     h, dr_scr+3
+        shld    rb_dst
+rb_loop:
+        lda     rb_cnt
+        ora     a
+        jz      rb_done
+        lda     dt_nc
+        ora     a
+        jz      rb_zero               ; записи кончились — остаток нули
+        lhld    dt_rec
+        mov     a,m                   ; pos
+        mov     b,a
+        lda     rbi
+        cmp     b                     ; slot == pos ?
+        jnz     rb_zero
+        ; присутствует: DE=dt_rec+1 (src), HL=rb_dst (dst), 24 байта
+        lhld    dt_rec
+        inx     h
+        xchg                          ; DE = src
+        lhld    rb_dst
+        call    copy24
+        ; dt_rec += 25 ; dt_nc--
+        lhld    dt_rec
+        lxi     d,25
+        dad     d
+        shld    dt_rec
+        lda     dt_nc
+        dcr     a
+        sta     dt_nc
+        jmp     rb_adv
+rb_zero:
+        lhld    rb_dst
+        call    zero24
+rb_adv:
+        lhld    rb_dst                ; dst += 24
+        lxi     d,24
+        dad     d
+        shld    rb_dst
+        lda     rbi
+        inr     a
+        sta     rbi
+        lda     rb_cnt
+        dcr     a
+        sta     rb_cnt
+        jmp     rb_loop
+rb_done:
+        lxi     h, dr_scr             ; drs читает колонки из dr_scr
+        shld    _rs_spr
+        jmp     drs_start
+
+; --- подпрограммы переноса 24 байт тайла (HL=dst, DE=src) ---
+copy24:
+        mvi     b,24
+c24:
+        ldax    d
+        mov     m,a
+        inx     d
+        inx     h
+        dcr     b
+        jnz     c24
+        ret
+zero24:
+        mvi     b,24
+        mvi     a,0
+z24:
+        mov     m,a
+        inx     h
+        dcr     b
+        jnz     z24
         ret
 
 ; ---------------------------------------------------------------
@@ -413,27 +558,27 @@ drs_stage:
 
 ; ---------------------------------------------------------------
 ; void mario_erase_sprite(void)
-;   Вернуть фон: копировать ROWS строк тени (_rs_s0/_rs_s1) в
-;   плоскости (_rs_p0/_rs_p1) по _rs_cols (знаковый счётчик) колонкам.
-;   Шаг: VRAM +0x100 (блок), тень +BAND_STRIDE = 0x80 (DAD с переносом).
+;   Вернуть фон: копировать ROWS строк относительного патча (_rs_s0/_rs_s1)
+;   в плоскости (_rs_p0/_rs_p1) по _rs_cols (знаковый счётчик) колонкам.
+;   Шаг: VRAM +0x100 (блок), патч +ROWS = 0x20 ( колонок идут подряд по 32 Б).
 ; ---------------------------------------------------------------
         SECTION code_clib
 _mario_erase_sprite:
 er_col:
-        ; -------- плоскость бита 0: shadow0 -> p0 --------
-        lhld    _rs_s0                ; DE = тень (источник)
+        ; -------- плоскость бита 0: s0 (патч) -> p0 --------
+        lhld    _rs_s0                ; HL = патч -> после XCHG DE = патч (источник)
         xchg
         lhld    _rs_p0                ; HL = VRAM (приёмник)
         mvi     b,ROWS
 er_row0:
         ldax    d
         mov     m,a
-        inx     d                     ; тень: y+1 => адрес +1
+        inx     d                     ; патч: y+1 => адрес +1
         dcx     h                     ; VRAM: y+1 => адрес -1
         dcr     b
         jnz     er_row0
 
-        ; -------- плоскость бита 1: shadow1 -> p1 --------
+        ; -------- плоскость бита 1: s1 (патч) -> p1 --------
         lhld    _rs_s1
         xchg
         lhld    _rs_p1
@@ -448,8 +593,8 @@ er_row1:
 
         ; ------------------- следующая колонка -------------------
         lhld    _rs_s0
-        lxi     d,0080h
-        dad     d                       ; тень += BAND_STRIDE (0x80)
+        lxi     d,0020h
+        dad     d                       ; патч += ROWS (0x20)
         shld    _rs_s0
         lhld    _rs_s1
         dad     d
@@ -572,70 +717,61 @@ cp_inner:
         ret
 
 ; ---------------------------------------------------------------
-; void mario_capture_shadow(void)
-;   Слепок полосы BAND_TOP..BAND_BOT из плоскостей A в колоночные тени:
-;     shadow0[c*128 + i] = E000 + c*256 + (151 - i),
-;     shadow1[c*128 + i] = C000 + c*256 + (151 - i).
-;   Источник (VRAM) — по убывающему адресу, приёмник (тень) — по
-;   возрастающему: mov a,m / stax d / dcx h / inx d.
+; void mario_capture_patch(void)
+;   Слепок прямоугольника под НОВЫМ спрайтом: копировать ROWS строк
+;   из плоскостей (_rs_p0/_rs_p1) в относительный патч (_rs_s0/_rs_s1)
+;   по _rs_cols (знаковый счётчик) колонкам. Вызывается ПОСЛЕ erase
+;   (старый спрайт стёрт -> в VRAM чистый фон) и ДО draw_sprite.
+;   Источник (VRAM) — по убывающему адресу, приёмник (патч) — по
+;   возрастающему: ldax d / mov m,a / dcx d / inx h.
+;   Шаг колонки: VRAM += 0x100 (блок), патч += ROWS (32).
 ; ---------------------------------------------------------------
         SECTION code_clib
-_mario_capture_shadow:
-        lxi     h,0E000h
-        shld    cap_p
-        lxi     h,0C000h
-        shld    cap_q
-        lhld    _shadow0              ; АДРЕС буфера из кучи (значение
-        shld    cap_s                   ; указателя; lxi дал бы адрес переменной)
-        lhld    _shadow1
-        shld    cap_t
-        mvi     c,NCOLS
-cs_col:
-        ; ---- тень 0 <- E000-колонка ----
-        lhld    cap_p
-        lxi     d,BAND_OFS
-        dad     d                       ; HL = src верх полосы
-        xchg                            ; DE = src (сохранён)
-        lhld    cap_s
-        xchg                            ; DE = тень, HL = src ✓
-        mvi     b,BAND_ROWS
-cs_row0:
-        mov     a,m
-        stax    d
-        dcx     h                       ; VRAM: строка ниже = адрес -1
-        inx     d                       ; тень: строка ниже = адрес +1
+_mario_capture_patch:
+cpc_col:
+        ; -------- плоскость бита 0: p0 (VRAM) -> s0 (патч) --------
+        lhld    _rs_p0
+        xchg                            ; DE = VRAM (источник)
+        lhld    _rs_s0                  ; HL = патч (приёмник)
+        mvi     b,ROWS
+cpc_row0:
+        ldax    d                       ; a = VRAM-байт
+        mov     m,a                     ; -> патч
+        dcx     d                       ; VRAM: y+1 => адрес -1
+        inx     h                       ; патч:  y+1 => адрес +1
         dcr     b
-        jnz     cs_row0
-        ; ---- тень 1 <- C000-колонка ----
-        lhld    cap_q
-        lxi     d,BAND_OFS
-        dad     d
+        jnz     cpc_row0
+
+        ; -------- плоскость бита 1: p1 -> s1 --------
+        lhld    _rs_p1
         xchg
-        lhld    cap_t
-        xchg
-        mvi     b,BAND_ROWS
-cs_row1:
-        mov     a,m
-        stax    d
-        dcx     h
-        inx     d
+        lhld    _rs_s1
+        mvi     b,ROWS
+cpc_row1:
+        ldax    d
+        mov     m,a
+        dcx     d
+        inx     h
         dcr     b
-        jnz     cs_row1
-        ; ---- следующая колонка ----
-        lhld    cap_p
+        jnz     cpc_row1
+
+        ; ------------------- следующая колонка -------------------
+        lhld    _rs_p0
         lxi     d,0100h
+        dad     d                       ; VRAM += 0x100 (блок)
+        shld    _rs_p0
+        lhld    _rs_p1
         dad     d
-        shld    cap_p
-        lhld    cap_q
+        shld    _rs_p1
+        lhld    _rs_s0
+        lxi     d,0020h
+        dad     d                       ; патч += ROWS (32)
+        shld    _rs_s0
+        lhld    _rs_s1
         dad     d
-        shld    cap_q
-        lhld    cap_s
-        lxi     d,BAND_STEP
-        dad     d
-        shld    cap_s
-        lhld    cap_t
-        dad     d
-        shld    cap_t
-        dcr     c
-        jnz     cs_col
+        shld    _rs_s1
+        lda     _rs_cols
+        inc     a
+        sta     _rs_cols
+        jnz     cpc_col
         ret

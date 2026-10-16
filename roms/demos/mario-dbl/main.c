@@ -21,8 +21,9 @@
  * Фон (текст + земля) статичен и ОДИНАКОВ в обоих буферах: рисуем его в буфер A
  * (gfx_print/тайлы — младшие биты цвета), затем копируем плоскости A -> B.
  * Двигается только спрайт Марио: каждый кадр в скрытом буфере стираем старого
- * Марио (возврат фона из RAM-тени по прежнему прямоугольнику) и рисуем нового.
- * Спрайт перекрывает текст, а когда уходит — текст возвращается из тени.
+ * Марио (возврат фона из относительного RAM-патча по прежнему пятну) и рисуем
+ * нового. Перед отрисовкой нового пятна его фон снимается в патч (capture_patch).
+ * Спрайт перекрывает текст, а когда уходит — текст возвращается из патча.
  *
  * Марио набран кубиками 8x8 (как на NES): поза = 3 клетки вширь x 4 ввысь.
  * Движение — каждый кадр: бег 4 px, ходьба — те же 4 px раз в 2 кадра (вдвое
@@ -35,7 +36,7 @@
  *
  * Вывод спрайта — на 8080-ассемблере (src/render.asm): спрайт закодирован
  * КОЛОНОЧНО, столбец VRAM проходится линейно (данные +3, адрес -1),
- * стирание — простое копирование из колоночной RAM-тени.
+ * стирание — копирование из относительного RAM-патча (шаг колонки = ROWS).
  */
 
 #include "v06.h"
@@ -49,10 +50,10 @@ extern void mario_draw_sprite(void);
 extern void mario_erase_sprite(void);
 extern void mario_fill_ground(void);      /* тайл земли во 4 плоскости   */
 extern void mario_copy_AB(void);          /* копия A -> B, 2x8 КБ          */
-extern void mario_capture_shadow(void);   /* слепок полосы в тени        */
+extern void mario_capture_patch(void);    /* слепок пятна в RAM-патч      */
 
-/* Звук (src/sfx_mario.c): прыжок/приземление — тон (sfx.c), ветер при беге —
- * шум канала C AY (drums.asm). На КР580ВИ53 ветер отсутствует (нет шума).
+/* Звук (src/sfx_mario.c): прыжок/приземление — тон на КР580ВИ53 (sfx.c).
+ * Шумогенератора у ВИ53 нет, поэтому ветра при беге нет.
  * Покадровый движок живёт в прерывании (frame_handler = mario_frame), НО ПОСЛЕ
  * смены палитры — так звук не сдвигает raster-критичный цикл записи 0C.
  * Из цикла лишь выставляем флаг бега (mario_sfx_running) и просим эффекты. */
@@ -68,11 +69,8 @@ extern void v06_set_palette_isr(const unsigned char *pal);
 
 /* ------------------------------- ГЕОМЕТРИЯ ------------------------------ */
 #define SCR_W        256
-#define BAND_TOP     104      /* верх полосы-тени (самый верх прыжка Марио)   */
-#define BAND_BOT     223      /* низ полосы (стопы стоящего Марио)            */
-#define BAND_ROWS    (BAND_BOT - BAND_TOP + 1)
-#define BAND_STRIDE  128      /* шаг колонки тени (степень 2: сдвиг колонки
-                               * в asm = инкремент старшего байта)            */
+#define BAND_TOP     104      /* верх зоны движения (самый верх прыжка Марио)  */
+#define BAND_BOT     223      /* низ зоны (стопы стоящего Марио)               */
 #define GROUND_TOP   224      /* тайлы земли: y = 224..255 (4 ряда)           */
 #define GROUND_ROWS  (256 - GROUND_TOP)
 #define GROUND_MY    (GROUND_TOP - MARIO_HPIX)  /* top стоящего Марио = 192    */
@@ -135,15 +133,16 @@ static unsigned char front;              /* 0 = виден A, 1 = виден B  
 static const unsigned char *show_pal;    /* палитра, которую ISR грузит на VBlank */
 static volatile unsigned char pal_dirty; /* 1 = show_pal_changed → перезаписать   */
 
-/* RAM-тень фона полосы: ДВЕ колоночные матрицы (для asm-копирования):
- * байт = col * BAND_STRIDE + (y - BAND_TOP). Буферы берутся из кучи
- * (mem/heap.c): куча стартует от конца образа __tail и в ROM-файл не
- * попадает — 8 KB теней не раздувают образ. Освобождения нет: буфер
- * живёт от capture_shadow() до перезапуска.
- * НЕ static — символы читают render.asm (lhld _shadow0/_shadow1). */
-#define SHADOW_BYTES  (32 * BAND_STRIDE)   /* 4 KB на плоскость        */
-unsigned char *shadow0;                    /* плоскость веса 1 (E000/A000) */
-unsigned char *shadow1;                    /* плоскость веса 2 (C000/8000) */
+/* Относительный RAM-патч фона ПОД СПРАЙТОМ (вместо полноширинной тени): по
+ * одному патчу на плоскость и на буфер A/B. Байт = relcol * PATCH_ROWS + row
+ * (шаг колонки = ROWS=32 в asm). Хранит ровно то, что было под пятном перед
+ * отрисовкой — erase возвращает фон отсюда. Берётся из кучи (mem/heap.c),
+ * в ROM не попадает: 5*32=160 Б/плоскость × 4 = 640 Б (было 8 КБ на полосу). */
+#define PATCH_ROWS   32                     /* = MARIO_HPIX, строк пятна        */
+#define PATCH_COLS   5                      /* max wcells(3)+spill(1) + запас    */
+#define PATCH_BYTES  (PATCH_COLS * PATCH_ROWS)
+static unsigned char *patch0[2];           /* плоскость веса 1 (E000/A000), по буферам */
+static unsigned char *patch1[2];           /* плоскость веса 2 (C000/8000), по буферам */
 
 /* Параметры для render.asm (ассемблер читает/пишет их напрямую).
  * НЕ static — символы должны быть видны линкеру. */
@@ -233,20 +232,34 @@ static void copy_A_to_B(void)
     mario_copy_AB();
 }
 
-/* Снять RAM-тень фона полосы с плоскостей буфера A (колоночные
- * матрицы) — asm-циклом. Буферы теней выделяем из кучи прямо перед
- * слепком: дальше они только читаются erase_sprite(). */
-static void capture_shadow(void)
+/* Выделить относительные патчи под спрайт (по одному на плоскость и буфер).
+ * 640 Б из кучи до 0x8000 — заведомо хватает, проверки OOM нет (пустой
+ * for(;;){} + &&/|| ломает кодогенерацию sccz80). */
+static void init_patches(void)
 {
-    /* 8 KB из кучи до 0x8000 — заведомо хватает, поэтому проверки OOM нет
-     * (пустой for(;;){} + &&/|| ломает кодогенерацию sccz80). */
-    shadow0 = (unsigned char *)heap_alloc(SHADOW_BYTES);
-    shadow1 = (unsigned char *)heap_alloc(SHADOW_BYTES);
-    mario_capture_shadow();
+    patch0[0] = (unsigned char *)heap_alloc(PATCH_BYTES);
+    patch1[0] = (unsigned char *)heap_alloc(PATCH_BYTES);
+    patch0[1] = (unsigned char *)heap_alloc(PATCH_BYTES);
+    patch1[1] = (unsigned char *)heap_alloc(PATCH_BYTES);
 }
 
-/* Вернуть фон по прямоугольнику спрайта в буфере buf: asm-копирование
- * из колоночной тени (32 строки x wcells колонок, всё в пределах полосы). */
+/* Снять фон под новым пятном в патч буфера buf (перед отрисовкой спрайта).
+ * x = пиксельный левый верх, y = пиксельный верх, w = колонок пятна (с spill). */
+static void capture_patch(unsigned char buf, unsigned char x, unsigned char y,
+                          unsigned char w)
+{
+    unsigned int col  = x >> 3;
+    unsigned int base = (buf == 0) ? BASE_A0 : BASE_B0;
+    rs_p0   = base + col * 0x100u + (255u - (unsigned int)y);
+    rs_p1   = rs_p0 - 0x2000u;
+    rs_s0   = (unsigned int)patch0[buf];
+    rs_s1   = (unsigned int)patch1[buf];
+    rs_cols = (unsigned char)(-(int)w);
+    mario_capture_patch();
+}
+
+/* Вернуть фон по пятну спрайта в буфере buf: asm-копирование ROWS строк x
+ * wcells колонок из относительного патча (старт = начало патча). */
 static void erase_sprite(unsigned char buf, unsigned char x, unsigned char y,
                          unsigned char wcells)
 {
@@ -254,18 +267,16 @@ static void erase_sprite(unsigned char buf, unsigned char x, unsigned char y,
     unsigned int base = (buf == 0) ? BASE_A0 : BASE_B0;
     rs_p0   = base + col * 0x100u + (255u - (unsigned int)y);
     rs_p1   = rs_p0 - 0x2000u;
-    /* Тень колоночная: байт = col*BAND_STRIDE + (yy - BAND_TOP),
-     * поэтому тень прямоугольника начинается с (y - BAND_TOP). */
-    rs_s0   = (unsigned int)shadow0 + col * BAND_STRIDE + (y - BAND_TOP);
-    rs_s1   = (unsigned int)shadow1 + col * BAND_STRIDE + (y - BAND_TOP);
+    /* Патч относительный: начинается с верха-лево пятна, шаг колонки = ROWS. */
+    rs_s0   = (unsigned int)patch0[buf];
+    rs_s1   = (unsigned int)patch1[buf];
     rs_cols = (unsigned char)(-(int)wcells);
     mario_erase_sprite();
 }
 
 /* Нарисовать спрайт-позу в буфер buf: asm-композиция колонок с
- * прозрачностью. Марио всегда целиком в полосе BAND_TOP..BAND_BOT
- * (my клампится). Шаг движения 4 px => x кратен 4; младший бит клетки
- * (x & 7 == 4) asm трактует как сдвиг тетрады вправо на 4 px. */
+ * прозрачностью. Шаг движения 4 px => x кратен 4; младший бит клетки
+ * (x & 7 == 4) asm трактует как сдвиг тетрады вправо на 4 px (drs-путь). */
 static void draw_sprite(unsigned char buf, unsigned char x, unsigned int y,
                         const unsigned char *spr)
 {
@@ -444,6 +455,7 @@ static void draw_frame(unsigned char present)
     unsigned char back = (unsigned char)(front ^ 1u);
     const unsigned char *spr = pick_sprite();
     unsigned char wcells = spr[0];
+    unsigned char w_new;
 
     /* Пропуск перерисовки: если спрайт уже нарисован в этой паре плоскостей
      * с тем же состоянием (x/y/поза) — кадр идентичен, erase+draw не нужны.
@@ -456,19 +468,22 @@ static void draw_frame(unsigned char present)
         && mx == old_x[back] && (unsigned char)my == old_y[back]) {
         /* спрайтовая сцена в back-буфере уже верна — ничего не рисуем */
     } else {
-        /* 1. Стереть прежнего Марио в скрытом буфере (возврат фона из тени). */
+        /* 1. Стереть прежнего Марио в скрытом буфере (возврат фона из патча). */
         if (old_valid[back])
             erase_sprite(back, old_x[back], old_y[back], old_w[back]);
 
-        /* 2. Нарисовать нового. */
+        /* 2. Снять фон под НОВЫМ пятном в патч — после стирания (здесь VRAM
+         * чистый фон) и до отрисовки. Ширина пятна = wcells + spill при frac=4. */
+        w_new = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
+        capture_patch(back, mx, (unsigned char)my, w_new);
+
+        /* 3. Нарисовать нового. */
         draw_sprite(back, mx, (unsigned int)my, spr);
 
-        /* 3. Запомнить прямоугольник для следующего обращения к этому буферу.
-         * При сдвиге тетрады (mx & 7 == 4) спрайг занимает на одну клетку
-         * шире (spill вправо) — стирать надо покрывать ровно отрисованное. */
+        /* 4. Запомнить пятно для следующего обращения к этому буферу. */
         old_x[back] = mx;
         old_y[back] = (unsigned char)my;
-        old_w[back] = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
+        old_w[back] = w_new;
         old_valid[back] = 1;
         last_spr[back] = spr;
     }
@@ -554,7 +569,7 @@ static void init_background(void)
     hud_paint_digits(0); hud_val[0] = fps_val;
     hud_paint_digits(1); hud_val[1] = fps_val;
 
-    capture_shadow();                       /* тень полосы с буфера A */
+    init_patches();                         /* относительные патчи под спрайт */
 }
 
 void main(void)
@@ -629,7 +644,7 @@ void main(void)
         ev = 0;
         for (i = 0; i < n; i++)
             ev |= update_state();            /* физика + битки звуковых событий */
-        mario_sfx_running = running;         /* зеркало флага бега для ISR-ветра */
+        mario_sfx_running = running;         /* зеркало флага бега для ISR-движка */
 
         draw_frame(1);                       /* рендер в скрытый буфер + заявка flip */
         /* Звук событий — только просим (байтовый флаг), исполнит ISR на

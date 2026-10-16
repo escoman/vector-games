@@ -16,8 +16,12 @@
 
 Форматы, которые печатает этот генератор (читает их main.c):
 
-  спрайт (16 шт: 8 фаз × {лево, право}):
-    [0]=wcells [1]=hcells [2]=hpix, затем hpix*wcells троек (opaque,b0,b1).
+  спрайт (16 шт: 8 фаз × {лево, право}) — тайл-ПРЕФАБ:
+    [0]=wcells [1]=hcells [2]=hpix=32 [3]=nTiles,
+    затем nTiles записей: [pos] + 8 троек (opaque,b0,b1).
+    pos = (col << 2) | row, где col=0..wcells-1, row=0..hcells-1 — координата
+    непустого тайла 8x8. Тайл хранится ТОЛЬКО если в нём хоть один пиксель
+    непрозрачен (есть op!=0); полностью пустые тайлы вырезаны.
     Бит 7 = ЛЕВЫЙ пиксель клетки (как в VRAM Вектора). opaque — маска ненулевых
     (непрозрачных) пикселей; b0/b1 — плоскости веса 1 и веса 2 логического цвета.
     Право — зеркало лева (реверс побитово в байте + реверс порядка клеток).
@@ -144,6 +148,24 @@ def emit_bytes(f, name, data):
     f.write('};\n\n')
 
 
+def to_prefab(trips):
+    """Колонки троек (по 32 строки) -> тайл-префаб: [wcells,hcells,hpix,nTiles]+
+    записи [pos]+8 троек. Тайл (col,row) включается, только если в нём есть
+    хоть один непрозрачный пиксель (какой-то op != 0). pos = (col<<2)|row."""
+    wc = len(trips)
+    recs = []
+    for c in range(wc):
+        col = trips[c]
+        assert len(col) == HPX
+        for t in range(HCELLS):
+            rows = col[t * CELL:(t + 1) * CELL]        # 8 троек тайла 8x8
+            if not any(op != 0 for (op, b0, b1) in rows):
+                continue                                 # пустой тайл — вырезаем
+            body = [b for (op, b0, b1) in rows for b in (op, b0, b1)]
+            recs.append([(c << 2) | t] + body)           # 1 + 24 байта
+    return [wc, HCELLS, HPX, len(recs)] + [b for r in recs for b in r]
+
+
 def main():
     im = Image.open(SHEET)
     imrgb = im.convert('RGB')
@@ -179,11 +201,10 @@ def main():
                               for r in range(HPX)])
                  for c in range(wcells)]
         assert all(len(t) == HPX for t in trips)
-        left = [b for col in trips for trip3 in col for b in trip3]
-        right = [b for col in mirror_trip(trips) for trip3 in col for b in trip3]
-        hdr_l = [wcells, HCELLS, HPX]
-        sprites.append(('mario%d_l' % (pi + 1), hdr_l + left))
-        sprites.append(('mario%d_r' % (pi + 1), hdr_l + right))
+        # Пакуем в тайл-префаб: только непустые 8x8-тайлы. Лево — как в позе,
+        # право — зеркало (реверс клеток + бит), уже по готовым колонкам троек.
+        sprites.append(('mario%d_l' % (pi + 1), to_prefab(trips)))
+        sprites.append(('mario%d_r' % (pi + 1), to_prefab(mirror_trip(trips))))
 
     # ---- тайл земли: берём tile_001.png донора, квант в 4 цвета ----
     donor = os.path.join(DONOR_TILES, 'tile_001.png')
