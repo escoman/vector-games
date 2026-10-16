@@ -115,6 +115,54 @@ class _BitWriter:
         self.out.append(value & 0xFF)
 
 
+class _PcWriter:
+    """Прямой порт writer'а src/zx0/compress.c (write_bit/write_byte/backtrack).
+
+    Нужен для точной backward-эмиссии: здесь биты и сырые байты используют два
+    независимых указателя (bit_index — текущий битовый байт, output_index —
+    конец потока), а механизм backtrack кладёт первый бит длины в bit0 только
+    что записанного байта смещения (interlace). Побитово совпадает с эталонным
+    ``zx0 -b``, поэтому поток гарантированно читается backward-декодером.
+    """
+
+    def __init__(self):
+        self.out = bytearray()
+        self.bit_index = 0        # позиция текущего битового байта
+        self.bit_mask = 0         # 0 => байт для битов не открыт
+        self.backtrack = False
+
+    def write_byte(self, value):
+        self.out.append(value & 0xFF)
+
+    def write_bit(self, value):
+        if self.backtrack:
+            if value:
+                self.out[-1] |= 1     # bit0 предыдущего (смещение) байта
+            self.backtrack = False
+        else:
+            if not self.bit_mask:
+                self.bit_mask = 128
+                self.bit_index = len(self.out)
+                self.write_byte(0)
+            if value:
+                self.out[self.bit_index] |= self.bit_mask
+            self.bit_mask >>= 1
+
+    def write_elias(self, value, backwards):
+        """Порт write_interlaced_elias_gamma(value, backwards_mode)."""
+        i = 2
+        while i <= value:
+            i <<= 1
+        i >>= 1
+        while True:
+            i >>= 1
+            if i <= 0:
+                break
+            self.write_bit(1 if backwards else 0)
+            self.write_bit(1 if (value & i) else 0)
+        self.write_bit(0 if backwards else 1)
+
+
 # ---------------------------------------------------------------------------
 # Точная модель целевого 8080-декодера (dzx0.asm, forward, standard)
 # ---------------------------------------------------------------------------
@@ -421,6 +469,61 @@ def compress(data):
     # Незакрытый битовый байт уже лежит в out с нулевыми младшими битами;
     # декодер останавливается на EOF (rz), хвостовые биты игнорируются.
     return bytes(w.out)
+
+
+def compress_backwards(data):
+    """Сжать data в поток ZX0 «backward» (режим эталонного ``zx0 -b``).
+
+    Побитовый порт src/zx0/compress.c (Einar Saukas) при backwards_mode=1.
+    Отличие от forward-эмиссии (см. compress()):
+      * interlaced Elias-gamma инвертирован: разделительные биты = 1,
+        терминальный = 0 (соотв..decoder RNC вместо RC);
+      * байт младших разрядов смещения = ((offset-1)%128)<<1 (без 255-x),
+        первый бит длины переплетается в его bit0 через backtrack;
+      * в конце весь поток байтов переворачивается (двоичная реверсия), а
+        вход переворачивается перед разбором.
+    Результат читается lib/unpack/zx0_back.asm справа налево (HL = конец
+    потока, DE = конец оригинала), что даёт самораспаковку «по себе» без
+    staging-памяти под поток.
+    """
+    data = bytes(data)
+    if not data:
+        raise ValueError('compress_backwards: пустые данные не поддерживаются')
+
+    rev = data[::-1]
+    tokens = _parse(rev)
+
+    w = _PcWriter()
+    last_offset = 1               # INITIAL_OFFSET в zx0.c
+    first = True
+
+    for tok in tokens:
+        if tok[0] == 'lit':
+            run = tok[1]
+            if first:
+                first = False
+            else:
+                w.write_bit(0)                    # индикатор литералов
+            w.write_elias(len(run), True)         # длина блока литералов
+            for b in run:
+                w.write_byte(b)
+        else:                                     # 'match'
+            _, length, offset = tok
+            if offset == last_offset:
+                w.write_bit(0)                    # повтор с тем же смещением
+                w.write_elias(length, True)
+            else:
+                w.write_bit(1)                    # новое смещение
+                w.write_elias((offset - 1) // 128 + 1, True)   # MSB
+                w.write_byte(((offset - 1) % 128) << 1)        # LSB (back)
+                w.backtrack = True
+                w.write_elias(length - 1, True)                # длина
+                last_offset = offset
+
+    w.write_bit(1)                                # EOF
+    w.write_elias(256, True)
+
+    return bytes(w.out[::-1])
 
 
 # ---------------------------------------------------------------------------

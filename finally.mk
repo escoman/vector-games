@@ -5,6 +5,9 @@
 # Если цель не clean — копирует TARGET (.rom) и MAPFILE (.map)
 # в PPSSPP_ROMS. Если директории нет — предупреждение.
 #
+# COMPRESS=1 — дополнительно собрать рядом $(TARGET:.rom=.r0m): самораспаковывающийся
+# образ (см. utils/rompack.py). deploy при этом отдаёт обычный несжатый .rom.
+#
 # make consist — показать состав ROM (ресурсы/код/библиотеки) и размеры.
 # make deploy  — собрать и положить в ROMS эмулятора.
 # make full    — clean + all + deploy.
@@ -80,4 +83,34 @@ consist: $(TARGET)
 	else \
 		echo "consist: карта $(CONSIST_MAP) не создана (zcc -m не сработал?)"; \
 	fi
+endif
+
+# --- COMPRESS=1 -----------------------------------------------------------
+# Дополнительно к обычному $(TARGET) (.rom) собрать $(R0M) — самораспаковывающийся
+# образ. utils/rompack.py сжимает $(TARGET) потоком ZX0 «backward» и оборачивает
+# в крошечный 8080-stub (lib/unpack/unpack_r0m.asm). .r0m эмулятор грузит в 0x0000
+# и запускает с него: stub обратнораспаковывает оригинал в 0x0100 и Jump-ит туда.
+# Несжатый $(TARGET) остаётся на месте; deploy по-прежнему кладёт в ROMS его.
+#   make COMPRESS=1                 # соберёт foo.rom и рядом foo.r0m
+#   make COMPRESS=1 Z88DK=/path     # если тулчейн не в ./z88dk
+COMPRESS ?= 0
+ROMPACK  ?= $(PROJECT_ROOT)utils/rompack.py
+R0M       = $(TARGET:.rom=.r0m)
+
+# make clean убирает и упакованный артефакт (.r0m регенерируется).
+ifneq ($(TARGET),)
+.PHONY: clean-r0m
+clean: clean-r0m
+clean-r0m:
+	@rm -f $(R0M)
+endif
+
+ifneq ($(filter clean,$(MAKECMDGOALS)),clean)
+ifeq ($(COMPRESS),1)
+all: $(R0M)
+
+$(R0M): $(TARGET)
+	@echo "=== Packing self-extracting $(R0M) (COMPRESS=1) ==="
+	@Z88DK=$(Z88DK) python3 $(ROMPACK) $(TARGET) -o $(R0M) --verify
+endif
 endif
