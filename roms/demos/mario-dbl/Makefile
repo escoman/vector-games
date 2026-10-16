@@ -6,14 +6,13 @@ include ../../../config.mk
 TARGET = mario-dbl.rom
 MAPFILE = mario-dbl.map
 
-# Звук: notes.c (таблицы нот) + sfx.c (3-голосный смеситель тональных эффектов).
-# Библиотека вывода звука — vi53.c (тон на КР580ВИ53).
+# Звук: прыжок/приземление — прямые делители КР580ВИ53 (src/sfx_mario.c -> vi53.c).
+# sfx.c/notes.c не подключаются: frame-exact-таблица пишется в обход смесителя.
 SRCS_COMMON = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/gfx/plane.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/fade.c $(LIB)/gfx/pr.asm $(LIB)/kbd/keyboard.c \
        $(LIB)/mem/heap.c \
-       $(LIB)/snd/notes.c $(LIB)/snd/sfx.c \
        src/render.asm src/sfx_mario.c main.c
 
 # mario-dbl.rom — тон на КР580ВИ53 (шума нет: ветер не воспроизводится).
