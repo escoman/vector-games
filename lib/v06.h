@@ -503,6 +503,9 @@ typedef struct {
 } sfx_t;
 
 extern void sfx_init(void);                      /* тишина, сброс голосов     */
+extern void sfx_set_channel_mask(unsigned char mask); /* биты 0-2 = каналы 0-2;
+                                                   0x07 = все (умолч.); вне
+                                                   маски канал не трогаем     */
 extern unsigned char sfx_play(const sfx_t *fx);   /* 1 — запущен, 0 — нечего   */
 extern void sfx_stop_all(void);                  /* заглушить все голоса      */
 extern unsigned char sfx_busy(void);             /* есть звучащий эффект      */
