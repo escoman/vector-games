@@ -144,7 +144,24 @@ unsigned int  rs_p0, rs_p1;              /* VRAM-указатели верха �
 unsigned char rs_cols;                   /* знаковый счётчик колонок (-w..0) */
 unsigned char rs_frac;                   /* суб-клеточный сдвиг: 0 или 4 px */
 
-
+/* ВРЕМЕННАЯ диагностика wake-гонки (учёт перехода через VBlank). */
+unsigned char dbg_frac;                  /* frac текущего кадра (0 или 4)     */
+unsigned int  dbg_start;                 /* raster старта erase (кадр N)      */
+unsigned int  dbg_mid;                   /* raster после erase (старт draw)   */
+unsigned int  dbg_eline;                 /* длительность erase, строк         */
+unsigned int  dbg_dline;                  /* длительность draw, строк          */
+unsigned int  dbg_elmax4;                /* макс. erase строк среди frac=4    */
+unsigned int  dbg_dlmax4;                /* макс. draw  строк среди frac=4    */
+unsigned int  dbg_elmax0;                /* макс. erase строк среди frac=0    */
+unsigned int  dbg_dlmax0;                /* макс. draw  строк среди frac=0    */
+unsigned int  dbg_endr;                  /* raster конца draw (в СВОЁМ кадре)  */
+unsigned int  dbg_earliest;              /* 40 + min(old_y,my): raster первого  */
+                                         /*   чтения написанных строк в N+1     */
+int           dbg_minmargin;             /* мин. запас (earliest-endr, wrap)    */
+int           dbg_minm4;                 /* то же, но только для frac=4         */
+unsigned int  dbg_tear;                  /* кадров с margin<0                   */
+unsigned int  dbg_tear4;                 /* кадров с margin<0 И frac=4          */
+unsigned int  dbg_draws;                 /* сколько реальных erase+draw         */
 
 /* Прямоугольник последнего НАРИСОВАННОГО спрайта (для стирания). Заполняется
  * только при фактической отрисовке — если кадр-гейтskip’нул, остаётся прежним,
@@ -252,45 +269,41 @@ static void erase_sprite(unsigned char x, unsigned char y, unsigned char wcells)
     mario_zero_sprite();
 }
 
-/* Нарисовать спрайт-позу: быстрый asm-цикл dr_tile (plain-store).
- * Суб-пиксельный сдвиг +4 px уже запечён в _sh-префаб, поэтому rs_frac=0
- * всегда — тяжёлый SBYTE-путь не используется. */
+/* Нарисовать спрайт-позу. Суб-пиксельный сдвиг +4 px (x не выровнен по сетке
+ * 8 px) считается на РАНТАЙМЕ: rs_frac = x&7 (0 или 4); при 4 render.asm
+ * собирает сдвинутые тайлы через SBYTE-стейджинг и рисует wcells+1 колонок. */
 static void draw_sprite(unsigned char x, unsigned int y, const unsigned char *spr)
 {
     unsigned int col = x >> 3;
     rs_p0  = BASE_A0 + col * 0x100u + (255u - y);
     rs_p1  = rs_p0 - 0x2000u;
     rs_spr = (unsigned int)spr;
-    rs_frac = 0u;
+    rs_frac = (unsigned char)(x & 7u);
     mario_draw_sprite();
 }
 
 /* ------------------------------ ЛОГИКА КАДРА ---------------------------- */
 
-/* Выбрать позу [0..7] по состоянию. Если x не выровнен по сетке 8 px
- * (mx & 7 == 4), берём PREBAKED sub-pixel вариант (_sh) — он на 1 клетку
- * шире и рисуется тем же быстрым dr_tile, что и выровненный. Тяжёлый
- * SBYTE-стейджинг на рантайме больше не нужен -> frac=4 не срывает гонку. */
+/* Выбрать позу [0..7] по состоянию. Суб-пиксельный сдвиг (mx & 7 == 4)
+ * обрабатывается рантайм-путём render.asm (rs_frac), поэтому здесь всегда
+ * отдаётся ВЫРОВНЕННЫЙ префаб — двойные _sh-варианты в ROM больше не нужны. */
 static const unsigned char *pick_sprite(void)
 {
     unsigned char f;
-    unsigned char sh = (unsigned char)((mx & 7u) ? 1u : 0u);   /* 1 = сдвинутая */
     unsigned char d  = facing ? 1u : 0u;
     if (turning) {
         if (turn_step == 0)
-            return sh ? mario_turn_sh[0][0] : mario_turn[0][0]; /* фронтальная */
+            return mario_turn[0][0];                     /* фронтальная */
         else
-            return sh ? mario_turn_sh[1][turn_target]
-                      : mario_turn[1][turn_target];
+            return mario_turn[1][turn_target];
     }
     if (crouch)                 f = 6;              /* присел            */
     else if (!grounded)         f = 7;              /* прыжок            */
     else if (running && moving)
-        return sh ? mario_run_sh[run_seq[anim_step]][d]
-                  : mario_run[run_seq[anim_step]][d];
+        return mario_run[run_seq[anim_step]][d];
     else if (moving)            f = walk_seq[anim_step]; /* ходьба 01->02->03->02 */
     else                        f = 0;              /* стойка статична (мавок убран: он каждые ~16 кадров дёргал полный redraw) */
-    return sh ? mario_frames_sh[f][d] : mario_frames[f][d];
+    return mario_frames[f][d];
 }
 
 static unsigned char update_state(void)
@@ -472,14 +485,62 @@ static void draw_frame(void)
     }
 
     /* 1. Стереть прежнего Mariо: обнулить его след в младших плоскостях. */
-    if (old_valid)
-        erase_sprite(old_x, old_y, old_w);
+    {
+        unsigned int tS, tM, tE;
+        int sl, el, ey, miny, wrap, margin;
+        int midl, eln, dln;
+        tS = mario_timer_read();
+        sl = (int)((T_FULL - tS) / 96u);
+        miny = my;
+        if (old_valid && (int)old_y < miny) miny = (int)old_y;
+        ey = (int)RASTER_BASE + miny;             /* raster первого чтения в N+1 */
 
-    /* 2. Нарисовать нового (прямой bitblit в E000/C000; фон в других
-     *    плоскостях, слепок не нужен). Ширина = wcells префаба: для
-     *    сдвинутого (_sh) варианта она уже на 1 клетку больше. */
-    w_new = wcells;
-    draw_sprite(mx, (unsigned int)my, spr);
+        if (old_valid)
+            erase_sprite(old_x, old_y, old_w);
+
+        tM = mario_timer_read();
+        midl = (int)((T_FULL - tM) / 96u);
+
+        /* 2. Нарисовать нового (прямой bitblit в E000/C000; фон в других
+         *    плоскостях, слепок не нужен). При рантайм-сдвиге (mx&7!=0) спрайт
+         *    занимает wcells+1 колонок -> на ширину стирания следующего кадра. */
+        w_new = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
+        draw_sprite(mx, (unsigned int)my, spr);
+
+        tE = mario_timer_read();
+        el = (int)((T_FULL - tE) / 96u);
+        /* длительности в строках с учётом возможного пересечения VBlank */
+        eln = (midl >= sl) ? (midl - sl) : (midl + (int)(312 - (unsigned int)sl));
+        dln = (el  >= midl) ? (el - midl)  : (el  + (int)(312 - (unsigned int)midl));
+        dbg_mid    = (unsigned int)midl;
+        dbg_eline  = (unsigned int)eln;
+        dbg_dline  = (unsigned int)dln;
+        if (mx & 7u) {
+            if ((unsigned int)eln > dbg_elmax4) dbg_elmax4 = (unsigned int)eln;
+            if ((unsigned int)dln > dbg_dlmax4) dbg_dlmax4 = (unsigned int)dln;
+        } else {
+            if ((unsigned int)eln > dbg_elmax0) dbg_elmax0 = (unsigned int)eln;
+            if ((unsigned int)dln > dbg_dlmax0) dbg_dlmax0 = (unsigned int)dln;
+        }
+        wrap = (el < sl) ? 1 : 0;                  /* crossing VBlank */
+        dbg_frac    = (unsigned char)(mx & 7u);
+        dbg_start   = (unsigned int)sl;
+        dbg_endr    = (unsigned int)el;
+        dbg_earliest= (unsigned int)ey;
+        /* Tear возможен только если draw перелился в кадр N+1 и закончился
+         * не раньше, чем луч начал читать верхнюю написанную строку. */
+        if (wrap) margin = ey - el; else margin = 10000;
+        if (dbg_draws == 0) dbg_minmargin = margin;
+        else if (margin < dbg_minmargin) dbg_minmargin = margin;
+        if (mx & 7u) {                              /* только сдвинутые кадры   */
+            if (margin < dbg_minm4) dbg_minm4 = margin;
+        }
+        if (wrap && el >= ey) {
+            dbg_tear++;
+            if (mx & 7u) dbg_tear4++;
+        }
+        dbg_draws++;
+    }
 
     /* 4. Запомнить пятно и позу для следующего обращения. */
     old_x = mx;
@@ -550,6 +611,8 @@ void main(void)
     old_valid = 0;
     last_spr = 0;
     draw_skipped = 0;
+    dbg_minmargin = 32000;
+    dbg_minm4 = 32000;
 
     v06_wait_frame();                       /* первый VBlank: reload таймера   */
 

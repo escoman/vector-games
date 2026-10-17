@@ -234,13 +234,11 @@ def main():
         assert all(len(t) == HPX for t in trips)
         # Пакуем в тайл-префаб: только непустые 8x8-тайлы. Лево — как в позе,
         # право — зеркало (реверс клеток + бит), уже по готовым колонкам троек.
-        # Дополнительно печатаем SUB-PIXEL вариант (_sh) со сдвигом +4 px,
-        # чтобы frac=4 не гонял тяжёлый SBYTE-стейджинг на рантайме.
+        # Суб-пиксельный сдвиг +4 px считается НА РАНТАЙМЕ (render.asm,
+        # SBYTE-стейджинг при rs_frac=4), поэтому отдельный _sh-префаб не
+        # печатаем — экономим ~половину ROM на спрайтах Марио.
         sprites.append(('mario%d_l' % (pi + 1), to_prefab(trips)))
         sprites.append(('mario%d_r' % (pi + 1), to_prefab(mirror_trip(trips))))
-        sprites.append(('mario%d_l_sh' % (pi + 1), to_prefab(shift_trip(trips))))
-        sprites.append(('mario%d_r_sh' % (pi + 1),
-                        to_prefab(shift_trip(mirror_trip(trips)))))
 
     # ---- тайл земли: берём tile_001.png донора, квант в 4 цвета ----
     donor = os.path.join(DONOR_TILES, 'tile_001.png')
@@ -265,33 +263,17 @@ def main():
         for pi in range(MAIN_POSES):
             f.write('    { mario%d_l, mario%d_r },\n' % (pi + 1, pi + 1))
         f.write('};\n\n')
-        # Sub-pixel (4px right) варианты — для mx & 7 == 4.
-        f.write('/* sub-pixel (+4 px) варианты [фаза][направление] */\n')
-        f.write('static const unsigned char * const mario_frames_sh[MARIO_NPOSE][2] = {\n')
-        for pi in range(MAIN_POSES):
-            f.write('    { mario%d_l_sh, mario%d_r_sh },\n' % (pi + 1, pi + 1))
-        f.write('};\n\n')
         # Turn poses: stored separately, not indexed by facing
         f.write('/* поворот: [шаг 0..1][направление] 0=лево 1=право */\n')
         f.write('static const unsigned char * const mario_turn[2][2] = {\n')
         for ti, pi in enumerate(TURN_IDS):
             f.write('    { mario%d_l, mario%d_r },\n' % (pi + 1, pi + 1))
         f.write('};\n\n')
-        f.write('/* поворот sub-pixel: [шаг][направление] */\n')
-        f.write('static const unsigned char * const mario_turn_sh[2][2] = {\n')
-        for ti, pi in enumerate(TURN_IDS):
-            f.write('    { mario%d_l_sh, mario%d_r_sh },\n' % (pi + 1, pi + 1))
-        f.write('};\n\n')
         # Run poses
         f.write('/* бег: [фаза 0..2][направление] 0=лево 1=право */\n')
         f.write('static const unsigned char * const mario_run[3][2] = {\n')
         for ri, pi in enumerate(RUN_IDS):
             f.write('    { mario%d_l, mario%d_r },\n' % (pi + 1, pi + 1))
-        f.write('};\n\n')
-        f.write('/* бег sub-pixel: [фаза][направление] */\n')
-        f.write('static const unsigned char * const mario_run_sh[3][2] = {\n')
-        for ri, pi in enumerate(RUN_IDS):
-            f.write('    { mario%d_l_sh, mario%d_r_sh },\n' % (pi + 1, pi + 1))
         f.write('};\n')
 
     # ---- запись src/tiles.inc (палитра + тайл) ----
