@@ -731,6 +731,18 @@
       "type": "label"
     },
     {
+      "address": "0x038A",
+      "comment": "var_print_column — КОЛОНКА ПЕЧАТИ/КУРСОРА (1б). 0x07BC: XRA A / STA 038A (сброс в 0 на старте); вывод символа сдвигает колонку.",
+      "name": "var_print_column",
+      "properties": {
+        "reads": "[\"путь вывода символа (0x028f/0346/037f)\"]",
+        "role": "print_column",
+        "writes": "[\"инкремент колонки; boot-подыннициализатор 0x07BC обнуляет\"]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x0391",
       "links": [
         "0x3E98"
@@ -798,6 +810,18 @@
         "writes": "[\"выделение блока FOR (0x01E8, A=0x11=17 байт)\", \"маркер FOR (0x81) в стеке блоков\", \"текстовый указатель (0x404D)\"]"
       },
       "type": "function"
+    },
+    {
+      "address": "0x0464",
+      "comment": "var_stmt_ptr — УКАЗАТЕЛЬ ТЕКУЩЕЙ КОМАНДЫ (2б). STOP пишет, CONT/диспетчер читают; LET/NEXT обновляют. рантайм-дифф: 00 00 -> 80 3F (=0x3F80, в область текста/программы).",
+      "name": "var_stmt_ptr",
+      "properties": {
+        "reads": "[\"текущая исполняемая команда (цикл диспетчера, CONT)\"]",
+        "role": "current_stmt_ptr",
+        "writes": "[\"STOP/LET/NEXT сохраняют позицию выполнения\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x049A",
@@ -1056,6 +1080,18 @@
         "writes": "[\"0x0609 — адрес возобновления скана (резюмируемый корутин)\"]"
       },
       "type": "function"
+    },
+    {
+      "address": "0x0625",
+      "comment": "var_stack_ptr — ВЕРШИНА СТЕКА ИНТЕРПРЕТАТОРА GOSUB/RETURN/FOR (2б). main_loop и CONT сбрасывают, GOSUB читает/пишет. рантайм-дифф: 00 00 -> FF FF (пустой стек = верх памяти).",
+      "name": "var_stack_ptr",
+      "properties": {
+        "reads": "[\"GOSUB возвращает по стеку\"]",
+        "role": "interpreter_stack_ptr",
+        "writes": "[\"main_loop/CONT сбрасывают вершину стека\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x063C",
@@ -1324,6 +1360,18 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "function"
+    },
+    {
+      "address": "0x09CD",
+      "comment": "var_eval_temp_ptr — ВРЕМЕННЫЙ УКАЗАТЕЛЬ ОЦЕНЩИКА (2б). func_eval_expression `0x09B1` сохраняет сюда позицию (SHLD 09CD); далее читают первичные/операции. рантайм-дифф: -> 0x3F7E (в буфер ввода).",
+      "name": "var_eval_temp_ptr",
+      "properties": {
+        "reads": "[\"eval/primary читают сохранённый\"]",
+        "role": "eval_temp_ptr",
+        "writes": "[\"eval_expression SHLD 09CD\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x09DD",
@@ -1671,6 +1719,30 @@
       "type": "label"
     },
     {
+      "address": "0x0C30",
+      "comment": "var_scan_ptr — КУРСОР ПОСТРОЧНОГО СКАНА (2б). Используется при обходе/List и высвобождении строк. рантайм-дифф: 00 00 -> 03 43 (=0x4303).",
+      "name": "var_scan_ptr",
+      "properties": {
+        "reads": "[\"LIST/обход строк, высвобождение\"]",
+        "role": "line_scan_ptr",
+        "writes": "[\"резюме построчного скана\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0C33",
+      "comment": "var_program_end — КОНЕЦ ПРОГРАММЫ (адрес после последней строки) (2б). NEW/CLEAR задают, вставка строки (prog_line_insert) сдвигает. рантайм-дифф: -> 0x4303 (=base+2, пустая программа с маркером конца).",
+      "name": "var_program_end",
+      "properties": {
+        "reads": "[\"NEW/CLEAR устанавливают конец\", \"prog_line_insert расширяет\"]",
+        "role": "program_end_ptr",
+        "writes": "[\"адрес после последней строки\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x0C45",
       "name": "lbl_0c45",
       "properties": {
@@ -1751,6 +1823,18 @@
       "type": "label"
     },
     {
+      "address": "0x0C8C",
+      "comment": "var_type_flag — ФЛАГ ТИПА ЗНАЧЕНИЯ строка/число (1б). LET и оценщик читают LDA 0C8C для ветки строковой конкатенации (-> 0x1E6D).",
+      "name": "var_type_flag",
+      "properties": {
+        "reads": "[\"LET/eval/высвобождение строк (LDA 0C8C)\"]",
+        "role": "value_type_flag",
+        "writes": "[\"оценщик при различении строка/число\"]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x0C90",
       "name": "lbl_0c90",
       "properties": {
@@ -1769,6 +1853,18 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x0CB3",
+      "comment": "var_free_limit — НИЖНЯЯ ГРАНИЦА СВОБОДНОЙ ПАМЯТИ / порог out-of-memory (2б). Функция FRE читает; guard оценщика сравнивает стек с ней (JC 0069). рантайм: -> 0x4303 (=конец программы).",
+      "name": "var_free_limit",
+      "properties": {
+        "reads": "[\"FRE читает границу\", \"guard eval: LHLD 0CB3 / SUB L / JC 0069\"]",
+        "role": "free_space_limit",
+        "writes": "[\"NEW/CLEAR/работа со строками обновляют\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x0CC1",
@@ -2062,6 +2158,18 @@
       "type": "function"
     },
     {
+      "address": "0x0ED6",
+      "comment": "var_free_top — ВЕРХ ОБЛАСТИ АЛЛОКАЦИИ (2б). boot сеет 0x7FCC (чуть ниже mem_top). рантайм-дифф: -> 7FCC.",
+      "name": "var_free_top",
+      "properties": {
+        "reads": "[\"аллокация строк/темп\"]",
+        "role": "memory_top_ptr",
+        "writes": "[\"boot: LXI H,7FCC / SHLD 0ED6\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x0EE9",
       "name": "lbl_0ee9",
       "properties": {
@@ -2070,6 +2178,30 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x0EF6",
+      "comment": "var_mem_top — ВЕРХНЯЯ ГРАНИЦА ПАМЯТИ (2б). boot сеет 0x7FFE. рантайм-дифф: -> 7FFE.",
+      "name": "var_mem_top",
+      "properties": {
+        "reads": "[\"проверки свободной памяти\"]",
+        "role": "mem_upper_bound",
+        "writes": "[\"boot: LXI H,7FFE / SHLD 0EF6\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x0F07",
+      "comment": "var_string_ptr — РАБОЧИЙ УКАЗАТЕЛЬ СТРОКИ (2б). Строковые функции (func_str_return, func_0fe9) сохраняют/восстанавливают его. рантайм-дифф: -> 0x403D.",
+      "name": "var_string_ptr",
+      "properties": {
+        "reads": "[\"func_str_return / 0fe9 (LHLD)\"]",
+        "role": "string_work_ptr",
+        "writes": "[\"строковые подпрограмки (SHLD)\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x0F26",
@@ -2090,6 +2222,18 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x0F45",
+      "comment": "var_binop_operand — ОПЕРАНД/УКАЗАТЕЛЬ ПОДПРОГРАММЫ БИНАРНОЙ ОПЕРАЦИИ (2б). Диспетчер оценщика `0x09DD` (SUI AB -> индекс) пишет 0x0F45; операции читают. рантайм-дифф: -> 0x3F7E.",
+      "name": "var_binop_operand",
+      "properties": {
+        "reads": "[\"подпрограммы бинарных операций (LHLD)\"]",
+        "role": "binop_operand_ptr",
+        "writes": "[\"диспетчер операций `0x09DD` (SHLD 0F45)\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x0F4E",
@@ -4633,6 +4777,18 @@
       "type": "function"
     },
     {
+      "address": "0x245F",
+      "comment": "var_play_pos — ПОЗИЦИЯ/КУРСОР ВОСПРОИЗВЕДЕНИЯ PLAY (1б). func_cmd_play сбрасывает (STA 245F) вместе с 0x27C8 при старте списка нот.",
+      "name": "var_play_pos",
+      "properties": {
+        "reads": "[\"драйвер продвигает курсор\"]",
+        "role": "play_position",
+        "writes": "[\"func_cmd_play: XRA A / STA 245F при старте\"]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x256E",
       "comment": "Таблица ключевых слов BASIC: 101 слов, кодировка «посимвольно, bit7 = конец слова». Токен = 0x0080 + номер слова (CLS=0 … CIRCLE=100). Слова 46..73 (SGN..&) — встроенные функции, их исполняет 0x2770.",
       "name": "data_keyword_table",
@@ -4686,6 +4842,18 @@
       },
       "size": 56,
       "type": "table"
+    },
+    {
+      "address": "0x27C8",
+      "comment": "var_play_active — ФЛАГ АКТИВНОСТИ PLAY (1б). func_cmd_play `0x2428` сбрасывает (XRA A/STA 27C8) при инициализации списка нот; проигрывание идёт на прерывании ВBlank (ТЗ п.63/65/74).",
+      "name": "var_play_active",
+      "properties": {
+        "reads": "[\"драйвер ВBlank проверяет активность\"]",
+        "role": "play_active_flag",
+        "writes": "[\"func_cmd_play: XRA A / STA 27C8 при старте\"]"
+      },
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x280E",
@@ -4802,6 +4970,18 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "function"
+    },
+    {
+      "address": "0x2B56",
+      "comment": "var_graph_xy — РАБОЧИЕ КООРДИНАТЫ X,Y ГРАФИКИ (2б: 0x2B56=X, 0x2B57=Y). PLOT/LINE/CIRCLE кладут сюда разобранные координаты (STA 2B56 / STA 2B57); читается и как слово (LHLD), и побайтно.",
+      "name": "var_graph_xy",
+      "properties": {
+        "reads": "[\"PLOT/LINE/CIRCLE читают координаты (lhld/lda)\"]",
+        "role": "graph_coords",
+        "writes": "[\"парсер координат `0x28A0` -> STA 2B56/2B57\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x2B8D",
@@ -5482,6 +5662,18 @@
       "type": "function"
     },
     {
+      "address": "0x30B4",
+      "comment": "var_circle_color — ЦВЕТ ОКРУЖНОСТИ/ДУГИ (1б). func_cmd_circle `0x3033` вычисляет цвет (CALL 0x10C3) и сохраняет в 0x30B4.",
+      "name": "var_circle_color",
+      "properties": {
+        "reads": "[\"драйвер дуги при отрисовке\"]",
+        "role": "circle_color",
+        "writes": "[\"func_cmd_circle: CALL 0x10C3 -> STA 30B4\"]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x327A",
       "name": "func_327a",
       "properties": {
@@ -5546,6 +5738,18 @@
         "writes": "[\"прямоугольник ВГД (восстановление изображения)\"]"
       },
       "type": "function"
+    },
+    {
+      "address": "0x3769",
+      "comment": "var_color_current — ТЕКУЩИЙ ЦВЕТ РИСОВАНИЯ (1б). Читают PLOT/PAINT (LDA 0x3769). рантайм-дифф: 00 -> 0F (=15) — автостарт COLOR15.",
+      "name": "var_color_current",
+      "properties": {
+        "reads": "[\"PLOT/PAINT (LDA 3769) берут текущий цвет\"]",
+        "role": "current_color",
+        "writes": "[\"COLOR/граф-команды задают\"]"
+      },
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x3A1F",
@@ -5887,6 +6091,18 @@
       "type": "function"
     },
     {
+      "address": "0x3DFC",
+      "comment": "var_string_alloc_ptr — УКАЗАТЕЛЬ АЛЛОКАЦИИ СТРОК/ТЕМП (0x3DFC..0x3DFF, 4б: два смежных слова). boot сеет оба 0x804F. рантайм-дифф: -> 4F 80 4F 80.",
+      "name": "var_string_alloc_ptr",
+      "properties": {
+        "reads": "[\"строки/темппы Allocate\"]",
+        "role": "string_alloc_ptr",
+        "writes": "[\"boot: LXI H,804F / SHLD 3DFC / SHLD 3DFE\"]"
+      },
+      "size": 4,
+      "type": "variable"
+    },
+    {
       "address": "0x3E98",
       "name": "func_3e98",
       "properties": {
@@ -5993,6 +6209,18 @@
       "type": "function"
     },
     {
+      "address": "0x3F21",
+      "comment": "var_program_base — BAЗA ПРОГРАММЫ — указатель на начало строк (2б). boot: LHLD 0026 / SHLD 3F21. NEW/скан/LIST читают (LHLD x8). рантайм-дифф: 00 00 -> 01 43 (=0x4301) => high-RAM ~0x4300, совпадает со спекой v2.5 §15.2.",
+      "name": "var_program_base",
+      "properties": {
+        "reads": "[\"адрес загрузки из page-zero монитора (`LHLD 0026` в boot)\"]",
+        "role": "program_base_ptr",
+        "writes": "[\"база программы в high-RAM (`SHLD 3F21` в boot)\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x3F24",
       "name": "lbl_3f24",
       "properties": {
@@ -6043,6 +6271,30 @@
       "type": "label"
     },
     {
+      "address": "0x3F76",
+      "comment": "var_input_delim — РАЗДЕЛИТЕЛЬ/ПЕРВЫЙ БАЙТ БУФЕРА ВВОДА (1б). boot сеет запятую `2C`. рантайм-дифф: 00 -> 2C.",
+      "name": "var_input_delim",
+      "properties": {
+        "reads": "[\"разбор разделителей строки ввода\"]",
+        "role": "input_delimiter",
+        "writes": "[\"boot: MVI A,2C / STA 3F76\"]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x3F77",
+      "comment": "var_input_buffer — БУФЕР ОТРЕДАКТИРОВАННОЙ СТРОКИ ВВОДА/ТОКЕНОВ (16б, 0x3F77..). Сюда пишется токенизированная команда. рантайм-дифф: 0x3F78 -> '15,0,1:' + 80, 0x3F83 -> 'CLS' (автостарт-демо) — подтверждает назначение.",
+      "name": "var_input_buffer",
+      "properties": {
+        "reads": "[\"REPL/токенизатор наполняют\"]",
+        "role": "input_line_buffer",
+        "writes": "[\"отредактированная строка/токены (0x3F77..)\"]"
+      },
+      "size": 16,
+      "type": "variable"
+    },
+    {
       "address": "0x3FF8",
       "name": "lbl_3ff8",
       "properties": {
@@ -6077,6 +6329,42 @@
         "writes": "[\"управляющий код 0x1F в ВГД через 0x1C95 (очистка экрана)\"]"
       },
       "type": "function"
+    },
+    {
+      "address": "0x4028",
+      "comment": "var_paint_field — ЦВЕТ/ЗНАЧЕНИЕ ЗАЛИВКИ PAINT (1б). func_cmd_paint `0x20B1` копирует текущий цвет (LDA 3769) в 0x4028 перед flood-заливкой.",
+      "name": "var_paint_field",
+      "properties": {
+        "reads": "[\"заливка использует как целевое значение\"]",
+        "role": "paint_color",
+        "writes": "[\"func_cmd_paint: LDA 0x3769 / STA 4028\"]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x404D",
+      "comment": "var_text_ptr — ГЛАВНЫЙ ТЕКСТОВЫЙ УКАЗАТЕЛЬ потока токенов (2б, ~30 обращений lhld/shld). RST 1 (сверка разделителя) и RST 2 (продвинуть на непробел) работают через него.",
+      "name": "var_text_ptr",
+      "properties": {
+        "reads": "[\"RST 1/RST 2 сдвигают поток токенов\"]",
+        "role": "text_stream_ptr",
+        "writes": "[\"оценщик/LET/команды передвигают указатель\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x404F",
+      "comment": "var_fac — ПЛАВАЮЩИЙ АККУМУЛЯТОР FAC (4б, 0x404F..0x4052). Центр арифметики: eval пишет, IF читает 0x4050 (истина). рантайм-дифф: 0x4050 -> 81 80 (знак/младшие байты значения).",
+      "name": "var_fac",
+      "properties": {
+        "reads": "[\"IF/PRINT/арифметика читают значение\"]",
+        "role": "floating_accumulator",
+        "writes": "[\"eval/LET/операции пишут результат\"]"
+      },
+      "size": 4,
+      "type": "variable"
     },
     {
       "address": "0x4074",
