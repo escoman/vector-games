@@ -1,6 +1,6 @@
 # Makefile — демка Mario racing-the-beam (одинарный буфер + таймер КР580ВИ53 ch2)
 # для Вектора-06Ц. Вывод спрайта на 8080-ассемблере (src/render.asm),
-# строб луча — src/timer.asm (порт 09h).
+# строб луча — стандартный модуль lib/timer/timer.asm (порт 09h).
 
 include ../../../config.mk
 
@@ -13,8 +13,8 @@ SRCS_COMMON = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/gfx/plane.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/fade.c $(LIB)/gfx/pr.asm $(LIB)/kbd/keyboard.c \
-       $(LIB)/mem/heap.c \
-       src/render.asm src/timer.asm src/sfx_mario.c main.c
+       $(LIB)/mem/heap.c $(LIB)/timer/timer.asm \
+       src/render.asm src/sfx_mario.c main.c
 
 # mario-dbl.rom — тон на КР580ВИ53 (шума нет: ветер не воспроизводится).
 SRCS    = $(SRCS_COMMON) $(LIB)/snd/vi53.c

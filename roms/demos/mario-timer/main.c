@@ -12,7 +12,7 @@
  * счётчик канала 2 значением 0x7500 = 29952 = ровно один кадр при такте ВИ53
  * 1.5 МГц (96 тиков таймера на строку растра, 312 строк/кадр — снято с модели
  * beam_state). Счётчик линейно убывает вместе с лучом ⇒ (29952 − счётчик) =
- * «тика elapsed» от начала кадра, т.е. известна строка луча. (src/timer.asm.)
+ * «тика elapsed» от начала кадра, т.е. известна строка луча. (lib/timer/timer.asm.)
  *
  * Почему так не мерцает. Из-за бланкинга между концом видимого скана (VBlank) и
  * верхом экрана луч проходит 312−256 = 56 строк, а до верха ПОЛОСЫ Марио
@@ -48,10 +48,11 @@
 extern void mario_draw_sprite(void);
 extern void mario_zero_sprite(void);      /* стирание = обнуление следа в E000/C000 */
 
-/* Примитивы «секундомера растра» из src/timer.asm (КР580ВИ53 канал 2, порт 09h).
- * reload — из ISR на каждом VBlank; read — опрос позиции луча в main. */
-extern void mario_timer_reload(void);
-extern unsigned int mario_timer_read(void);
+/* Примитивы «секундомера растра» — стандартный модуль библиотеки
+ * lib/timer/timer.asm (КР580ВИ53 канал 2, порт 09h), объявления в v06.h:
+ * timer_start — пуск на полный кадр (зовётся из кадрового ISR на каждом
+ * VBlank), timer_start_sync — пуск после EI/HLT, timer_read/timer_elapsed —
+ * позиция луча, timer_wait — спин до нужного значения счётчика. */
 
 /* Звук (src/sfx_mario.c): прыжок/приземление — тон на КР580ВИ53 (vi53.c,
  * frame-exact таблица делителей). Шумогенератора у ВИ53 нет, поэтому ветра при беге нет.
@@ -105,11 +106,9 @@ extern unsigned char mario_sfx_running;   /* зеркало флага бега 
 /* ------------------------- ОКНА ГОНКИ С ЛУЧОМ --------------------------- */
 /* Счётчик после перезапуска на VBlank убывает от 29952; elapsed = 29952 − счётчик
  * = тикам от начала кадра. 96 тиков = 1 строка растра. Окна — сколько elapsed
- *Still допустимо, чтобы луч гарантированно ещё не дошёл до рисуемых строк
- * (с запасом на само erase+draw). */
-#define T_FULL        29952u           /* полный кадр таймера (=0x7500)         */
-#define T_LINES(t)    ((t) / 96u)      /* строк луча за elapsed-тика            */
-#define LINES(x)      ((x) * 96u)      /* тика на x строк                       */
+ * Still допустимо, чтобы луч гарантированно ещё не дошёл до рисуемых строк
+ * (с запасом на само erase+draw). Константы и переводы строка↔тика — в v06.h
+ * (TIMER_FULL, TIMER_LINES, TIMER_LINE, TIMER_REMAIN). */
 /* WAKE-фаза: рисуем Марио, только когда УЖЕ прошёл его коридор. Строка y
  * читается лучом на растре 40+y (256 видимых + верхняя часть гашения). Ждём
  * прохода НИЖНЕЙ строки пятна (bot-1), плюс запас на «луч ушёл». */
@@ -117,7 +116,7 @@ extern unsigned char mario_sfx_running;   /* зеркало флага бега 
 #define WAKE_MARGIN    4u               /* строк запаса после прохода низа     */
 /* Строка 0 (FPS) вверху (y<8). От VBlank до y=0 луч идёт 312−256 = 56 строк.
  * Окно 44 строки — HUD пишется раньше спрайта и в узком верхнем окне. */
-#define T_HUD_MAX     LINES(44)        /* 4224: окно обновления цифр FPS       */
+#define T_HUD_MAX     TIMER_LINES(44)  /* 4224: окно обновления цифр FPS       */
 
 /* --------------------------------- ВВОД --------------------------------- */
 #define KEY_LEFT   8
@@ -255,7 +254,7 @@ static void draw_background(void)
  * плоскости Mariо не трогает). Цвет 8 = белый фон (bg2, slot 8). */
 static void draw_text_line(unsigned char col, unsigned char y, const char *s)
 {
-    gfx_print(col, y, s, 8);   /* bg2 = белый, только старшие плоскости */
+    gfx_print(col, y, s, 4);   /* bg2 = белый, только старшие плоскости */
 }
 
 /* Обнулить пятно прежнего Mariо в МЛАДШИХ плоскостях (E000/C000): ch=0 =>
@@ -420,29 +419,20 @@ static void hud_paint_digits(void)
  *    привязываем фазу счётчика к VBlank и весь кадр он линейно отсчитывает
  *    положение луча. Дешёвые 3 OUT в порт ВИ53 (не 02/0C) — растру не мешают.
  * 2) затем — покадровый звук. Он долгий, но пишет только ВИ53-порты каналов
- *    0/1 (не 02/0C), поэтому после reload безопасен. */
+ *    0/1 (не 02/0C), поэтому после timer_start безопасен. */
 static void mario_frame(void)
 {
-    mario_timer_reload();                    /* старт нового кадра под луч     */
-    mario_sfx_frame();                       /* ровно 1 такт звука за VBlank   */
+    timer_start();                          /* старт нового кадра под луч      */
+    mario_sfx_frame();                      /* ровно 1 такт звука за VBlank   */
 }
 
-/* Спин до raster-строки `target` (в тиках от VBlank). Читаем таймер-«секундомер»
- * луча; выход, когда elapsed >= target (луч ушёл достаточно низко) ИЛИ когда
- * elapsed ПЕРЕСТАЛ расти — значит пересекли VBlank (счётчик перезагрузился),
- * этот кадр упущен, рисуем немедленно. Никаких обращений к VRAM здесь нет. */
+/* Спин до raster-строки `target` (в тиках от VBlank) — примитив библиотеки
+ * timer_wait: счётчик убывает, поэтому ждём значения TIMER_FULL - target.
+ * Выход раньше цели (луч уже ниже) и выход на перезагрузке счётчика
+ * (кадр упущен — рисуем немедленно) делает сам timer_wait. */
 static void spin_to_raster(unsigned int target)
 {
-    unsigned int t, e, prev;
-    t = mario_timer_read();
-    prev = (t <= T_FULL) ? (T_FULL - t) : 0u;
-    while (prev < target) {
-        t = mario_timer_read();
-        e = (t <= T_FULL) ? (T_FULL - t) : 0u;
-        if (e < prev) break;            /* перезагрузка на VBlank → поздно     */
-        if (e >= target) break;         /* достиг нужной raster-строки         */
-        prev = e;
-    }
+    timer_wait(TIMER_REMAIN(target));
 }
 
 /* Стереть/нарисовать спрайт и (опционально) HUD, но только пока луч не дошёл
@@ -452,12 +442,11 @@ static void draw_frame(void)
     const unsigned char *spr = pick_sprite();
     unsigned char wcells = spr[0];
     unsigned char w_new;
-    unsigned int t, elapsed;
+    unsigned int elapsed;
 
     /* Строка 0 (FPS) — раньше спрайта: окно T_HUD_MAX. Пишется редко (~1/с). */
     if (hud_val != fps_val) {
-        t = mario_timer_read();
-        elapsed = (t <= T_FULL) ? (T_FULL - t) : 0u;
+        elapsed = timer_elapsed();
         if (elapsed <= T_HUD_MAX) {
             hud_paint_digits();
             hud_val = fps_val;
@@ -481,16 +470,14 @@ static void draw_frame(void)
             int bo = (int)old_y + MARIO_HPIX;
             if (bo > bot) bot = bo;
         }
-        spin_to_raster(LINES(RASTER_BASE + (unsigned int)bot + WAKE_MARGIN));
+        spin_to_raster(TIMER_LINES(RASTER_BASE + (unsigned int)bot + WAKE_MARGIN));
     }
 
     /* 1. Стереть прежнего Mariо: обнулить его след в младших плоскостях. */
     {
-        unsigned int tS, tM, tE;
         int sl, el, ey, miny, wrap, margin;
         int midl, eln, dln;
-        tS = mario_timer_read();
-        sl = (int)((T_FULL - tS) / 96u);
+        sl = (int)TIMER_LINE(timer_elapsed());
         miny = my;
         if (old_valid && (int)old_y < miny) miny = (int)old_y;
         ey = (int)RASTER_BASE + miny;             /* raster первого чтения в N+1 */
@@ -498,8 +485,7 @@ static void draw_frame(void)
         if (old_valid)
             erase_sprite(old_x, old_y, old_w);
 
-        tM = mario_timer_read();
-        midl = (int)((T_FULL - tM) / 96u);
+        midl = (int)TIMER_LINE(timer_elapsed());
 
         /* 2. Нарисовать нового (прямой bitblit в E000/C000; фон в других
          *    плоскостях, слепок не нужен). При рантайм-сдвиге (mx&7!=0) спрайт
@@ -507,8 +493,7 @@ static void draw_frame(void)
         w_new = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
         draw_sprite(mx, (unsigned int)my, spr);
 
-        tE = mario_timer_read();
-        el = (int)((T_FULL - tE) / 96u);
+        el = (int)TIMER_LINE(timer_elapsed());
         /* длительности в строках с учётом возможного пересечения VBlank */
         eln = (midl >= sl) ? (midl - sl) : (midl + (int)(312 - (unsigned int)sl));
         dln = (el  >= midl) ? (el - midl)  : (el  + (int)(312 - (unsigned int)midl));
@@ -565,20 +550,13 @@ static void init_background(void)
 
     /* Текст — фоновым белым в полосе движения Mariо: спрайт перекрывает его
      * своими цветами без маскирования (ch!=0 => цвет Mariо, ch=0 => фон ряда). */
-    y = 48;
+    y = 120;
     draw_text_line(1,  y,       "VECTOR-06C RACING THE BEAM");
-    draw_text_line(1,  y += 12, "");
-    draw_text_line(1,  y += 12, "PLANE SPLIT (mario-8cols):");
-    draw_text_line(1,  y += 12, "BG = A000/8000  MARIO=E000/C000");
-    draw_text_line(1,  y += 12, "PAL IDX = bg*4 + ch");
-    draw_text_line(1,  y += 12, "");
-    draw_text_line(1,  y += 12, "ERASE = ZERO MARIO PLANES");
-    draw_text_line(1,  y += 12, "BG ALWAYS SHOWS (ch=0)");
     draw_text_line(1,  y += 12, "");
     draw_text_line(1,  y += 12, "ARROWS - WALK    SHIFT - RUN");
     draw_text_line(1,  y += 12, "SPACE  - JUMP    DOWN  - DUCK");
     draw_text_line(1,  y += 12, "");
-    draw_text_line(1,  y += 12, "SMOOTH LIKE DBL, NO SWAP");
+    draw_text_line(1,  y += 12, "SMOOTH LIKE DBL, BUT NO SWAP");
 
     /* FPS-приставка «FPS=» статична — печатаем один раз (bg-белый, plane 4/8). */
     gfx_active_planes = 0x0C; gfx_print(13, 0, "FPS=", 8);
@@ -595,10 +573,9 @@ void main(void)
     build_palette();
     mario_sfx_init();
 
-    /* Кадровый ISR (reload таймера + звук) ставим ДО первой отрисовки: после
+    /* Кадровый ISR (пуск таймера + звук) ставим ДО первой отрисовки: после
      * первого же VBlank счётчик канала 2 синхронизируется с лучом, и draw_frame
-     * сможет читать реальную фазу. Пока ISR не сработал ни разу — выждём один
-     * VBlank. */
+     * сможет читать реальную фазу. */
     frame_handler = mario_frame;
 
     init_background();
@@ -614,7 +591,9 @@ void main(void)
     dbg_minmargin = 32000;
     dbg_minm4 = 32000;
 
-    v06_wait_frame();                       /* первый VBlank: reload таймера   */
+    /* Первый VBlank с привязкой фазы: EI; HLT; пуск счётчика (lib/timer).
+     * Кадровый ISR перезапустит его на каждом следующем VBlank. */
+    timer_start_sync();
 
     draw_frame();                           /* первый кадр Марио (в окне)      */
 
