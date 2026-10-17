@@ -5111,12 +5111,15 @@
     },
     {
       "address": "0x2BEB",
-      "name": "func_2beb",
+      "comment": "func_render_glyph — ОТРИСОВКА ГЛИФА СИМВОЛА В VRAM (был func_2beb). LHLD 3D8D (адрес текстового курсора в плоскостях), MVI A,0F8/ADD L, MOV C,H, MVI B,05 -> цикл CALL func_render_glyph_column / INR C / DCR B (5 колонок). Зовётся из refresh-контура терминала label_2C21 (рядом func_kbd_dequeue, опрос var_irq_prescaler bit3). Источник бит глифа — data_glyph_block (адрес готовит func_term_putc).",
+      "name": "func_render_glyph",
       "properties": {
+        "role": "render_glyph",
         "seed_evidence": "call",
         "seed_from": "0x2C2E",
         "seed_source": "debug_analyze_code"
       },
+      "size": 4294967295,
       "type": "function"
     },
     {
@@ -5711,12 +5714,15 @@
     },
     {
       "address": "0x327A",
-      "name": "func_327a",
+      "comment": "func_render_glyph_column — ЗАПИСЬ ОДНОЙ КОЛОНКИ ГЛИФА в 4 плоскости VRAM (был func_327a). Берёт байт колонки, раскладывает биты по плоскостям: LXI B,2000h / DAD B — шаг между плоскостями (0x8000=plane3..0xE000=plane0). Вызывается 5 раз из func_render_glyph (по одной на колонку).",
+      "name": "func_render_glyph_column",
       "properties": {
+        "role": "render_glyph_column",
         "seed_evidence": "call",
         "seed_from": "0x2BFE",
         "seed_source": "debug_analyze_code"
       },
+      "size": 4294967295,
       "type": "function"
     },
     {
@@ -5798,6 +5804,22 @@
       },
       "size": 1,
       "type": "variable"
+    },
+    {
+      "address": "0x379F",
+      "comment": "data_glyph_block — ЗНАКОГЕНЕРАТОР (char generator): 128 глифов x 5 байт = 640 (0x379F..0x3A1E). Формат: байт = вертикальный столбец (x=0..4), биты = строки, bit0=верх..bit7=низ; ШРИФТ 5x7 (bit0 — служебный пустой верхний ряд-зазор, забит лишь у полуграф. #6); индекс = код символа & 0x7F. Набор: 0..31 полуграфика, 32 пробел, 33..95 ASCII (цифры/знаки/латиница A..Z), 96..126 КИРИЛЛИЦА А..Я (без Ъ/Ё), 127 блок; строчных латинских НЕТ. Читается НА МЕСТЕ из образа (без boot-копирования: 0x6000=нули). Потребитель: func_term_putc вычисляет адрес глифа `LXI H,379F / DAD B x5` (=база+5*код) -> func_render_glyph (0x2BEB, цикл MVI B,05) -> func_render_glyph_column (0x327A, письмо в 4 плоскости VRAM шагом 0x2000). Подтверждено glyph_scan, границей (0x3A1F = var_irq_prescaler), живым вводом и PNG-рендером всех 128 глифов.",
+      "name": "data_glyph_block",
+      "properties": {
+        "charset": "0-31 graph; 32 space; 33-95 ASCII; 96-126 Cyrillic; 127 block",
+        "code_mask": "0x7F",
+        "glyphs": "128",
+        "layout": "col5x7_bit0top_bit0blank",
+        "role": "char_generator",
+        "source": "in-place (no boot copy)",
+        "stride": "5"
+      },
+      "size": 640,
+      "type": "data"
     },
     {
       "address": "0x3A1F",
@@ -6162,13 +6184,16 @@
     },
     {
       "address": "0x3E9F",
-      "comment": "func_term_putc — Низкоуровневый вывод символа C в терминал (аппаратный бэкенд putchar). Лежит в области драйвера экрана, вызывается из func_putchar.",
+      "comment": "func_term_putc — func_term_putc — ВВОД СИМВОЛА В ТЕРМИНАЛ (putchar->putc). Маскирует код `MVI A,7FH / ANA C` (128 глифов) и вычисляет адрес глифа в data_glyph_block: `LXI H,379Fh / DAD B x5` (=база + 5*код, путь lbl_3d4d), сохраняет (XCHG/PUSH D) и передаёт управление на отрисовку func_render_glyph (0x2BEB). Обработчики спец-кодов (CURSOR/ inversion) на lbl_3d36/lbl_3d44. Источник растровых глифов — data_glyph_block 0x379F (Stage 7).",
+      "links": [
+        "0x379F"
+      ],
       "name": "func_term_putc",
       "properties": {
         "calls": "[\"EI; PUSH PSW/B/D/H (полное сохранение регистров)\"]",
         "params": "C = код символа (маскируется 0x7F)",
         "reads": "[\"0x402E (состояние терминала)\"]",
-        "role": "output_char_backend",
+        "role": "terminal_putc",
         "seed_evidence": "call",
         "seed_from": "0x02DB",
         "seed_source": "debug_analyze_code",
