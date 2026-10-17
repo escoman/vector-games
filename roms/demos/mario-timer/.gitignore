@@ -1,0 +1,15 @@
+# Build artifacts
+*.rom
+*.map
+*.o
+zcc_opt.def
+*.c.asm
+
+# Генерируемые ассеты: ИСТОЧНИК — src/raccoon_mario.png + tools/gen_assets.py
+src/sprites.inc
+src/tiles.inc
+
+# Sidecar отладчика (MCP)
+*.rdb
+
+__pycache__/
