@@ -4825,12 +4825,27 @@
       "type": "variable"
     },
     {
+      "address": "0x2465",
+      "comment": "data_error_messages — ПУЛ СООБЩЕНИЙ ОБ ОШИБКАХ и промптов: 23 строки с 0x2465 (плотный, каждая заканчивается байтом с bit7). КОДИРОВКА: коды 0x60..0x7E — КИРИЛЛИЦА (знакогенератор Stage 7), сообщения набраны русскими буквами (bez=БЕЗ, o{ibka=ОШИБКА); ключевые слова NEXT/FOR/DATA/ GOSUB/DEF — латиницей A..Z. Выводит func_error_raise (0x0083): LXI H,2465 + проход пула по bit7-терминаторам, индекс от кода ошибки (RAR/DCR). NEXT->строка0 подтверждён живьём (экран «NEXT БЕЗ FOR ОШИБКА»). Полный список и переводы — asm/messages.inc.",
+      "name": "data_error_messages",
+      "properties": {
+        "emitter": "func_error_raise (0x0083)",
+        "encoding": "cyrillic via glyph codes 0x60-0x7E; bit7 = EOL",
+        "role": "error_message_pool",
+        "strings": "23"
+      },
+      "size": 265,
+      "type": "data"
+    },
+    {
       "address": "0x256E",
-      "comment": "Таблица ключевых слов BASIC: 101 слов, кодировка «посимвольно, bit7 = конец слова». Токен = 0x0080 + номер слова (CLS=0 … CIRCLE=100). Слова 46..73 (SGN..&) — встроенные функции, их исполняет 0x2770.",
+      "comment": "data_keyword_table — ТАБЛИЦА КЛЮЧЕВЫХ СЛОВ: 101 слово, байт=символ, bit7=конец слова; токен = 0x80 + номер (func_tok_tokenize). Потребители: токенизатор (LXI D,256D) и детокенизация LIST/LLIST. Полная карта токен<->слово<->обработчик — tools/tokens.md; построчная выгрузка — asm/keywords.inc.",
       "name": "data_keyword_table",
       "properties": {
-        "encoding": "bit7=end-of-word",
-        "token_base": "0x0080",
+        "encoding": "byte/char, bit7 = end of word",
+        "listing": "asm/keywords.inc",
+        "role": "keyword_table",
+        "token_base": "0x80",
         "words": "101"
       },
       "size": 361,
@@ -6386,6 +6401,17 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x4012",
+      "comment": "str_autoload — СТРОКА АВТОЗАПУСКА «COLOR15,0,1:CLS» + CR (data-остров в коде, сразу за JMP). Исполняется при boot до REPL: задаёт палитру и очищает экран. Спека v2.5 «демо @0x3C60» здесь — код, не программа; зона 5A — артефакт ZX0-потока (N/A).",
+      "name": "str_autoload",
+      "properties": {
+        "role": "autoload_program",
+        "text": "COLOR15,0,1:CLS"
+      },
+      "size": 16,
+      "type": "string"
     },
     {
       "address": "0x4022",
