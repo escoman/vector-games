@@ -233,13 +233,24 @@
     },
     {
       "address": "0x00E5",
-      "name": "lbl_00e5",
+      "comment": "func_main_loop — Главный цикл REPL (`_READY`): печать приглашения, ввод/редактиро-вание строки -> func_tok_tokenize; строка с номером -> вставка в программу, без номера -> immediate-exec. Cold-start путь: 0x19CC func_boot_init -> JMP 0x00E5.",
+      "links": [
+        "0x01EF",
+        "0x049A"
+      ],
+      "name": "func_main_loop",
       "properties": {
+        "calls": "[\"CALL 0x01EF func_tok_tokenize\", \"вход в цикл исполнения строк\", \"CALL 0x0276/0x07AD (инициализация)\"]",
+        "params": "(нет) — точка входа после boot; не возвращает (замкнутый цикл).",
+        "reads": "[\"состояние `_READY`\", \"буфер строки ввода (до 127 симв., п.85 change log)\"]",
+        "role": "repl_ready_loop",
         "seed_evidence": "jcc",
         "seed_from": "0x00C7",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"баннер READY (строка 0x254B)\", \"самомод. JMP (STA 0608/05D0)\"]"
       },
-      "type": "label"
+      "size": 4294967295,
+      "type": "function"
     },
     {
       "address": "0x010B",
@@ -359,12 +370,22 @@
     },
     {
       "address": "0x01EF",
-      "name": "func_01ef",
+      "comment": "func_tok_tokenize — Токенизатор: превращает ASCII-ввод (лат/кир, РУС/ЛАТ) во внутренние коды; токен = 0x80 + индекс слова keyword-таблицы (MOV A,B / ORI 80). Подтверждён вызовом из REPL-цикла.",
+      "links": [
+        "0x256E"
+      ],
+      "name": "func_tok_tokenize",
       "properties": {
+        "calls": "[\"скан слов keyword-таблицы (маркер bit7 = конец слова)\"]",
+        "params": "HL = буфер ASCII-ввода; пишет внутренние токены в рабочий буфер строки программы.",
+        "reads": "[\"буфер ввода 0x3F77\", \"data_keyword_table 0x256E (LXI D,256D)\"]",
+        "role": "tokenizer",
         "seed_evidence": "call",
         "seed_from": "0x0125",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"токенизированная строка (код = 0x80 + номер слова)\"]"
       },
+      "size": 4294967295,
       "type": "function"
     },
     {
@@ -700,14 +721,43 @@
       "type": "function"
     },
     {
-      "address": "0x049A",
-      "name": "lbl_049a",
+      "address": "0x03F3",
+      "comment": "func_cmd_for — FOR: резервирует 17-байтный контрольный блок (0x01E8), инициализирует переменную через путь LET (0x0691), кладёт маркер FOR (0x81) на стек блоков, затем разбирает TO/STEP. Парность с func_cmd_next подтверждена маркером 0x81.",
+      "links": [
+        "0x0691"
+      ],
+      "name": "func_cmd_for",
       "properties": {
+        "calls": "[\"MVI A,0x11 / CALL 0x01E8 (выделить 17 байт под контрольный блок)\", \"CALL 0x0691 func_cmd_let (инициализировать переменную)\", \"CPI 0x81 (проверка вложенного FOR)\"]",
+        "params": "HL = поток после FOR (переменная = нач TO конец [STEP шаг]).",
+        "reads": "[\"переменная/выражения (0x0691, 0x09B1)\", \"TO (0x9E) / STEP (0xA3)\"]",
+        "role": "cmd_for",
+        "writes": "[\"выделение блока FOR (0x01E8, A=0x11=17 байт)\", \"маркер FOR (0x81) в стеке блоков\", \"текстовый указатель (0x404D)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x049A",
+      "comment": "func_cmd_dispatch — Диспетчер КОМАНД (открытый пункт Stage 2). Самомодифицируемый индексный переход: смещение=(token-0x80)*2, таблица data_cmd_table 0x2700, запись=адрес обработчика, 0x0074=«нет». Не путать с func_exec_dispatch (0x0B09, диспетчер функций).",
+      "links": [
+        "0x2700",
+        "0x0691"
+      ],
+      "name": "func_cmd_dispatch",
+      "properties": {
+        "calls": "[\"самомод. LHLD 2700 -> word из data_cmd_table (адрес обработчика)\", \"JNC 0x0691 func_cmd_let (токен без флага команды -> присваивание)\"]",
+        "index_formula": "(token - 080h) * 2, база 0x2700",
+        "mechanism": "self-modifying indexed jump (STA 04C1 / LHLD 2700 / PCHL-семантика)",
+        "params": "HL = текстовый указатель на поток токенов команды; вход из цикла исполнения (0x012B). Контракт: по выходу HL — после команды; `0x3A`(:) — разделитель, `0x00` — конец строки.",
+        "reads": "[\"(HL) — текущий токен\", \"0x3A/0x20 — пропуск разделителей и пробелов\"]",
+        "role": "command_dispatch",
         "seed_evidence": "jcc",
         "seed_from": "0x012B",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"самомодификация LHLD-операнда по 0x04C1 (младший байт)\"]"
       },
-      "type": "label"
+      "size": 4294967295,
+      "type": "function"
     },
     {
       "address": "0x04A7",
@@ -825,17 +875,83 @@
       "type": "label"
     },
     {
-      "address": "0x0691",
+      "address": "0x05B9",
+      "comment": "func_cmd_gosub — GOSUB: сохранить точку возврата в стек (0x0625) с маркером 0x8C (его ищет RETURN), затем переход к строке. Парность с func_cmd_return подтверждена маркером 0x8C.",
       "links": [
-        "0x0BCD"
+        "0x053E"
       ],
-      "name": "lbl_0691",
+      "name": "func_cmd_gosub",
       "properties": {
+        "calls": "[\"MVI D,0x8C / PUSH D (маркер GOSUB в стек возвратов)\", \"CALL 0x053E func_053e (номер)\", \"затем семантика GOTO к цели\"]",
+        "params": "HL = поток после GOSUB.",
+        "reads": "[\"номер строки (0x053E)\", \"указатель возврата (0x0625 — стек GOSUB)\"]",
+        "role": "cmd_gosub",
+        "writes": "[\"0x0625 (stek GOSUB): пуш текущий текстовый указатель + маркер 0x8C\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0602",
+      "comment": "func_cmd_goto — GOTO: вычислить номер (0x053E), найти строку в цепочке программы (сравнение номера с каждой записью, возврат указателя или 0). Механизм line_find оформим отдельным объектом в под-пакете 5c.",
+      "links": [
+        "0x053E"
+      ],
+      "name": "func_cmd_goto",
+      "properties": {
+        "calls": "[\"CALL 0x053E func_053e (вычислить номер)\", \"поиск строки по номеру (цикл сравнения BC/DE), нет -> ошибка\"]",
+        "params": "HL = поток после GOTO; цель — номер строки.",
+        "reads": "[\"номер строки (через 0x053E)\", \"цепочка строк программы (num/next)\"]",
+        "role": "cmd_goto",
+        "writes": "[\"текстовый указатель (0x404D) на найденную строку\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x063C",
+      "comment": "func_cmd_return — RETURN: размотать стек возвратов, сопоставить маркер 0x8C (кладёт GOSUB), восстановить текстовый указатель на строку вызова. Пустой стек -> STOP/READY.",
+      "name": "func_cmd_return",
+      "properties": {
+        "calls": "[\"POP PSW / CPI 0x8C (маркер GOSUB)\", \"размотка стека (DAD SP/INX H) до точки возврата\"]",
+        "params": "HL = поток после RETURN.",
+        "reads": "[\"стек возвратов от 0x0625 (поиск маркера 0x8C)\", \"PSW (POP PSW / CPI 0x8C)\"]",
+        "role": "cmd_return",
+        "writes": "[\"текстовый указатель (0x404D) на строку возврата\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0679",
+      "comment": "func_cmd_data — DATA как исполняемый оператор — ничего не делает: пропускает список констант до разделителя/конца строки (данные читаются обработчиком READ через отдельный указатель DATA).",
+      "name": "func_cmd_data",
+      "properties": {
+        "calls": "[\"скан до 0x3A/0x22/0x00 (RZ на конце строки)\"]",
+        "params": "HL = поток после DATA.",
+        "reads": "[\"`(HL)` до разделителя `:`(0x3A) или `\\\"`(0x22) или конца (0x00)\"]",
+        "role": "cmd_data_skip",
+        "writes": "[\"текстовый указатель (0x404D) — пропускает список констант\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0691",
+      "comment": "func_cmd_let — Обработчик присваивания/LET: разбор имени (0x0BCD) -> `=` (0xAC) -> вычисление выражения (0x09B1) -> запись. Сюда попадает func_cmd_dispatch при токене без флага команды (JNC 0x0691). Также инициализирует переменную цикла FOR (CALL из 0x03F3).",
+      "links": [
+        "0x0BCD",
+        "0x09B1"
+      ],
+      "name": "func_cmd_let",
+      "properties": {
+        "calls": "[\"CALL 0x0BCD func_var_lookup\", \"CPI 0xAC (`=`, иначе ошибка)\", \"CALL 0x09B1 func_eval_expression\"]",
+        "params": "HL = указатель на имя переменной (без флага команды). Общий путь присваивания (LET неявный и явный).",
+        "reads": "[\"поток токенов: имя, `=` (0xAC), правая часть\"]",
+        "role": "cmd_let_assign",
         "seed_evidence": "jcc",
         "seed_from": "0x04AD",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"текстовый указатель (0x404D) на конец выражения\", \"слот переменной по адресу из func_var_lookup\"]"
       },
-      "type": "label"
+      "size": 4294967295,
+      "type": "function"
     },
     {
       "address": "0x06D1",
@@ -856,6 +972,38 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x0712",
+      "comment": "func_cmd_if — IF/THEN: вычислить условие, потребовать THEN (0xA1), проверить FAC (0x4050==0 -> ложь -> пропуск). Истина -> fallthrough к GOTO/GOSUB/присваиванию в ветке.",
+      "links": [
+        "0x09B1"
+      ],
+      "name": "func_cmd_if",
+      "properties": {
+        "calls": "[\"CALL 0x09B1 func_eval_expression (условие)\", \"CPI 0xA1 (THEN)\", \"LDA 0x4050 (проверка истинности)\", \"JZ 0x0672 (ложь -> пропуск ветки)\"]",
+        "params": "HL = поток после IF (условие + THEN/GOTO/GOSUB).",
+        "reads": "[\"условие (0x09B1) -> FAC\", \"FAC экспонента 0x4050 (истина/ложь)\", \"THEN (0xA1) — ожидаемый разделитель\"]",
+        "role": "cmd_if_then",
+        "writes": "[\"текстовый указатель (0x404D)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x072D",
+      "comment": "func_cmd_print — PRINT: цикл по элементам, разделители `,`/`;` (табуляция/без перевод), модификаторы TAB(/SPC(/AT; строки vs числа по 0x0C8C. Позиционирование курсора — через обработчик CUR (0x1C7A).",
+      "links": [
+        "0x09B1"
+      ],
+      "name": "func_cmd_print",
+      "properties": {
+        "calls": "[\"CALL 0x09B1 func_eval_expression (каждый элемент)\", \"CALL 0x1C7A func_cmd_cur (позицион TAB/AT)\", \"RST 10 (вывод строки)\"]",
+        "params": "HL = поток токенов после PRINT.",
+        "reads": "[\"разделители `,`(0x2C)/`;`(0x3B)\", \"TAB( 0x9D / SPC( 0x9F / AT 0xC8\", \"0x0C8C (строковый временный флаг — различает строка/число)\"]",
+        "role": "cmd_print",
+        "writes": "[\"текстовый указатель (0x404D)\", \"поток вывода на экран (func_putchar)\"]"
+      },
+      "type": "function"
     },
     {
       "address": "0x07AD",
@@ -884,6 +1032,48 @@
         "seed_evidence": "call",
         "seed_from": "0x010B",
         "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0819",
+      "comment": "func_cmd_input — INPUT: опциональный prompt в кавычках (0x22), печать (0x0E72), затем по списку переменных через `,`/`;` — запрос значения и присваивание. Токенизация строковых переменных (prompt) — п.6/59 change log.",
+      "name": "func_cmd_input",
+      "properties": {
+        "calls": "[\"CALL 0x0E72 (напечатать prompt-строку)\", \"ожидание символа (0x2C40 func_kbd_dequeue)\", \"разбор/присваивание\"]",
+        "params": "HL = поток после INPUT (опц. prompt-строка \"...\" и список переменных через `,`/`;`).",
+        "reads": "[\"prompt `\\\"` (0x22) — литерал до закрывающей кавычки\", \"разделители `,`(0x2C)/`;`(0x3B)\"]",
+        "role": "cmd_input",
+        "writes": "[\"слоты переменных (0x0BCD)\", \"текстовый указатель (0x404D)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0869",
+      "comment": "func_cmd_read — READ: читает следующий элемент из потока DATA и присваивает переменной (0x0BCD); двигает указатель DATA. Семантику указателя DATA/RESTORE уточним в под-пакете 5d (карта page-zero).",
+      "links": [
+        "0x0BCD"
+      ],
+      "name": "func_cmd_read",
+      "properties": {
+        "calls": "[\"CALL 0x0BCD func_var_lookup (назначить переменной)\", \"CALL 0x0BCD (разбор следующих имён списка)\", \"поиск следующего элемента DATA\"]",
+        "params": "HL = поток после READ (список переменных).",
+        "reads": "[\"указатель DATA (служебная ячейка)\", \"текущий элемент DATA\"]",
+        "role": "cmd_read",
+        "writes": "[\"слоты переменных (0x0BCD)\", \"указатель DATA (продвинуть)\", \"текстовый указатель (0x404D)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x08F6",
+      "comment": "func_cmd_next — NEXT: соstack'а блоков достаёт ближайший FOR (проверка маркера 0x81; нет -> ошибка), инкрементит переменную на шаг, сравнивает с пределом; при переходе — переход к телу, иначе — снимаем блок.",
+      "name": "func_cmd_next",
+      "properties": {
+        "calls": "[\"CPI 0x81 (найти FOR-блок)\", \"JNZ 0x007E (NEXT без FOR -> ошибка)\", \"SPHL/INX H (забрать адрес переменной из блока)\"]",
+        "params": "HL = поток после NEXT (список переменных).",
+        "reads": "[\"стек блоков FOR (маркер 0x81)\", \"шаг/предел контрольного блока\"]",
+        "role": "cmd_next",
+        "writes": "[\"переменная цикла (инкремент на шаг)\", \"текстовый указатель (0x404D)\"]"
       },
       "type": "function"
     },
@@ -3544,6 +3734,22 @@
       "type": "label"
     },
     {
+      "address": "0x19CC",
+      "comment": "func_boot_init — Инициализация при старте: PIA2 (OUT 04=81), растановка текстовых указателей, первичные вызовы, самомодификация, затем переход в REPL-цикл. Детальная RAM-карта ячеек — Stage 6.",
+      "links": [
+        "0x00E5"
+      ],
+      "name": "func_boot_init",
+      "properties": {
+        "calls": "[\"CALL 0x07BC/0x019F/0x01C5\", \"самомод. нач. адресов\", \"JMP 0x00E5 func_main_loop\"]",
+        "params": "вход с 0x0000 (LXI SP,7FFF / JMP 19CC).",
+        "reads": "[\"константы инициализации указателей 0x3F21/0EF6/0ED6/3DFC\"]",
+        "role": "boot_init",
+        "writes": "[\"OUT 04 = 0x81 (PIA2)\", \"служебные указатели интерпретатора\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x19FB",
       "links": [
         "0x01C5"
@@ -3960,6 +4166,19 @@
       },
       "size": 1,
       "type": "variable"
+    },
+    {
+      "address": "0x2700",
+      "comment": "data_cmd_table — Таблица адресов обработчиков команд `0x80..0xAD` (46 слов по 2 байта, смещение=(токен-0x80)*2). Читается func_cmd_dispatch через самомод. LHLD. `0x0074` = оператор не реализован/не вызывается из позиции команды (операторы `* / ^ AND OR > =`). Соседствует с таблицей функций data_dispatch_table (0x2770).",
+      "name": "data_cmd_table",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "command_handler_table",
+        "writes": "[]"
+      },
+      "size": 92,
+      "type": "data"
     },
     {
       "address": "0x2770",
