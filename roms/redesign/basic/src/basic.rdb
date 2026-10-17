@@ -81,11 +81,14 @@
     },
     {
       "address": "0x0038",
-      "comment": "func_rst_irq — RST 7 (0x0038): переход к обработчику прерываний 0x2C7F (смена стека на 0x26F7, счётчик тиков 0x3A1F, OUT 00/IN 01). Подробный разбор — Stage 4 (прерывания).",
+      "comment": "func_rst_irq — Вектор прерываний 0x0038: JMP в обработчик 0x2C7F. Единственный точка входа прерываний в ROM; режим IM не выставляется (см. Stage4.md) — используется векторная схема ВМ80А.",
+      "links": [
+        "0x2C7F"
+      ],
       "name": "func_rst_irq",
       "properties": {
-        "calls": "[\"JMP 0x2C7F (VBlank/IRQ тикер — область Stage 4)\"]",
-        "params": "RST 7 (вектор прерывания)",
+        "calls": "[\"JMP 0x2C7F func_irq_handler (тикер 50 Гц)\"]",
+        "params": "RST 7 (вектор прерывания, вход по INT от КР580ВМ80А)",
         "reads": "[]",
         "role": "rst_irq_jump",
         "seed_evidence": "rst",
@@ -3875,6 +3878,22 @@
       "type": "label"
     },
     {
+      "address": "0x239D",
+      "comment": "func_irq_palette_refresh — Попиксельная синхронизация палитры на каждый кадр (racing-the-beam): 16 пар OUT 02/OUT 0C из таблицы 0x2C7E с увеличенными паузами (XTHL) — это п.93 change log. Точный подбираемый эффект не вскрываем (открытый пункт Stage 4).",
+      "links": [
+        "0x2C7E"
+      ],
+      "name": "func_irq_palette_refresh",
+      "properties": {
+        "calls": "[\"цикл B=0x0F..00: OUT 02 / LDAX D / OUT 0C\", \"XTHL/XTHL (намеренные задержки — racing the beam)\"]",
+        "params": "таблица цветов 0x2C7E (16 ячеек); вызывается из 0x2C7F",
+        "reads": "[\"0x2C7E.. (LDAX D — цвета ячеек)\"]",
+        "role": "irq_palette_sync",
+        "writes": "[\"OUT 02 (адрес/бордюр)\", \"OUT 0C (физический цвет в палитру)\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x23B9",
       "name": "lbl_23b9",
       "properties": {
@@ -3928,13 +3947,19 @@
     },
     {
       "address": "0x26F7",
-      "name": "lbl_26f7",
+      "comment": "var_irq_stack_top — Вершина выделенного IRQ-стека: func_irq_handler делает LXI SP,0x26F7, чтобы обработка прерывания шла на своём стеке (п.18 change log — толерантность к прерыванию в любом коде).",
+      "name": "var_irq_stack_top",
       "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "irq_stack_pointer",
         "seed_evidence": "jcc",
         "seed_from": "0x12B5",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[]"
       },
-      "type": "label"
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x2770",
@@ -4181,12 +4206,19 @@
     },
     {
       "address": "0x2C40",
-      "name": "func_2c40",
+      "comment": "func_kbd_dequeue — Выборка клавиши из буфера, собираемого ISR: возвращает код в A (или <0/0xFF если буфер пуст). Зовут func_inkey (INKEY$) и редакторский цикл ожидания символа. Был func_2c40.",
+      "name": "func_kbd_dequeue",
       "properties": {
+        "calls": "[\"JZ/JP на пустой буфер (0x2C6D: A:=<0, RET)\", \"CPI 0x84 (проверка special-кода)\"]",
+        "params": "(нет); возвращает A = код клавиши или 0xFF/знак<0, если пусто",
+        "reads": "[\"0x2B3F (счётчик буфера клавиш)\", \"кольцевой буфер 0x4012\", \"0x2DCF (состояние мигания/повтора)\"]",
+        "role": "kbd_read_key",
         "seed_evidence": "call",
         "seed_from": "0x2C31",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"0x2B3F-- (DCR M — израсходован символ)\", \"0x2DCF bit1 (XRI 02 — сдвиг фазы курсора)\"]"
       },
+      "size": 4294967295,
       "type": "function"
     },
     {
@@ -4208,6 +4240,36 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x2C7E",
+      "comment": "data_irq_palette_table — 16 ячеек физических цветов, из которых func_irq_palette_refresh каждый кадр перезаписывает палитру через OUT 02/OUT 0C.",
+      "name": "data_irq_palette_table",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "palette_color_table",
+        "writes": "[]"
+      },
+      "size": 16,
+      "type": "data"
+    },
+    {
+      "address": "0x2C7F",
+      "comment": "func_irq_handler — Главный обработчик прерываний 50 Гц: сохранить PSW/HL/SP/PC в блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC), переключить стек на 0x26F7, обновить палитру (0x239D), инкрементить прескейлер 0x3A1F и кадровый счётчик 0x3A20, выдать управление экраном OUT 00=0x8A, снять latch РУС/ЛАТ (IN 01/ANI 80), заморгать курсор (XRI 08 на 0x2DCD), сканировать матрицу клавиатуры (OUT 03/IN 02). Возврат — через lbl_irq_resume.",
+      "links": [
+        "0x239D",
+        "0x2DC8"
+      ],
+      "name": "func_irq_handler",
+      "properties": {
+        "calls": "[\"CALL 0x239D func_irq_palette_refresh\", \"CALL 0x2DC8 func_kbd_matrix_prime\", \"падение в хвост 0x2D00 lbl_irq_resume (EI/JMP)\"]",
+        "params": "вход по прерыванию; контекст в HL/SP/PSW сохраняется в блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC)",
+        "reads": "[\"IN 01 bit7 (РУС/ЛАТ)\", \"IN 02 (состояние матрицы клавиатуры)\", \"прескейлер 0x3A1F / strobe 0x3A22\"]",
+        "role": "irq_vblank_handler",
+        "writes": "[\"блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC)\", \"свой стек: LXI SP,0x26F7\", \"0x3A1F++ / 0x3A20:21++ (кадровый счётчик)\", \"OUT 00 (упр. ВВ55#1) = 0x8A\", \"0x2CB1 (за latch РУС/ЛАТ)\", \"0x2DCD bit3 (мигание курсора XRI 08)\", \"OUT 03/IN 02 (скан строк матрицы)\"]"
+      },
+      "type": "function"
     },
     {
       "address": "0x2CA8",
@@ -4264,13 +4326,36 @@
     },
     {
       "address": "0x2D00",
-      "name": "lbl_2d00",
+      "comment": "lbl_irq_resume — Хвост возврата из прерывания: восстановить D/B/PSW, SP и HL из блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC), затем EI и самомодифицируемый JMP на сохранённый PC (без IRET — возврат прыжком). Это п.18/п.72 change log: обработчик сам восстанавливает контекст, DI нигде не выполняется.",
+      "links": [
+        "0x2D04"
+      ],
+      "name": "lbl_irq_resume",
       "properties": {
+        "calls": "[\"POP D/B/PSW\", \"EI\", \"JMP 0x0000 (самомод. на PC из 0x2D0B)\"]",
+        "params": "(вход из func_irq_handler в хвосте)",
+        "reads": "[\"блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC)\"]",
+        "role": "irq_resume_tail",
         "seed_evidence": "jcc",
         "seed_from": "0x2CED",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"SP := 0x2D04 (самомод.)\", \"HL := 0x2D07 (самомод.)\"]"
       },
+      "size": 4294967295,
       "type": "label"
+    },
+    {
+      "address": "0x2D04",
+      "comment": "var_irq_context_block — Блок сохранения прерванного контекста: 0x2D04 SP, 0x2D07 HL, 0x2D0B PC (записывает func_irq_handler, читает lbl_irq_resume).",
+      "name": "var_irq_context_block",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "irq_saved_context",
+        "writes": "[]"
+      },
+      "size": 8,
+      "type": "variable"
     },
     {
       "address": "0x2D0D",
@@ -4367,13 +4452,36 @@
     },
     {
       "address": "0x2DC8",
-      "name": "func_2dc8",
+      "comment": "func_kbd_matrix_prime — Аппаратная подготовка клавиатурной матрицы перед чтением порта 0x02: выставить strobe строки и подтяжку. Зовётся из ISR (0x2CE0, 0x2D15) и из dequeue-цикла. Был func_2dc8.",
+      "links": [
+        "0x3A22"
+      ],
+      "name": "func_kbd_matrix_prime",
       "properties": {
+        "calls": "[\"MVI A,88/OUT 00; OUT 01; LDA 3A22/OUT 03; OUT 02\"]",
+        "params": "(нет); строк/столбец задаётся 0x3A22",
+        "reads": "[\"0x3A22 (выбранная строка strobe)\"]",
+        "role": "kbd_scan_prime",
         "seed_evidence": "call",
         "seed_from": "0x2CE0",
-        "seed_source": "debug_analyze_code"
+        "seed_source": "debug_analyze_code",
+        "writes": "[\"OUT 00 = 0x88 (упр. ВВ55#1)\", \"OUT 01\", \"OUT 03 (0x3A22: маска строки)\", \"OUT 02 = 0 (подтяжка)\"]"
       },
+      "size": 4294967295,
       "type": "function"
+    },
+    {
+      "address": "0x2DCD",
+      "comment": "var_cursor_blink — Состояние курсора: func_irq_handler заморгивает бит 3 (XRI 0x08) на каждом кадре; рядом 0x2DCF используют для фазы повтора клавиш.",
+      "name": "var_cursor_blink",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "cursor_blink_state",
+        "writes": "[]"
+      },
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x2E76",
@@ -4647,6 +4755,45 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "function"
+    },
+    {
+      "address": "0x3A1F",
+      "comment": "var_irq_prescaler — Делитель тика: func_irq_handler INR M на каждом прерывании; при переполнении через 0 инкрементится var_irq_frame_counter (0x3A20). Биты (напр. 0x08) читают как фазу мигания курсора (func_2c40-цикл).",
+      "name": "var_irq_prescaler",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "tick_prescaler",
+        "writes": "[]"
+      },
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x3A20",
+      "comment": "var_irq_frame_counter — 16-битный счётчик кадров (LHLD/INX H/SHLD 0x3A20 по переполнению прескалера). Кадровые часы интерпретатора.",
+      "name": "var_irq_frame_counter",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "frame_counter",
+        "writes": "[]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x3A22",
+      "comment": "var_kbd_strobe — Маска выбранной строки клавиатурной матрицы: func_kbd_matrix_prime пишет её в порт 0x03 перед чтением порта 0x02.",
+      "name": "var_kbd_strobe",
+      "properties": {
+        "calls": "[]",
+        "reads": "[]",
+        "role": "kbd_row_strobe",
+        "writes": "[]"
+      },
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x3BBA",
