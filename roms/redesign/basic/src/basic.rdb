@@ -1,0 +1,5031 @@
+{
+  "format": "rdb",
+  "objects": [
+    {
+      "address": "0x0000",
+      "name": "func_0000",
+      "properties": {
+        "seed_evidence": "entry",
+        "seed_from": "0x0000",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0008",
+      "name": "func_0008",
+      "properties": {
+        "seed_evidence": "rst",
+        "seed_from": "0x0AA6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0010",
+      "name": "func_0010",
+      "properties": {
+        "seed_evidence": "rst",
+        "seed_from": "0x011A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0020",
+      "name": "func_0020",
+      "properties": {
+        "seed_evidence": "rst",
+        "seed_from": "0x0041",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0028",
+      "name": "func_0028",
+      "properties": {
+        "seed_evidence": "rst",
+        "seed_from": "0x052D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0038",
+      "name": "func_0038",
+      "properties": {
+        "seed_evidence": "rst",
+        "seed_from": "0x7FBB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x003B",
+      "links": [
+        "0x005C"
+      ],
+      "name": "func_003b",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0157",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x003E",
+      "name": "func_003e",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0F8B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x004A",
+      "name": "func_004a",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0CEC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x005C",
+      "name": "func_005c",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x003B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0069",
+      "name": "lbl_0069",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x09C2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0074",
+      "name": "lbl_0074",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x000D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x007B",
+      "name": "lbl_007b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x13BD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0083",
+      "links": [
+        "0x01C5"
+      ],
+      "name": "lbl_0083",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CCF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0098",
+      "name": "lbl_0098",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x009B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x00A1",
+      "name": "func_00a1",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x00B8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x00B5",
+      "links": [
+        "0x2E76"
+      ],
+      "name": "lbl_00b5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0095",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x00E5",
+      "name": "lbl_00e5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x00C7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x010B",
+      "links": [
+        "0x07BC"
+      ],
+      "name": "lbl_010b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x011D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x013D",
+      "name": "lbl_013d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0142",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x014B",
+      "name": "lbl_014b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0136",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x016A",
+      "name": "lbl_016a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x016F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0172",
+      "links": [
+        "0x01AA"
+      ],
+      "name": "lbl_0172",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x014D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0182",
+      "name": "lbl_0182",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0184",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x018F",
+      "name": "lbl_018f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x017B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x01AA",
+      "name": "func_01aa",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0172",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x01C5",
+      "name": "func_01c5",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0083",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x01D1",
+      "name": "lbl_01d1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x01D3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x01E8",
+      "name": "func_01e8",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0E19",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x01EF",
+      "name": "func_01ef",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0125",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x01F8",
+      "name": "lbl_01f8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x024C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x021A",
+      "name": "lbl_021a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0212",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0220",
+      "name": "lbl_0220",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x022E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0236",
+      "name": "lbl_0236",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0225",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0239",
+      "name": "lbl_0239",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x01FB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0247",
+      "name": "lbl_0247",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x023F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x024A",
+      "name": "lbl_024a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0244",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0259",
+      "name": "lbl_0259",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0201",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0260",
+      "name": "lbl_0260",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0229",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0264",
+      "name": "lbl_0264",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0266",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x026D",
+      "name": "lbl_026d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0205",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0276",
+      "name": "func_0276",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0114",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0279",
+      "name": "func_0279",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1AB8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x028C",
+      "name": "lbl_028c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0284",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x028F",
+      "name": "lbl_028f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0289",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x02CA",
+      "name": "lbl_02ca",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x02D2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x02E0",
+      "links": [
+        "0x0378"
+      ],
+      "name": "lbl_02e0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x02E4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x02EB",
+      "name": "lbl_02eb",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0298",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x02F9",
+      "name": "lbl_02f9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x029D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0309",
+      "name": "lbl_0309",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x02B8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0313",
+      "name": "lbl_0313",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x02B4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x031F",
+      "name": "func_031f",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x02F0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x032F",
+      "name": "func_032f",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x02FB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0336",
+      "links": [
+        "0x0020"
+      ],
+      "name": "func_0336",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x02ED",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x033C",
+      "name": "lbl_033c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x02A7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0346",
+      "links": [
+        "0x0020"
+      ],
+      "name": "lbl_0346",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x02AB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x035A",
+      "name": "lbl_035a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0360",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0367",
+      "name": "func_0367",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x027F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0378",
+      "name": "func_0378",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x00D0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x037F",
+      "name": "lbl_037f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0386",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0391",
+      "links": [
+        "0x3E98"
+      ],
+      "name": "lbl_0391",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0382",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x03E2",
+      "name": "func_03e2",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1AB5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x049A",
+      "name": "lbl_049a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x012B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x04A7",
+      "name": "lbl_04a7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x049E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x04BC",
+      "name": "lbl_04bc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x04B2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x04C5",
+      "name": "lbl_04c5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x04CC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x04E0",
+      "name": "func_04e0",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x01B9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0529",
+      "links": [
+        "0x0010"
+      ],
+      "name": "func_0529",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0C92",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x052D",
+      "links": [
+        "0x0028"
+      ],
+      "name": "func_052d",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x10CA",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0531",
+      "name": "func_0531",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0BB0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0539",
+      "name": "lbl_0539",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x052E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x053E",
+      "name": "func_053e",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0121",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0557",
+      "name": "lbl_0557",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x055E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0691",
+      "links": [
+        "0x0BCD"
+      ],
+      "name": "lbl_0691",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x04AD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x06D1",
+      "name": "lbl_06d1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x06C5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x06E1",
+      "name": "lbl_06e1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x06AE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x07AD",
+      "name": "func_07ad",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0117",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x07B2",
+      "name": "func_07b2",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x008A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x07BC",
+      "name": "func_07bc",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x010B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x099E",
+      "links": [
+        "0x09B1"
+      ],
+      "name": "func_099e",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x052A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x09A1",
+      "name": "func_09a1",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0ABA",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x09A9",
+      "name": "func_09a9",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0AEF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x09B1",
+      "name": "func_09b1",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x06A0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x09B4",
+      "name": "func_09b4",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0AB0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x09DD",
+      "name": "lbl_09dd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x09D3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x09E5",
+      "name": "lbl_09e5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x09F9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x09FC",
+      "name": "lbl_09fc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x09E7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0A01",
+      "name": "lbl_0a01",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x09E2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0A43",
+      "name": "func_0a43",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x09C6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0A47",
+      "name": "lbl_0a47",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A50",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0A58",
+      "name": "lbl_0a58",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A4B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0A97",
+      "name": "lbl_0a97",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A5A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0AA1",
+      "name": "lbl_0aa1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A78",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0AA6",
+      "links": [
+        "0x0008"
+      ],
+      "name": "func_0aa6",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0B01",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0AAE",
+      "name": "lbl_0aae",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A69",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0ABF",
+      "links": [
+        "0x0BCD"
+      ],
+      "name": "lbl_0abf",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A5F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0AD0",
+      "name": "lbl_0ad0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0AA3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0AE8",
+      "links": [
+        "0x0008"
+      ],
+      "name": "lbl_0ae8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0AE1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0B01",
+      "links": [
+        "0x0AA6"
+      ],
+      "name": "lbl_0b01",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0AD9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0B09",
+      "comment": "Диспетчер встроенных ФУНКЦИЙ: `LXI B,0x2770 / DAD B / MOV C,M / INX H / MOV H,M / MOV L,C / PCHL` — вычислительный прыжок по `data_dispatch_table`, индекс = токен − 0x00AE (смещение ×2). Достигается из оценщика выражений (`lbl_0ad0` после `sui 0aeh`). ВНИМАНИЕ: это НЕ диспетчер команд — исполнение операторов CLS..CLEAR идёт иным путём (не вскрыт, открытый пункт Stage 2).",
+      "links": [
+        "0x2770",
+        "0x148D",
+        "0x156C",
+        "0x14A1",
+        "0x280E",
+        "0x0D6E",
+        "0x109C",
+        "0x0D92",
+        "0x179E",
+        "0x1878",
+        "0x1267",
+        "0x17E3",
+        "0x18BB",
+        "0x18C1",
+        "0x191E",
+        "0x1933",
+        "0x197D",
+        "0x100B",
+        "0x0E40",
+        "0x10D6",
+        "0x101A",
+        "0x102B",
+        "0x103B",
+        "0x106B",
+        "0x1075",
+        "0x1C9C",
+        "0x1A4D",
+        "0x15FA"
+      ],
+      "name": "func_exec_dispatch",
+      "properties": {
+        "index_formula": "token - 0AEh",
+        "role": "function_dispatch"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0B3A",
+      "name": "lbl_0b3a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x09FE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0BA8",
+      "name": "lbl_0ba8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A6E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0BCD",
+      "name": "func_0bcd",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0691",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0BDA",
+      "name": "lbl_0bda",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0BE3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0BF5",
+      "name": "lbl_0bf5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0BDE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0BFC",
+      "name": "lbl_0bfc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0BE8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0BFD",
+      "name": "lbl_0bfd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C06",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C11",
+      "name": "lbl_0c11",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C01",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C1B",
+      "name": "lbl_0c1b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C0B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C29",
+      "name": "lbl_0c29",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C1D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C45",
+      "name": "lbl_0c45",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C3E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C48",
+      "name": "lbl_0c48",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C58",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C54",
+      "name": "lbl_0c54",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C4A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C62",
+      "name": "lbl_0c62",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C42",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C79",
+      "name": "lbl_0c79",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C7D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C84",
+      "name": "lbl_0c84",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C50",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C88",
+      "name": "lbl_0c88",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2ADC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C89",
+      "name": "lbl_0c89",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0C2B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0C90",
+      "name": "lbl_0c90",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CA0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0CB1",
+      "name": "lbl_0cb1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CC6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0CC1",
+      "name": "lbl_0cc1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CBC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0CD7",
+      "name": "lbl_0cd7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0D17",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0CDC",
+      "name": "lbl_0cdc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CB6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0CFB",
+      "name": "lbl_0cfb",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0D10",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D03",
+      "name": "lbl_0d03",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CFE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D20",
+      "name": "lbl_0d20",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0D24",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D3D",
+      "name": "lbl_0d3d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0CD4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D42",
+      "name": "lbl_0d42",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0D5C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D58",
+      "name": "lbl_0d58",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0D4F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D64",
+      "name": "lbl_0d64",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0D3A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0D6E",
+      "comment": "func_fre — FRE(0): объём свободной памяти; при активных строках делает сборку мусора.",
+      "name": "func_fre",
+      "properties": {
+        "calls": "[\"LXI H,0000 / DAD SP (запас стека)\", \"CALL 0x0FE5 / 0x0EF5 (сборка мусора строк, если 0x0C8C<>0)\", \"JMP 0x0D97 (результат DE -> FAC)\"]",
+        "dispatch_index": "4",
+        "function": "FRE",
+        "params": "0 (значения не имеет)",
+        "reads": "[\"0x0CB3 (верх занятой памяти)\", \"0x0C8C (флаг стр. зоны)\", \"SP (стек)\", \"0x0ED6/0x0ED3 (границы строк)\"]",
+        "role": "function_handler",
+        "token": "0x00B2",
+        "word_index": "50",
+        "writes": "[\"строковая зона (сборка мусора)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0D92",
+      "comment": "func_pos — POS: колонка курсора. Её хвост 0x0D95 — общий return-помощник байт->FAC для INP/PEEK/POINT/LEN/ASC.",
+      "name": "func_pos",
+      "properties": {
+        "calls": "[\"CALL 0x3DEC (колонка курсора -> A)\", \"хвост 0x0D95: MOV C,A / MVI E,00 / MVI B,90 / JMP 0x1493 (байт->FAC)\"]",
+        "dispatch_index": "6",
+        "function": "POS",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050); позиция курсора",
+        "reads": "[\"состояние экрана через 0x3DEC\"]",
+        "role": "function_handler",
+        "token": "0x00B4",
+        "word_index": "52",
+        "writes": "[\"0x0C8C (флаг стр. зоны)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0D97",
+      "name": "func_0d97",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0BB8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0DC0",
+      "links": [
+        "0x0E0D"
+      ],
+      "name": "lbl_0dc0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A73",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0E0D",
+      "links": [
+        "0x0008"
+      ],
+      "name": "func_0e0d",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0DC0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0E40",
+      "comment": "func_str — STR$: число -> строка через float->ASCII форматировщик 0x16AD.",
+      "name": "func_str",
+      "properties": {
+        "calls": "[\"CALL 0x09A1 (взять FAC)\", \"CALL 0x16AD (float->ASCII в буфер)\", \"CALL 0x0E71 (посчитать длину)\", \"CALL 0x0FE5 / 0x0ECE (выделить/скопировать)\", \"CALL 0x0E68 (dim) / 0x0FD8\"]",
+        "dispatch_index": "17",
+        "function": "STR$",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050) (число)",
+        "reads": "[\"стр. дескриптор: dim 0x4049, data-ptr 0x404B\"]",
+        "role": "function_handler",
+        "token": "0x00BF",
+        "word_index": "63",
+        "writes": "[\"стр. дескриптор: dim 0x4049, data-ptr 0x404B\", \"строковая зона (0x0DF9 alloc)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0E65",
+      "links": [
+        "0x0ECE"
+      ],
+      "name": "func_0e65",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0FB1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0E68",
+      "name": "func_0e68",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0E5B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0E72",
+      "name": "lbl_0e72",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A9E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0E78",
+      "name": "lbl_0e78",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0E84",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0E87",
+      "name": "lbl_0e87",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0E7C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0ECE",
+      "name": "func_0ece",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0E54",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0EE9",
+      "name": "lbl_0ee9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0EDF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0F26",
+      "name": "lbl_0f26",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0F37",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0F27",
+      "name": "lbl_0f27",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0F19",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0F4E",
+      "name": "lbl_0f4e",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0F0D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0F51",
+      "name": "func_0f51",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0F20",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0F73",
+      "name": "lbl_0f73",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0F2D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0F98",
+      "name": "lbl_0f98",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A11",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x0FCF",
+      "name": "func_0fcf",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0FC1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0FD8",
+      "name": "func_0fd8",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0E60",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0FE8",
+      "name": "func_0fe8",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0FB9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x0FE9",
+      "name": "func_0fe9",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x06D5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1009",
+      "name": "lbl_1009",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1001",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x100B",
+      "comment": "func_len — LEN: вычисляет строковый аргумент и возвращает его длину (байт счётчика). Его хвост 0x100F — общий eval-помощник для ASC/VAL.",
+      "name": "func_len",
+      "properties": {
+        "calls": "[\"CONT 0x0D95 (положить результат)\", \"CALL 0x0FE2 (eval строки -> дескриптор)\", \"хвост 0x100F переиспользуют ASC/VAL\"]",
+        "dispatch_index": "16",
+        "function": "LEN",
+        "params": "строка (eval через 0x0FE2)",
+        "reads": "[\"дескриптор строки (длина в (HL))\", \"0x0C8C (флаг стр. зоны)\"]",
+        "role": "function_handler",
+        "token": "0x00BE",
+        "word_index": "62",
+        "writes": "[\"0x0C8C=0\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x101A",
+      "comment": "func_asc — ASC: код первого символа строки; пустая строка -> 255.",
+      "links": [
+        "0x100B"
+      ],
+      "name": "func_asc",
+      "properties": {
+        "calls": "[\"CALL 0x100F (eval строки, хвост func_len)\", \"JNZ 0x0D95 (код символа), пустая строка -> MVI A,FF\"]",
+        "dispatch_index": "19",
+        "function": "ASC",
+        "params": "строка",
+        "reads": "[\"data-ptr дескриптора (LDAX D) — первый байт строки\"]",
+        "role": "function_handler",
+        "token": "0x00C1",
+        "word_index": "65",
+        "writes": "[]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x102B",
+      "comment": "func_chr — CHR$: строка из одного символа по его коду.",
+      "name": "func_chr",
+      "properties": {
+        "calls": "[\"CALL 0x0E65 (собрать дескриптор из 1 байта, dim=1)\", \"CALL 0x10CA (числовой аргумент)\", \"LHLD 0x404B / MOV M,E\", \"JMP 0x0E97 (вернуть временную строку)\"]",
+        "dispatch_index": "20",
+        "function": "CHR$",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050); код символа",
+        "reads": "[\"0x404B (data-ptr временной строки)\"]",
+        "role": "function_handler",
+        "token": "0x00C2",
+        "word_index": "66",
+        "writes": "[\"стр. дескриптор: dim 0x4049, data-ptr 0x404B\", \"0x404B-> (символ)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x103B",
+      "comment": "func_left — LEFT$: первые n байт; его хвост 0x103F — общий экстрактор подстроки для RIGHT$/MID$.",
+      "name": "func_left",
+      "properties": {
+        "calls": "[\"CALL 0x10B6 (eval 2 аргумента)\", \"CLAMP n к длине (CMP B/JC)\", \"CALL 0x0ECE (копировать) / 0x0E68 (dim) / 0x0FD8\", \"хвост 0x103F.. переиспользуют RIGHT/MID\", \"JMP 0x0E97\"]",
+        "dispatch_index": "21",
+        "function": "LEFT$",
+        "params": "строка, число (0x10B6 eval)",
+        "reads": "[\"дескриптор строки (dim/data-ptr)\"]",
+        "role": "function_handler",
+        "token": "0x00C3",
+        "word_index": "67",
+        "writes": "[\"новый дескриптор подстроки\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x106B",
+      "comment": "func_right — RIGHT$: сдвиг стартовой позиции на len-n и падение в общий экстрактор LEFT$.",
+      "links": [
+        "0x103B"
+      ],
+      "name": "func_right",
+      "properties": {
+        "calls": "[\"CALL 0x10B6 (eval)\", \"LDAX D / SUB B (старт = len - n)\", \"JMP 0x103F (хвост func_left)\"]",
+        "dispatch_index": "22",
+        "function": "RIGHT$",
+        "params": "строка, число",
+        "reads": "[\"дескриптор строки\"]",
+        "role": "function_handler",
+        "token": "0x00C4",
+        "word_index": "68",
+        "writes": "[\"дескриптор подстроки\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1075",
+      "comment": "func_mid — MID$: start=p, len опционален; входит в общий экстрактор подстроки на 0x1041.",
+      "links": [
+        "0x103B"
+      ],
+      "name": "func_mid",
+      "properties": {
+        "calls": "[\"CALL 0x10B9 (eval до 3 аргументов)\", \"MVI E,FF / CPI 29 (необязательный len)\", \"RST 08 (след. токен)\", \"LXI B,0x1041 / PUSH B (общий хвост func_left)\"]",
+        "dispatch_index": "23",
+        "function": "MID$",
+        "params": "строка, позиция[, длина]",
+        "reads": "[\"дескриптор строки\"]",
+        "role": "function_handler",
+        "token": "0x00C5",
+        "word_index": "69",
+        "writes": "[\"дескриптор подстроки\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x109C",
+      "comment": "func_inp — INP(n): чтение порта n; номер порта патчится самомодификацией IN-инструкции.",
+      "name": "func_inp",
+      "properties": {
+        "calls": "[\"CALL 0x10CA (eval числа -> A)\", \"STA 0x10A3 (patch IN), IN 00\", \"JMP 0x0D95 (хвост func_pos: байт A -> FAC)\"]",
+        "dispatch_index": "5",
+        "function": "INP",
+        "params": "число (номер порта)",
+        "reads": "[\"порт ввода IN 00 (номер подставляется)\"]",
+        "role": "function_handler",
+        "token": "0x00B3",
+        "word_index": "51",
+        "writes": "[\"0x10A3 (самомодифицируемый операнд порта инструкции IN)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x10C7",
+      "links": [
+        "0x099E"
+      ],
+      "name": "func_10c7",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0AF9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x10D6",
+      "comment": "func_val — VAL: прогоняет строку через арифметический парсер 0x15A8; пусто -> 0.",
+      "links": [
+        "0x100B"
+      ],
+      "name": "func_val",
+      "properties": {
+        "calls": "[\"CALL 0x100F (eval строки, хвост func_len)\", \"JZ 0x119A (пусто -> 0)\", \"CALL 0x15A8 (числовой парсер -> FAC)\"]",
+        "dispatch_index": "18",
+        "function": "VAL",
+        "params": "строка",
+        "reads": "[\"data-ptr строки (HL из дескриптора)\"]",
+        "role": "function_handler",
+        "token": "0x00C0",
+        "word_index": "64",
+        "writes": "[\"0x00AE (текст. указатель парсера)\", \"0x00B0/0x00B1 (флаги разбора)\", \"FAC\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1100",
+      "name": "func_1100",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x16E6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1103",
+      "links": [
+        "0x14D1"
+      ],
+      "name": "func_1103",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1805",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1109",
+      "links": [
+        "0x14D1"
+      ],
+      "name": "func_1109",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1287",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x110F",
+      "links": [
+        "0x14A3"
+      ],
+      "name": "func_110f",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x180F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1112",
+      "name": "func_1112",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x127B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1115",
+      "name": "func_1115",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1482",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1134",
+      "name": "lbl_1134",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x111D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x113F",
+      "name": "lbl_113f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x113B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x116D",
+      "name": "lbl_116d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x114A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1183",
+      "name": "func_1183",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1580",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1187",
+      "name": "lbl_1187",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CC7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1188",
+      "name": "lbl_1188",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1197",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x119A",
+      "name": "lbl_119a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x11C9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x119B",
+      "name": "lbl_119b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x17AF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x119F",
+      "name": "lbl_119f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x11BB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11A5",
+      "name": "lbl_11a5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x11A8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11AF",
+      "name": "lbl_11af",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x11A1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11BB",
+      "links": [
+        "0x119F"
+      ],
+      "name": "lbl_11bb",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x118B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11CC",
+      "name": "lbl_11cc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x115C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11EA",
+      "name": "lbl_11ea",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1227",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11F4",
+      "name": "lbl_11f4",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1211",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x11FC",
+      "name": "lbl_11fc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x120A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1214",
+      "name": "lbl_1214",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x121A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1225",
+      "name": "lbl_1225",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x11F9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1267",
+      "comment": "func_log — LOG: натуральный логарифм рядом; ноль/отрицательное -> ошибка.",
+      "links": [
+        "0x0028"
+      ],
+      "name": "func_log",
+      "properties": {
+        "calls": "[\"RST 28 -> 0x0028 (проверка, 0 -> ошибка JPE 0539)\", \"CALL 0x1112 / 0x1109 / 0x13B8 / 0x1844 / 0x167D (float-ряд)\", \"константы 0x1840, 0x125A (табличные)\"]",
+        "dispatch_index": "9",
+        "function": "LOG",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x4050 (экспонента)\"]",
+        "role": "function_handler",
+        "seed_evidence": "call",
+        "seed_from": "0x17DB",
+        "seed_source": "debug_analyze_code",
+        "token": "0x00B7",
+        "word_index": "55",
+        "writes": "[\"FAC (через float-хелперы)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x129D",
+      "name": "func_129d",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1808",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x12A6",
+      "name": "func_12a6",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x17E0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x12CE",
+      "name": "lbl_12ce",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x12BF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1321",
+      "name": "lbl_1321",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1319",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x132F",
+      "name": "lbl_132f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x132B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1343",
+      "name": "lbl_1343",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CAD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x134A",
+      "name": "func_134a",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1304",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x134F",
+      "name": "lbl_134f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x134B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1354",
+      "name": "lbl_1354",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1350",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1359",
+      "name": "lbl_1359",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1355",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x135E",
+      "name": "lbl_135e",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x135A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1363",
+      "name": "lbl_1363",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x135F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1368",
+      "name": "lbl_1368",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1364",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x136D",
+      "name": "lbl_136d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1369",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1371",
+      "name": "func_1371",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x12D8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x137A",
+      "name": "lbl_137a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1375",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1381",
+      "name": "lbl_1381",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x137C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1388",
+      "name": "lbl_1388",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1383",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x138F",
+      "name": "lbl_138f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x138A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1396",
+      "name": "lbl_1396",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1391",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x139D",
+      "name": "lbl_139d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1398",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x13A4",
+      "name": "lbl_13a4",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x139F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x13AA",
+      "links": [
+        "0x14AB"
+      ],
+      "name": "func_13aa",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1666",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x13B8",
+      "name": "func_13b8",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1281",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x13EC",
+      "links": [
+        "0x14DA"
+      ],
+      "name": "lbl_13ec",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x13D8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1410",
+      "name": "lbl_1410",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x141C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x141F",
+      "links": [
+        "0x1446"
+      ],
+      "name": "lbl_141f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x140D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x143D",
+      "links": [
+        "0x1440"
+      ],
+      "name": "func_143d",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1428",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1440",
+      "links": [
+        "0x1443"
+      ],
+      "name": "func_1440",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x143D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1443",
+      "links": [
+        "0x1446"
+      ],
+      "name": "func_1443",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1440",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1446",
+      "name": "func_1446",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1419",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x144D",
+      "name": "func_144d",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x140A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x145D",
+      "name": "lbl_145d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1449",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1461",
+      "name": "lbl_1461",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1453",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1466",
+      "links": [
+        "0x0028"
+      ],
+      "name": "lbl_1466",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x17F4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1471",
+      "name": "func_1471",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1677",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1485",
+      "name": "func_1485",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x115F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x148D",
+      "comment": "func_sgn — SGN: результат -1/0/+1 константой в FAC.",
+      "name": "func_sgn",
+      "properties": {
+        "calls": "[\"RST 28 -> 0x0028 (проверка/загрузка FAC)\", \"JMP 0x1183 (нормализация/сохранение FAC)\"]",
+        "dispatch_index": "0",
+        "function": "SGN",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x4050 (экспонента/знак FAC)\"]",
+        "role": "function_handler",
+        "token": "0x00AE",
+        "word_index": "46",
+        "writes": "[\"0x4050=0x88 (масштаб результата)\", \"0x4051=0x80 (знак результата)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x148E",
+      "name": "func_148e",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1680",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1493",
+      "name": "func_1493",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1627",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14A1",
+      "comment": "func_abs — ABS: инвертирует знаковый бит FAC. Её зовёт унарный минус (lbl_0aae: call func_14a3) и EXP (call 14A3).",
+      "name": "func_abs",
+      "properties": {
+        "calls": "[\"RST 28 -> 0x0028 (проверка FAC)\", \"RP ранний выход если >= 0\"]",
+        "dispatch_index": "2",
+        "function": "ABS",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x404F (знак FAC)\"]",
+        "role": "function_handler",
+        "token": "0x00B0",
+        "word_index": "48",
+        "writes": "[\"0x404F (сброс bit7 знака)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14A3",
+      "name": "func_14a3",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0AB7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14AB",
+      "name": "func_14ab",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x13AA",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14BB",
+      "name": "func_14bb",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x17A4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14C3",
+      "name": "func_14c3",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x13B3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14CE",
+      "name": "func_14ce",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1713",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14D1",
+      "name": "func_14d1",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0F30",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14DA",
+      "name": "func_14da",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x13EC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14DD",
+      "name": "func_14dd",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x12CF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14E4",
+      "name": "lbl_14e4",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x14E0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x14F0",
+      "name": "func_14f0",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x17C5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x14F5",
+      "name": "func_14f5",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x16CE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1518",
+      "name": "lbl_1518",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1504",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x151F",
+      "name": "lbl_151f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x14FF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1520",
+      "name": "lbl_1520",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x14FB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1526",
+      "name": "lbl_1526",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x152C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x152A",
+      "name": "func_152a",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1577",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x152B",
+      "name": "func_152b",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x16ED",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1549",
+      "name": "lbl_1549",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1545",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1561",
+      "name": "lbl_1561",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x153C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x156C",
+      "comment": "func_int — INT: отбрасывает дробную часть; RNC ранний выход, если уже целое.",
+      "name": "func_int",
+      "properties": {
+        "calls": "[\"CALL 0x152A (усечение мантиссы)\", \"CALL 0x1183 (нормализация/сохранение FAC)\"]",
+        "dispatch_index": "1",
+        "function": "INT",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x4050 (экспонента)\", \"0x404D (текстовый указатель)\"]",
+        "role": "function_handler",
+        "seed_evidence": "call",
+        "seed_from": "0x17BF",
+        "seed_source": "debug_analyze_code",
+        "token": "0x00AF",
+        "word_index": "47",
+        "writes": "[\"0x4050=0x98 (сдвиг на границу целого)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1585",
+      "name": "func_1585",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0D09",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x15A9",
+      "name": "lbl_15a9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A55",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x15B5",
+      "name": "lbl_15b5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15AC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x15BF",
+      "name": "lbl_15bf",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15C8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x15E2",
+      "name": "lbl_15e2",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15EB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x15F3",
+      "name": "lbl_15f3",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15CD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x15FA",
+      "comment": "func_amp — `&` — шестнадцатеричная константа: разбор hex-цифр (0-9,A-F), накопление 16-битного числа (x16+digit) и выдача его в FAC (шкала 0x98). Так задают адреса памяти и hex-числа. НЕ конкатенация и НЕ строка/символ.",
+      "name": "func_amp",
+      "properties": {
+        "calls": "[\"RST 0x10 (след. символ), JC 0x160F (цифра 0-9) / 'A'..'F' (CPI 41/47, SUI 07)\", \"CPI 10 / JNC 0x0074 (не hex -> ошибка)\", \"DAD H x4 (*16) + ADD E — накопление 16-битного значения\", \"MOV A,D / RLC / SBB A (знак) / MVI B,98 / CALL 0x1493 (число->FAC)\"]",
+        "dispatch_index": "27",
+        "function": "&",
+        "params": "hex-константа после `&` (адреса памяти и вообще шестнадцатеричные числа)",
+        "reads": "[\"поток токенов (RST 0x10 — следующий символ числа)\"]",
+        "role": "function_handler",
+        "token": "0x00C9",
+        "word_index": "73",
+        "writes": "[\"FAC (числовое значение hex-литерала, шкала целого 0x98)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x160F",
+      "name": "lbl_160f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1600",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1621",
+      "name": "lbl_1621",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1605",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x162C",
+      "name": "lbl_162c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15F5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1631",
+      "name": "lbl_1631",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15C3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x164C",
+      "links": [
+        "0x0010"
+      ],
+      "name": "lbl_164c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1694",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1658",
+      "name": "lbl_1658",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x162E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x165C",
+      "name": "lbl_165c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1633",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x165F",
+      "name": "lbl_165f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x166B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x166B",
+      "links": [
+        "0x165F"
+      ],
+      "name": "lbl_166b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1662",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1676",
+      "name": "func_1676",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x16D6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x167D",
+      "links": [
+        "0x14AB"
+      ],
+      "name": "func_167d",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x129A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1688",
+      "name": "lbl_1688",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x164D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x169A",
+      "name": "func_169a",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x00CB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x16A2",
+      "name": "func_16a2",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1A02",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x16A3",
+      "name": "func_16a3",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x00D9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x16B9",
+      "name": "lbl_16b9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x16B4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x16DD",
+      "links": [
+        "0x13AA"
+      ],
+      "name": "lbl_16dd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x177F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x16E6",
+      "links": [
+        "0x1100"
+      ],
+      "name": "lbl_16e6",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x16D2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1704",
+      "name": "lbl_1704",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x16F8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x170A",
+      "name": "lbl_170a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x173F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1719",
+      "name": "lbl_1719",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1727",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1746",
+      "name": "lbl_1746",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x174A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1752",
+      "name": "lbl_1752",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1743",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1762",
+      "name": "lbl_1762",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x175B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1764",
+      "name": "lbl_1764",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1767",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x176E",
+      "name": "lbl_176e",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x16BC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1771",
+      "name": "lbl_1771",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1753",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1774",
+      "name": "func_1774",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x16C5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x179E",
+      "comment": "func_sqr — SQR = x^0.5 через возведение в степень; ветка в EXP.",
+      "links": [
+        "0x14AB",
+        "0x17E3"
+      ],
+      "name": "func_sqr",
+      "properties": {
+        "calls": "[\"CALL 0x14AB\", \"LXI H,0x1783 (0.5)\", \"CALL 0x14BB (степень)\", \"RST 28\", \"JZ 0x17E3 func_exp (особый путь)\"]",
+        "dispatch_index": "7",
+        "function": "SQR",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"константа 0x1783 (0.5)\"]",
+        "role": "function_handler",
+        "seed_evidence": "call",
+        "seed_from": "0x1FF8",
+        "seed_source": "debug_analyze_code",
+        "token": "0x00B5",
+        "word_index": "53",
+        "writes": "[\"FAC (x^0.5)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x17CB",
+      "name": "lbl_17cb",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x17BA",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x17E3",
+      "comment": "func_exp — EXP: exp(x); переполнение по CPI 88 -> 0x1466. Явно зовёт INT и ABS.",
+      "links": [
+        "0x14AB",
+        "0x156C",
+        "0x14A1"
+      ],
+      "name": "func_exp",
+      "properties": {
+        "calls": "[\"CALL 0x14AB (сохранить FAC/текст)\", \"CALL 0x12A6 (сборка ряда)\", \"CALL 0x156C func_int\", \"CALL 0x14A3 func_abs\", \"CALL 0x1103 / 0x110F / 0x129D / 0x1853 (float)\", \"константы 0x8138/0xAA38 (мантиссы)\"]",
+        "dispatch_index": "10",
+        "function": "EXP",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x4050 (экспонента)\"]",
+        "role": "function_handler",
+        "seed_evidence": "jcc",
+        "seed_from": "0x17AA",
+        "seed_source": "debug_analyze_code",
+        "token": "0x00B8",
+        "word_index": "56",
+        "writes": "[\"FAC (итог), переполнение -> 0x1466\"]"
+      },
+      "size": 4294967295,
+      "type": "function"
+    },
+    {
+      "address": "0x1844",
+      "links": [
+        "0x14AB"
+      ],
+      "name": "func_1844",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x128D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1853",
+      "links": [
+        "0x14AB"
+      ],
+      "name": "func_1853",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1818",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1878",
+      "comment": "func_rnd — RND: линейный конгруэнтный ГПСЧ, состояние в 0x3DFC.",
+      "name": "func_rnd",
+      "properties": {
+        "calls": "[\"RST 28\", \"JM 0x1895\", \"CALL 0x14BB\", \"CALL 0x12A6 (умножение)\", \"CALL 0x1112 (сложение)\", \"CALL 0x14CE\", \"CALL 0x1186\"]",
+        "dispatch_index": "8",
+        "function": "RND",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050); состояние ГПСЧ в 0x3DFC",
+        "reads": "[\"0x3DFC.. (состояние ПСЧ)\", \"константы 0x9835/0x447A, 0x6828/0xB146\"]",
+        "role": "function_handler",
+        "token": "0x00B6",
+        "word_index": "54",
+        "writes": "[\"0x3DFC.. (новое состояние ПСЧ)\", \"FAC (результат)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x18A7",
+      "name": "func_18a7",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0DE7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x18AA",
+      "name": "func_18aa",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x06DC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x18BB",
+      "comment": "func_cos — COS: сдвиг фазы на pi/2 и вычисление синуса (fall-through в SIN).",
+      "links": [
+        "0x18C1"
+      ],
+      "name": "func_cos",
+      "properties": {
+        "calls": "[\"LXI H,0x1901 (константа pi/2)\", \"CALL 0x1103 (float-сложение)\", \"падение в 0x18C1 func_sin (cos x = sin(x+pi/2))\"]",
+        "dispatch_index": "11",
+        "function": "COS",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"FAC (аргумент x)\"]",
+        "role": "function_handler",
+        "token": "0x00B9",
+        "word_index": "57",
+        "writes": "[\"FAC (x + pi/2 перед падением в SIN)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x18C1",
+      "comment": "func_sin — SIN: ряд Тейлора с приведением аргумента (зовёт INT и ABS).",
+      "links": [
+        "0x156C",
+        "0x14A1"
+      ],
+      "name": "func_sin",
+      "properties": {
+        "calls": "[\"CALL 0x14AB (сохранить FAC/текст)\", \"CALL 0x14C3 (деление)\", \"CALL 0x13B8 (умножение)\", \"CALL 0x156C func_int\", \"CALL 0x110F / 0x1109 / 0x1100 (float)\", \"CNC 0x14A3 func_abs\", \"JMP 0x1844 (сборка ряда)\"]",
+        "dispatch_index": "12",
+        "function": "SIN",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x4050 (экспонента)\", \"константы 0x1901/0x1905/0x1909 (pi/2, ряд)\"]",
+        "role": "function_handler",
+        "token": "0x00BA",
+        "word_index": "58",
+        "writes": "[\"FAC (итог ряда)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x191E",
+      "comment": "func_tan — TAN = SIN/COS: сохраняет SIN, вычисляет COS, делит (JMP 13B6).",
+      "links": [
+        "0x18C1",
+        "0x18BB"
+      ],
+      "name": "func_tan",
+      "properties": {
+        "calls": "[\"CALL 0x14AB\", \"CALL 0x18C1 func_sin\", \"CALL 0x14AB\", \"CALL 0x14C3\", \"CALL 0x18BB func_cos\", \"JMP 0x13B6 (деление SIN/COS)\"]",
+        "dispatch_index": "13",
+        "function": "TAN",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"FAC (аргумент x)\"]",
+        "role": "function_handler",
+        "token": "0x00BB",
+        "word_index": "59",
+        "writes": "[\"FAC (SIN/COS)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1933",
+      "comment": "func_atn — ATN: арктангенс рядом; нечётность через условный вызов ABS.",
+      "links": [
+        "0x0028",
+        "0x14A1"
+      ],
+      "name": "func_atn",
+      "properties": {
+        "calls": "[\"RST 28 -> 0x0028\", \"CM 0x1799 (если отрицательное -> знак)\", \"CM 0x14A3 func_abs (если отрицательное)\", \"CALL 0x13B8\", \"CALL 0x1844 (ряд)\"]",
+        "dispatch_index": "14",
+        "function": "ATN",
+        "params": "FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)",
+        "reads": "[\"0x4050 (экспонента, порог CPI 81)\", \"константы 0x1901/0x1958\"]",
+        "role": "function_handler",
+        "seed_evidence": "call",
+        "seed_from": "0x2004",
+        "seed_source": "debug_analyze_code",
+        "token": "0x00BC",
+        "word_index": "60",
+        "writes": "[\"FAC (итог ряда)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x194E",
+      "name": "lbl_194e",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x193F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x197D",
+      "comment": "func_peek — PEEK(a): чтение байта памяти по адресу с проверкой диапазона.",
+      "name": "func_peek",
+      "properties": {
+        "calls": "[\"CALL 0x0531 (eval числа -> DE = адрес)\", \"CALL 0x1987 (граница: D>=3 -> ошибка)\", \"LDAX D (чтение байта)\", \"JMP 0x0D95 (байт->FAC)\"]",
+        "dispatch_index": "15",
+        "function": "PEEK",
+        "params": "число (адрес)",
+        "reads": "[\"(DE) — байт памяти по адресу\"]",
+        "role": "function_handler",
+        "token": "0x00BD",
+        "word_index": "61",
+        "writes": "[]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x19B7",
+      "name": "lbl_19b7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x19C6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x19FB",
+      "links": [
+        "0x01C5"
+      ],
+      "name": "lbl_19fb",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x036E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1A01",
+      "name": "func_1a01",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1C59",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1A0B",
+      "name": "lbl_1a0b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1A10",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1A15",
+      "name": "lbl_1a15",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1A41",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1A16",
+      "name": "lbl_1a16",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1A27",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1A32",
+      "name": "lbl_1a32",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1A3B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1A33",
+      "name": "lbl_1a33",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1A36",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1A4D",
+      "comment": "func_inkey — INKEY$: строка из нажатой клавиши или пустая, если клавиш нет.",
+      "name": "func_inkey",
+      "properties": {
+        "calls": "[\"CALL 0x2C40 (скан клавиатуры -> A: код или <0 если пуста)\", \"JP 0x1A5F (есть клавиша -> строка 1 символ) / XRA A (пусто -> пустая строка)\", \"CALL 0x0E65 (собрать дескриптор) / JMP 0x0E97 (вернуть строку)\"]",
+        "dispatch_index": "25",
+        "function": "INKEY$",
+        "params": "(без аргумента)",
+        "reads": "[\"клавиатура через 0x2C40\"]",
+        "role": "function_handler",
+        "token": "0x00C7",
+        "word_index": "71",
+        "writes": "[\"стр. дескриптор: dim 0x4049, data-ptr 0x404B\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1AA7",
+      "links": [
+        "0x3F20"
+      ],
+      "name": "lbl_1aa7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x00E2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1C48",
+      "name": "func_1c48",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1C74",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1C95",
+      "name": "func_1c95",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x00A4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1C9C",
+      "comment": "func_point — POINT: состояние точки экрана (чтение пиксела через 0x3BD3, база 0x2B56).",
+      "name": "func_point",
+      "properties": {
+        "calls": "[\"CALL 0x10CA (eval аргумента)\", \"CALL 0x1CA5 -> CALL 0x3BD3 (чтение пиксела)\", \"JMP 0x0D95 (результат->FAC)\"]",
+        "dispatch_index": "24",
+        "function": "POINT",
+        "params": "выражение (координаты)",
+        "reads": "[\"0x2B56 (состояние экрана/луча)\"]",
+        "role": "function_handler",
+        "token": "0x00C6",
+        "word_index": "70",
+        "writes": "[]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1CA5",
+      "name": "func_1ca5",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x23FE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1CB3",
+      "links": [
+        "0x0010"
+      ],
+      "name": "lbl_1cb3",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A7D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1CC2",
+      "links": [
+        "0x0010"
+      ],
+      "name": "lbl_1cc2",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A82",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1E6D",
+      "name": "lbl_1e6d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x06B2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x1FE2",
+      "links": [
+        "0x0010"
+      ],
+      "name": "func_1fe2",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2011",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2009",
+      "name": "lbl_2009",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x1FFE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2011",
+      "links": [
+        "0x1FE2"
+      ],
+      "name": "lbl_2011",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A8C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x201B",
+      "links": [
+        "0x0010"
+      ],
+      "name": "lbl_201b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0A91",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2045",
+      "name": "lbl_2045",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3E9C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2048",
+      "name": "func_2048",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2360",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x204B",
+      "name": "lbl_204b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x204E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x206C",
+      "name": "lbl_206c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2054",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x209C",
+      "name": "func_209c",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x02D6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x230C",
+      "name": "lbl_230c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x13CF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2323",
+      "name": "lbl_2323",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F6F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x234D",
+      "name": "lbl_234d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2371",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2358",
+      "name": "lbl_2358",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2369",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x23B9",
+      "name": "lbl_23b9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2325",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x23F2",
+      "name": "func_23f2",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x235C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x23FD",
+      "name": "lbl_23fd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x241F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2413",
+      "name": "lbl_2413",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2403",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x256E",
+      "comment": "Таблица ключевых слов BASIC: 101 слов, кодировка «посимвольно, bit7 = конец слова». Токен = 0x0080 + номер слова (CLS=0 … CIRCLE=100). Слова 46..73 (SGN..&) — встроенные функции, их исполняет 0x2770.",
+      "name": "data_keyword_table",
+      "properties": {
+        "encoding": "bit7=end-of-word",
+        "token_base": "0x0080",
+        "words": "101"
+      },
+      "size": 361,
+      "type": "table"
+    },
+    {
+      "address": "0x26F7",
+      "name": "lbl_26f7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x12B5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2770",
+      "comment": "Таблица адресов обработчиков встроенных ФУНКЦИЙ (28 записей по 2 байта, little-endian, слова 46..73 = SGN..&). Индекс = токен − 0x00AE = номер слова − 46. Запись 26 (AT) = 0x0074 — page-zero заглушка «не реализовано», не функция. Запись 28 (0x8379) лежит вне образа — граница таблицы. КОМАНДЫ (CLS..CLEAR, токены 0x80..0x99) здесь НЕ диспетчатся — их механизм остаётся открытым.",
+      "name": "data_dispatch_table",
+      "properties": {
+        "covers": "built-in functions SGN..& (words 46..73)",
+        "entries": "28",
+        "index_formula": "token - 0AEh = word - 46",
+        "stride": "2"
+      },
+      "size": 56,
+      "type": "table"
+    },
+    {
+      "address": "0x280E",
+      "comment": "func_usr — USR(a): прыжок PCHL в машинный код по адресу a; возврат через 0x0D95 (байт->FAC).",
+      "name": "func_usr",
+      "properties": {
+        "calls": "[\"CALL 0x0531 (eval числа -> DE = адрес)\", \"CMP 42 / JNC 0x0539 (адрес 0x42.. -> ошибка)\", \"XCHG / LXI D,0x0D95 / PUSH D / PCHL (хвост-вызов по адресу)\"]",
+        "dispatch_index": "3",
+        "function": "USR",
+        "params": "число (адрес машинного кода)",
+        "reads": "[\"(DE) — пользовательская подпрограмма\"]",
+        "role": "function_handler",
+        "token": "0x00B1",
+        "word_index": "49",
+        "writes": "[]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2ABF",
+      "name": "func_2abf",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2C0B",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2AD9",
+      "name": "lbl_2ad9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0BF9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2ADA",
+      "name": "lbl_2ada",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0BED",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2AE8",
+      "name": "lbl_2ae8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2329",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2AF0",
+      "name": "lbl_2af0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2332",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2AF9",
+      "name": "func_2af9",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x23C1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2B8D",
+      "name": "lbl_2b8d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3BBC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2B9D",
+      "name": "lbl_2b9d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BA8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BA0",
+      "name": "lbl_2ba0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BA3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BAE",
+      "name": "lbl_2bae",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BD8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BB9",
+      "name": "lbl_2bb9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BD0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BBF",
+      "name": "lbl_2bbf",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BC0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BC8",
+      "name": "lbl_2bc8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BC9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BD6",
+      "name": "lbl_2bd6",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x40C9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BE6",
+      "name": "lbl_2be6",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3DCF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2BEB",
+      "name": "func_2beb",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2C2E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2BFD",
+      "name": "lbl_2bfd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2C04",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2C0A",
+      "name": "lbl_2c0a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BFA",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2C1E",
+      "name": "func_2c1e",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0369",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2C22",
+      "name": "lbl_2c22",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2C36",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2C2E",
+      "links": [
+        "0x2BEB"
+      ],
+      "name": "lbl_2c2e",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2C29",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2C40",
+      "name": "func_2c40",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2C31",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2C6B",
+      "name": "lbl_2c6b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2C5E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2C6D",
+      "name": "lbl_2c6d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2C47",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2CA8",
+      "name": "lbl_2ca8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2C9E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2CBF",
+      "name": "lbl_2cbf",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2CB5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2CCE",
+      "name": "lbl_2cce",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2CDD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2CE0",
+      "links": [
+        "0x2DC8"
+      ],
+      "name": "lbl_2ce0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2CC5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2CF6",
+      "name": "lbl_2cf6",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2CFD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D00",
+      "name": "lbl_2d00",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2CED",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D0D",
+      "name": "lbl_2d0d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2CD4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D15",
+      "links": [
+        "0x2DC8"
+      ],
+      "name": "lbl_2d15",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D0E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D25",
+      "name": "lbl_2d25",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D20",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D44",
+      "name": "lbl_2d44",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D2F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D57",
+      "name": "lbl_2d57",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D52",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D5A",
+      "name": "lbl_2d5a",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D4D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D62",
+      "name": "lbl_2d62",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D46",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D6B",
+      "name": "lbl_2d6b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D64",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2D7B",
+      "name": "lbl_2d7b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2D76",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2DC8",
+      "name": "func_2dc8",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2CE0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2E76",
+      "name": "func_2e76",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x00B5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2E7C",
+      "name": "lbl_2e7c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2E84",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2E9A",
+      "name": "func_2e9a",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2E80",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2EAB",
+      "name": "lbl_2eab",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2EAD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2EB6",
+      "name": "lbl_2eb6",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F47",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2EBC",
+      "name": "func_2ebc",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2F56",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2EC4",
+      "name": "lbl_2ec4",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2E97",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2ECD",
+      "name": "lbl_2ecd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2ECF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2EF7",
+      "name": "lbl_2ef7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2EE9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F01",
+      "name": "lbl_2f01",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2EE1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F1F",
+      "name": "lbl_2f1f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F03",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F3E",
+      "name": "lbl_2f3e",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F25",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F56",
+      "links": [
+        "0x2EBC"
+      ],
+      "name": "lbl_2f56",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F42",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F70",
+      "name": "lbl_2f70",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F60",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F76",
+      "name": "lbl_2f76",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F6A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F89",
+      "name": "lbl_2f89",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F8C",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2F90",
+      "name": "lbl_2f90",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F83",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2FA7",
+      "name": "lbl_2fa7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2F99",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2FC3",
+      "name": "lbl_2fc3",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2FB8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2FC5",
+      "name": "func_2fc5",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2F92",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2FDE",
+      "name": "func_2fde",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2EF1",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x2FF7",
+      "name": "lbl_2ff7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2FE5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x2FFF",
+      "name": "lbl_2fff",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3001",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x327A",
+      "name": "func_327a",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2BFE",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3284",
+      "name": "func_3284",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x3DB6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x33F8",
+      "name": "lbl_33f8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x232D",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3419",
+      "name": "func_3419",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x3405",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3BBA",
+      "name": "lbl_3bba",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D0F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3BCC",
+      "name": "lbl_3bcc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3BC7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3BD3",
+      "name": "func_3bd3",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x1CAD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3BFC",
+      "name": "lbl_3bfc",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3BEF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C06",
+      "name": "lbl_3c06",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3BE3",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C1C",
+      "name": "lbl_3c1c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3BE9",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C2C",
+      "name": "lbl_3c2c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3C09",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C3C",
+      "name": "lbl_3c3c",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3C0F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C46",
+      "name": "lbl_3c46",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3C1F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C50",
+      "name": "lbl_3c50",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3C2F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C56",
+      "name": "lbl_3c56",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3BF5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C58",
+      "name": "lbl_3c58",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3C51",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3C94",
+      "name": "lbl_3c94",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x4076",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3CA2",
+      "name": "lbl_3ca2",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x12C4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3CCE",
+      "name": "lbl_3cce",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CB2",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3CDA",
+      "name": "lbl_3cda",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D4A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3CF2",
+      "name": "lbl_3cf2",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CDF",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3CFF",
+      "name": "lbl_3cff",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CE5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D0D",
+      "name": "lbl_3d0d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CF4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D1F",
+      "name": "lbl_3d1f",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D1A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D24",
+      "name": "lbl_3d24",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0AC8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D36",
+      "name": "lbl_3d36",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3EB0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D44",
+      "name": "lbl_3d44",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3EB6",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D4D",
+      "name": "lbl_3d4d",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2BB0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3D84",
+      "name": "lbl_3d84",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3DC8",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3DA3",
+      "name": "lbl_3da3",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3DBC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3DB0",
+      "name": "lbl_3db0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3DA7",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3DB2",
+      "name": "lbl_3db2",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3DA4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3DC0",
+      "name": "lbl_3dc0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D89",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3DDF",
+      "name": "func_3ddf",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x2354",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3E98",
+      "name": "func_3e98",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0391",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3E9F",
+      "name": "func_3e9f",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x02DB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3EA0",
+      "name": "func_3ea0",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x3DD4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3EBD",
+      "name": "lbl_3ebd",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D38",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3ED5",
+      "name": "lbl_3ed5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3EC5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3ED8",
+      "name": "lbl_3ed8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3ECD",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3EDB",
+      "name": "lbl_3edb",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D3E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3EE0",
+      "name": "lbl_3ee0",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3EC0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3EF6",
+      "name": "lbl_3ef6",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3EE4",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3F20",
+      "name": "func_3f20",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x0132",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3F24",
+      "name": "lbl_3f24",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3F3A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3F35",
+      "name": "lbl_3f35",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3F2A",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3F46",
+      "name": "lbl_3f46",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3F3E",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3F59",
+      "name": "func_3f59",
+      "properties": {
+        "seed_evidence": "call",
+        "seed_from": "0x3D78",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3F5B",
+      "name": "lbl_3f5b",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3F72",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3FF8",
+      "name": "lbl_3ff8",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3D47",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x3FFE",
+      "name": "lbl_3ffe",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x4008",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x4074",
+      "name": "lbl_4074",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x15F0",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x40A4",
+      "name": "lbl_40a4",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x40B5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x40B9",
+      "name": "lbl_40b9",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x40BB",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x40C3",
+      "name": "lbl_40c3",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x3CFC",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x40C7",
+      "name": "lbl_40c7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x2B8F",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x40E1",
+      "name": "lbl_40e1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x40EA",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x40F5",
+      "name": "lbl_40f5",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x40D5",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0x7EE1",
+      "name": "lbl_7ee1",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0235",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    },
+    {
+      "address": "0xC8E7",
+      "name": "lbl_c8e7",
+      "properties": {
+        "seed_evidence": "jcc",
+        "seed_from": "0x0335",
+        "seed_source": "debug_analyze_code"
+      },
+      "type": "label"
+    }
+  ],
+  "platform": "vector06c",
+  "rom": {
+    "file": "basic.r0m",
+    "sha256": "6c632f67718a31f0bc2c7cc4142d77bc9454cdc2f76aa6813d94e675530253d9",
+    "size": 17152
+  },
+  "version": 1
+}

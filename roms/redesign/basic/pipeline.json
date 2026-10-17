@@ -1,0 +1,38 @@
+{
+ "note": "Профиль pipeline для run_pipeline.sh (ТЗ Launcher §5/§14/§31). basic — распакованный RAM-образ интерпретатора BASIC 2.997 (src/basic.r0m, снят Stage 0 с самораспаковывающегося bas2997.rom через tools/dump_interp.py). run_pipeline.sh передаёт --org 0x0000 (.r0m-соглашение); entry по умолчанию = org = 0x0000 (page-zero: LXI SP,7FFF; JMP 19CC + RST-векторы — из них достижим весь код), hi по умолчанию = 0x0000+17152-1 = 0x42FF (с 0x4300 — программная область, не часть образа). ROM самодостаточен: boot = инициализация + автозапуск COLOR15,0,1:CLS, затем REPL '=>' — секвенции клавиш не нужны; --key вернутся в Stage 2–10 для зондирования команд. RDB родится первым debug_save_rdb внутри seed_rdb (basic.r0m → basic.rdb).",
+ "stage_args": {
+  "seed_rdb": {
+   "--max-depth": "12",
+   "--max-instructions": "100000"
+  },
+  "probe": {
+   "--seconds": "3",
+   "--snapshot": true
+  },
+  "io_signature": {
+   "--seconds": "3"
+  },
+  "memory_diff": {
+   "--run-seconds": "3"
+  },
+  "abi_scan": {
+   "--limit": "32",
+   "--run": "3"
+  },
+  "table_shape": {
+   "--runtime": true,
+   "--limit": "200"
+  },
+  "strings_scan": {
+   "--allow-ya": true,
+   "--min-len": "4"
+  }
+ },
+ "persistence": {
+  "max_unsaved_objects": 10,
+  "max_checkpoint_seconds": 300,
+  "save_after_stage": true,
+  "verify_after_save": true,
+  "checkpoint_after_save": true
+ }
+}

@@ -748,8 +748,8 @@ def main(argv=None):
                     "checkpoint/resume, dry-run/apply")
     parser.add_argument("--rom", required=True)
     parser.add_argument("--rdb", default=None,
-                        help="путь .rdb; по умолчанию — сосед .rom (как делает "
-                             "сам отладчик)")
+                        help="путь .rdb; по умолчанию — сосед образа "
+                             "(.rom/.r0m/.bin → .rdb, как делает сам отладчик)")
     parser.add_argument("--org", default="0x0100")
     parser.add_argument("--entry", default=None,
                         help="точка входа для линтеров (по умолчанию org)")
@@ -818,7 +818,7 @@ def main(argv=None):
 
     ctx = Ctx()
     ctx.rom = args.rom
-    ctx.rdb = args.rdb or re.sub(r"\.(rom|ROM|bin)$", ".rdb", args.rom)
+    ctx.rdb = args.rdb or re.sub(r"\.(rom|ROM|r0m|bin)$", ".rdb", args.rom)
     ctx.org = args.org
     ctx.server = args.server
     ctx.z80asm = args.z80asm
