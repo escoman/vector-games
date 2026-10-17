@@ -744,6 +744,19 @@
       "type": "label"
     },
     {
+      "address": "0x03A1",
+      "comment": "func_cmd_llist — LLIST: распечатать программу на принтер (младший брат LIST, 0x03A6 — рядом). Токен 0xDB -> `0x03A1` (сегмент B).",
+      "name": "func_cmd_llist",
+      "properties": {
+        "calls": "[\"обход строк (0x0619)\", \"детокенизация через таблицу ключ. слов\"]",
+        "params": "HL = поток после LLIST (необяз. диапазон).",
+        "reads": "[\"[LN][токены] строк программы\", \"data_keyword_table — детокенизация\"]",
+        "role": "cmd_llist",
+        "writes": "[\"листинг на принтер\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x03A6",
       "comment": "func_cmd_list — LIST: распечатать строки (диапазон необязателен), обратно разворачивая токены в слова по таблице ключевых слов. Подтверждено телом (0x03A6: CALL 03C7/RNZ/LOAD LN).",
       "links": [
@@ -1285,20 +1298,20 @@
     },
     {
       "address": "0x09B1",
-      "comment": "func_eval_expression — Точка входа оценщика выражений: страховка памяти (LHLD 0CB3 / DAD SP / JC 0069), вызов ядра 0x0A43, затем цепочка реляционных операторов. Хелперы Stage 2 зовут её, чтобы вычислить аргумент.",
+      "comment": "func_eval_expression — Вход в оценщик выражений (рекурсивный спуск с приоритетами). Уточнён ABI (Stage 5d): стек-guard (лимит 0x0CB3 -> JC 0069), цикл свёртки по приоритету 0x09D0, диспетчер бин. операций 0x09DD (SUI AB -> индекс,Routine ptr -> 0x0F45), строковая конкатенация по флагу 0x0C8C -> 0x1E6D.",
       "links": [
         "0x0A43"
       ],
       "name": "func_eval_expression",
       "properties": {
-        "calls": "[\"CALL 0x0A43 func_eval_primary (ядро разбора)\", \"JC 0x0069 (OUT OF MEMORY при нехватке стека)\", \"падение в 0x09DD (реляционные операторы >0xAB)\"]",
-        "params": "HL = текстовый указатель на начало выражения",
-        "reads": "[\"SP против 0x0CB3 (низ занятой памяти) — страховка от переполнения\", \"поток токенов по HL\"]",
-        "role": "evaluator_entry",
+        "calls": "[\"guard: LXI H,FFD1/DAD SP/JC 0069 (out of memory)\", \"CALL 0x0A43 — разбор/unary/primary\", \"0x09D0 — цикл свёртки по приоритету (MVI A,77/CMP B)\", \"0x09DD — диспетчер операций; строковая ветка -> 0x1E6D\"]",
+        "params": "HL = поток выражения; возврат значения в FAC.",
+        "reads": "[\"0x0CB3 — лимит глубины стека\", \"0x0C8C — флаг строковых темпов\", \"0x09DD — индекс бинарной операции (SUI AB)\"]",
+        "role": "eval_expression",
         "seed_evidence": "call",
         "seed_from": "0x06A0",
         "seed_source": "debug_analyze_code",
-        "writes": "[\"текстовый указатель (HL, в page-zero 0x404D) (двигается на конец разобранного выражения)\", \"FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050) (значение выражения)\"]"
+        "writes": "[\"0x0F45 — указатель подпрограммы бинарной операции\", \"FAC — значение выражения\"]"
       },
       "type": "function"
     },
@@ -1354,20 +1367,21 @@
     },
     {
       "address": "0x0A43",
-      "comment": "func_eval_primary — Ядро оценщика: сброс строкового флага, разбор унарных/бинарных операторов и литералов (dispatch по диапазону токенов), рекурсия. Вызывается из func_eval_expression.",
+      "comment": "func_eval_primary — Разбор первичного члена (литерал/переменная/скобка/унар/вызов функции). Вызывается func_eval_expression (0x09B1). Core назван в Stage 2/3; 5d подтверждает роль в цепочке приоритетов.",
       "links": [
-        "0x0ABF"
+        "0x0ABF",
+        "0x099E"
       ],
       "name": "func_eval_primary",
       "properties": {
-        "calls": "[\"RST 0x10 (продвинуть указатель, следующий непробельный символ)\", \"0x15A9 func_num_digitize (числовой литерал)\", \"0x0ABF func_eval_ref (переменная/функция)\", \"рекурсия на себя (бинарные операторы +,-,NOT,FN,^...)\"]",
-        "params": "HL = текстовый указатель",
-        "reads": "[\"0x0C8C (флаг строковой зоны — сбрасывается на входе)\", \"поток токенов/литералов по HL\"]",
-        "role": "evaluator_core",
+        "calls": "[\"func_099e — вычислить целое\", \"func_var_lookup — переменная\", \"func_exec_dispatch 0x0B09 — встроенная функция\"]",
+        "params": "HL = поток на первичном члене; значение -> FAC.",
+        "reads": "[\"разбор литералов/переменных/скобок/унарных/вызовов FN\"]",
+        "role": "eval_primary",
         "seed_evidence": "call",
         "seed_from": "0x09C6",
         "seed_source": "debug_analyze_code",
-        "writes": "[\"текстовый указатель (HL, в page-zero 0x404D)\", \"FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)\"]"
+        "writes": "[\"FAC — значение первичного члена\"]"
       },
       "type": "function"
     },
@@ -2292,6 +2306,22 @@
         "token": "0x00B3",
         "word_index": "51",
         "writes": "[\"0x10A3 (самомодифицируемый операнд порта инструкции IN)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x10A7",
+      "comment": "func_cmd_out — OUT port,val: вывод байта в аппаратный порт. Подтверждено телом (0x10A7: CALL 099E/STA 10B4/CALL 10C3/OUT 00). Токен 0x90 (сегмент A).",
+      "links": [
+        "0x099E"
+      ],
+      "name": "func_cmd_out",
+      "properties": {
+        "calls": "[\"CALL 0x099E — порт\", \"CALL 0x10C3 — значение\", \"OUT (порт)\"]",
+        "params": "HL = поток после OUT; порт, значение.",
+        "reads": "[\"номер порта (`CALL 0x099E`)\", \"значение (`CALL 0x10C3`)\"]",
+        "role": "cmd_out",
+        "writes": "[\"`OUT порт` (самомодиф. операнд порта по `STA 0x10B4`)\"]"
       },
       "type": "function"
     },
@@ -3920,6 +3950,19 @@
       "type": "function"
     },
     {
+      "address": "0x19AA",
+      "comment": "func_cmd_poke — POKE addr,val: запись байта в память. Подтверждено телом (0x19AA: CALL .../PUSH D/CALL 10C3/POP D/STAX D). Guard диапазона нет — таблиц адресов/масок недоступны (ТЗ п.40/67). Токен 0x94 (сегмент A).",
+      "name": "func_cmd_poke",
+      "properties": {
+        "calls": "[\"CALL 0x300A/0x1987 — вычислить адрес\", \"CALL 0x10C3 — значение\"]",
+        "params": "HL = поток после POKE; адрес, значение.",
+        "reads": "[\"адрес (`CALL 0x1987`/`0x300A` -> DE)\", \"значение (`CALL 0x10C3`)\"]",
+        "role": "cmd_poke",
+        "writes": "[\"`STAX D` — запись байта по адресу DE (без guard-диапазона)\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x19B7",
       "name": "lbl_19b7",
       "properties": {
@@ -4252,6 +4295,45 @@
       "type": "function"
     },
     {
+      "address": "0x1DA8",
+      "comment": "func_cmd_csave — CSAVE: записать программу на магнитофон. Подтверждено телом (0x1DA8: MVI A,D3/STA.../CALL 1D2D/1D41/1D76/MVI A,55 — синхробайт). Токен 0x9B (сегмент A).",
+      "name": "func_cmd_csave",
+      "properties": {
+        "calls": "[\"CALL 0x1D2D / 0x1D41 / 0x1D76 — запись заголовка/байтов\", \"порт ленты (`D3` OUT)\"]",
+        "params": "HL = поток после CSAVE (необяз. имя/диапазон).",
+        "reads": "[\"программа/блок для записи\", \"имя (<=11 симв., ТЗ п.73)\"]",
+        "role": "cmd_csave",
+        "writes": "[\"магнитофон-выход: синхробайт `0x55`, заголовок, данные\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1DED",
+      "comment": "func_cmd_bsave — BSAVE: сохранить блок памяти на ленту в двоичном виде. Токен 0xE0 -> `0x1DED` (сегмент B).",
+      "name": "func_cmd_bsave",
+      "properties": {
+        "calls": "[\"запись блока на ленту (хелперы ленты)\"]",
+        "params": "HL = поток после BSAVE (имя, адрес, длина).",
+        "reads": "[\"блок памяти (адрес..длина)\"]",
+        "role": "cmd_bsave",
+        "writes": "[\"магнитофон-выход — двоичный блок\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1E3D",
+      "comment": "func_cmd_bload — BLOAD: загрузить блок памяти с ленты. Пара BSAVE. Токен 0xE1 -> `0x1E3D` (сегмент B).",
+      "name": "func_cmd_bload",
+      "properties": {
+        "calls": "[\"чтение блока с ленты (хелперы ленты)\"]",
+        "params": "HL = поток после BLOAD (имя).",
+        "reads": "[\"лента — двоичный блок (адрес, длина)\"]",
+        "role": "cmd_bload",
+        "writes": "[\"блок памяти — загруженные данные\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x1E6D",
       "name": "lbl_1e6d",
       "properties": {
@@ -4287,6 +4369,19 @@
         "reads": "[\"лента/магнитофон вход\", \"строки программы\"]",
         "role": "cmd_verify",
         "writes": "[\"сравнение без изменения памяти\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x1EDA",
+      "comment": "func_cmd_cload — CLOAD: считать программу с магнитофона (пара CSAVE). Токен 0x9A -> `0x1EDA` (сегмент A). Детали обмена — группа ленты рядом с CSAVE.",
+      "name": "func_cmd_cload",
+      "properties": {
+        "calls": "[\"чтение с ленты (хелперы,mirror CSAVE)\", \"вставка строк (0x012E)\"]",
+        "params": "HL = поток после CLOAD (необяз. имя).",
+        "reads": "[\"магнитофон-вход — поток программы\"]",
+        "role": "cmd_cload",
+        "writes": "[\"загрузка строк в память программы\"]"
       },
       "type": "function"
     },
@@ -4340,6 +4435,19 @@
       "type": "label"
     },
     {
+      "address": "0x2036",
+      "comment": "func_cmd_lprint — LPRINT: печать выражений на принтер (младший брат PRINT). Токен 0xDA -> `0x2036` (сегмент B).",
+      "name": "func_cmd_lprint",
+      "properties": {
+        "calls": "[\"тот же разбор списка, что PRINT\", \"вывод символа на принтер\"]",
+        "params": "HL = поток после LPRINT (список вывода).",
+        "reads": "[\"вычисляемые значения/строки\"]",
+        "role": "cmd_lprint",
+        "writes": "[\"печатающее устройство (порт принтера)\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x2045",
       "name": "lbl_2045",
       "properties": {
@@ -4390,6 +4498,19 @@
       "type": "function"
     },
     {
+      "address": "0x20B1",
+      "comment": "func_cmd_paint — PAINT: заливка замкнутой области. Подтверждено телом (0x20B1: LDA 3769/STA 4028/CALL 28A0). ИСПРАВЛЕНИЕ 5b: адрес `0x20B1`, не `0x19B1` (то был середина POKE). Токен 0xE3 -> `0x276C`.",
+      "name": "func_cmd_paint",
+      "properties": {
+        "calls": "[\"CALL 0x28A0 — разобрать X,Y\", \"заливка (рекурсивный flood)\"]",
+        "params": "HL = поток после PAINT; X,Y(,цвет/заливка).",
+        "reads": "[\"текущий цвет (`LDA 0x3769` -> `0x4028`)\", \"координаты X,Y (`CALL 0x28A0`)\"]",
+        "role": "cmd_paint",
+        "writes": "[\"пиксельно-байтовая заливка области ВГД\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x230C",
       "name": "lbl_230c",
       "properties": {
@@ -4398,6 +4519,19 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x231B",
+      "comment": "func_cmd_screen — SCREEN: переключение режимов экрана (SCREEN0/3/4 — ТЗ). Подтверждено телом (0x231B: CALL 20A6 / DCR C / JZ...). Токен 0xDC -> 0x231B (в 5b-доке адрес был верен).",
+      "name": "func_cmd_screen",
+      "properties": {
+        "calls": "[\"CALL 0x20A6 — вычислить режим\", \"переконфигурировать ВГД\"]",
+        "params": "HL = поток после SCREEN; режим (0/3/4).",
+        "reads": "[\"аргумент режима (`CALL 0x20A6` -> C)\"]",
+        "role": "cmd_screen",
+        "writes": "[\"режим экрана (ветвление JZ 0x2384/0x23B9 по значению C)\"]"
+      },
+      "type": "function"
     },
     {
       "address": "0x2323",
@@ -4486,6 +4620,19 @@
       "type": "label"
     },
     {
+      "address": "0x2428",
+      "comment": "func_cmd_play — PLAY list$: воспроизведение нот. Подтверждено телом (0x2428: PUSH PSW/XRA A/STA 27C8/STA 245F/DI/CPI 2C). Драйвер — на прерывании (ТЗ п.63/65/74). Токен 0xE2 -> `0x276A`.",
+      "name": "func_cmd_play",
+      "properties": {
+        "calls": "[\"сброс курсора воспроизведения\", \"инициализация звуковых счётчиков\"]",
+        "params": "HL = поток после PLAY; список нот через `,`.",
+        "reads": "[\"список нот/длительностей (разбор по `,` `CPI 2C`)\"]",
+        "role": "cmd_play",
+        "writes": "[\"состояние проигрывания `0x27C8`/`0x245F`\", \"тон/громкость через `DI` (драйвер на ВBlank-прерывании)\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x256E",
       "comment": "Таблица ключевых слов BASIC: 101 слов, кодировка «посимвольно, bit7 = конец слова». Токен = 0x0080 + номер слова (CLS=0 … CIRCLE=100). Слова 46..73 (SGN..&) — встроенные функции, их исполняет 0x2770.",
       "name": "data_keyword_table",
@@ -4554,6 +4701,45 @@
         "token": "0x00B1",
         "word_index": "49",
         "writes": "[]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x281D",
+      "comment": "func_cmd_color — COLOR: задать текущий цвет/палитру. Токен 0xDD (сегмент B, `0x2760` -> `0x281D`).",
+      "name": "func_cmd_color",
+      "properties": {
+        "calls": "[\"вычислить аргументы цвета\"]",
+        "params": "HL = поток после COLOR; аргументы цвета/палитры.",
+        "reads": "[\"вычисляемые компоненты цвета\"]",
+        "role": "cmd_color",
+        "writes": "[\"текущий цвет/палитра вывода (переменная рисования)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x28C2",
+      "comment": "func_cmd_plot — PLOT X,Y(,c): установить точку. Подтверждено телом (0x28C2: CALL 28A0 / CPI 2C ',' / CALL 10C3). Токен 0x92 (сегмент A).",
+      "name": "func_cmd_plot",
+      "properties": {
+        "calls": "[\"CALL 0x28A0 — разобрать X,Y\", \"CALL 0x10C3 — вычислить цвет\", \"примитив вывода точки\"]",
+        "params": "HL = поток после PLOT; аргументы X,Y(,цвет).",
+        "reads": "[\"вычисляемые X,Y (`CALL 0x28A0`)\", \"необязательный цвет через `,` (`CALL 0x10C3`)\"]",
+        "role": "cmd_plot",
+        "writes": "[\"установка точки ВГД (координатная кодировка режима экрана)\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x28FD",
+      "comment": "func_cmd_line — LINE (X,Y)-(X,Y)[,c][BF|BS]: отрезок/прямоугольник. Адрес из плотной таблицы (токен 0x93); группа графики, рядом с PLOT.",
+      "name": "func_cmd_line",
+      "properties": {
+        "calls": "[\"разбор координат (`CALL 0x28A0`-подобный)\", \"драйвер линии\"]",
+        "params": "HL = поток после LINE; X1,Y1-X2,Y2 (,цвет), опц. BF/BS.",
+        "reads": "[\"две точки (координаты), цвет; флаг заливки/границы\"]",
+        "role": "cmd_line",
+        "writes": "[\"отрезок (или прямоугольник BF/BS) в ВГД\"]"
       },
       "type": "function"
     },
@@ -5283,6 +5469,19 @@
       "type": "label"
     },
     {
+      "address": "0x3033",
+      "comment": "func_cmd_circle — CIRCLE (X,Y),R(,c): окружность/дуга. Подтверждено телом (0x3033: CALL 28A0/STA 2B56/CALL 10C3). ИСПРАВЛЕНИЕ 5b: адрес `0x3033`, не `0x1C21`. Токен 0xE4 -> `0x276E`.",
+      "name": "func_cmd_circle",
+      "properties": {
+        "calls": "[\"CALL 0x28A0 — центр\", \"CALL 0x10C3 — цвет\", \"примитив дуги\"]",
+        "params": "HL = поток после CIRCLE; X,Y, радиус(,цвет).",
+        "reads": "[\"центр X,Y (`CALL 0x28A0`)\", \"радиус (-> `0x2B56`/`0x2B57`)\", \"цвет (`CALL 0x10C3` -> `0x30B4`)\"]",
+        "role": "cmd_circle",
+        "writes": "[\"окружность/дуга в ВГД (синус-таблица, ТЗ п.23)\"]"
+      },
+      "type": "function"
+    },
+    {
       "address": "0x327A",
       "name": "func_327a",
       "properties": {
@@ -5319,6 +5518,32 @@
         "seed_evidence": "call",
         "seed_from": "0x3405",
         "seed_source": "debug_analyze_code"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x3441",
+      "comment": "func_cmd_get — GET: считать блок изображения из экрана в память (пара PUT). Токен 0xDE -> `0x3441` (сегмент B). ТЗ п.45/47/69.",
+      "name": "func_cmd_get",
+      "properties": {
+        "calls": "[\"разбор координат/размера\", \"чтение плоскостей ВГД\"]",
+        "params": "HL = поток после GET; X,Y, размер, буфер.",
+        "reads": "[\"прямоугольник ВГД (координаты + размеры)\"]",
+        "role": "cmd_get",
+        "writes": "[\"буфер памяти — считанный блок графики\"]"
+      },
+      "type": "function"
+    },
+    {
+      "address": "0x357F",
+      "comment": "func_cmd_put — PUT: вывести блок изображения из памяти на экран (пара GET). Токен 0xDF -> `0x357F` (сегмент B). ТЗ п.45/47/69.",
+      "name": "func_cmd_put",
+      "properties": {
+        "calls": "[\"разбор координат/размера\", \"запись плоскостей ВГД\"]",
+        "params": "HL = поток после PUT; X,Y, размер, буфер.",
+        "reads": "[\"буфер памяти — блок графики\"]",
+        "role": "cmd_put",
+        "writes": "[\"прямоугольник ВГД (восстановление изображения)\"]"
       },
       "type": "function"
     },
