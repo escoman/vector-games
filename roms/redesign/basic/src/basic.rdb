@@ -1053,6 +1053,18 @@
       "type": "function"
     },
     {
+      "address": "0x05D1",
+      "comment": "var_resume_vector — ВЕКТОР ВОЗОБНОВЛЕНИЯ ИСПОЛНЕНИЯ (2б). main_loop сеет адрес 0x05E1; OPC JMP (0xC3) в 0x05D0 -> трамплин `JMP [0x05D1]`. Парный к var_step_vector: точка возврата/возобновления цикла исполнения.",
+      "name": "var_resume_vector",
+      "properties": {
+        "reads": "[\"трамплин `0x05D0` (STA 05D0 = 0xC3 JMP) целится сюда\"]",
+        "role": "resume_routine_vector",
+        "writes": "[\"`main_loop 0x00FC`: LXI H,05E1 / SHLD 05D1\", \"`label_05E1` (SHLD 05D1)\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x0602",
       "comment": "func_cmd_goto — GOTO: вычислить номер (0x053E), найти строку в цепочке программы (сравнение номера с каждой записью, возврат указателя или 0). Механизм line_find оформим отдельным объектом в под-пакете 5c.",
       "links": [
@@ -1069,6 +1081,18 @@
       "type": "function"
     },
     {
+      "address": "0x0609",
+      "comment": "var_step_vector — ВЕКТОР ПОДСПРОГРАММЫ ШАГА СТРОКИ (2б). main_loop сеет адрес func_prog_step 0x0619; байт-опкод JMP (0xC3) кладётся в 0x0608, т.е. 0x0608..0x0609 — самомод-трамплин `JMP [0x0609]`. Держит адрес рутины продвижения к следующему оператору.",
+      "name": "var_step_vector",
+      "properties": {
+        "reads": "[\"трамплин `0x0608` (STA 0608 = 0xC3 JMP) целится сюда\"]",
+        "role": "step_routine_vector",
+        "writes": "[\"`main_loop 0x00F6`: LXI H,0619 / SHLD 0609\", \"`func_prog_step` обновляет вектор шага\"]"
+      },
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x0619",
       "comment": "func_prog_step — Резюмируемый пошаговый переход по строкам программы (указатель возобновления 0x0609, точка шага 0x0619). Общий механизм для GOTO/поиска, LIST, RUN, DELETE, INSERT. GOTO встраивает цикл сравнения номеров (0x060B).",
       "name": "func_prog_step",
@@ -1083,7 +1107,7 @@
     },
     {
       "address": "0x0625",
-      "comment": "var_stack_ptr — ВЕРШИНА СТЕКА ИНТЕРПРЕТАТОРА GOSUB/RETURN/FOR (2б). main_loop и CONT сбрасывают, GOSUB читает/пишет. рантайм-дифф: 00 00 -> FF FF (пустой стек = верх памяти).",
+      "comment": "var_stack_ptr — ВЕРШИНА СТЕКА ИНТЕРПРЕТАТОРА GOSUB/RETURN/FOR (2б). main_loop и CONT сеют 0xFFFF (LXI H,FFFF/SHLD 0625). На этом стеке лежат GOSUB-адреса (маркер 0x8C) и 17-байтные блоки FOR-счётчиков (создаются CALL 0x01E8) — отдельных ячеек под FOR нет. Живое значение пустого стека: 0xFFFF.",
       "name": "var_stack_ptr",
       "properties": {
         "reads": "[\"GOSUB возвращает по стеку\"]",
@@ -1824,7 +1848,7 @@
     },
     {
       "address": "0x0C8C",
-      "comment": "var_type_flag — ФЛАГ ТИПА ЗНАЧЕНИЯ строка/число (1б). LET и оценщик читают LDA 0C8C для ветки строковой конкатенации (-> 0x1E6D).",
+      "comment": "var_type_flag — ФЛАГ ТИПА ЗНАЧЕНИЯ строка/число (1б). func_var_lookup ставит 0 (число, XRA A/STA 0C8C) или 1 (строка по `$`, MVI A,01/STA 0C8C). LET/eval читают LDA 0C8C для строковой ветки. Парный старший байт 0x0C8B = адрес значения текущей переменной (указатель слота); отдельным объектом НЕ заведён — перекрывает 0x0C8C (один объект на адрес).",
       "name": "var_type_flag",
       "properties": {
         "reads": "[\"LET/eval/высвобождение строк (LDA 0C8C)\"]",
@@ -1856,11 +1880,11 @@
     },
     {
       "address": "0x0CB3",
-      "comment": "var_free_limit — НИЖНЯЯ ГРАНИЦА СВОБОДНОЙ ПАМЯТИ / порог out-of-memory (2б). Функция FRE читает; guard оценщика сравнивает стек с ней (JC 0069). рантайм: -> 0x4303 (=конец программы).",
+      "comment": "var_free_limit — ВЕРШИНА ТАБЛИЦЫ ПЕРЕМЕННЫХ (vartab) = нижняя граница free (2б). Формат записи: 6 байт [имя:2][значение:4]; создание переменной в func_var_lookup: LHLD 0CB3 -> LXI B,0006 -> DAD B -> SHLD 0CB3 (0x0C63..0x0C71), обнуление записью (RST 20). Guard оценщика сравнивает стек с vartab (LHLD 0CB3/SUB L/JC 0069 = out-of-memory). FRE читает. ЖИВОЕ значение в сессии: 0x4303 == program_end (0x0C33=0x4303) => таблица пуста (демо без переменных).",
       "name": "var_free_limit",
       "properties": {
         "reads": "[\"FRE читает границу\", \"guard eval: LHLD 0CB3 / SUB L / JC 0069\"]",
-        "role": "free_space_limit",
+        "role": "vartab_top_ptr",
         "writes": "[\"NEW/CLEAR/работа со строками обновляют\"]"
       },
       "size": 2,
@@ -2156,6 +2180,18 @@
         "writes": "[\"0x0ED3 (окно строки)\", \"стек (RST 0x20)\"]"
       },
       "type": "function"
+    },
+    {
+      "address": "0x0ED3",
+      "comment": "var_string_window — ОКНО СТРОКОВОЙ АЛЛОКАЦИИ / базовый указатель временной строковой области (2б). Лежит чуть ниже var_free_top 0x0ED6. FRE вычисляет свободную память от него; str_window/0fe9 двигают окно. Инициализируется в label_01B0 вместе с установкой var_stmt_ptr. Автостарт-демо строк не создаёт, поэтому в рантайм-диффе не участвует — роль подтверждена статически (инициализация + потребители).",
+      "name": "var_string_window",
+      "properties": {
+        "reads": "[\"FRE (`func_fre`: LHLD 0ED3)\", \"строковые подпрограмки (`func_0f51`/`0fe9`/`lbl_0f73` LHLD 0ED3)\"]",
+        "role": "string_window_ptr",
+        "writes": "[\"`func_str_window` (SHLD 0ED3)\", \"инициализация рядом с var_stmt_ptr (`label_01B0`)\", \"`func_0fe9`/`label_0EF8` (SHLD 0ED3)\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x0ED6",
@@ -5725,6 +5761,18 @@
         "writes": "[\"буфер памяти — считанный блок графики\"]"
       },
       "type": "function"
+    },
+    {
+      "address": "0x3559",
+      "comment": "var_getput_ptr — РАБОЧИЙ УКАЗАТЕЛЬ БЛОКА GET/PUT (2б). Хранит адрес/дескриптор прямоугольника graphics-областей для READ/PUT (GET `func_cmd_get` 0x3441, PUT `func_cmd_put` 0x357f): читают и пишут метки 0x34xx/0x35xx. Демо рисует PLOT/COLOR, не вызывает GET/PUT -> в рантайм-диффе отсутствует; роль подтверждена статически.",
+      "name": "var_getput_ptr",
+      "properties": {
+        "reads": "[\"обработчики GET/PUT (`label_348b`/`3498`/`34e9`/`36c0`/`3785` lda/lhld 3559)\"]",
+        "role": "get_put_work_ptr",
+        "writes": "[\"парсер/вычисление блока GET/PUT (`34e9`/`3558`/`3574`/`35ab` shld 3559)\"]"
+      },
+      "size": 2,
+      "type": "variable"
     },
     {
       "address": "0x357F",
