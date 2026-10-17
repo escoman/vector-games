@@ -49,4 +49,9 @@ roms/tests/dt2_512/dt2_512_bmp.inc
 roms/tests/assets/dt2_bmp.inc
 roms/tests/assets/logo16_bmp.inc
 
+# basic (Stage 9): артефакты сборки asm-дерева (исходники code/equates/basic_new.asm и .inc — в репо)
+roms/redesign/basic/asm/*.bin
+roms/redesign/basic/asm/*.o
+roms/redesign/basic/asm/*.sym
+
 !roms/redesign/putup/src/putup.rom
