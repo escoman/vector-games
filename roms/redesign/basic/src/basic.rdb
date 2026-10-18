@@ -1246,6 +1246,20 @@
       "type": "function"
     },
     {
+      "address": "0x0782",
+      "comment": "func_output_char_edit — Форматирование/вывод символа (BCD→ASCII). Вход `INX H / CALL 0x099E / DCX H / PUSH H / CALL 0x0531 / MVI A,20 / CALL 0x0378 (emit)`; хвост `MOV B,A / RRC×4 / ORI F0 / DAA / CPI 60 / SBI 1F / JMP 0x0378`. Строка-источник 0x077E. Достигается через ветку, которую CFG от 0x0000 не прошёл (условный вызов редактора вывода).",
+      "name": "func_output_char_edit",
+      "properties": {
+        "cfg_reachable": "no (branch not followed)",
+        "emit_char": "0x0378",
+        "helper": "0x0531, 0x099E",
+        "role": "output_char_edit",
+        "src_string": "0x077E"
+      },
+      "size": 43,
+      "type": "function"
+    },
+    {
       "address": "0x07AD",
       "name": "func_07ad",
       "properties": {
@@ -1615,6 +1629,19 @@
         "index_formula": "token - 0AEh",
         "role": "function_dispatch"
       },
+      "type": "function"
+    },
+    {
+      "address": "0x0B12",
+      "comment": "func_relation_dispatch — Диспатч отношений (сравнение/присваивание). `ORI AF / PUSH PSW / CALL 0x09A1 / CALL 0x0531 / POP PSW / XCHG / POP B / XTHL / XCHG / CALL 0x14C3 / LXI H,0D97 / JNZ 0B35 / ANA|ORA D,E / PCHL` — жонглирует операндами (XTHL/XCHG) и уходит по вычисленному адресу (PCHL). Вход динамический (адрес из вычислителя), потому не покрыт CFG.",
+      "name": "func_relation_dispatch",
+      "properties": {
+        "dispatch": "PCHL (вычисленный переход)",
+        "helper": "0x0531, 0x09A1, 0x14C3",
+        "role": "relational_operator_dispatch",
+        "target_table": "0x0D97"
+      },
+      "size": 40,
       "type": "function"
     },
     {
@@ -5885,6 +5912,19 @@
         "role": "cmd_put",
         "writes": "[\"прямоугольник ВГД (восстановление изображения)\"]"
       },
+      "type": "function"
+    },
+    {
+      "address": "0x366F",
+      "comment": "func_selfmod_patch — Самомодифицируемый сборщик трамплина. Straight-line: `MOV L,C / MOV H,B / MOV A,M / INX H / ORA M ×3 / MOV L,A / MVI A,C9 / STA 0x3737 / CALL 0x372B / CMA / STA 0x373A / STA 0x3740 / MVI A,EB / STA 0x3737 / XCHG`. Патшит байты (`C9`=RET, `EB`=JMP) в ячейки 0x3737/373A/3740 — пары с патч-областью 0x3730. Вход динамический.",
+      "name": "func_selfmod_patch",
+      "properties": {
+        "calls": "0x372B",
+        "patch_area": "0x3730 (residual gap)",
+        "patch_cells": "0x3737, 0x373A, 0x3740",
+        "role": "selfmod_trampoline_patch"
+      },
+      "size": 35,
       "type": "function"
     },
     {

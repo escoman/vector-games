@@ -1423,15 +1423,40 @@ label_077B:
 	cnz	label_0EB8
 	pop	h
 	jmp	label_072C
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_0782:
-	defb	23h,0CDh,9Eh,09h,2Bh,0E5h,0CDh,31h
-	defb	05h,3Eh,20h,0CDh,78h,03h,0AFh,0B2h
-	defb	0C4h,9Ah,07h,7Bh,21h,7Eh,07h,0E5h
-	defb	47h,0Fh,0Fh,0Fh,0Fh,0CDh,0A3h,07h
-	defb	78h,0F6h,0F0h,27h,0FEh,60h,0DEh,1Fh
-	defb	0C3h,78h,03h
-
+; func_output_char_edit — Форматирование/вывод символа (BCD→ASCII). Вход `INX H / CALL 0x099E / DCX H / PUSH H / CALL 0x0531 / MVI A,20 / CALL 0x0378 (emit)`; хвост `MOV B,A / RRC×4 / ORI F0 / DAA / CPI 60 / SBI 1F / JMP 0x0378`. Строка-источник 0x077E. Достигается через ветку, которую CFG от 0x0000 не прошёл (условный вызов редактора вывода).
+; cfg_reachable: no (branch not followed)
+; emit_char: 0x0378
+; helper: 0x0531, 0x099E
+; role: output_char_edit
+; src_string: 0x077E
+func_output_char_edit:
+	inx	h
+	call	func_099e
+	dcx	h
+	push	h
+	call	func_fac_require_int
+	mvi	a,20h
+	call	func_0378
+	xra	a
+	ora	d
+	cnz	label_079A
+	mov	a,e
+	lxi	h,077eh
+	push	h
+label_079A:
+	mov	b,a
+	rrc
+	rrc
+	rrc
+	rrc
+	call	label_07A3
+	mov	a,b
+label_07A3:
+	ori	0f0h
+	daa
+	cpi	60h
+	sbi	1fh
+	jmp	func_0378
 func_07ad:
 	mvi	m,00h
 	lxi	h,3f76h
@@ -2001,14 +2026,40 @@ func_exec_dispatch:
 	mov	h,m
 	mov	l,c
 	pchl
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_0B12:
-	defb	0F6h,0AFh,0F5h,0CDh,0A1h,09h,0CDh,31h
-	defb	05h,0F1h,0EBh,0C1h,0E3h,0EBh,0CDh,0C3h
-	defb	14h,0F5h,0CDh,31h,05h,0F1h,0C1h,79h
-	defb	21h,97h,0Dh,0C2h,35h,0Bh,0A3h,4Fh
-	defb	78h,0A2h,0E9h,0B3h,4Fh,78h,0B2h,0E9h
-
+; func_relation_dispatch — Диспатч отношений (сравнение/присваивание). `ORI AF / PUSH PSW / CALL 0x09A1 / CALL 0x0531 / POP PSW / XCHG / POP B / XTHL / XCHG / CALL 0x14C3 / LXI H,0D97 / JNZ 0B35 / ANA|ORA D,E / PCHL` — жонглирует операндами (XTHL/XCHG) и уходит по вычисленному адресу (PCHL). Вход динамический (адрес из вычислителя), потому не покрыт CFG.
+; dispatch: PCHL (вычисленный переход)
+; helper: 0x0531, 0x09A1, 0x14C3
+; role: relational_operator_dispatch
+; target_table: 0x0D97
+func_relation_dispatch:
+	ori	0afh
+	push	psw
+	call	func_str_flush_guard
+	call	func_fac_require_int
+	pop	psw
+	xchg
+	pop	b
+	xthl
+	xchg
+	call	func_14c3
+	push	psw
+	call	func_fac_require_int
+	pop	psw
+	pop	b
+	mov	a,c
+	lxi	h,0d97h
+	jnz	label_0B35
+	ana	e
+	mov	c,a
+	mov	a,b
+	ana	d
+	pchl
+label_0B35:
+	ora	e
+	mov	c,a
+	mov	a,b
+	ora	d
+	pchl
 lbl_0b3a:
 	lxi	h,40fch
 	lda	var_type_flag
@@ -8947,14 +8998,35 @@ label_3657:
 label_3669:
 	sta	3742h
 	jmp	label_3692
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_366F:
-	defb	0EBh,69h,60h,7Eh,23h,0B6h,23h,0B6h
-	defb	23h,0B6h,6Fh,3Eh,0C9h,32h,37h,37h
-	defb	0CDh,2Bh,37h,7Ch,2Fh,32h,3Ah,37h
-	defb	7Dh,2Fh,32h,40h,37h,3Eh,0EBh,32h
-	defb	37h,37h,0EBh
-
+; func_selfmod_patch — Самомодифицируемый сборщик трамплина. Straight-line: `MOV L,C / MOV H,B / MOV A,M / INX H / ORA M ×3 / MOV L,A / MVI A,C9 / STA 0x3737 / CALL 0x372B / CMA / STA 0x373A / STA 0x3740 / MVI A,EB / STA 0x3737 / XCHG`. Патшит байты (`C9`=RET, `EB`=JMP) в ячейки 0x3737/373A/3740 — пары с патч-областью 0x3730. Вход динамический.
+; calls: 0x372B
+; patch_area: 0x3730 (residual gap)
+; patch_cells: 0x3737, 0x373A, 0x3740
+; role: selfmod_trampoline_patch
+func_selfmod_patch:
+	xchg
+	mov	l,c
+	mov	h,b
+	mov	a,m
+	inx	h
+	ora	m
+	inx	h
+	ora	m
+	inx	h
+	ora	m
+	mov	l,a
+	mvi	a,0c9h
+	sta	3737h
+	call	label_372B
+	mov	a,h
+	cma
+	sta	373ah
+	mov	a,l
+	cma
+	sta	3740h
+	mvi	a,0ebh
+	sta	3737h
+	xchg
 label_3692:
 	call	label_3728
 	inx	b
@@ -9053,6 +9125,7 @@ label_3728:
 	xchg
 	ldax	b
 	mov	l,a
+label_372B:
 	mvi	h,00h
 	jmp	label_372F
 ; Uncovered ROM bytes — neither code nor an RDB object
