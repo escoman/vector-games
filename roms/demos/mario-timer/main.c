@@ -196,11 +196,12 @@ static unsigned int  tick;
  * (x/y/поза не менялись) — после первого показа erase+draw можно пропустить. */
 static unsigned char draw_skipped;
 
-/* HUD частоты кадров: показанных (draw_frame) кадров за окно VBlank -> FPS. */
-static unsigned char fps_val = 50;            /* текущее показываемое число FPS (0..99) */
-static unsigned char hud_val = 0xFF;          /* значение FPS, уже напечатанное на экране */
-static unsigned int fps_vbl;                    /* VBlank накоплено в окне          */
-static unsigned int fps_frames;                 /* показанных кадров в окне          */
+/* HUD: сколько РАЗ за секунду удалась фактическая перерисовка спрайта Марио
+ * (erase+draw в draw_frame) за окно VBlank -> число в поле «FPS=». */
+static unsigned char fps_val = 0;             /* текущее показываемое число (0..99) */
+static unsigned char hud_val = 0xFF;          /* значение, уже напечатанное на экране */
+static unsigned int fps_vbl;                  /* VBlank накоплено в окне          */
+static unsigned int fps_draws;                /* фактических перерисовок в окне    */
 
 /* ------------------------------- УТИЛИТЫ -------------------------------- */
 
@@ -395,22 +396,24 @@ static unsigned char update_state(void)
     return ev;
 }
 
-/* Пересчитать окно измерений в текущее число FPS (0..99). */
+/* Пересчитать окно измерений в число перерисовок спрайта в секунду (0..99).
+ * Окно ~50 витков цикла (≈1 с при 50 Гц), пересчёт (×50/окно) даёт «в секунду». */
 static void fps_refresh(void)
 {
-    unsigned char v = (unsigned char)((fps_frames * 50u) / fps_vbl);
+    unsigned char v = (unsigned char)((fps_draws * 50u) / fps_vbl);
     if (v > 99u) v = 99u;                /* два разряда «NN», больше не влезает */
     fps_val = v;
 }
 
 /* Нарисовать ТОЛЬКО две цифры FPS (колонки 17,18; строка 0) в ФОНОВЫх
- * плоскостях A000/8000 белым (bg2) — младшие плоскости Mariо не трогает.
+ * плоскостях ЧЁРНЫМ (bg1 = плоскость A000, слот палитры 4 = RGB 0x00) —
+ * младшие плоскости Mariо не трогает.
  * Приставка «FPS=» статична и печатается один раз при инициализации. */
 static void hud_paint_digits(void)
 {
     gfx_active_planes = 0x0C;                 /* только фоновые биты 2..3 (A000/8000) */
-    gfx_put_char(17, 0, (char)('0' + fps_val / 10u), 8);
-    gfx_put_char(18, 0, (char)('0' + fps_val % 10u), 8);
+    gfx_put_char(17, 0, (char)('0' + fps_val / 10u), 4);
+    gfx_put_char(18, 0, (char)('0' + fps_val % 10u), 4);
     gfx_active_planes = 0x0F;
 }
 
@@ -418,11 +421,23 @@ static void hud_paint_digits(void)
  * 1) перезапустить «секундомер растра» (канал 2) на полный кадр — этим мы
  *    привязываем фазу счётчика к VBlank и весь кадр он линейно отсчитывает
  *    положение луча. Дешёвые 3 OUT в порт ВИ53 (не 02/0C) — растру не мешают.
- * 2) затем — покадровый звук. Он долгий, но пишет только ВИ53-порты каналов
+ * 2) затем — опрос матрицы клавиатуры (kbd_scan_now). Порт 0x03 = PIA1 PA —
+ *    ОН ЖЕ регистр скролла экрана: маски строк 0xFE..0x7F видны как сдвиг
+ *    растра, если написать их в видимой части. Здесь луч гарантированно в
+ *    гашении (прерывание приходит на VSync), прерывания закрыты — скан
+ *    целиком безопасен. Раньше скан был в main-цикле «сразу после VBlank»,
+ *    но тяжёлый кадр (медленный redraw при прыжке) переливался за следующий
+ *    VBlank, цикл мгновенно срывался в kbd_scan_now() посреди видимого
+ *    растра — экран дёргался прыжками скролла (тот же механизм, что лечили
+ *    в ducktales2: длинный ISR выталкивал scan из гашения). Теперь снимок
+ *    kbd_rows всегда свежий к моменту возврата из ISR, а main-цикл только
+ *    читает память (kbd_is_down/kbd_shift_state).
+ * 3) затем — покадровый звук. Он долгий, но пишет только ВИ53-порты каналов
  *    0/1 (не 02/0C), поэтому после timer_start безопасен. */
 static void mario_frame(void)
 {
     timer_start();                          /* старт нового кадра под луч      */
+    kbd_scan_now();                         /* матрица в гашении: скролл молчит */
     mario_sfx_frame();                      /* ровно 1 такт звука за VBlank   */
 }
 
@@ -527,7 +542,9 @@ static void draw_frame(void)
         dbg_draws++;
     }
 
-    /* 4. Запомнить пятно и позу для следующего обращения. */
+    /* 4. Запомнить пятно и позу для следующего обращения. Сюда доходим только
+     * когда перерисовка реально состоялась (скипы выше — return раньше). */
+    fps_draws++;                          /* в окно HUD: удалась ещё одна отрисовка */
     old_x = mx;
     old_y = (unsigned char)my;
     old_w = w_new;
@@ -558,8 +575,8 @@ static void init_background(void)
     draw_text_line(1,  y += 12, "");
     draw_text_line(1,  y += 12, "SMOOTH LIKE DBL, BUT NO SWAP");
 
-    /* FPS-приставка «FPS=» статична — печатаем один раз (bg-белый, plane 4/8). */
-    gfx_active_planes = 0x0C; gfx_print(13, 0, "FPS=", 8);
+    /* FPS-приставка «FPS=» статична — печатаем один раз (bg-чёрный, plane A000). */
+    gfx_active_planes = 0x0C; gfx_print(13, 0, "FPS=", 4);
     gfx_active_planes = 0x0F;
     hud_paint_digits(); hud_val = fps_val;
 }
@@ -602,7 +619,7 @@ void main(void)
     /* fixed timestep. Младший байт frame_count читаем одним LDA (atomic 8080). */
     fc_lo   = (volatile unsigned char *)&frame_count;
     last_fc = *fc_lo;
-    fps_vbl = 0; fps_frames = 0;
+    fps_vbl = 0; fps_draws = 0;
 
     for (;;) {
         /* Кадранс wake-фазы. Якорь — младший байт frame_count (один LDA,
@@ -614,9 +631,9 @@ void main(void)
         last_fc = *fc_lo;
 
         /* Ввод+физика — ДО спина ожидания луча (к VRAM не прикасаемся, позицию
-         * нужно знать заранее). Снимок матрицы неблокирующий. */
-        kbd_scan_now();                     /* обновить kbd_rows + shift, без halt */
-
+         * нужно знать заранее). Снятие матрицы делает ISR на VBlank (см.
+         * mario_frame — там kbd_scan_now в гашении); здесь только чтение
+         * сохранённого снимка kbd_rows/kbd_shift_state, порты не трогаем. */
         ev = update_state();                /* РОВНО 1 шаг физики на кадр */
         mario_sfx_running = running;        /* зеркало флага бега для ISR-движка */
 
@@ -627,10 +644,10 @@ void main(void)
 
         tick++;
 
-        /* Частота показанных кадров: виток = один shown-кадр (cadence замкнут
-         * на VBlank якорем выше). Окно ~50 витков. */
-        fps_frames++;
+        /* Окно измерения: виток цикла ≈ один VBlank-кадр (cadence замкнут
+         * якорем выше), но в число попадают только фактические перерисовки
+         * спрайта (fps_draws++ в draw_frame) — статичные сцены дают 0/с. */
         fps_vbl++;
-        if (fps_vbl >= 50) { fps_refresh(); fps_vbl = 0; fps_frames = 0; }
+        if (fps_vbl >= 50) { fps_refresh(); fps_vbl = 0; fps_draws = 0; }
     }
 }
