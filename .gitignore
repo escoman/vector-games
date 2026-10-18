@@ -54,4 +54,7 @@ roms/redesign/basic/asm/*.bin
 roms/redesign/basic/asm/*.o
 roms/redesign/basic/asm/*.sym
 
+# basic (Stage 10): артефакты сборки Makefile (basic_new.r0m покрыт глобальным *.r0m)
+roms/redesign/basic/src/basic_new.zx0
+
 !roms/redesign/putup/src/putup.rom
