@@ -76,6 +76,7 @@ func_rst_fac_sign:
 	rz
 	lda	var_fac
 	ral
+label_0031:
 	sbb	a
 	rnz
 	inr	a
@@ -2020,20 +2021,69 @@ lbl_0b3a:
 	cmp	d
 	rnc
 	jmp	label_0A28
+; func_str_compare_let — Сравнение строк и путь LET-конкатенации. Читает флаг типа 0x0C8C (`LDA 0C8C / ADC A / ORA A / JPO 1E6D` — ветвь concat), цикл сравнения `LDAX B / CMP M / INX H / INX B`, хвост (0x0B93) пишет результат `SHLD 404D / SHLD 404F`. Самомодиф. слот data_render_lut_preamble (0x40FC) ссылается на 0x0B4C.
+; concat_branch: 0x1E6D
+; result_cells: 0x404D, 0x404F
+; role: string_compare_let_concat
+; type_flag: 0x0C8C (var_type_flag)
+func_str_compare_let:
+	xra	a
+	ora	c
+	rar
+	pop	b
+	pop	d
+	push	psw
+	lda	var_type_flag
+	adc	a
+	ora	a
+	jpo	lbl_1e6d
+	lxi	h,0b93h
+	push	h
+	jz	func_14f0
+	xra	a
+	sta	var_type_flag
+	push	d
+	call	label_0FE5
+	mov	a,m
+	inx	h
+	inx	h
+	mov	c,m
+	inx	h
+	mov	b,m
+	pop	d
+	push	b
+	push	psw
+	call	func_0fe9
+	call	func_14d1
+	pop	psw
+	mov	d,a
+	pop	h
+label_0B7B:
+	mov	a,e
+	ora	d
+	rz
+	xra	a
+	ora	d
+	cma
+	rz
+	xra	a
+	cmp	e
+	inr	a
+	rnc
+	dcr	d
+	dcr	e
+	ldax	b
+	cmp	m
+	inx	h
+	inx	b
+	jz	label_0B7B
+	cmc
+	jmp	label_0031
 ; Uncovered ROM bytes — neither code nor an RDB object
-gap_0B4C:
-	defb	0AFh,0B1h,1Fh,0C1h,0D1h,0F5h,3Ah,8Ch
-	defb	0Ch,8Fh,0B7h,0E2h,6Dh,1Eh,21h,93h
-	defb	0Bh,0E5h,0CAh,0F0h,14h,0AFh,32h,8Ch
-	defb	0Ch,0D5h,0CDh,0E5h,0Fh,7Eh,23h,23h
-	defb	4Eh,23h,46h,0D1h,0C5h,0F5h,0CDh,0E9h
-	defb	0Fh,0CDh,0D1h,14h,0F1h,57h,0E1h,7Bh
-	defb	0B2h,0C8h,0AFh,0B2h,2Fh,0C8h,0AFh,0BBh
-	defb	3Ch,0D0h,15h,1Dh,0Ah,0BEh,23h,03h
-	defb	0CAh,7Bh,0Bh,3Fh,0C3h,31h,00h,3Ch
-	defb	8Fh,0C1h,0A0h,32h,50h,40h,0C8h,21h
-	defb	00h,00h,22h,4Dh,40h,21h,80h,81h
-	defb	22h,4Fh,40h,0C9h
+gap_0B93:
+	defb	3Ch,8Fh,0C1h,0A0h,32h,50h,40h,0C8h
+	defb	21h,00h,00h,22h,4Dh,40h,21h,80h
+	defb	81h,22h,4Fh,40h,0C9h
 
 lbl_0ba8:
 	mvi	d,5ah
@@ -5989,77 +6039,297 @@ label_2125:
 	mov	m,b
 	xchg
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2132:
+; data_pixel_read_dispatch — 16 LE-указателей в POINT-варианты (0x3C69..0x3C90). Индекс — номер комбинации 4 бит E000/C000/A000/8000 (bit-plane mask). Прыжок через PCHL после MVI A,idx / RAL / RAL / DAD H. В code.asm gap_2132 — только первые 32 байта таблица, остальное код (не покрыт CFG из-за динамического dispatch).
+data_pixel_read_dispatch:
 	defb	77h,3Ch,72h,3Ch,6Dh,3Ch,69h,3Ch
 	defb	8Fh,3Ch,8Ah,3Ch,85h,3Ch,81h,3Ch
 	defb	78h,3Ch,73h,3Ch,6Eh,3Ch,6Ah,3Ch
 	defb	90h,3Ch,8Bh,3Ch,86h,3Ch,82h,3Ch
-	defb	0E1h,0CDh,0D3h,3Bh,0C8h,0E5h,0CDh,11h
-	defb	23h,2Dh,7Dh,2Fh,0E6h,07h,0CAh,6Ch
-	defb	21h,0CDh,0D3h,3Bh,0C2h,5Bh,21h,0C3h
-	defb	87h,21h,0CDh,60h,3Ch,0C2h,79h,21h
-	defb	3Eh,0F8h,85h,6Fh,0C3h,6Ch,21h,0CDh
-	defb	0D3h,3Bh,0CAh,83h,21h,2Dh,0C3h,79h
-	defb	21h,78h,32h,0D7h,21h,2Ch,22h,06h
-	defb	00h,5Dh,0E1h,7Dh,93h,0CAh,0DEh,21h
-	defb	0E5h,5Fh,4Dh,0Dh,6Ch,06h,41h,0Ah
-	defb	67h,04h,0Ah,57h,1Dh,0CAh,0B2h,21h
-	defb	0B7h,0FAh,0B2h,21h,07h,0B2h,0FAh,0B0h
-	defb	21h,1Dh,0C2h,0A6h,21h,0FEh,1Dh,57h
-	defb	0CDh,81h,32h,16h,0FFh,0C3h,0C5h,21h
-	defb	3Eh,0F8h,83h,0D2h,0D1h,21h,5Fh,7Ah
-	defb	0CDh,84h,32h,3Eh,9Fh,84h,67h,0FAh
-	defb	0BAh,21h,26h,9Fh,0C3h,0BAh,21h,0C6h
-	defb	08h,0CAh,0DDh,21h,3Eh,00h,3Dh,57h
-	defb	0CDh,84h,32h,0E1h,2Ch,0CDh,0D3h,3Bh
-	defb	0C4h,11h,23h,0C2h,0DEh,21h,2Dh,22h
-	defb	0FEh,40h,3Ah,06h,00h,57h,24h,7Dh
-	defb	2Fh,0E6h,07h,0CAh,12h,22h,0CDh,0D3h
-	defb	3Bh,0CAh,09h,22h,01h,52h,21h,0E5h
-	defb	0C5h,0CDh,01h,23h,0C3h,4Ah,22h,7Dh
-	defb	0BAh,0CAh,7Dh,22h,2Dh,0C3h,0F1h,21h
-	defb	0D5h,0CDh,60h,3Ch,0D1h,3Ch,0C2h,2Eh
-	defb	22h,0B5h,0BAh,0CAh,7Dh,22h,3Eh,0F8h
-	defb	85h,0D2h,2Eh,22h,0BAh,0DAh,2Eh,22h
-	defb	6Fh,0C3h,12h,22h,0CDh,0D3h,3Bh,0C2h
-	defb	0FEh,21h,7Dh,0BAh,0CAh,7Dh,22h,2Dh
-	defb	0C3h,2Eh,22h,7Dh,2Fh,0E6h,07h,0CAh
-	defb	53h,22h,0CDh,0D3h,3Bh,0CAh,09h,22h
-	defb	7Dh,0BAh,0CAh,7Dh,22h,2Dh,0C3h,3Dh
-	defb	22h,0D5h,0CDh,60h,3Ch,0D1h,0C2h,6Eh
-	defb	22h,7Dh,0BAh,0CAh,7Dh,22h,3Eh,0F8h
-	defb	85h,0D2h,6Eh,22h,0BAh,0DAh,6Eh,22h
-	defb	6Fh,0C3h,53h,22h,0CDh,0D3h,3Bh,0CAh
-	defb	09h,22h,7Dh,0BAh,0CAh,7Dh,22h,2Dh
-	defb	0C3h,6Eh,22h,2Ah,0FEh,40h,25h,7Dh
-	defb	2Fh,0E6h,07h,0CAh,0A0h,22h,0CDh,0D3h
-	defb	3Bh,0CAh,99h,22h,01h,52h,21h,0E5h
-	defb	0C5h,0CDh,01h,23h,0C3h,0D4h,22h,7Dh
-	defb	0BAh,0C8h,2Dh,0C3h,81h,22h,0D5h,0CDh
-	defb	60h,3Ch,0D1h,3Ch,0C2h,0BAh,22h,0B5h
-	defb	0BAh,0C8h,3Eh,0F8h,85h,0D2h,0BAh,22h
-	defb	0BAh,0DAh,0BAh,22h,6Fh,0C3h,0A0h,22h
-	defb	0CDh,0D3h,3Bh,0C2h,8Eh,22h,7Dh,0BAh
-	defb	0C8h,2Dh,0C3h,0BAh,22h,7Dh,2Fh,0E6h
-	defb	07h,0CAh,0DBh,22h,0CDh,0D3h,3Bh,0CAh
-	defb	99h,22h,7Dh,0BAh,0C8h,2Dh,0C3h,0C7h
-	defb	22h,0D5h,0CDh,60h,3Ch,0D1h,0C2h,0F4h
-	defb	22h,7Dh,0BAh,0C8h,3Eh,0F8h,85h,0D2h
-	defb	0F4h,22h,0BAh,0DAh,0F4h,22h,6Fh,0C3h
-	defb	0DBh,22h,0CDh,0D3h,3Bh,0CAh,99h,22h
-	defb	7Dh,0BAh,0C8h,2Dh,0C3h,0F4h,22h,0E5h
-	defb	21h,00h,00h,39h,3Ah,0B4h,0Ch,94h
-	defb	0E1h,0D8h
 
+; func_paint_floodfill — Тело заливки PAINT (рекурсивный flood). Вход из func_cmd_paint (0x20B1) через trampoline `LXI D,2152 / PUSH D / RET` — потому CFG от 0x0000 сюда не доходит. Начало `POP H / CALL 0x3BD3(POINT) / RZ`; обход соседей, writes ВГД через 0x3281/0x3284; проверка стека 0x2301. Конец ровно на lbl_230c (442 байта).
+; calls: 0x3BD3 (POINT), 0x3C60 (planes), 0x3281/0x3284 (VRAM)
+; cfg_reachable: no (dynamic PUSH/RET entry)
+; entry: trampoline from func_cmd_paint (0x20B1)
+; role: paint_flood_fill_body
+func_paint_floodfill:
+	pop	h
+	call	func_3bd3
+	rz
+	push	h
+	call	label_2311
+label_215B:
+	dcr	l
+	mov	a,l
+	cma
+	ani	07h
+	jz	label_216C
+	call	func_3bd3
+	jnz	label_215B
+	jmp	label_2187
+label_216C:
+	call	func_point_read_planes
+	jnz	label_2179
+	mvi	a,0f8h
+	add	l
+	mov	l,a
+	jmp	label_216C
+label_2179:
+	call	func_3bd3
+	jz	label_2183
+	dcr	l
+	jmp	label_2179
+label_2183:
+	mov	a,b
+	sta	21d7h
+label_2187:
+	inr	l
+	shld	0006h
+	mov	e,l
+	pop	h
+	mov	a,l
+	sub	e
+	jz	label_21DE
+	push	h
+	mov	e,a
+	mov	c,l
+	dcr	c
+	mov	l,h
+	mvi	b,41h
+	ldax	b
+	mov	h,a
+	inr	b
+	ldax	b
+	mov	d,a
+	dcr	e
+	jz	label_21B2
+	ora	a
+	jm	label_21B2
+label_21A6:
+	rlc
+	ora	d
+	jm	label_21B0
+	dcr	e
+	jnz	label_21A6
+	cpi	1dh
+	mov	d,a
+label_21B2:
+	call	label_3281
+	mvi	d,0ffh
+	jmp	label_21C5
+label_21BA:
+	mvi	a,0f8h
+	add	e
+	jnc	label_21D1
+	mov	e,a
+	mov	a,d
+	call	func_3284
+label_21C5:
+	mvi	a,9fh
+	add	h
+	mov	h,a
+	jm	label_21BA
+	mvi	h,9fh
+	jmp	label_21BA
+label_21D1:
+	adi	08h
+	jz	label_21DD
+	mvi	a,00h
+	dcr	a
+	mov	d,a
+	call	func_3284
+label_21DD:
+	pop	h
+label_21DE:
+	inr	l
+	call	func_3bd3
+	cnz	label_2311
+	jnz	label_21DE
+	dcr	l
+	shld	40feh
+	lda	0006h
+	mov	d,a
+	inr	h
+label_21F1:
+	mov	a,l
+	cma
+	ani	07h
+	jz	label_2212
+	call	func_3bd3
+	jz	label_2209
+label_21FE:
+	lxi	b,2152h
+	push	h
+	push	b
+	call	label_2301
+	jmp	label_224A
+label_2209:
+	mov	a,l
+	cmp	d
+	jz	label_227D
+	dcr	l
+	jmp	label_21F1
+label_2212:
+	push	d
+	call	func_point_read_planes
+	pop	d
+	inr	a
+	jnz	label_222E
+	ora	l
+	cmp	d
+	jz	label_227D
+	mvi	a,0f8h
+	add	l
+	jnc	label_222E
+	cmp	d
+	jc	label_222E
+	mov	l,a
+	jmp	label_2212
+label_222E:
+	call	func_3bd3
+	jnz	label_21FE
+	mov	a,l
+	cmp	d
+	jz	label_227D
+	dcr	l
+	jmp	label_222E
+label_223D:
+	mov	a,l
+	cma
+	ani	07h
+	jz	label_2253
+	call	func_3bd3
+	jz	label_2209
+label_224A:
+	mov	a,l
+	cmp	d
+	jz	label_227D
+	dcr	l
+	jmp	label_223D
+label_2253:
+	push	d
+	call	func_point_read_planes
+	pop	d
+	jnz	label_226E
+	mov	a,l
+	cmp	d
+	jz	label_227D
+	mvi	a,0f8h
+	add	l
+	jnc	label_226E
+	cmp	d
+	jc	label_226E
+	mov	l,a
+	jmp	label_2253
+label_226E:
+	call	func_3bd3
+	jz	label_2209
+	mov	a,l
+	cmp	d
+	jz	label_227D
+	dcr	l
+	jmp	label_226E
+label_227D:
+	lhld	40feh
+	dcr	h
+label_2281:
+	mov	a,l
+	cma
+	ani	07h
+	jz	label_22A0
+	call	func_3bd3
+	jz	label_2299
+label_228E:
+	lxi	b,2152h
+	push	h
+	push	b
+	call	label_2301
+	jmp	label_22D4
+label_2299:
+	mov	a,l
+	cmp	d
+	rz
+	dcr	l
+	jmp	label_2281
+label_22A0:
+	push	d
+	call	func_point_read_planes
+	pop	d
+	inr	a
+	jnz	label_22BA
+	ora	l
+	cmp	d
+	rz
+	mvi	a,0f8h
+	add	l
+	jnc	label_22BA
+	cmp	d
+	jc	label_22BA
+	mov	l,a
+	jmp	label_22A0
+label_22BA:
+	call	func_3bd3
+	jnz	label_228E
+	mov	a,l
+	cmp	d
+	rz
+	dcr	l
+	jmp	label_22BA
+label_22C7:
+	mov	a,l
+	cma
+	ani	07h
+	jz	label_22DB
+	call	func_3bd3
+	jz	label_2299
+label_22D4:
+	mov	a,l
+	cmp	d
+	rz
+	dcr	l
+	jmp	label_22C7
+label_22DB:
+	push	d
+	call	func_point_read_planes
+	pop	d
+	jnz	label_22F4
+	mov	a,l
+	cmp	d
+	rz
+	mvi	a,0f8h
+	add	l
+	jnc	label_22F4
+	cmp	d
+	jc	label_22F4
+	mov	l,a
+	jmp	label_22DB
+label_22F4:
+	call	func_3bd3
+	jz	label_2299
+	mov	a,l
+	cmp	d
+	rz
+	dcr	l
+	jmp	label_22F4
+label_2301:
+	push	h
+	lxi	h,0000h
+	dad	sp
+	lda	0cb4h
+	sub	h
+	pop	h
+	rc
 lbl_230c:
 	mvi	e,0ah
 	jmp	func_error_raise
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2311:
-	defb	0F5h,0E5h,4Dh,6Ch,0CDh,7Ah,32h,0E1h
-	defb	0F1h,0C9h
-
+label_2311:
+	push	psw
+	push	h
+	mov	c,l
+	mov	l,h
+	call	func_render_glyph_column
+	pop	h
+	pop	psw
+	ret
 ; func_cmd_screen — SCREEN: переключение режимов экрана (SCREEN0/3/4 — ТЗ). Подтверждено телом (0x231B: CALL 20A6 / DCR C / JZ...). Токен 0xDC -> 0x231B (в 5b-доке адрес был верен).
 ; calls: ["CALL 0x20A6 — вычислить режим", "переконфигурировать ВГД"]
 ; params: HL = поток после SCREEN; режим (0/3/4).
@@ -6256,9 +6526,9 @@ label_2447:
 	pop	h
 	rst	func_rst_advance_text
 	jnz	label_2432
-	lda	3a23h
+	lda	var_scratch_high
 	ori	00h
-	sta	3a23h
+	sta	var_scratch_high
 	ei
 	ret
 ; data_error_messages — ПУЛ СООБЩЕНИЙ ОБ ОШИБКАХ и промптов: 23 строки с 0x2465 (плотный, каждая заканчивается байтом с bit7). КОДИРОВКА: коды 0x60..0x7E — КИРИЛЛИЦА (знакогенератор Stage 7), сообщения набраны русскими буквами (bez=БЕЗ, o{ibka=ОШИБКА); ключевые слова NEXT/FOR/DATA/ GOSUB/DEF — латиницей A..Z. Выводит func_error_raise (0x0083): LXI H,2465 + проход пула по bit7-терминаторам, индекс от кода ошибки (RAR/DCR). NEXT->строка0 подтверждён живьём (экран «NEXT БЕЗ FOR ОШИБКА»). Полный список и переводы — asm/messages.inc.
@@ -6347,12 +6617,30 @@ data_keyword_table:
 	defb	49h,4Eh,0D4h,43h,49h,52h,43h,4Ch
 	defb	0C5h
 
+; func_plot_column_step — Мелкий plot-хелпер (несколько точек входа: 0x26D8/0x26D9/0x26DD). Тело: `LXI H,2B57 / PUSH B / MOV C,M / MOV L,H / CALL 0x327A (func_render_glyph_column) / POP B / RET`. Хвост 0x26E5..0x26F6 — выравнивающий паддинг (нули). Вызывается из func_line_draw.
+; calls: 0x327A (func_render_glyph_column)
+; entry_points: 0x26D8, 0x26D9, 0x26DD
+; role: plot_column_step
+; tail: 0x26E5..0x26F6 padding
+func_plot_column_step:
+	nop
+label_26D8:
+	nop
+label_26D9:
+	lxi	h,2b57h
+	nop
+label_26DD:
+	push	b
+	mov	c,m
+	mov	l,e
+	call	func_render_glyph_column
+	pop	b
+	ret
 ; Uncovered ROM bytes — neither code nor an RDB object
-gap_26D7:
-	defb	00h,00h,21h,57h,2Bh,00h,0C5h,4Eh
-	defb	6Bh,0CDh,7Ah,32h,0C1h,0C9h,00h,00h
+gap_26E5:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
+	defb	00h,00h
 
 ; var_irq_stack_top — Вершина выделенного IRQ-стека: func_irq_handler делает LXI SP,0x26F7, чтобы обработка прерывания шла на своём стеке (п.18 change log — толерантность к прерыванию в любом коде).
 ; calls: []
@@ -6798,7 +7086,7 @@ label_2A00:
 	mov	a,d
 	sta	2a91h
 	sta	2aabh
-	sta	26d8h
+	sta	label_26D8
 	lda	2b57h
 	sub	c
 	jnc	label_2A18
@@ -6832,24 +7120,79 @@ label_2A28:
 	inr	b
 	xchg
 	pchl
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2A49:
-	defb	3Eh,80h,0CAh,73h,2Ah,0C3h,6Fh,2Ah
-	defb	7Dh,0D6h,00h,6Fh,9Ch,95h,67h,0E5h
-	defb	3Ah,8Ch,2Ah,3Dh,0C2h,6Ah,2Ah,0CDh
-	defb	0D9h,26h,0Dh,0C2h,7Dh,2Ah,0C3h,9Ch
-	defb	2Ah,3Eh,01h,0FAh,73h,2Ah,0CDh,0D8h
-	defb	26h,0AFh,32h,8Ch,2Ah,0Dh,0C2h,7Dh
-	defb	2Ah,0C3h,9Ch,2Ah,0E1h,0AFh,0ACh,0F2h
-	defb	51h,2Ah,3Eh,00h,85h,6Fh,8Ch,95h
-	defb	67h,0E5h,3Eh,00h,87h,0D2h,49h,2Ah
-	defb	00h,21h,57h,2Bh,0CDh,0DDh,26h,0Dh
-	defb	0C2h,7Dh,2Ah,05h,0C2h,7Dh,2Ah,0E1h
-	defb	21h,8Ch,2Ah,7Eh,87h,70h,0D2h,0B3h
-	defb	2Ah,0F5h,00h,21h,57h,2Bh,0CDh,0DDh
-	defb	26h,0F1h,0C4h,0D9h,26h,7Bh,32h,56h
-	defb	2Bh
-
+; func_line_draw — Прорисовка линии/дуги (Брезенхэм-подобный обход). Считает дельты по var 0x2B56/0x2B57, состояние-байт 0x2A8C (самомодиф.), зовёт plot-хелперы 0x26D8/0x26D9/0x26DD (см. func_plot_column_step). Циклы `DCR C / DCR B`, возврат по переполнению. Вход динамический (адрес рутины из вычислителя графических команд).
+; calls: 0x26D8/0x26D9/0x26DD (plot step)
+; role: line_arc_draw
+; state_cell: 0x2A8C (самомодифицируемый счётчик обхода)
+; vars: 0x2B56, 0x2B57 (текущая позиция)
+func_line_draw:
+	mvi	a,80h
+	jz	label_2A73
+	jmp	label_2A6F
+label_2A51:
+	mov	a,l
+	sui	00h
+	mov	l,a
+	sbb	h
+	sub	l
+	mov	h,a
+	push	h
+	lda	2a8ch
+	dcr	a
+	jnz	label_2A6A
+	call	label_26D9
+	dcr	c
+	jnz	label_2A7D
+	jmp	label_2A9C
+label_2A6A:
+	mvi	a,01h
+	jm	label_2A73
+label_2A6F:
+	call	label_26D8
+	xra	a
+label_2A73:
+	sta	2a8ch
+	dcr	c
+	jnz	label_2A7D
+	jmp	label_2A9C
+label_2A7D:
+	pop	h
+	xra	a
+	xra	h
+	jp	label_2A51
+	mvi	a,00h
+	add	l
+	mov	l,a
+	adc	h
+	sub	l
+	mov	h,a
+	push	h
+	mvi	a,00h
+	add	a
+	jnc	func_line_draw
+	nop
+	lxi	h,2b57h
+	call	label_26DD
+	dcr	c
+	jnz	label_2A7D
+label_2A9C:
+	dcr	b
+	jnz	label_2A7D
+	pop	h
+	lxi	h,2a8ch
+	mov	a,m
+	add	a
+	mov	m,b
+	jnc	label_2AB3
+	push	psw
+	nop
+	lxi	h,2b57h
+	call	label_26DD
+	pop	psw
+label_2AB3:
+	cnz	label_26D9
+	mov	a,e
+	sta	var_graph_xy
 label_2ABA:
 	pop	h
 	pop	d
@@ -7249,7 +7592,7 @@ lbl_2ce0:
 	call	func_kbd_matrix_prime
 	lxi	h,0ff00h
 	shld	2b3dh
-	lda	3a23h
+	lda	var_scratch_high
 	ora	a
 	jz	lbl_irq_resume
 	rrc
@@ -7915,35 +8258,51 @@ label_3179:
 	pop	h
 	pop	b
 	ret
+; func_coord_variant_table — JP-таблица вариантов координатной рутины: `JMP 3190 / JMP 319A / JMP 3253 / JMP 31A4 / CALL 319A`, далее тела `XCHG / LHLD 3BA9 или 3BA7 / XCHG / RST 20 / JP 3253`. Общий `RST 20` + две именованные RAM-ячейки 0x3BA9/0x3BA7 (кандидаты в var_). Вход через адрес из таблицы (PCHL/JP), поэтому не покрыт CFG.
+; layout: 5 JMP/CALL-векторов + тела
+; ram_cells: 0x3BA9, 0x3BA7
+; role: coord_transform_variant_table
+; shared_vector: RST 20 (0x0020)
+func_coord_variant_table:
+	jmp	label_3190
 ; Uncovered ROM bytes — neither code nor an RDB object
-gap_3181:
-	defb	0C3h,90h,31h,0C3h,9Ah,31h,0C3h,53h
-	defb	32h,0C3h,0A4h,31h,0CDh,9Ah,31h,0EBh
-	defb	2Ah,0A9h,3Bh,0E7h,0EBh,0F2h,53h,32h
-	defb	0C9h,0EBh,2Ah,0A7h,3Bh,0EBh,0E7h,0F2h
-	defb	53h,32h,0C9h,0EBh,2Ah,0A7h,3Bh,0EBh
-	defb	0E7h,0F8h,0EBh,2Ah,0A9h,3Bh,0E7h,0F8h
-	defb	0EBh,0C3h,53h,32h,0C3h,0C4h,31h,0C3h
-	defb	0D0h,31h,0C3h,53h,32h,0C3h,0DAh,31h
-	defb	0CDh,0D0h,31h,50h,59h,0E5h,2Ah,0A7h
-	defb	3Bh,0E7h,0E1h,0F2h,53h,32h,0C9h,0E5h
-	defb	50h,59h,2Ah,0A9h,3Bh,0EBh,0C3h,0CAh
-	defb	31h,0E5h,50h,59h,2Ah,0A9h,3Bh,0EBh
-	defb	0E7h,0E1h,0F8h,0E5h,50h,59h,2Ah,0A7h
-	defb	3Bh,0E7h,0E1h,0F8h,0C3h,53h,32h,0C3h
-	defb	0FFh,31h,0C3h,06h,32h,0C3h,53h,32h
-	defb	0C3h,0Dh,32h,0CDh,06h,32h,0EBh,2Ah
-	defb	0A7h,3Bh,0C3h,94h,31h,0EBh,2Ah,0A9h
-	defb	3Bh,0C3h,9Eh,31h,0EBh,2Ah,0A9h,3Bh
-	defb	0EBh,0E7h,0F8h,0EBh,2Ah,0A7h,3Bh,0E7h
-	defb	0EBh,0F8h,0C3h,53h,32h,0C3h,2Dh,32h
-	defb	0C3h,36h,32h,0C3h,53h,32h,0C3h,40h
-	defb	32h,0CDh,36h,32h,0E5h,50h,59h,2Ah
-	defb	0A9h,3Bh,0C3h,0CAh,31h,0E5h,50h,59h
-	defb	2Ah,0A7h,3Bh,0EBh,0C3h,0CAh,31h,0E5h
-	defb	50h,59h,2Ah,0A7h,3Bh,0EBh,0E7h,0E1h
-	defb	0F8h,0E5h,50h,59h,2Ah,0A9h,3Bh,0E7h
-	defb	0E1h,0F8h
+gap_3184:
+	defb	0C3h,9Ah,31h,0C3h,53h,32h,0C3h,0A4h
+	defb	31h,0CDh,9Ah,31h
+
+label_3190:
+	xchg
+	lhld	3ba9h
+	rst	func_rst_cmp_dehl
+	xchg
+	jp	label_3253
+	ret
+; Uncovered ROM bytes — neither code nor an RDB object
+gap_319A:
+	defb	0EBh,2Ah,0A7h,3Bh,0EBh,0E7h,0F2h,53h
+	defb	32h,0C9h,0EBh,2Ah,0A7h,3Bh,0EBh,0E7h
+	defb	0F8h,0EBh,2Ah,0A9h,3Bh,0E7h,0F8h,0EBh
+	defb	0C3h,53h,32h,0C3h,0C4h,31h,0C3h,0D0h
+	defb	31h,0C3h,53h,32h,0C3h,0DAh,31h,0CDh
+	defb	0D0h,31h,50h,59h,0E5h,2Ah,0A7h,3Bh
+	defb	0E7h,0E1h,0F2h,53h,32h,0C9h,0E5h,50h
+	defb	59h,2Ah,0A9h,3Bh,0EBh,0C3h,0CAh,31h
+	defb	0E5h,50h,59h,2Ah,0A9h,3Bh,0EBh,0E7h
+	defb	0E1h,0F8h,0E5h,50h,59h,2Ah,0A7h,3Bh
+	defb	0E7h,0E1h,0F8h,0C3h,53h,32h,0C3h,0FFh
+	defb	31h,0C3h,06h,32h,0C3h,53h,32h,0C3h
+	defb	0Dh,32h,0CDh,06h,32h,0EBh,2Ah,0A7h
+	defb	3Bh,0C3h,94h,31h,0EBh,2Ah,0A9h,3Bh
+	defb	0C3h,9Eh,31h,0EBh,2Ah,0A9h,3Bh,0EBh
+	defb	0E7h,0F8h,0EBh,2Ah,0A7h,3Bh,0E7h,0EBh
+	defb	0F8h,0C3h,53h,32h,0C3h,2Dh,32h,0C3h
+	defb	36h,32h,0C3h,53h,32h,0C3h,40h,32h
+	defb	0CDh,36h,32h,0E5h,50h,59h,2Ah,0A9h
+	defb	3Bh,0C3h,0CAh,31h,0E5h,50h,59h,2Ah
+	defb	0A7h,3Bh,0EBh,0C3h,0CAh,31h,0E5h,50h
+	defb	59h,2Ah,0A7h,3Bh,0EBh,0E7h,0E1h,0F8h
+	defb	0E5h,50h,59h,2Ah,0A9h,3Bh,0E7h,0E1h
+	defb	0F8h
 
 label_3253:
 	push	b
@@ -7981,6 +8340,7 @@ func_render_glyph_column:
 	ldax	b
 label_3280:
 	mov	d,a
+label_3281:
 	lxi	b,2000h
 func_3284:
 	ora	m
@@ -8849,8 +9209,8 @@ var_irq_frame_counter:
 var_kbd_strobe:
 	defb	10h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3A23:
+; var_scratch_high — RAM scratch: 407 байт нолей сразу после var_kbd_strobe 0x3A22. В boot не инициализируется, автостарт-демо не трогает (memory_diff не даёт патчей здесь). Заводим как variable — единственный корректный тип для «не-код» области в RDB-модели.
+var_scratch_high:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
@@ -9012,16 +9372,59 @@ lbl_3c58:
 	rz
 	cpi	00h
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3C60:
-	defb	0E5h,5Ch,26h,41h,56h,0EBh,01h,00h
-	defb	20h,7Eh,00h,5Fh,09h,7Eh,00h,0A3h
-	defb	5Fh,09h,7Eh,00h,0A3h,5Fh,09h,7Eh
-	defb	00h,0A3h,0C2h,92h,3Ch,3Eh,0A0h,84h
-	defb	67h,7Eh,00h,5Fh,09h,7Eh,00h,0A3h
-	defb	5Fh,09h,7Eh,00h,0A3h,5Fh,09h,7Eh
-	defb	00h,0A3h,0E1h,0C9h
-
+; func_point_read_planes — POINT-читалка 4 плоскостей (E000/C000/A000/8000). Пролог `PUSH H / MOV E,H / MVI H,41 / MOV D,M` читает page_h из LUT 0x4100, затем `LXI B,2000 / DAD B` — stride плоскостей; комбинирование битов `MOV A,M / NOP / ANA E`. Это ровно цели 0x3C69..0x3C93 из таблицы data_pixel_read_dispatch (Stage 11). Подтверждение Stage 7 §8.3.
+; dispatch_table: data_pixel_read_dispatch (0x2132)
+; lut: data_x_to_page_h_lut (0x4100)
+; role: point_read_4_planes
+; stride: 0x2000 (LXI B,2000)
+func_point_read_planes:
+	push	h
+	mov	e,h
+	mvi	h,41h
+	mov	d,m
+	xchg
+	lxi	b,2000h
+	mov	a,m
+	nop
+	mov	e,a
+	dad	b
+	mov	a,m
+	nop
+	ana	e
+	mov	e,a
+	dad	b
+	mov	a,m
+	nop
+	ana	e
+	mov	e,a
+	dad	b
+	mov	a,m
+	nop
+	ana	e
+	jnz	label_3C92
+	mvi	a,0a0h
+	add	h
+	mov	h,a
+	mov	a,m
+	nop
+	mov	e,a
+	dad	b
+	mov	a,m
+	nop
+	ana	e
+	mov	e,a
+	dad	b
+	mov	a,m
+	nop
+	ana	e
+	mov	e,a
+	dad	b
+	mov	a,m
+	nop
+	ana	e
+label_3C92:
+	pop	h
+	ret
 lbl_3c94:
 	stc
 	mov	a,b
@@ -9342,8 +9745,8 @@ lbl_3ef6:
 	sub	b
 	sta	3d8dh
 	jmp	label_3EB9
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3F00:
+; data_bit_clear_masks — Маски «погасить биты сверху» для LINE/CIRCLE (32б = 16 слов). Паттерн FF*8 | 00FC 007E 003F 801F | C00F E007 F003 F801 | FF 7F 3F 1F 0F 07 03 01. Используется в паре 0x2ABF/0x327A (расчистка бита = CMA / ANA D / MOV M,A).
+data_bit_clear_masks:
 	defb	0FFh,0FFh,0FFh,0FFh,0FFh,0FFh,0FFh,0FFh
 	defb	00h,0FCh,00h,7Eh,00h,3Fh,80h,1Fh
 	defb	0C0h,0Fh,0E0h,07h,0F0h,03h,0F8h,01h
@@ -9430,8 +9833,8 @@ var_input_buffer:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3F87:
+; var_scratch_tail — RAM scratch: 113 байт нолей сразу после var_input_buffer (0x3F77+16). Резерв под строку ввода / временные значения. В диффе не подтверждён (автостарт-демо не трогает).
+var_scratch_tail:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
@@ -9608,73 +10011,79 @@ lbl_40f5:
 	mov	e,a
 	xchg
 	jmp	label_2BE3
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_40FC:
-	defb	4Ch,0Bh,00h,00h,80h,80h,80h,80h
-	defb	80h,80h,80h,80h,81h,81h,81h,81h
-	defb	81h,81h,81h,81h,82h,82h,82h,82h
-	defb	82h,82h,82h,82h,83h,83h,83h,83h
-	defb	83h,83h,83h,83h,84h,84h,84h,84h
-	defb	84h,84h,84h,84h,85h,85h,85h,85h
-	defb	85h,85h,85h,85h,86h,86h,86h,86h
-	defb	86h,86h,86h,86h,87h,87h,87h,87h
-	defb	87h,87h,87h,87h,88h,88h,88h,88h
-	defb	88h,88h,88h,88h,89h,89h,89h,89h
-	defb	89h,89h,89h,89h,8Ah,8Ah,8Ah,8Ah
-	defb	8Ah,8Ah,8Ah,8Ah,8Bh,8Bh,8Bh,8Bh
-	defb	8Bh,8Bh,8Bh,8Bh,8Ch,8Ch,8Ch,8Ch
-	defb	8Ch,8Ch,8Ch,8Ch,8Dh,8Dh,8Dh,8Dh
-	defb	8Dh,8Dh,8Dh,8Dh,8Eh,8Eh,8Eh,8Eh
-	defb	8Eh,8Eh,8Eh,8Eh,8Fh,8Fh,8Fh,8Fh
-	defb	8Fh,8Fh,8Fh,8Fh,90h,90h,90h,90h
-	defb	90h,90h,90h,90h,91h,91h,91h,91h
-	defb	91h,91h,91h,91h,92h,92h,92h,92h
-	defb	92h,92h,92h,92h,93h,93h,93h,93h
-	defb	93h,93h,93h,93h,94h,94h,94h,94h
-	defb	94h,94h,94h,94h,95h,95h,95h,95h
-	defb	95h,95h,95h,95h,96h,96h,96h,96h
-	defb	96h,96h,96h,96h,97h,97h,97h,97h
-	defb	97h,97h,97h,97h,98h,98h,98h,98h
-	defb	98h,98h,98h,98h,99h,99h,99h,99h
-	defb	99h,99h,99h,99h,9Ah,9Ah,9Ah,9Ah
-	defb	9Ah,9Ah,9Ah,9Ah,9Bh,9Bh,9Bh,9Bh
-	defb	9Bh,9Bh,9Bh,9Bh,9Ch,9Ch,9Ch,9Ch
-	defb	9Ch,9Ch,9Ch,9Ch,9Dh,9Dh,9Dh,9Dh
-	defb	9Dh,9Dh,9Dh,9Dh,9Eh,9Eh,9Eh,9Eh
-	defb	9Eh,9Eh,9Eh,9Eh,9Fh,9Fh,9Fh,9Fh
-	defb	9Fh,9Fh,9Fh,9Fh,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h,80h,40h,20h,10h
-	defb	08h,04h,02h,01h
+; data_render_lut_preamble — ПРЕАМБУЛА пары LUT (0x4100/0x4200). 4C 0B = little-endian 0x0B4C — самомодифицируемый слот (код-адрес в области LET/eval, gap_0B4C). Два нулевых байта — padding/second operand. Физически примыкает к page_h-LUT, потому заводится отдельным 4-байтным объектом.
+data_render_lut_preamble:
+	defb	4Ch,0Bh,00h,00h
+
+; data_x_to_page_h_lut — LUT: пиксельный X (0..255) -> старший байт адреса плоскости VRAM = 0x80 + (X>>3). Плоскости E000/C000/A000/8000 покрываются инкрементом H на 0x20 (=2000h stride) после ADD D. Читается в func_render_glyph (0x2BEB) и func_3bd3 (POINT) через MVI H,41 / MOV D,M. Подтверждает Stage 7 §8.3 (открытый пункт §7 закрыт).
+data_x_to_page_h_lut:
+	defb	80h,80h,80h,80h,80h,80h,80h,80h
+	defb	81h,81h,81h,81h,81h,81h,81h,81h
+	defb	82h,82h,82h,82h,82h,82h,82h,82h
+	defb	83h,83h,83h,83h,83h,83h,83h,83h
+	defb	84h,84h,84h,84h,84h,84h,84h,84h
+	defb	85h,85h,85h,85h,85h,85h,85h,85h
+	defb	86h,86h,86h,86h,86h,86h,86h,86h
+	defb	87h,87h,87h,87h,87h,87h,87h,87h
+	defb	88h,88h,88h,88h,88h,88h,88h,88h
+	defb	89h,89h,89h,89h,89h,89h,89h,89h
+	defb	8Ah,8Ah,8Ah,8Ah,8Ah,8Ah,8Ah,8Ah
+	defb	8Bh,8Bh,8Bh,8Bh,8Bh,8Bh,8Bh,8Bh
+	defb	8Ch,8Ch,8Ch,8Ch,8Ch,8Ch,8Ch,8Ch
+	defb	8Dh,8Dh,8Dh,8Dh,8Dh,8Dh,8Dh,8Dh
+	defb	8Eh,8Eh,8Eh,8Eh,8Eh,8Eh,8Eh,8Eh
+	defb	8Fh,8Fh,8Fh,8Fh,8Fh,8Fh,8Fh,8Fh
+	defb	90h,90h,90h,90h,90h,90h,90h,90h
+	defb	91h,91h,91h,91h,91h,91h,91h,91h
+	defb	92h,92h,92h,92h,92h,92h,92h,92h
+	defb	93h,93h,93h,93h,93h,93h,93h,93h
+	defb	94h,94h,94h,94h,94h,94h,94h,94h
+	defb	95h,95h,95h,95h,95h,95h,95h,95h
+	defb	96h,96h,96h,96h,96h,96h,96h,96h
+	defb	97h,97h,97h,97h,97h,97h,97h,97h
+	defb	98h,98h,98h,98h,98h,98h,98h,98h
+	defb	99h,99h,99h,99h,99h,99h,99h,99h
+	defb	9Ah,9Ah,9Ah,9Ah,9Ah,9Ah,9Ah,9Ah
+	defb	9Bh,9Bh,9Bh,9Bh,9Bh,9Bh,9Bh,9Bh
+	defb	9Ch,9Ch,9Ch,9Ch,9Ch,9Ch,9Ch,9Ch
+	defb	9Dh,9Dh,9Dh,9Dh,9Dh,9Dh,9Dh,9Dh
+	defb	9Eh,9Eh,9Eh,9Eh,9Eh,9Eh,9Eh,9Eh
+	defb	9Fh,9Fh,9Fh,9Fh,9Fh,9Fh,9Fh,9Fh
+
+; data_x_to_bit_mask_lut — LUT: пиксельный X -> битовая маска 0x80 >> (X & 7). Парная к data_x_to_page_h_lut. Установка бита (чернила) = OR, сброс (расчистка) = AND ~mask. Читается там же: INR H / MOV B,M. Подтверждает Stage 7 §8.3.
+data_x_to_bit_mask_lut:
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
+	defb	80h,40h,20h,10h,08h,04h,02h,01h
 
 
 ; --- Symbols at addresses owned by another unit ---
@@ -9712,6 +10121,7 @@ func_amp	equ	15FAh
 label_1B50	equ	1B50h
 label_1E36	equ	1E36h
 func_cmd_cload	equ	1EDAh
+label_21B0	equ	21B0h
 var_play_pos	equ	245Fh
 var_play_active	equ	27C8h
 label_27F8	equ	27F8h

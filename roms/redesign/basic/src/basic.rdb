@@ -1628,6 +1628,19 @@
       "type": "label"
     },
     {
+      "address": "0x0B4C",
+      "comment": "func_str_compare_let — Сравнение строк и путь LET-конкатенации. Читает флаг типа 0x0C8C (`LDA 0C8C / ADC A / ORA A / JPO 1E6D` — ветвь concat), цикл сравнения `LDAX B / CMP M / INX H / INX B`, хвост (0x0B93) пишет результат `SHLD 404D / SHLD 404F`. Самомодиф. слот data_render_lut_preamble (0x40FC) ссылается на 0x0B4C.",
+      "name": "func_str_compare_let",
+      "properties": {
+        "concat_branch": "0x1E6D",
+        "result_cells": "0x404D, 0x404F",
+        "role": "string_compare_let_concat",
+        "type_flag": "0x0C8C (var_type_flag)"
+      },
+      "size": 92,
+      "type": "function"
+    },
+    {
       "address": "0x0BA8",
       "name": "lbl_0ba8",
       "properties": {
@@ -4691,6 +4704,33 @@
       "type": "function"
     },
     {
+      "address": "0x2132",
+      "comment": "data_pixel_read_dispatch — 16 LE-указателей в POINT-варианты (0x3C69..0x3C90). Индекс — номер комбинации 4 бит E000/C000/A000/8000 (bit-plane mask). Прыжок через PCHL после MVI A,idx / RAL / RAL / DAD H. В code.asm gap_2132 — только первые 32 байта таблица, остальное код (не покрыт CFG из-за динамического dispatch).",
+      "name": "data_pixel_read_dispatch",
+      "properties": {
+        "entries": "16",
+        "role": "pixel_read_dispatch_table",
+        "stride": "2",
+        "targets_hi": "0x3C93",
+        "targets_lo": "0x3C69"
+      },
+      "size": 32,
+      "type": "table"
+    },
+    {
+      "address": "0x2152",
+      "comment": "func_paint_floodfill — Тело заливки PAINT (рекурсивный flood). Вход из func_cmd_paint (0x20B1) через trampoline `LXI D,2152 / PUSH D / RET` — потому CFG от 0x0000 сюда не доходит. Начало `POP H / CALL 0x3BD3(POINT) / RZ`; обход соседей, writes ВГД через 0x3281/0x3284; проверка стека 0x2301. Конец ровно на lbl_230c (442 байта).",
+      "name": "func_paint_floodfill",
+      "properties": {
+        "calls": "0x3BD3 (POINT), 0x3C60 (planes), 0x3281/0x3284 (VRAM)",
+        "cfg_reachable": "no (dynamic PUSH/RET entry)",
+        "entry": "trampoline from func_cmd_paint (0x20B1)",
+        "role": "paint_flood_fill_body"
+      },
+      "size": 442,
+      "type": "function"
+    },
+    {
       "address": "0x230C",
       "name": "lbl_230c",
       "properties": {
@@ -4852,6 +4892,19 @@
       "type": "table"
     },
     {
+      "address": "0x26D7",
+      "comment": "func_plot_column_step — Мелкий plot-хелпер (несколько точек входа: 0x26D8/0x26D9/0x26DD). Тело: `LXI H,2B57 / PUSH B / MOV C,M / MOV L,H / CALL 0x327A (func_render_glyph_column) / POP B / RET`. Хвост 0x26E5..0x26F6 — выравнивающий паддинг (нули). Вызывается из func_line_draw.",
+      "name": "func_plot_column_step",
+      "properties": {
+        "calls": "0x327A (func_render_glyph_column)",
+        "entry_points": "0x26D8, 0x26D9, 0x26DD",
+        "role": "plot_column_step",
+        "tail": "0x26E5..0x26F6 padding"
+      },
+      "size": 32,
+      "type": "function"
+    },
+    {
       "address": "0x26F7",
       "comment": "var_irq_stack_top — Вершина выделенного IRQ-стека: func_irq_handler делает LXI SP,0x26F7, чтобы обработка прерывания шла на своём стеке (п.18 change log — толерантность к прерыванию в любом коде).",
       "name": "var_irq_stack_top",
@@ -4960,6 +5013,19 @@
         "role": "cmd_line",
         "writes": "[\"отрезок (или прямоугольник BF/BS) в ВГД\"]"
       },
+      "type": "function"
+    },
+    {
+      "address": "0x2A49",
+      "comment": "func_line_draw — Прорисовка линии/дуги (Брезенхэм-подобный обход). Считает дельты по var 0x2B56/0x2B57, состояние-байт 0x2A8C (самомодиф.), зовёт plot-хелперы 0x26D8/0x26D9/0x26DD (см. func_plot_column_step). Циклы `DCR C / DCR B`, возврат по переполнению. Вход динамический (адрес рутины из вычислителя графических команд).",
+      "name": "func_line_draw",
+      "properties": {
+        "calls": "0x26D8/0x26D9/0x26DD (plot step)",
+        "role": "line_arc_draw",
+        "state_cell": "0x2A8C (самомодифицируемый счётчик обхода)",
+        "vars": "0x2B56, 0x2B57 (текущая позиция)"
+      },
+      "size": 113,
       "type": "function"
     },
     {
@@ -5728,6 +5794,19 @@
       "type": "variable"
     },
     {
+      "address": "0x3181",
+      "comment": "func_coord_variant_table — JP-таблица вариантов координатной рутины: `JMP 3190 / JMP 319A / JMP 3253 / JMP 31A4 / CALL 319A`, далее тела `XCHG / LHLD 3BA9 или 3BA7 / XCHG / RST 20 / JP 3253`. Общий `RST 20` + две именованные RAM-ячейки 0x3BA9/0x3BA7 (кандидаты в var_). Вход через адрес из таблицы (PCHL/JP), поэтому не покрыт CFG.",
+      "name": "func_coord_variant_table",
+      "properties": {
+        "layout": "5 JMP/CALL-векторов + тела",
+        "ram_cells": "0x3BA9, 0x3BA7",
+        "role": "coord_transform_variant_table",
+        "shared_vector": "RST 20 (0x0020)"
+      },
+      "size": 210,
+      "type": "function"
+    },
+    {
       "address": "0x327A",
       "comment": "func_render_glyph_column — ЗАПИСЬ ОДНОЙ КОЛОНКИ ГЛИФА в 4 плоскости VRAM (был func_327a). Берёт байт колонки, раскладывает биты по плоскостям: LXI B,2000h / DAD B — шаг между плоскостями (0x8000=plane3..0xE000=plane0). Вызывается 5 раз из func_render_glyph (по одной на колонку).",
       "name": "func_render_glyph_column",
@@ -5876,6 +5955,18 @@
       "type": "variable"
     },
     {
+      "address": "0x3A23",
+      "comment": "var_scratch_high — RAM scratch: 407 байт нолей сразу после var_kbd_strobe 0x3A22. В boot не инициализируется, автостарт-демо не трогает (memory_diff не даёт патчей здесь). Заводим как variable — единственный корректный тип для «не-код» области в RDB-модели.",
+      "name": "var_scratch_high",
+      "properties": {
+        "init": "none",
+        "region": "high-RAM workspace",
+        "role": "ram_scratch_workspace"
+      },
+      "size": 407,
+      "type": "variable"
+    },
+    {
       "address": "0x3BBA",
       "name": "lbl_3bba",
       "properties": {
@@ -5994,6 +6085,19 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x3C60",
+      "comment": "func_point_read_planes — POINT-читалка 4 плоскостей (E000/C000/A000/8000). Пролог `PUSH H / MOV E,H / MVI H,41 / MOV D,M` читает page_h из LUT 0x4100, затем `LXI B,2000 / DAD B` — stride плоскостей; комбинирование битов `MOV A,M / NOP / ANA E`. Это ровно цели 0x3C69..0x3C93 из таблицы data_pixel_read_dispatch (Stage 11). Подтверждение Stage 7 §8.3.",
+      "name": "func_point_read_planes",
+      "properties": {
+        "dispatch_table": "data_pixel_read_dispatch (0x2132)",
+        "lut": "data_x_to_page_h_lut (0x4100)",
+        "role": "point_read_4_planes",
+        "stride": "0x2000 (LXI B,2000)"
+      },
+      "size": 52,
+      "type": "function"
     },
     {
       "address": "0x3C94",
@@ -6287,6 +6391,18 @@
       "type": "label"
     },
     {
+      "address": "0x3F00",
+      "comment": "data_bit_clear_masks — Маски «погасить биты сверху» для LINE/CIRCLE (32б = 16 слов). Паттерн FF*8 | 00FC 007E 003F 801F | C00F E007 F003 F801 | FF 7F 3F 1F 0F 07 03 01. Используется в паре 0x2ABF/0x327A (расчистка бита = CMA / ANA D / MOV M,A).",
+      "name": "data_bit_clear_masks",
+      "properties": {
+        "consumer": "graf_clear_bit (0x2ABF / 0x327A)",
+        "layout": "16 слов x 2 байта",
+        "role": "bit_clear_pattern_lut"
+      },
+      "size": 32,
+      "type": "data"
+    },
+    {
       "address": "0x3F20",
       "name": "func_3f20",
       "properties": {
@@ -6380,6 +6496,18 @@
         "writes": "[\"отредактированная строка/токены (0x3F77..)\"]"
       },
       "size": 16,
+      "type": "variable"
+    },
+    {
+      "address": "0x3F87",
+      "comment": "var_scratch_tail — RAM scratch: 113 байт нолей сразу после var_input_buffer (0x3F77+16). Резерв под строку ввода / временные значения. В диффе не подтверждён (автостарт-демо не трогает).",
+      "name": "var_scratch_tail",
+      "properties": {
+        "init": "none",
+        "region": "high-RAM workspace",
+        "role": "ram_scratch_tail"
+      },
+      "size": 113,
       "type": "variable"
     },
     {
@@ -6534,6 +6662,42 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x40FC",
+      "comment": "data_render_lut_preamble — ПРЕАМБУЛА пары LUT (0x4100/0x4200). 4C 0B = little-endian 0x0B4C — самомодифицируемый слот (код-адрес в области LET/eval, gap_0B4C). Два нулевых байта — padding/second operand. Физически примыкает к page_h-LUT, потому заводится отдельным 4-байтным объектом.",
+      "name": "data_render_lut_preamble",
+      "properties": {
+        "points_to": "0x0B4C",
+        "preamble_le": "4C 0B 00 00",
+        "role": "render_lut_preamble"
+      },
+      "size": 4,
+      "type": "data"
+    },
+    {
+      "address": "0x4100",
+      "comment": "data_x_to_page_h_lut — LUT: пиксельный X (0..255) -> старший байт адреса плоскости VRAM = 0x80 + (X>>3). Плоскости E000/C000/A000/8000 покрываются инкрементом H на 0x20 (=2000h stride) после ADD D. Читается в func_render_glyph (0x2BEB) и func_3bd3 (POINT) через MVI H,41 / MOV D,M. Подтверждает Stage 7 §8.3 (открытый пункт §7 закрыт).",
+      "name": "data_x_to_page_h_lut",
+      "properties": {
+        "consumer": "func_render_glyph (0x2BEB) / func_3bd3 (POINT)",
+        "formula": "0x80 + (X>>3)",
+        "role": "pixel_x_to_vram_page_hi"
+      },
+      "size": 256,
+      "type": "data"
+    },
+    {
+      "address": "0x4200",
+      "comment": "data_x_to_bit_mask_lut — LUT: пиксельный X -> битовая маска 0x80 >> (X & 7). Парная к data_x_to_page_h_lut. Установка бита (чернила) = OR, сброс (расчистка) = AND ~mask. Читается там же: INR H / MOV B,M. Подтверждает Stage 7 §8.3.",
+      "name": "data_x_to_bit_mask_lut",
+      "properties": {
+        "consumer": "func_render_glyph (0x2BEB) / func_3bd3 (POINT)",
+        "formula": "0x80 >> (X & 7)",
+        "role": "pixel_x_to_bit_mask"
+      },
+      "size": 256,
+      "type": "data"
     },
     {
       "address": "0x7EE1",
