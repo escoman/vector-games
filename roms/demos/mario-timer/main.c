@@ -32,16 +32,20 @@
  *
  * Марио набран кубиками 8x8, поза = 3 клетки x 4. Шаг 4 px (x кратно 4); при x
  * кратном 8 — побайтовый вывод (frac=0), при сдвиге на 4 px — тетрадный сдвиговый
- * вывод (frac=4). Вывод спрайта — 8080-ассемблер (src/render.asm): спрайт закодирован
+ * вывод (frac=4). Вывод спрайта — 8080-ассемблер (include/render.asm): спрайт закодирован
  * КОЛОНОЧНО, столбец VRAM проходится линейно (данные +3, адрес -1), стирание —
  * копирование из относительного RAM-патча (шаг колонки = ROWS).
+ * Раскладка файлов: include/ — всё, что участвует в конечной сборке (код
+ * render.asm/sfx_mario.c и генерируемые данные .inc); assets/ — исходники-«сырьё»
+ * (xcf/png/txt/mp3), из которых эти .inc добываются скриптами tools/*.py и которые
+ * можно удалить, не сломав сборку. main.c — точка входа, в корне.
  */
 
 #include "v06.h"
 
-#include "src/tiles.inc"      /* screen_pal4, tile_ground */
-#include "src/sprites.inc"    /* mario_frames[N][2], mario_turn[2][2], mario_run[3][2], MARIO_* */
-#include "src/background.inc" /* bg_tileset, bg_map, BG_*  (фон из mario-8cols) */
+#include "tiles.inc"      /* screen_pal4, tile_ground */
+#include "sprites.inc"    /* mario_frames[N][2], mario_turn[2][2], mario_run[3][2], MARIO_* */
+#include "background.inc" /* bg_tileset, bg_map, BG_*  (фон из mario-8cols) */
 
 /* Примитивы вывода из render.asm (по идиомам mario-16cols/mario.asm).
  * Параметры передаются через глобалы rs_* ниже — без стековых аргументов. */
@@ -54,7 +58,7 @@ extern void mario_zero_sprite(void);      /* стирание = обнулени
  * VBlank), timer_start_sync — пуск после EI/HLT, timer_read/timer_elapsed —
  * позиция луча, timer_wait — спин до нужного значения счётчика. */
 
-/* Звук (src/sfx_mario.c): прыжок/приземление — тон на КР580ВИ53 (vi53.c,
+/* Звук (include/sfx_mario.c): прыжок/приземление — тон на КР580ВИ53 (vi53.c,
  * frame-exact таблица делителей). Шумогенератора у ВИ53 нет, поэтому ветра при беге нет.
  * КАНАЛЫ ЗВУКА = 0 и 1; канал 2 зарезервирован под таймер и звуком не трогается.
  * Покадровый движок живёт в прерывании (frame_handler = mario_frame). */

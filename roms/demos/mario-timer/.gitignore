@@ -5,9 +5,8 @@
 zcc_opt.def
 *.c.asm
 
-# Генерируемые ассеты: ИСТОЧНИК — src/raccoon_mario.png + tools/gen_assets.py
-src/sprites.inc
-src/tiles.inc
+# include/*.inc — результат tools/gen_*.py (сырьё в assets/), но держим в git:
+# конечная сборка должна работать без сырья и без запуска генераторов.
 
 # Sidecar отладчика (MCP)
 *.rdb

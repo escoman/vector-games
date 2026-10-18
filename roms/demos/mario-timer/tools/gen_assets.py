@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """gen_assets.py — ассеты демки Mario double-buffering (Вектор-06Ц).
 
-Источник: src/raccoon_mario.png — лист поз енота-Марио (все влево), нарезанный
+Источник: assets/raccoon_mario.png — лист поз енота-Марио (все влево), нарезанный
 автором; сверху встроено имя «Raccoon Mario», внизу запечены ID поз 01..21.
 Берём первые 8 поз (они же 8 фаз из raccoon_mario.txt), каждая ~24x46 px.
+Результат — include/sprites.inc и include/tiles.inc (подключаемые данные сборки).
 
 Экран демки — 256x256x16, но на каждый буфер (пару плоскостей) приходится
 4 цвета: логический индекс пикселя 0..3. Палитра сконцентрирована на Марио
@@ -36,8 +37,10 @@ import glob
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, '..', 'src')
-SHEET = os.path.join(SRC, 'raccoon_mario.png')
+ROOT = os.path.join(HERE, '..')
+ASSETS = os.path.join(ROOT, 'assets')    # сырьё: лист поз png
+OUT = os.path.join(ROOT, 'include')      # результат: данные для сборки
+SHEET = os.path.join(ASSETS, 'raccoon_mario.png')
 # Тайл-донор поверхности — из соседней демки mario-8cols.
 DONOR_TILES = os.path.abspath(os.path.join(
     HERE, '..', '..', 'mario-8cols', 'src', 'tiles'))
@@ -250,8 +253,9 @@ def main():
         op, b0, b1 = encode_cell([row])[0]
         tile += [b0, b1]
 
-    # ---- запись src/sprites.inc ----
-    with open(os.path.join(SRC, 'sprites.inc'), 'w') as f:
+    # ---- запись include/sprites.inc ----
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, 'sprites.inc'), 'w') as f:
         f.write('/* автоген: tools/gen_assets.py — НЕ править руками */\n\n')
         f.write('#define MARIO_NPOSE   %d\n' % MAIN_POSES)
         f.write('#define MARIO_HCELLS  %d\n' % HCELLS)
@@ -276,11 +280,11 @@ def main():
             f.write('    { mario%d_l, mario%d_r },\n' % (pi + 1, pi + 1))
         f.write('};\n')
 
-    # ---- запись src/tiles.inc (палитра + тайл) ----
+    # ---- запись include/tiles.inc (палитра + тайл) ----
     # Тайл 8x8 = 16 байт; повторяем 4 раза (64 байта), чтобы asm-цикл
     # fg_run (32 ряда, шаг 2) читал из валидных данных без wrap-логики.
     tile_rep = tile * 4
-    with open(os.path.join(SRC, 'tiles.inc'), 'w') as f:
+    with open(os.path.join(OUT, 'tiles.inc'), 'w') as f:
         f.write('/* автоген: tools/gen_assets.py — НЕ править руками */\n\n')
         f.write('/* 4 цвета экрана: 0=голубой(небо), 1=красный, 2=розовый, 3=чёрный */\n')
         f.write('static const unsigned char screen_pal4[4] = {\n    %s\n};\n\n'

@@ -13,7 +13,7 @@
     вниз, бит 0x80 = левый пиксель);
   * формы составных объектов — `prefabs.json` (grid глобальных индексов тайлов).
 
-Результат — src/background.inc: компактный bg_tileset (только использованные
+Результат — include/background.inc: компактный bg_tileset (только использованные
 тайлы, перенумерованные локально; локальный 0 = пустое небо) и bg_map[32*32]
 локальных индексов (порядок row-major: [row*BG_COLS + col]).
 
@@ -24,8 +24,9 @@ import re
 import json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, '..', 'src')
-M8 = os.path.abspath(os.path.join(HERE, '..', '..', 'mario-8cols', 'src'))
+ROOT = os.path.join(HERE, '..')
+OUT = os.path.join(ROOT, 'include')      # результат: .inc для сборки
+M8 = os.path.abspath(os.path.join(ROOT, '..', 'mario-8cols', 'src'))
 LEVEL_INC = os.path.join(M8, 'level.inc')
 PREFABS_JSON = os.path.join(M8, 'prefabs.json')
 
@@ -116,8 +117,9 @@ def main():
     local_map = [[(remap[grid[r][c]] if grid[r][c] != 0 else 0)
                   for c in range(BG_COLS)] for r in range(BG_ROWS)]
 
-    # ---- запись src/background.inc ----
-    with open(os.path.join(SRC, 'background.inc'), 'w') as f:
+    # ---- запись include/background.inc ----
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, 'background.inc'), 'w') as f:
         f.write('/* автоген: tools/gen_bg.py (фон из mario-8cols, сплит по '
                 'плоскостям). НЕ править руками */\n\n')
         f.write('#define BG_COLS %d\n' % BG_COLS)
