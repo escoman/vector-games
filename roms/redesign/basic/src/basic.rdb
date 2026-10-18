@@ -3994,6 +3994,19 @@
       "type": "function"
     },
     {
+      "address": "0x1823",
+      "comment": "data_exp_poly_coeffs — Ряд коэффициентов EXP. Указатель грузится `LXI H,1823h` (в `func_exp`, 0x17E3) перед вызовом evaluator-а `func_1844`. Массив 4-байтных float; блок кончается ровно на `func_1844` (0x1844) — внутри только данные.",
+      "name": "data_exp_poly_coeffs",
+      "properties": {
+        "consumer": "func_1844 (Horner series evaluator)",
+        "loaded_by": "lxi h,1823h (func_exp 0x17E3)",
+        "record": "4-byte packed float (sign/exp + 3 mantissa)",
+        "role": "exp_polynomial_coefficients"
+      },
+      "size": 33,
+      "type": "data"
+    },
+    {
       "address": "0x1844",
       "links": [
         "0x14AB"
@@ -4098,6 +4111,19 @@
       "type": "function"
     },
     {
+      "address": "0x1901",
+      "comment": "data_sin_atn_poly_coeffs — Ряд коэффициентов SIN/ATN. Грузится `LXI H,1901h`, затем `LXI H,1905h`/`LXI H,1909h` — то есть 0x1905=0x1901+4 и 0x1909=0x1901+8 это отдельные 4-байтные члены того же массива (нормировка/первый член ряда). Блок кончается ровно на `func_tan` (0x191E). RDB `func_atn` уже отмечает `reads: константа 0x1901`.",
+      "name": "data_sin_atn_poly_coeffs",
+      "properties": {
+        "consumer": "func_1844 / func_atn",
+        "loaded_by": "lxi h,1901h / 1905h / 1909h (func_sin/func_atn)",
+        "record": "4-byte packed float",
+        "role": "sin_atn_polynomial_coefficients"
+      },
+      "size": 29,
+      "type": "data"
+    },
+    {
       "address": "0x191E",
       "comment": "func_tan — TAN = SIN/COS: сохраняет SIN, вычисляет COS, делит (JMP 13B6).",
       "links": [
@@ -4151,6 +4177,20 @@
         "seed_source": "debug_analyze_code"
       },
       "type": "label"
+    },
+    {
+      "address": "0x1958",
+      "comment": "data_atn_poly_coeffs — Главный ряд коэффициентов ATN. Внутри `func_atn` (0x1933): `lbl_194e: LXI H,1958h / CALL func_1844`. Экспоненты членов монотонно растут (0x78,0x7B,0x7C,0x7D,0x7D,0x7E,0x7E,0x7F) с мантиссами `AA AA`/`00 00 00` — классический полином арктангенса. Блок кончается ровно на `func_peek` (0x197D). RDB `func_atn`: `reads: константы 0x1901/0x1958`.",
+      "name": "data_atn_poly_coeffs",
+      "properties": {
+        "consumer": "func_1844 (Horner series evaluator)",
+        "exponent_seq": "0x78..0x7F (monotonic)",
+        "loaded_by": "lxi h,1958h in func_atn (lbl_194e)",
+        "record": "4-byte packed float",
+        "role": "atn_polynomial_coefficients"
+      },
+      "size": 37,
+      "type": "data"
     },
     {
       "address": "0x197D",

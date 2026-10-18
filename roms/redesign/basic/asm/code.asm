@@ -4527,8 +4527,8 @@ func_exp:
 	pop	b
 	mov	c,d
 	jmp	func_12a6
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_1823:
+; data_exp_poly_coeffs — Ряд коэффициентов EXP. Указатель грузится `LXI H,1823h` (в `func_exp`, 0x17E3) перед вызовом evaluator-а `func_1844`. Массив 4-байтных float; блок кончается ровно на `func_1844` (0x1844) — внутри только данные.
+data_exp_poly_coeffs:
 	defb	08h,40h,2Eh,94h,74h,70h,4Fh,2Eh
 	defb	77h,6Eh,02h,88h,7Ah,0E6h,0A0h,2Ah
 	defb	7Ch,50h,0AAh,0AAh,7Eh,0FFh,0FFh,7Fh
@@ -4679,8 +4679,8 @@ label_18ED:
 	cnc	func_14a3
 	lxi	h,1909h
 	jmp	func_1844
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_1901:
+; data_sin_atn_poly_coeffs — Ряд коэффициентов SIN/ATN. Грузится `LXI H,1901h`, затем `LXI H,1905h`/`LXI H,1909h` — то есть 0x1905=0x1901+4 и 0x1909=0x1901+8 это отдельные 4-байтные члены того же массива (нормировка/первый член ряда). Блок кончается ровно на `func_tan` (0x191E). RDB `func_atn` уже отмечает `reads: константа 0x1901`.
+data_sin_atn_poly_coeffs:
 	defb	0DBh,0Fh,49h,81h,00h,00h,00h,7Fh
 	defb	05h,0BAh,0D7h,1Eh,86h,64h,26h,99h
 	defb	87h,58h,34h,23h,87h,0E0h,5Dh,0A5h
@@ -4734,8 +4734,8 @@ lbl_194e:
 	call	func_1844
 	lxi	h,1901h
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_1958:
+; data_atn_poly_coeffs — Главный ряд коэффициентов ATN. Внутри `func_atn` (0x1933): `lbl_194e: LXI H,1958h / CALL func_1844`. Экспоненты членов монотонно растут (0x78,0x7B,0x7C,0x7D,0x7D,0x7E,0x7E,0x7F) с мантиссами `AA AA`/`00 00 00` — классический полином арктангенса. Блок кончается ровно на `func_peek` (0x197D). RDB `func_atn`: `reads: константы 0x1901/0x1958`.
+data_atn_poly_coeffs:
 	defb	09h,4Ah,0D7h,3Bh,78h,02h,6Eh,84h
 	defb	7Bh,0FEh,0C1h,2Fh,7Ch,74h,31h,9Ah
 	defb	7Dh,84h,3Dh,5Ah,7Dh,0C8h,7Fh,91h
