@@ -3,12 +3,18 @@
 Экспортёр подставляет имена RDB в операнды, где может. Модуль сверяет три
 вещи — все они арифметика интервалов и поиск по тексту, без разбора кодов:
 
-1. числовой операнд попадает под RDB-объект ⇒ имя могло бы стоять здесь, но
-   стоит число (`should_be_symbolic`);
+1. числовой операнд стоит ровно по началу RDB-объекта в адресной позиции
+   (`jmp`/`call`/`lxi`/`lda`/`sta`/…) ⇒ имя могло бы стоять здесь без риска
+   для байтов, но стоит число (`should_be_symbolic`). Операнды
+   внутри объекта (смещение от начала, напр. `lda var_fac+1`) и операнды-
+   константы (`cpi 20h`, `mvi 00h`) не флагуются: подстановка имени
+   изменила бы байт;
 2. именованный операнд нигде в дереве не определён ⇒ сборка упадёт
    (`undefined_symbol`);
-3. метка дерева не соответствует ни одному имени RDB ⇒ экспорт и база
-   разошлись (`orphan_label`).
+3. метка дерева не соответствует ни одному объекту RDB ни по имени, ни по
+   адресу ⇒ экспорт и база разошлись (`orphan_label`). Метки, которые
+   экспортёр синтезировал по адресу (`func_003b`), а в RDB тот же блок лежит
+   под семантическим именем, расхождением не считаются.
 
 `defb/defw/defs/incbin` в расчёт не берутся: там числа — это данные, а не
 адреса.
@@ -35,6 +41,45 @@ SYNTH_RE = re.compile(r"^(?:label|gap|sub|unk|tmp)_[0-9A-Fa-f_]*\Z",
                       re.IGNORECASE)
 # Операнды в скобках — адрес может стоять и внутри: (0100h), (data_table)
 PAREN_RE = re.compile(r"^\((?P<inner>.*)\)$")
+# Хекс-суффикс синтезированной по адресу метки (`func_003b`, `lbl_1A2B`).
+ADDR_SUFFIX_RE = re.compile(r"_([0-9A-Fa-f]{2,6})\Z")
+# Мнемоники, чей операнд — адрес/вектор памяти (16 бит). Только они годятся в
+# `should_be_symbolic`: у инструкций с 8-битным операндом-константой
+# (mvi/cpi/adi/sui/…) число — это значение, и совпадение с адресом объекта
+# случайно; подстановка имени исказила бы байт. `lxi` — загрузка адреса в
+# регистровую пару, адресный.
+ADDRESS_MNEMONICS = frozenset({
+    "jmp", "jp", "call", "rst",
+    "jz", "jnz", "jc", "jnc", "jpe", "jpo", "jm",   # безуслов./условные переходы
+    "cz", "cnz", "cc", "cnc", "cp", "cm",            # условные вызовы
+    "lda", "sta", "lhld", "shld", "lxi",              # прямая адресация
+})
+
+
+def at_start(objects, address):
+    """Объект, начинающийся ровно по адресу (или None).
+
+    Только такой перевод числа в имя байт-точен: значение символа равно
+    operandу. Внутренние смещения (`var_fac+1`) сюда не попадают.
+    """
+    for obj in objects:
+        if obj.address == address:
+            return obj
+    return None
+
+
+def label_address(name, entry, objects):
+    """Адрес, которому соответствует метка дерева (или None).
+
+    Для `equ` берём значение; для синтезированных экспортёром имён читаем
+    хекс-суффикс (`func_003b` → 0x003B).
+    """
+    if entry.get("kind") == "equ":
+        value = export_asm.asm_number(entry.get("value", ""))
+        if value is not None:
+            return value
+    match = ADDR_SUFFIX_RE.search(name)
+    return int(match.group(1), 16) if match else None
 
 
 def unwrap(item):
@@ -44,27 +89,25 @@ def unwrap(item):
 
 
 def load_objects(rdb_path):
+    """Именованные объекты RDB.
+
+    Размер не требуется: обе проверки (`should_be_symbolic`, `orphan_label`)
+    сверяют точный адрес, где значим лишь факт `объект начинается по адресу`.
+    Прежний фильтр по `size_known` выбрасывал функции нулевого размера и
+    глушил адресную сверку.
+    """
     rdb = Rdb.load(rdb_path)
-    return [item for item in rdb.objects if item.name and item.size_known]
-
-
-def name_at(objects, address):
-    """Объект, начинающийся по адресу, либо накрывающий его диапазон."""
-    best = None
-    for obj in objects:
-        if obj.address == address:
-            return obj
-        if obj.contains(address) and obj.type in ("function", "code", "data",
-                                                  "table", "string", "music",
-                                                  "variable", "label"):
-            best = best or obj
-    return best
+    return [item for item in rdb.objects if item.name]
 
 
 def check_operands(out_dir, objects, origin, rom_size, built=None):
     findings = []
     built = built or export_asm.built_files(out_dir)
     defined = export_asm.defined_symbols(out_dir, built)
+    # z80asm не различает регистр символов, а экспортёр пишет EQU-алиасы в
+    # нижнем регистре, а ссылки — в верхнем. Сверяем определённость без учёта
+    # регистра, иначе уже определённые метки ложно падают в `undefined_symbol`.
+    defined_ci = {key.lower() for key in defined}
     lo, hi = to_addr(origin), to_addr(origin) + int(rom_size) - 1
     stats = {"numeric": 0, "symbolic": 0, "numeric_in_window": 0}
     for name in built:
@@ -86,21 +129,27 @@ def check_operands(out_dir, objects, origin, rom_size, built=None):
                     stats["numeric"] += 1
                     if lo <= value <= hi:
                         stats["numeric_in_window"] += 1
-                        obj = name_at(objects, value)
-                        if obj is not None and not UNKNOWN_RE.search(obj.name):
-                            findings.append({
-                                "rule": "should_be_symbolic", "severity": "info",
-                                "file": name, "line": number,
-                                "detail": "%s %s: число %s попадает под %s (%s)"
-                                          % (directive, item, addr_hex(value),
-                                             obj.name, obj.type),
-                                "suggestion": "заменить на %s" % obj.name})
+                        # Имя уместно лишь там, где операнд — адрес, а не
+                        # константа, и не нуль (литерал / нулевой указатель).
+                        if (directive.lower() in ADDRESS_MNEMONICS
+                                and value != 0):
+                            obj = at_start(objects, value)
+                            if (obj is not None
+                                    and not UNKNOWN_RE.search(obj.name)):
+                                findings.append({
+                                    "rule": "should_be_symbolic",
+                                    "severity": "info",
+                                    "file": name, "line": number,
+                                    "detail": "%s %s: число %s = начало %s (%s)"
+                                              % (directive, item, addr_hex(value),
+                                                 obj.name, obj.type),
+                                    "suggestion": "заменить на %s" % obj.name})
                     continue
                 if IDENT_RE.match(item):
                     if item.upper() in export_asm.RESERVED_OPERANDS:
                         continue          # регистр/условие — это не ссылка
                     stats["symbolic"] += 1
-                    if item not in defined:
+                    if item.lower() not in defined_ci:
                         findings.append({
                             "rule": "undefined_symbol", "severity": "error",
                             "file": name, "line": number,
@@ -112,22 +161,29 @@ def check_operands(out_dir, objects, origin, rom_size, built=None):
 
 
 def check_labels(out_dir, objects, defined):
-    """Метки экспорта ↔ имена RDB: обе стороны расхождения полезны."""
+    """Метки экспорта ↔ объекты RDB: сверка и по имени, и по адресу."""
     findings = []
     names = {obj.name for obj in objects}
+    starts = {obj.address: obj.name for obj in objects}
     used = set()
     for name in sorted(defined):
         if UNKNOWN_RE.search(name) or SYNTH_RE.search(name):
             continue
-        if name not in names:
-            findings.append({"rule": "orphan_label", "severity": "warn",
-                             "file": defined[name]["file"],
-                             "line": defined[name]["line"],
-                             "detail": "метка %s есть в ASM, но нет в RDB" % name,
-                             "suggestion": "создать объект в RDB или снять "
-                                           "расхождение перезаписью экспорта"})
-        else:
+        if name in names:
             used.add(name)
+            continue
+        # Имени нет в RDB — но метка могла быть синтезирована экспортёром по
+        # адресу, под которым в RDB лежит объект с другим (семантическим) именем.
+        addr = label_address(name, defined[name], objects)
+        if addr is not None and addr in starts:
+            used.add(starts[addr])      # объект выгружен, просто под иным именем
+            continue
+        findings.append({"rule": "orphan_label", "severity": "warn",
+                         "file": defined[name]["file"],
+                         "line": defined[name]["line"],
+                         "detail": "метка %s есть в ASM, но нет в RDB" % name,
+                         "suggestion": "создать объект в RDB или снять "
+                                       "расхождение перезаписью экспорта"})
     unused = sorted(names - used)
     for name in unused[:40]:
         findings.append({"rule": "rdb_name_not_emitted", "severity": "info",
