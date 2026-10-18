@@ -1,0 +1,2 @@
+10 PRINT &O10
+RUN

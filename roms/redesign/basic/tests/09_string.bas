@@ -1,0 +1,3 @@
+10 PRINT "HI"
+20 PRINT "OK"
+RUN
