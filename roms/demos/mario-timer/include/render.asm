@@ -22,7 +22,9 @@
 ;   _rs_p1    то же для плоскости бита1 (вес 2: C000/8000) = p0 - 0x2000
 ;   _rs_s0    старт относительного патча для _rs_p0 (плоскость бита0), erase/capture
 ;   _rs_s1    старт относительного патча для _rs_p1 (плоскость бита1), erase/capture
-;   _rs_cols  знаковый счётчик колонок: от -wcells до 0
+;   _rs_zero  режим вывода: 0 = рисовать payload (draw), 1 = занулять те же
+;             адреса, что рисовал draw (sparse erase). Стирание = вызов
+;             mario_draw_sprite с _rs_zero=1 на данных ПРОШЛОГО спрайта.
 ;   _rs_frac  суб-клеточный сдвиг: 0 = выровнен по сетке 8px (быстрый путь,
 ;             побайтовая композиция), 4 = сдвиг вправо на 4px — каждая тетрада
 ;             выходного байта собирается из двух соседних клеток спрайта
@@ -43,8 +45,8 @@
 ;
 
         SECTION code_clib
+        PUBLIC  _mario_init_renderer
         PUBLIC  _mario_draw_sprite
-        PUBLIC  _mario_zero_sprite
         PUBLIC  _mario_fill_ground
         PUBLIC  _mario_copy_AB
 
@@ -52,8 +54,8 @@
         EXTERN  _rs_data
         EXTERN  _rs_p0
         EXTERN  _rs_p1
-        EXTERN  _rs_cols
         EXTERN  _rs_frac
+        EXTERN  _rs_zero
 
 ROWS EQU 32                 ; строк спрайта (hcells=4 x CELL=8)
 
@@ -71,16 +73,15 @@ fg_cur:     defw    0         ; курсор колонки E000 (+0x100 на к
 
 ; --- рабочие переменные сдвига тетрады (mario_draw_sprite, frac=4) ---
 ;   Плитный стейджинг: ds_buf хранит ОДИН тайл сдвинутой колонки (24 B =
-;   8 троек op/b0/b1), заполняется 24 SBYTE-макросами: HL прибит к &ds_t,
-;   OR идёт mov m,a / add m (без push/pop), запись в ds_buf — фиксированные
-;   sta+ofs (HL больше не курсор), счётчик строк не нужен.
+;   8 троек op/b0/b1), заполняется 24 SBYTE-макросами. HL — выходной курсор:
+;   промежуточная тетрада записывается в (HL), ADD M объединяет половины,
+;   итог перезаписывает слот; затем HL идёт к следующему байту.
 ds_ncols:   defb    0         ; wcells (ширина спрайта в клетках)
 ds_cc:      defb    0         ; счётчик колонок вывода (wcells+1 .. 0)
-ds_t:       defb    0         ; временный накопитель nibble-OR (через ADD M)
 ds_buf:     defs    24        ; staged-тайл (8 троек), формат = payload записи
         ; Нулевой блок-клетка (96 байт = 4 нуля-тайла 8x8) для отсутствующих
         ; соседей: клетка слева от 0-й и cur для spill-колонки справа.
-        ; Обнуляется в начале drs_start (секция bss при --no-crt не зануляется).
+        ; Очищается один раз через mario_init_renderer(); дальше только читается.
 zcol:       defs    96
 
 ; --- рабочие переменные тайл-префаба (mario_draw_sprite) ---
@@ -111,6 +112,24 @@ ds_pres_p:  defw    0      ; курсор prev pres-байтов (шаг +1/та
 ds_pres_c:  defw    0      ; курсор cur pres-байтов
 pres_buf:   defs    (MAXWC + 2) * 4
 tab2:       defs    (MAXWC + 2) * 8
+
+; ---------------------------------------------------------------
+; void mario_init_renderer(void)
+; Инициализировать нулевые тайлы один раз. BSS не обнуляется при --no-crt,
+; но zcol после инициализации только читается, поэтому очищать его на каждом
+; frac=4 кадре не нужно.
+; ---------------------------------------------------------------
+        SECTION code_clib
+_mario_init_renderer:
+        lxi     h, zcol
+        mvi     a, 0
+        mvi     c, 96
+mir_zcol:
+        mov     m, a
+        inx     h
+        dcr     c
+        jnz     mir_zcol
+        ret
 
 ; ---------------------------------------------------------------
 ; void mario_draw_sprite(void)
@@ -180,20 +199,27 @@ tv0:    shld    dt_v0
         jnc     tv1
         dcr     h
 tv1:    shld    dt_v1
-        ; --- плоскость 0 ---
+        ; --- вывод тайла: draw = payload, erase = 0 (тот же footprint) ---
+        lda     _rs_zero
+        ora     a
+        jnz     dr_tile_z
         lhld    dt_rec
         inx     h
         xchg                          ; DE = данные тайла (pos+1)
         lhld    dt_v0
-        mvi     b,8
         call    dr_p0
-        ; --- плоскость 1 ---
         lhld    dt_rec
         inx     h
         xchg
         lhld    dt_v1
-        mvi     b,8
         call    dr_p1
+        jmp     dr_tile_next
+dr_tile_z:
+        lhld    dt_v0
+        call    dr_pz                 ; erase: занулить 8 строк без чтения данных
+        lhld    dt_v1
+        call    dr_pz
+dr_tile_next:
         ; --- следующая запись ---
         lhld    dt_rec
         lxi     d,25
@@ -325,50 +351,217 @@ rb_done:
 ; dr_p0 / dr_p1 — внутренний цикл одной колонки, вызывается и из
 ; быстрого пути (dr_col), и из сдвинутого (после набора ds_buf).
 ; Вход: HL = VRAM-курсор (верх колонки), DE = данные колонки,
-;   B = счётчик строк (ROWS=32).
+;   B не используется.
 ; ЧИСТАЯ ЗАПИСЬ (без чтения VRAM): в схеме сплита плоскостей Mario живёт
 ;   в младших плоскостях E000/C000, которые ПРЕДВАРИТЕЛЬНО обнулены
-;   (_mario_zero_sprite / gfx_fill_planes), поэтому cur==0 и полная
+;   (erase через dr_pz / gfx_fill_planes), поэтому cur==0 и полная
 ;   композиция res = cur ^ ((cur ^ bit) & op) выроджается в res = bit & op.
 ;   Убрали 2 чтения (xra m / mov a,m) и лишний ALU на байт -> ~2x быстрее
 ;   dr-цикла; весь erase+draw успевает закончиться до прихода луча.
 ; HL уменьшается (y+1), DE +3/строку.
-; Выход: HL = низ колонки, DE = следующая колонка, B=0; Z=1.
+; Выход: HL = низ колонки, DE = следующая колонка, B сохраняется; Z-флаг не является частью интерфейса.
 ; ---------------------------------------------------------------
 dr_p0:
-        ldax    d                     ; op
-        mov     c,a                   ; C = op
-        inx     d                     ; -> b0
-        ldax    d                     ; b0
-        inx     d                     ; -> b1 (в этом проходе не нужен)
-        ana     c                     ; b0 & op  (cur==0 -> это и есть результат)
-        mov     m,a                   ; запись в плоскость (без чтения VRAM)
-        inx     d                     ; -> op следующей строки
-        dcx     h                     ; y+1 => адрес -1
-        dcr     b
-        jnz     dr_p0
+        ; Ровно 8 строк: развёрнутый цикл устраняет DCR B/JNZ на каждой строке.
+        ; row 0
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 1
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 2
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 3
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 4
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 5
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 6
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
+        ; row 7
+        ldax    d
+        mov     c,a
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        inx     d
+        dcx     h
         ret
 
 dr_p1:
-        ldax    d                     ; op
+        ; Ровно 8 строк: развёрнутый цикл.
+        ; row 0
+        ldax    d
         mov     c,a
-        inx     d                     ; пропуск b0
-        inx     d                     ; -> b1
-        ldax    d                     ; b1
-        inx     d                     ; -> op следующей строки
-        ana     c                     ; b1 & op
-        mov     m,a                   ; запись (без чтения VRAM)
-        dcx     h                     ; y+1 => адрес -1
-        dcr     b
-        jnz     dr_p1
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 1
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 2
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 3
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 4
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 5
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 6
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ; row 7
+        ldax    d
+        mov     c,a
+        inx     d
+        inx     d
+        ldax    d
+        inx     d
+        ana     c
+        mov     m,a
+        dcx     h
+        ret
+
+; ---------------------------------------------------------------
+; dr_pz — erase-вариант внутреннего цикла одной колонки: занулить 8 строк
+;   тайла в одной плоскости (шаг адреса -1, как dr_p0/dr_p1). НЕ читает
+;   данные тайла; footprint (адреса) точно совпадает с dr_p0/dr_p1, поэтому
+;   стирание убирает ровно то, что поставил прошлый draw.
+; Вход: HL = VRAM-курсор верха тайла. Выход: HL = низ тайла.
+; ---------------------------------------------------------------
+dr_pz:
+        mvi     a, 0
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
+        mov     m, a
+        dcx     h
         ret
 
 ; ---------------------------------------------------------------
 ; SBYTE — макро-конструктор одного байта сдвинутой колонки.
 ;   A = (cur >> 4) | (prev << 4);  запись в ds_buf+ofs;  DE,BC += 1.
-; HL должен указывать на &ds_t и НЕ двигается в makro'е —
-; therefore OR идёт напрямую (mov m,a пишет prev<<4 в (HL),
-; add m читает обратно ds_t и складывает с cur>>4), без push/pop.
+; HL указывает на следующий байт ds_buf. Временный high nibble кладётся
+; прямо в выходной слот; ADD M объединяет непересекающиеся тетрады, затем
+; результат перезаписывает тот же слот и HL двигается вперёд.
 ; ---------------------------------------------------------------
 SBYTE   MACRO   ofs
         ldax    b                     ; prev byte
@@ -377,7 +570,7 @@ SBYTE   MACRO   ofs
         rlc
         rlc
         ani     0F0h                  ; high nibble = prev<<4
-        mov     m,a                   ; (HL)=ds_t = prev<<4
+        mov     m,a                   ; выходной слот = prev<<4
         ldax    d                     ; cur byte
         rrc
         rrc
@@ -385,9 +578,35 @@ SBYTE   MACRO   ofs
         rrc
         ani     0Fh                   ; low nibble = cur>>4
         add     m                     ; A = (cur>>4)+(prev<<4) == OR
-        sta     ds_buf+ofs            ; фиксированный адрес, HL не трогаем
+        mov     m,a
+        inx     h
         inx     b
         inx     d
+        ENDM
+
+; Один сосед отсутствует: не загружаем его байты и не объединяем половины.
+SBYTE_C MACRO ofs
+        ldax    d
+        rrc
+        rrc
+        rrc
+        rrc
+        ani     0Fh
+        mov     m,a
+        inx     h
+        inx     d
+        ENDM
+
+SBYTE_P MACRO ofs
+        ldax    b
+        rlc
+        rlc
+        rlc
+        rlc
+        ani     0F0h
+        mov     m,a
+        inx     h
+        inx     b
         ENDM
 
 ; ---------------------------------------------------------------
@@ -406,17 +625,10 @@ SBYTE   MACRO   ofs
 ;   (staged op заведомо 0, результат побитово = полный проход);
 ;   иначе стейдим 24 байта в ds_buf (24 SBYTE, источники — payload
 ;   записей по указателям tab2) и рисуем 8 строк dr_p0/dr_p1 (B=8).
+;   ds_buf заполняется через указатель HL, без STA абсолютного адреса на байт.
 ; ---------------------------------------------------------------
 drs_start:
-        ; --- занулить zcol (96 байт): bss при --no-crt не инициализирован ---
-        lxi     h, zcol
-        mvi     a, 0
-        mvi     c, 96
-drs_zclr:
-        mov     m, a
-        inx     h
-        dcr     c
-        jnz     drs_zclr
+        ; zcol очищен один раз функцией mario_init_renderer().
         ; --- cc = wcells + 1 (колонок вывода) ---
         lda     ds_ncols
         mov     c, a
@@ -446,7 +658,92 @@ ds_tloop:
         lhld    ds_pres_c
         ora     m
         jz      ds_tskip              ; оба тайла пусты -> нечего стейдить
-        ; --- стейджинг 24 B: cur-тайл -> DE ---
+        lda     _rs_zero              ; erase: стейджинг не нужен -> сразу адрес+0
+        ora     a
+        jnz     ds_staged
+        ; Спецпути для одного присутствующего соседа: не читать второй
+        ; тайл и не выполнять OR двух половин для каждого из 24 байтов.
+        lhld    ds_pres_c
+        mov     a, m
+        ora     a
+        jz      ds_only_prev
+        lhld    ds_pres_p
+        mov     a, m
+        ora     a
+        jz      ds_only_cur
+        jmp     ds_both
+
+ds_only_cur:
+        lhld    ds_ctab               ; только cur: младшая тетрада
+        mov     a, m
+        inx     h
+        mov     h, m
+        mov     l, a
+        xchg                          ; DE = cur payload
+        lxi     h, ds_buf
+        SBYTE_C 0
+        SBYTE_C 1
+        SBYTE_C 2
+        SBYTE_C 3
+        SBYTE_C 4
+        SBYTE_C 5
+        SBYTE_C 6
+        SBYTE_C 7
+        SBYTE_C 8
+        SBYTE_C 9
+        SBYTE_C 10
+        SBYTE_C 11
+        SBYTE_C 12
+        SBYTE_C 13
+        SBYTE_C 14
+        SBYTE_C 15
+        SBYTE_C 16
+        SBYTE_C 17
+        SBYTE_C 18
+        SBYTE_C 19
+        SBYTE_C 20
+        SBYTE_C 21
+        SBYTE_C 22
+        SBYTE_C 23
+        jmp     ds_staged
+
+ds_only_prev:
+        lhld    ds_ptab               ; только prev: старшая тетрада
+        mov     a, m
+        inx     h
+        mov     h, m
+        mov     l, a
+        mov     b, h
+        mov     c, l                  ; BC = prev payload
+        lxi     h, ds_buf
+        SBYTE_P 0
+        SBYTE_P 1
+        SBYTE_P 2
+        SBYTE_P 3
+        SBYTE_P 4
+        SBYTE_P 5
+        SBYTE_P 6
+        SBYTE_P 7
+        SBYTE_P 8
+        SBYTE_P 9
+        SBYTE_P 10
+        SBYTE_P 11
+        SBYTE_P 12
+        SBYTE_P 13
+        SBYTE_P 14
+        SBYTE_P 15
+        SBYTE_P 16
+        SBYTE_P 17
+        SBYTE_P 18
+        SBYTE_P 19
+        SBYTE_P 20
+        SBYTE_P 21
+        SBYTE_P 22
+        SBYTE_P 23
+        jmp     ds_staged
+
+ds_both:
+        ; --- обычный стейджинг: prev-тайл -> BC, cur-тайл -> DE ---
         lhld    ds_ctab               ; HL = *ctab (payload записи или zcol-тайл)
         mov     a, m
         inx     h
@@ -461,7 +758,7 @@ ds_tloop:
         mov     l, a
         mov     b, h
         mov     c, l                  ; BC = src prev
-        lxi     h, ds_t               ; накопитель, HL стоит весь стейджинг
+        lxi     h, ds_buf             ; выходной курсор, продвигается на каждый байт
         SBYTE   0
         SBYTE   1
         SBYTE   2
@@ -486,6 +783,7 @@ ds_tloop:
         SBYTE   21
         SBYTE   22
         SBYTE   23
+ds_staged:
         ; ---- VRAM-курсоры: dt_v0/v1 = _rs_p0/p1 - delta (заём -> dcr h) ----
         lhld    _rs_p0
         lda     ds_td
@@ -505,16 +803,22 @@ dsv0:   shld    dt_v0
         jnc     dsv1
         dcr     h
 dsv1:   shld    dt_v1
-        ; ---- вывод 8 строк плоскость 0 ----
+        ; ---- вывод 8 строк: draw из ds_buf, erase — нули (тот же footprint) ----
+        lda     _rs_zero
+        ora     a
+        jnz     ds_staged_z
         lxi     d, ds_buf
         lhld    dt_v0
-        mvi     b, 8
         call    dr_p0
-        ; ---- плоскость 1 ----
         lxi     d, ds_buf
         lhld    dt_v1
-        mvi     b, 8
         call    dr_p1
+        jmp     ds_tskip
+ds_staged_z:
+        lhld    dt_v0
+        call    dr_pz
+        lhld    dt_v1
+        call    dr_pz
 ds_tskip:
         lda     ds_td                 ; delta += 8
         adi     8
@@ -552,49 +856,13 @@ ds_tskip:
         ret
 
 ; ---------------------------------------------------------------
-; void mario_zero_sprite(void)
-;   Стереть прежнего Mariо: ОБНУЛИТЬ прямоугольник следа (ROWS строк x
-;   _rs_cols колонок) в МЛАДШИХ плоскостях Mariо (_rs_p0=E000/вес1,
-;   _rs_p1=C000/вес2). Фон живёт в СТАРШИХ плоскостях (A000/8000) и сюда не
-;   заходит, а индекс палитры = bg*4 + ch, поэтому ch=0 = «показать фон» —
-;   обнуления младших плоскостей достаточно, возврат фона из слепка НЕ нужен.
-;   Шаг колонки: VRAM +0x100 (блок). _rs_cols — знаковый счётчик (-w..0).
+; mario_zero_sprite (плотное стирание прямоугольником ROWS×колонок) УДАЛЁН.
+; Стирание прежнего Mariо теперь идёт через mario_draw_sprite с _rs_zero=1:
+; тот же обход тайл-префаба, но dr_pz пишет 0 в те же адреса, что рисовал
+; dr_p0/dr_p1. Footprint стирания == footprint отрисовки -> младшие плоскости
+; (E000/C000) снова чисты перед рисованием нового, призраков нет, а пустые
+; клетки внутри bounding box больше не затираются (экономия растра).
 ; ---------------------------------------------------------------
-        SECTION code_clib
-_mario_zero_sprite:
-zr_col:
-        ; -------- плоскость бита 0 (E000) <- 0 --------
-        lhld    _rs_p0                ; HL = VRAM
-        mvi     b,ROWS
-        mvi     a,0
-zr_row0:
-        mov     m,a
-        dcx     h                     ; y+1 => адрес -1
-        dcr     b
-        jnz     zr_row0
-
-        ; -------- плоскость бита 1 (C000) <- 0 --------
-        lhld    _rs_p1
-        mvi     b,ROWS
-zr_row1:
-        mov     m,a
-        dcx     h
-        dcr     b
-        jnz     zr_row1
-
-        ; ------------------- следующая колонка -------------------
-        lhld    _rs_p0
-        lxi     d,0100h
-        dad     d                       ; VRAM += 0x100 (блок)
-        shld    _rs_p0
-        lhld    _rs_p1
-        dad     d
-        shld    _rs_p1
-        lda     _rs_cols
-        inc     a
-        sta     _rs_cols
-        jnz     zr_col
-        ret
 
 ; ---------------------------------------------------------------
 ; void mario_fill_ground(void)

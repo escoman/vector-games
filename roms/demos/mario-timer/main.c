@@ -49,8 +49,8 @@
 
 /* Примитивы вывода из render.asm (по идиомам mario-16cols/mario.asm).
  * Параметры передаются через глобалы rs_* ниже — без стековых аргументов. */
-extern void mario_draw_sprite(void);
-extern void mario_zero_sprite(void);      /* стирание = обнуление следа в E000/C000 */
+extern void mario_draw_sprite(void);      /* draw (rs_zero=0) и sparse-erase (rs_zero=1) */
+extern void mario_init_renderer(void);    /* разовая обнуляция zcol (нуля-тайлы frac=4) */
 
 /* Примитивы «секундомера растра» — стандартный модуль библиотеки
  * lib/timer/timer.asm (КР580ВИ53 канал 2, порт 09h), объявления в v06.h:
@@ -113,11 +113,14 @@ extern unsigned char mario_sfx_running;   /* зеркало флага бега 
  * Still допустимо, чтобы луч гарантированно ещё не дошёл до рисуемых строк
  * (с запасом на само erase+draw). Константы и переводы строка↔тика — в v06.h
  * (TIMER_FULL, TIMER_LINES, TIMER_LINE, TIMER_REMAIN). */
-/* WAKE-фаза: рисуем Марио, только когда УЖЕ прошёл его коридор. Строка y
- * читается лучом на растре 40+y (256 видимых + верхняя часть гашения). Ждём
- * прохода НИЖНЕЙ строки пятна (bot-1), плюс запас на «луч ушёл». */
+/* WAKE-фаза: начинаем рисование, как только луч дошёл до ВЕРХНЕЙ строки пятна
+ * (старого или нового — что выше). Внутренние циклы dr_* пишут тайл сверху вниз
+ * (dcx h => y++), поэтому, стартовав на верхней линии, мы пишем строки, которые
+ * луч уже прочитал (или дочитает уже новыми) — кадр не рвётся, а окно под лучом
+ * вырастает на всю высоту полосы (+MARIO_HPIX строк): тяжёлые кадры больше не
+ * переливаются за VBlank. Ждём RASTER_BASE+top (верх) + маленький запас. */
 #define RASTER_BASE    40u              /* raster первого видимого ряда (y=0)  */
-#define WAKE_MARGIN    4u               /* строк запаса после прохода низа     */
+#define WAKE_MARGIN    4u               /* строк запаса от ВЕРХА пятна (писать не под лучом) */
 /* Строка 0 (FPS) вверху (y<8). От VBlank до y=0 луч идёт 312−256 = 56 строк.
  * Окно 44 строки — HUD пишется раньше спрайта и в узком верхнем окне. */
 #define T_HUD_MAX     TIMER_LINES(44)  /* 4224: окно обновления цифр FPS       */
@@ -144,8 +147,8 @@ static unsigned char palA[16];
 unsigned int  rs_spr;                    /* указатель на спрайт (заголовок)  */
 unsigned int  rs_data;                   /* колонка данных (считает asm)     */
 unsigned int  rs_p0, rs_p1;              /* VRAM-указатели верха колонки     */
-unsigned char rs_cols;                   /* знаковый счётчик колонок (-w..0) */
 unsigned char rs_frac;                   /* суб-клеточный сдвиг: 0 или 4 px */
+unsigned char rs_zero;                   /* 1 = mario_draw_sprite затирает (erase), 0 = рисует */
 
 /* ВРЕМЕННАЯ диагностика wake-гонки (учёт перехода через VBlank). */
 unsigned char dbg_frac;                  /* frac текущего кадра (0 или 4)     */
@@ -169,7 +172,7 @@ unsigned int  dbg_draws;                 /* сколько реальных eras
 /* Прямоугольник последнего НАРИСОВАННОГО спрайта (для стирания). Заполняется
  * только при фактической отрисовке — если кадр-гейтskip’нул, остаётся прежним,
  * и следующий erase сотрёт именно то пятно, что реально на экране. */
-static unsigned char old_x, old_y, old_w;   /* old_w в клетках, h=MARIO_HPIX */
+static unsigned char old_x, old_y;          /* пятно прежнего реального показа (x верха клетки, y верха) */
 static unsigned char old_valid;
 static const unsigned char *last_spr;       /* поза, реально нарисованная */
 
@@ -262,15 +265,23 @@ static void draw_text_line(unsigned char col, unsigned char y, const char *s)
     gfx_print(col, y, s, 4);   /* bg2 = белый, только старшие плоскости */
 }
 
-/* Обнулить пятно прежнего Mariо в МЛАДШИХ плоскостях (E000/C000): ch=0 =>
- * сквозь него снова виден фон из старших плоскостей. Слепок/патч не нужен. */
-static void erase_sprite(unsigned char x, unsigned char y, unsigned char wcells)
+/* Стереть прежнего Mariо СПАРСНО: занулить только те тайлы, которые реально
+ * занимала прошлая поза, а не весь прямоугольник (wcells+1)×32. Стирание =
+ * mario_draw_sprite в режиме rs_zero=1 на ДАННЫХ ПРОШЛОГО спрайта (та же
+ * поза last_spr, тот же суб-пиксельный frac): обходит occupied-тайлы, и dr_pz
+ * пишет 0 в те же адреса, что прошлый draw заполнил. Footprint совпадает ->
+ * младшие плоскости (E000/C000) снова чисты, призраков нет, пустые клетки
+ * внутри bounding box не затираются. */
+static void erase_sprite(const unsigned char *spr, unsigned char x, unsigned char y)
 {
     unsigned int col  = x >> 3;
+    rs_spr  = (unsigned int)spr;         /* прошлая поза -> те же occupied-тайлы */
+    rs_frac = (unsigned char)(x & 7u);   /* тот же frac, что был при рисовании   */
     rs_p0   = BASE_A0 + col * 0x100u + (255u - (unsigned int)y);
     rs_p1   = rs_p0 - 0x2000u;
-    rs_cols = (unsigned char)(-(int)wcells);
-    mario_zero_sprite();
+    rs_zero = 1;
+    mario_draw_sprite();
+    rs_zero = 0;
 }
 
 /* Нарисовать спрайт-позу. Суб-пиксельный сдвиг +4 px (x не выровнен по сетке
@@ -459,8 +470,6 @@ static void spin_to_raster(unsigned int target)
 static void draw_frame(void)
 {
     const unsigned char *spr = pick_sprite();
-    unsigned char wcells = spr[0];
-    unsigned char w_new;
     unsigned int elapsed;
 
     /* Строка 0 (FPS) — раньше спрайта: верхнее окно T_HUD_MAX. Сюда попадают
@@ -482,37 +491,34 @@ static void draw_frame(void)
         return;
     }
 
-    /* WAKE: ждём, пока луч ПРОЙДЁТ нижнюю строку пятна (старого или нового —
-     * что ниже), и только затем рисуем, чтобы ни один байт не писался под
-     * лучом. bot = my+MARIO_HPIX (исключающая нижняя строка). Ряд (bot-1)
-     * читается на растре RASTER_BASE+(bot-1); ждём RASTER_BASE+bot+запас. */
+    /* WAKE: ждём, пока луч пройдёт НИЖНЮЮ строку пятна (старого или нового —
+     * что ниже): bot = max(my, old_y) + MARIO_HPIX. И erase, и draw идут ПОСЛЕ
+     * луча, в безопасном окне под полосой, поэтому порядок обхода тайлов не
+     * важен. Сдвинутый путь (frac=4) рисует КОЛОНКАМИ (внешний цикл ds_cc), а
+     * не строками: при старте от ВЕРХА он догонял луч и правые колонки каждой
+     * прочитанной строки оставались затёртыми erase'ом -> мерцание «кроме
+     * первого столбца». Ожидание ниже низа полосы убирает гонку целиком. */
     {
         int bot = my + MARIO_HPIX;
-        if (old_valid) {
-            int bo = (int)old_y + MARIO_HPIX;
-            if (bo > bot) bot = bo;
-        }
+        if (old_valid) { int bo = (int)old_y + MARIO_HPIX; if (bo > bot) bot = bo; }
         spin_to_raster(TIMER_LINES(RASTER_BASE + (unsigned int)bot + WAKE_MARGIN));
     }
 
-    /* 1. Стереть прежнего Mariо: обнулить его след в младших плоскостях. */
+    /* erase → draw ПОДРЯД, оба сразу за лучом: буфер один живой, поэтому между
+     * стиранием старой позы и рисованием новой нельзя вставлять спин — иначе
+     * полоса надолго остаётся пустой и луч читает стёртого Марио. */
     {
-        int sl, el, ey, miny, wrap, margin;
-        int midl, eln, dln;
+        int sl, midl, el, ey, miny, wrap, margin, eln, dln;
         sl = (int)TIMER_LINE(timer_elapsed());
         miny = my;
         if (old_valid && (int)old_y < miny) miny = (int)old_y;
         ey = (int)RASTER_BASE + miny;             /* raster первого чтения в N+1 */
 
         if (old_valid)
-            erase_sprite(old_x, old_y, old_w);
+            erase_sprite(last_spr, old_x, old_y);
 
-        midl = (int)TIMER_LINE(timer_elapsed());
+        midl = (int)TIMER_LINE(timer_elapsed());  /* = строка луча на входе в draw */
 
-        /* 2. Нарисовать нового (прямой bitblit в E000/C000; фон в других
-         *    плоскостях, слепок не нужен). При рантайм-сдвиге (mx&7!=0) спрайт
-         *    занимает wcells+1 колонок -> на ширину стирания следующего кадра. */
-        w_new = (unsigned char)(wcells + ((mx & 7u) ? 1u : 0u));
         draw_sprite(mx, (unsigned int)my, spr);
 
         el = (int)TIMER_LINE(timer_elapsed());
@@ -531,7 +537,7 @@ static void draw_frame(void)
         }
         wrap = (el < sl) ? 1 : 0;                  /* crossing VBlank */
         dbg_frac    = (unsigned char)(mx & 7u);
-        dbg_start   = (unsigned int)sl;
+        dbg_start   = (unsigned int)sl;            /* строка сразу после wake */
         dbg_endr    = (unsigned int)el;
         dbg_earliest= (unsigned int)ey;
         /* Tear возможен только если draw перелился в кадр N+1 и закончился
@@ -554,7 +560,6 @@ static void draw_frame(void)
     fps_draws++;                          /* в окно HUD: удалась ещё одна отрисовка */
     old_x = mx;
     old_y = (unsigned char)my;
-    old_w = w_new;
     old_valid = 1;
     last_spr = spr;
     draw_skipped = 0;
@@ -606,6 +611,8 @@ void main(void)
 
     build_palette();
     mario_sfx_init();
+    mario_init_renderer();               /* zcol (нуля-тайлы frac=4) чистим ОДИН раз:
+                                          * drs_start больше не зануляет его на кадре */
 
     /* Кадровый ISR (пуск таймера + звук) ставим ДО первой отрисовки: после
      * первого же VBlank счётчик канала 2 синхронизируется с лучом, и draw_frame
@@ -622,6 +629,7 @@ void main(void)
     old_valid = 0;
     last_spr = 0;
     draw_skipped = 0;
+    rs_zero = 0;           /* bss при --no-crt не занулён: первый draw обязан рисовать */
     dbg_minmargin = 32000;
     dbg_minm4 = 32000;
 
