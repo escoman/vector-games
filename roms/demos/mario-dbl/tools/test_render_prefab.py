@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """test_render_prefab.py — проверка тайл-префаба render.asm на эмуляторе v06_emu.
 
-Гоняет НАСТОЯЩИЙ src/render.asm (после текстового раскрытия макроса SBYTE —
-мини-ассемблер v06_emu не знает MACRO) для всех спрайтов из src/sprites.inc
+Гоняет НАСТОЯЩИЙ include/render.asm (после текстового раскрытия макроса SBYTE —
+мини-ассемблер v06_emu не знает MACRO) для всех спрайтов из include/sprites.inc
 в обоих путях: frac=0 (dr_tile, тайлы из записей) и frac=4 (rec_build +
 drs_stage + tile-цикл пропуска пустых пар). Результат сравнивается с
 независимым Python-эталоном:
@@ -31,8 +31,8 @@ ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..', '..'))
 sys.path.insert(0, os.path.join(ROOT, 'utils', 'emulator'))
 from v06_emu import Emulator8080, Assembler8080  # noqa: E402
 
-RENDER = os.path.join(HERE, '..', 'src', 'render.asm')
-SPRITES = os.path.join(HERE, '..', 'src', 'sprites.inc')
+RENDER = os.path.join(HERE, '..', 'include', 'render.asm')
+SPRITES = os.path.join(HERE, '..', 'include', 'sprites.inc')
 
 GLOBALS = ['_rs_spr', '_rs_data', '_rs_p0', '_rs_p1', '_rs_s0', '_rs_s1']
 

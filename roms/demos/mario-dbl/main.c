@@ -34,15 +34,15 @@
  * клеток спрайта (сдвиг тетрады при выводе), поэтому спрайт занимает на одну
  * клетку шире (spill вправо).
  *
- * Вывод спрайта — на 8080-ассемблере (src/render.asm): спрайт закодирован
+ * Вывод спрайта — на 8080-ассемблере (include/render.asm): спрайт закодирован
  * КОЛОНОЧНО, столбец VRAM проходится линейно (данные +3, адрес -1),
  * стирание — копирование из относительного RAM-патча (шаг колонки = ROWS).
  */
 
 #include "v06.h"
 
-#include "src/tiles.inc"      /* screen_pal4, tile_ground */
-#include "src/sprites.inc"    /* mario_frames[N][2], mario_turn[2][2], mario_run[3][2], MARIO_* */
+#include "tiles.inc"      /* screen_pal4, tile_ground */
+#include "sprites.inc"    /* mario_frames[N][2], mario_turn[2][2], mario_run[3][2], MARIO_* */
 
 /* Примитивы вывода из render.asm (по идиомам mario-16cols/mario.asm).
  * Параметры передаются через глобалы rs_* ниже — без стековых аргументов. */
@@ -52,7 +52,7 @@ extern void mario_fill_ground(void);      /* тайл земли во 4 плос
 extern void mario_copy_AB(void);          /* копия A -> B, 2x8 КБ          */
 extern void mario_capture_patch(void);    /* слепок пятна в RAM-патч      */
 
-/* Звук (src/sfx_mario.c): прыжок/приземление — тон на КР580ВИ53 (vi53.c,
+/* Звук (include/sfx_mario.c): прыжок/приземление — тон на КР580ВИ53 (vi53.c,
  * frame-exact таблица делителей). Шумогенератора у ВИ53 нет, поэтому ветра при беге нет.
  * Покадровый движок живёт в прерывании (frame_handler = mario_frame), НО ПОСЛЕ
  * смены палитры — так звук не сдвигает raster-критичный цикл записи 0C.

@@ -5,9 +5,9 @@
 zcc_opt.def
 *.c.asm
 
-# Генерируемые ассеты: ИСТОЧНИК — src/raccoon_mario.png + tools/gen_assets.py
-src/sprites.inc
-src/tiles.inc
+# Генерируемые ассеты: ИСТОЧНИК — assets/raccoon_mario.png + tools/gen_assets.py
+include/sprites.inc
+include/tiles.inc
 
 # Sidecar отладчика (MCP)
 *.rdb
