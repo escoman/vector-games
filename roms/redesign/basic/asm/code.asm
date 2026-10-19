@@ -9,6 +9,9 @@
 ; RDB data region, or explicit gap_ region.  This is what the build
 ; consumes; code/code.asm and data/data.asm are read-only views.
 
+; func_0000 — Reset-вектор: `LXI SP,7FFFh / JMP 19CC`. Гэп 0x0006..0x0007 — хвост JMP (адрес цели),CFG уже вёл сюда, но RDB не записал длину. След. объект func_rst_fetch_sep @0x0008 — продление ровно до 0x0007.
+; calls: ["0x19CC"]
+; params: in[] out[] saves[]
 func_0000:
 	lxi	sp,7fffh
 	jmp	func_boot_init
@@ -17,10 +20,11 @@ gap_0006:
 	defb	00h,00h
 
 ; func_rst_fetch_sep — RST 1 (0x0008): прочитать/сверить разделитель из потока токенов; при совпадении падает в RST 2 (продвинуть указатель).
-; calls: ["JNZ 0x0074 func_error_stub (разделитель не совпал)", "fall-through в RST 2 (0x0010)"]
-; params: RST 1; HL = текстовый указатель
+; calls: []
+; params: in[H,L] out[A,H,L] saves[]
 ; reads: ["(HL), XTHL, CMP M (сверить ожидаемый символ)"]
 ; role: rst_get_token
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (HL, в page-zero 0x404D)"]
 func_rst_fetch_sep:
 	mov	a,m
@@ -30,10 +34,11 @@ func_rst_fetch_sep:
 	xthl
 	jnz	func_error_stub
 ; func_rst_advance_text — RST 2 (0x0010): продвинуть текстовый указатель на следующий непробельный символ; возвращает его в A с признаком диапазона.
-; calls: ["INX H / CPI 3A (':' — конец строки) / RNC", "CPI 20 (пробел) / JZ 0x0010"]
-; params: RST 2; HL = текстовый указатель
+; calls: []
+; params: in[H,L] out[A] saves[]
 ; reads: ["(HL) — следующий непробельный символ"]
 ; role: rst_advance_ptr
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (HL, в page-zero 0x404D)"]
 func_rst_advance_text:
 	inx	h
@@ -47,9 +52,9 @@ func_rst_advance_text:
 	rar
 	adc	a
 	ret
-; func_rst_cmp_dehl — RST 4 (0x0020): сравнить HL с DE, выставить Z (равенство). Сверка границ строки/окна.
-; calls: ["MOV A,H / SBB D / RNZ / ORA L / SBB E / RET"]
-; params: RST 4; HL и DE
+; func_rst_cmp_dehl — RST 08h: сравнение DE,HL. Гэп 0x0026..0x0027 — хвост (MOV A,L/SUB E/ретурн-условие). След. объект func_rst_fac_sign @0x0028 — до 0x0027.
+; calls: []
+; params: in[D,E,H,L] out[A] saves[]
 ; reads: ["H/L против D/E"]
 ; role: rst_compare
 ; writes: ["флаги (Z = HL==DE)"]
@@ -64,10 +69,10 @@ func_rst_cmp_dehl:
 gap_0026:
 	defb	01h,43h
 
-; func_rst_fac_sign — RST 5 (0x0028): тест знака/нуля FAC. RZ если FAC=0; A=0 для положительного, 0xFF для отрицательного. Зовут арифметики и ABS/SGN.
-; calls: ["ORA A / RZ (FAC==0)", "RAL / SBB A / RNZ / INR A"]
-; params: RST 5; FAC
-; reads: ["0x4050 (экспонента)", "0x404F (знак)"]
+; func_rst_fac_sign — RST 10h: знак/нормализация FAC. Гэп 0x0035..0x0037 — хвост обработчика. След. объект func_rst_irq @0x0038 — продление ровно до 0x0037.
+; calls: []
+; params: in[] out[A] saves[]
+; reads: ["0x0FD2", "0x404F"]
 ; role: rst_fac_test
 ; writes: ["A (0 = положительно, 0xFF = отрицательно)"]
 func_rst_fac_sign:
@@ -86,15 +91,22 @@ gap_0035:
 	defb	00h,00h,00h
 
 ; func_rst_irq — Вектор прерываний 0x0038: JMP в обработчик 0x2C7F. Единственный точка входа прерываний в ROM; режим IM не выставляется (см. Stage4.md) — используется векторная схема ВМ80А.
-; calls: ["JMP 0x2C7F func_irq_handler (тикер 50 Гц)"]
-; params: RST 7 (вектор прерывания, вход по INT от КР580ВМ80А)
+; calls: ["0x2C7F"]
+; params: in[] out[] saves[]
 ; reads: []
 ; role: rst_irq_jump
+; size_source: stage17_linear_decode
 ; writes: []
 func_rst_irq:
 	jmp	func_irq_handler
+; calls: ["0x005C"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_003b:
 	call	func_005c
+; calls: ["0x0020", "0x003E"]
+; params: in[C,H,L] out[B,C,H,L] saves[B]
+; size_source: stage17_linear_decode
 func_003e:
 	push	b
 	xthl
@@ -107,6 +119,10 @@ label_0041:
 	dcx	b
 	dcx	h
 	jmp	label_0041
+; calls: ["0x0069"]
+; params: in[A] out[A,H] saves[H]
+; reads: ["0x0CB3"]
+; size_source: stage17_linear_decode
 func_004a:
 	push	h
 	mov	l,a
@@ -121,6 +137,9 @@ func_004a:
 	pop	h
 	rnc
 	jmp	lbl_0069
+; calls: []
+; params: in[D,E,H,L] out[A,D,E,H,L] saves[D]
+; size_source: stage17_linear_decode
 func_005c:
 	push	d
 	xchg
@@ -140,11 +159,12 @@ label_006E:
 	lxi	h,0000h
 	shld	var_stack_ptr
 ; func_error_stub — Page-zero заглушка «не реализовано»/синтаксическая ошибка (запись AT в таблице функций; сюда ведут JC/JNZ из RST и var_lookup). Была меткой.
-; calls: ["генерирует код ошибки 02"]
-; params: (нет; fall-through/вызов при синтаксической ошибке)
+; calls: []
+; params: in[A] out[B,E] saves[]
 ; reads: []
 ; role: error_not_implemented
-; writes: ["0x03E7=0 (MVI E,02 / XRA A / STA 03E7)"]
+; size_source: stage17_linear_decode
+; writes: ["0x03E7"]
 func_error_stub:
 	mvi	e,02h
 	xra	a
@@ -153,11 +173,12 @@ func_error_stub:
 	lxi	b,001eh
 	lxi	b,201eh
 ; func_error_raise — Единая точка поднятия ошибки: вызывающий грузит E=код и прыгает сюда. Коды подтверждены в телах Stage 2. Была меткой.
-; calls: ["MVI E,nn / JMP 0x0083 (стандартный шаблон RaiseError)"]
-; params: E = код ошибки (08 INT, 16 OOM, 1A SUBSCRIPT, 1E STRING)
+; calls: ["0x07B2", "0x01C5"]
+; params: in[A,E] out[E,H] saves[]
 ; reads: ["E (код)"]
 ; role: error_raise
-; writes: ["состояние ошибки/стоп интерпретатора"]
+; size_source: stage17_linear_decode
+; writes: ["0x00BE"]
 func_error_raise:
 	call	func_01c5
 	xra	a
@@ -177,23 +198,27 @@ lbl_0098:
 	ora	a
 	jp	lbl_0098
 	jmp	label_0094
-func_00a1:
+; calls: ["0x10D6", "0x1C95"]
+; params: in[H,L] out[A,H,L] saves[]
+; semantic_evidence: обход HL до байта с bit7=1; каждый символ -> ANI 7F -> CALL 1C95 (func_putchar); вызывается с LXI H,msg (напр. 0x2544) — печать упакованного строкового сообщения
+; size_source: stage17_linear_decode
+func_print_packed_string:
 	mov	a,m
 	ani	7fh
 	call	func_putchar
 	mov	a,m
 	ora	a
 	inx	h
-	jp	func_00a1
+	jp	func_print_packed_string
 	lxi	h,0000h
 	cpi	00h
 	jmp	label_10FA
 lbl_00b5:
 	call	func_2e76
-	call	func_00a1
+	call	func_print_packed_string
 	lxi	h,2544h
 label_00BE:
-	call	func_00a1
+	call	func_print_packed_string
 	lhld	var_stack_ptr
 	mov	a,h
 	ana	l
@@ -214,15 +239,16 @@ label_00BE:
 	ora	a
 	jz	lbl_1aa7
 ; func_main_loop — Главный цикл REPL (`_READY`): печать приглашения, ввод/редактиро-вание строки -> func_tok_tokenize; строка с номером -> вставка в программу, без номера -> immediate-exec. Cold-start путь: 0x19CC func_boot_init -> JMP 0x00E5.
-; calls: ["CALL 0x01EF func_tok_tokenize", "вход в цикл исполнения строк", "CALL 0x0276/0x07AD (инициализация)"]
-; params: (нет) — точка входа после boot; не возвращает (замкнутый цикл).
+; calls: ["0x00A1", "0x2E76"]
+; params: in[L] out[] saves[]
 ; reads: ["состояние `_READY`", "буфер строки ввода (до 127 симв., п.85 change log)"]
 ; role: repl_ready_loop
-; writes: ["баннер READY (строка 0x254B)", "самомод. JMP (STA 0608/05D0)"]
+; size_source: stage17_linear_decode
+; writes: ["0x0260", "0x0261", "0x0271", "0x03E7", "0x05D0", "0x05D1"]
 func_main_loop:
 	lxi	h,254bh
 	call	func_2e76
-	call	func_00a1
+	call	func_print_packed_string
 	mvi	a,0c3h
 	sta	0608h
 	sta	05d0h
@@ -254,10 +280,11 @@ label_011A:
 	pop	psw
 	jnc	func_cmd_dispatch
 ; func_prog_line_insert — Вставка/замена нумерованной строки. Формат строки: 2-байтный номер (little-endian) + токены + 0x00; связей-указателей нет, обход последовательным сканом. Подтверждено телом (0x0162..): MOV M,E/MOV M,D (номер), копир-цикл LXI D,3F77 до 0x00.
-; calls: ["CALL 0x01AA — дописать 00 00 (конец) / поправить границы"]
-; params: BC = номер строки; HL/буфер 0x3F77 = токенизированное тело (до 0x00). Вызывается из REPL при наличии номера (0x012B).
-; reads: ["скан программы (шаг 0x0619) для точки вставки", "0x3F77 — токены строки-источника"]
+; calls: ["0x0010", "0x3F20"]
+; params: in[A,B,D,E,H,L] out[D,E,H,L] saves[]
+; reads: ["0x0C33"]
 ; role: prog_insert_line
+; size_source: stage17_linear_decode
 ; writes: ["память программы: [LN_lo LN_hi][токены][00]", "сдвиг хвоста через CALL 003B (RAM-тремплин перемещения)", "0x0C33 — текстовый указатель", "указатель конца программы"]
 func_prog_line_insert:
 	push	d
@@ -342,11 +369,12 @@ lbl_018f:
 	sta	0190h
 	jmp	label_1C6C
 ; func_cmd_new — NEW: стереть программу (записать пустой маркер `00 00`) и сбросить указатели. Подтверждено телом (LHLD 3F21 / MVI M,00).
-; calls: ["CALL 0x01AA — установить конец программы/указатели"]
-; params: HL = поток после NEW.
-; reads: ["0x3F21 — база программы"]
+; calls: []
+; params: in[A] out[] saves[]
+; reads: ["0x3F21"]
 ; role: cmd_new
-; writes: ["`00 00` — маркер конца (пустая программа) по 0x3F21", "0x0C33, 0x0464 — указатели", "0x0EF6 — начало переменных"]
+; size_source: stage17_linear_decode
+; writes: ["0x0C33"]
 func_cmd_new:
 	rnz
 	lhld	var_program_base
@@ -355,6 +383,11 @@ func_cmd_new:
 	mov	m,a
 	inx	h
 	shld	var_program_end
+; calls: ["0x04E0"]
+; params: in[] out[] saves[]
+; reads: ["0x0C33", "0x0EF6", "0x3F21"]
+; size_source: stage17_linear_decode
+; writes: ["0x01D0", "0x0C30", "0x0CB3", "0x0ED3"]
 func_01aa:
 	lhld	var_program_base
 	dcx	h
@@ -368,6 +401,11 @@ label_01BC:
 	lhld	var_program_end
 	shld	var_scan_ptr
 	shld	var_free_limit
+; calls: []
+; params: in[A] out[B,H] saves[]
+; reads: ["0x0ED6"]
+; size_source: stage17_linear_decode
+; writes: ["0x0C8B"]
 func_01c5:
 	pop	b
 	lhld	var_free_top
@@ -389,16 +427,21 @@ lbl_01d1:
 	push	b
 label_01E6:
 	mvi	a,0cah
+; calls: []
+; params: in[A] out[] saves[]
+; size_source: stage17_linear_decode
+; writes: ["0x0C2B", "0x2ADC"]
 func_01e8:
 	sta	2adch
 	sta	0c2bh
 	ret
 ; func_tok_tokenize — Токенизатор: превращает ASCII-ввод (лат/кир, РУС/ЛАТ) во внутренние коды; токен = 0x80 + индекс слова keyword-таблицы (MOV A,B / ORI 80). Подтверждён вызовом из REPL-цикла.
-; calls: ["скан слов keyword-таблицы (маркер bit7 = конец слова)"]
-; params: HL = буфер ASCII-ввода; пишет внутренние токены в рабочий буфер строки программы.
+; calls: []
+; params: in[A] out[C,D] saves[]
 ; reads: ["буфер ввода 0x3F77", "data_keyword_table 0x256E (LXI D,256D)"]
 ; role: tokenizer
-; writes: ["токенизированная строка (код = 0x80 + номер слова)"]
+; size_source: stage17_linear_decode
+; writes: ["0x00D1"]
 func_tok_tokenize:
 	xra	a
 	sta	0209h
@@ -488,8 +531,14 @@ lbl_026d:
 	inx	d
 	stax	d
 	ret
+; calls: []
+; params: in[] out[D] saves[]
+; size_source: stage17_linear_decode
 func_0276:
 	lxi	d,3f77h
+; calls: ["0x0367"]
+; params: in[D,E] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_0279:
 	mov	h,d
 	mov	l,e
@@ -562,7 +611,7 @@ lbl_02e0:
 lbl_02eb:
 	mvi	c,18h
 	call	func_0336
-	call	func_031f
+	call	func_is_delimiter
 	rz
 	rst	func_rst_cmp_dehl
 	jnz	lbl_02eb
@@ -570,7 +619,7 @@ lbl_02eb:
 lbl_02f9:
 	mvi	c,08h
 	call	func_032f
-	call	func_031f
+	call	func_is_delimiter
 	rz
 	mvi	a,77h
 	cmp	l
@@ -589,7 +638,11 @@ lbl_0313:
 	cmp	l
 	jnz	lbl_0313
 	ret
-func_031f:
+; calls: []
+; params: in[H,L] out[A] saves[]
+; semantic_evidence: CPI-веер на 20/3A/2C/3B/22 (SPC ':' ',' ';' '"') -> RZ при совпадении: предикатор разделителя токенов/аргументов
+; size_source: stage17_linear_decode
+func_is_delimiter:
 	mov	a,m
 	cpi	20h
 	rz
@@ -601,6 +654,9 @@ func_031f:
 	rz
 	cpi	22h
 	ret
+; calls: ["0x3E9F"]
+; params: in[H,L] out[A,H,L] saves[]
+; size_source: stage17_linear_decode
 func_032f:
 	mvi	a,77h
 	cmp	l
@@ -643,6 +699,9 @@ lbl_035a:
 	jnz	lbl_035a
 	pop	h
 	jmp	label_02D6
+; calls: ["0x0367", "0x2C1E"]
+; params: in[A] out[B] saves[]
+; size_source: stage17_linear_decode
 func_0367:
 	mvi	b,00h
 label_0369:
@@ -653,6 +712,9 @@ label_0369:
 	rnz
 	mov	b,a
 	jmp	label_0369
+; calls: []
+; params: in[A,B,H] out[C,H] saves[]
+; size_source: stage17_linear_decode
 func_0378:
 	push	psw
 	push	b
@@ -676,26 +738,28 @@ lbl_0391:
 	pop	b
 	pop	psw
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_0398:
+; data_0398_table — Малая таблица из 8 элементов + терминатор 00. Дизассемблер даёт мусор (не инструкции: монотонные малые значения 08 0A 0D 0C 1F 18 19 1A). Между lbl_0391 и func_cmd_llist.
+data_0398_table:
 	defb	08h,0Ah,0Dh,0Ch,1Fh,18h,19h,1Ah
 	defb	00h
 
 ; func_cmd_llist — LLIST: распечатать программу на принтер (младший брат LIST, 0x03A6 — рядом). Токен 0xDB -> `0x03A1` (сегмент B).
-; calls: ["обход строк (0x0619)", "детокенизация через таблицу ключ. слов"]
-; params: HL = поток после LLIST (необяз. диапазон).
+; calls: []
+; params: in[] out[] saves[]
 ; reads: ["[LN][токены] строк программы", "data_keyword_table — детокенизация"]
 ; role: cmd_llist
-; writes: ["листинг на принтер"]
+; size_source: stage17_linear_decode
+; writes: ["0x00BE"]
 func_cmd_llist:
 	mvi	a,01h
 	sta	0190h
 ; func_cmd_list — LIST: распечатать строки (диапазон необязателен), обратно разворачивая токены в слова по таблице ключевых слов. Подтверждено телом (0x03A6: CALL 03C7/RNZ/LOAD LN).
-; calls: ["CALL 0x03C7 — разбор диапазона", "CALL 0x3F20 — первая строка", "шаг 0x0619 по строкам"]
-; params: HL = поток после LIST; необязательный диапазон строк.
+; calls: ["0x3F20", "0x0020", "0x03E2", "0x03A6", "0x0008", "0x04E0", "0x053E"]
+; params: in[C] out[A,D,E] saves[]
 ; reads: ["[LN][токены] строк программы", "0x3F21 (база)", "data_keyword_table 0x256E — детокенизация"]
 ; role: cmd_list
-; writes: ["текстовый вывод через 0x1C95/PRINT-механизм"]
+; size_source: stage17_linear_decode
+; writes: ["0x03E7"]
 func_cmd_list:
 	call	label_03C7
 	rnz
@@ -737,6 +801,9 @@ label_03C7:
 	stc
 	shld	03e7h
 	ret
+; calls: ["0x0020", "0x1A01", "0x07B2"]
+; params: in[H,L] out[D,E,H] saves[B]
+; size_source: stage17_linear_decode
 func_03e2:
 	mov	e,m
 	inx	h
@@ -750,10 +817,11 @@ func_03e2:
 	call	func_07b2
 	jmp	func_1a01
 ; func_cmd_for — FOR: резервирует 17-байтный контрольный блок (0x01E8), инициализирует переменную через путь LET (0x0691), кладёт маркер FOR (0x81) на стек блоков, затем разбирает TO/STEP. Парность с func_cmd_next подтверждена маркером 0x81.
-; calls: ["MVI A,0x11 / CALL 0x01E8 (выделить 17 байт под контрольный блок)", "CALL 0x0691 func_cmd_let (инициализировать переменную)", "CPI 0x81 (проверка вложенного FOR)"]
-; params: HL = поток после FOR (переменная = нач TO конец [STEP шаг]).
+; calls: ["0x0691", "0x01C5", "0x01E8", "0x03F3"]
+; params: in[C,D,E,H,L] out[A] saves[]
 ; reads: ["переменная/выражения (0x0691, 0x09B1)", "TO (0x9E) / STEP (0xA3)"]
 ; role: cmd_for
+; size_source: stage17_linear_decode
 ; writes: ["выделение блока FOR (0x01E8, A=0x11=17 байт)", "маркер FOR (0x81) в стеке блоков", "текстовый указатель (0x404D)"]
 func_cmd_for:
 	mvi	a,11h
@@ -860,12 +928,13 @@ label_0487:
 	shld	var_stack_ptr
 	xchg
 ; func_cmd_dispatch — Диспетчер КОМАНД (самомод. индексный переход, таблица 0x2700). В 5b уточнён путь расширений: ветка SUI 5A дописывает второй плотный сегмент таблицы (0xCA..0xE4 -> off 0x3A..0x6E), так что один диспетчер роутит и операторы 0x80..0x9C, и расширения 0xCA..0xE4; токены 0x9D..0xC9 отклоняются range-проверкой.
-; calls: ["самомод. LHLD 2700 -> word из data_cmd_table (адрес обработчика)", "JNC 0x0691 func_cmd_let (токен без флага команды -> присваивание)"]
+; calls: []
 ; index_formula: (token - 080h) * 2, база 0x2700
 ; mechanism: self-modifying indexed jump (STA 04C1 / LHLD 2700 / PCHL-семантика)
-; params: HL = текстовый указатель на поток токенов команды; вход из цикла исполнения (0x012B). Контракт: по выходу HL — после команды; `0x3A`(:) — разделитель, `0x00` — конец строки.
+; params: in[H,L] out[A] saves[]
 ; reads: ["(HL) — текущий токен", "0x3A/0x20 — пропуск разделителей и пробелов"]
 ; role: command_dispatch
+; size_source: stage17_linear_decode
 ; writes: ["самомодификация LHLD-операнда по 0x04C1 (младший байт)"]
 func_cmd_dispatch:
 	inx	h
@@ -904,10 +973,11 @@ lbl_04c5:
 	ora	a
 	ret
 ; func_cmd_restore — RESTORE: сбросить указатель чтения DATA в начало программы (или к строке с номером). Токен 0x8B из таблицы.
-; calls: ["шаг 0x0619 — найти строку (если задан номер)"]
-; params: HL = поток после RESTORE (необязательный номер строки).
+; calls: ["0x0602", "0x04E0", "0x053E"]
+; params: in[H] out[D] saves[]
 ; reads: ["0x3F21 (база программы)"]
 ; role: cmd_restore
+; size_source: stage17_linear_decode
 ; writes: ["DATA-указатель = начало (или строка по номеру)"]
 func_cmd_restore:
 	jz	func_04e0
@@ -917,6 +987,11 @@ func_cmd_restore:
 	call	label_0605
 	pop	d
 	jmp	label_04E5
+; calls: []
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
+; reads: ["0x3F21"]
+; size_source: stage17_linear_decode
+; writes: ["0x086B"]
 func_04e0:
 	xchg
 	lhld	var_program_base
@@ -932,11 +1007,12 @@ label_04EA:
 	call	func_0367
 	cpi	05h
 ; func_cmd_stop — STOP: остановка выполнения с сохранением позиции (для CONT). Токен 0x8F из таблицы.
-; calls: ["выход из цикла исполнения в REPL"]
-; params: HL = поток после STOP.
-; reads: ["текущий текстовый указатель (0x0464) — для последующего CONT"]
+; calls: ["0x00E5"]
+; params: in[H,L] out[A,B,H] saves[A]
+; reads: ["0x01D0", "0x0271"]
 ; role: cmd_stop
-; writes: ["0x0464 — сохранить позицию останова", "режим команды (READY)"]
+; size_source: stage17_linear_decode
+; writes: ["0x01D0", "0x0207", "0x020A"]
 func_cmd_stop:
 	rnz
 	ori	0c0h
@@ -958,11 +1034,12 @@ label_050D:
 	jnz	label_00BE
 	jmp	func_main_loop
 ; func_cmd_cont — CONT: возобновить выполнение с сохранённой STOP/CNTL-C позиции. Токен 0x97 из таблицы.
-; calls: ["возврат в цикл исполнения"]
-; params: HL = поток после CONT.
+; calls: []
+; params: in[D,E,L] out[A,D,E,H,L] saves[]
 ; reads: ["0x0464 — сохранённая позиция останова"]
 ; role: cmd_cont
-; writes: ["текстовый указатель = позиция CONT"]
+; size_source: stage17_linear_decode
+; writes: ["0x0271"]
 func_cmd_cont:
 	rnz
 	lxi	h,0000h
@@ -974,18 +1051,25 @@ func_cmd_cont:
 	shld	var_stack_ptr
 	xchg
 	ret
+; calls: ["0x0010", "0x099E"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_0529:
 	rst	func_rst_advance_text
 label_052A:
 	call	func_099e
+; calls: ["0x0028"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_052d:
 	rst	func_rst_fac_sign
 	jm	lbl_0539
 ; func_fac_require_int — Требовать целое во FAC (экспонента < 0x91), иначе ошибка 08. Используют PEEK/USR (eval числа → адрес).
-; calls: ["JC 0x152A (преобразовать дробное к целому)", "MVI E,08 / JMP 0x0083 func_error_raise (INT REQUIRED)"]
-; params: FAC (ожидаемое целое)
-; reads: ["0x4050 (экспонента) — CPI 0x91"]
+; calls: []
+; params: in[] out[A] saves[]
+; reads: ["0x0FD2"]
 ; role: fac_integer_guard
+; size_source: stage17_linear_decode
 ; writes: []
 func_fac_require_int:
 	lda	4050h
@@ -994,6 +1078,9 @@ func_fac_require_int:
 lbl_0539:
 	mvi	e,08h
 	jmp	func_error_raise
+; calls: ["0x0010"]
+; params: in[H,L] out[D,E] saves[]
+; size_source: stage17_linear_decode
 func_053e:
 	mov	a,m
 	cpi	3ah
@@ -1048,11 +1135,12 @@ lbl_0557:
 	inr	d
 	jmp	lbl_0557
 ; func_cmd_clear — CLEAR: сброс переменных, массивов и стеков (границы RAM). Токен 0x99 из таблицы.
-; calls: ["инициализация таблицы переменных"]
-; params: HL = поток после CLEAR.
-; reads: ["0x0EF6/0x0ED6 — границы переменных/строк"]
+; calls: ["0x0010", "0x0020", "0x01AA", "0x0529"]
+; params: in[C,D,E,H,L] out[D,E,H] saves[H]
+; reads: ["0x0C33", "0x0EF6"]
 ; role: cmd_clear
-; writes: ["сброс GOSUB-стека 0x0625", "очистка переменных/указателей значений, TEXT/DATA-указатели"]
+; size_source: stage17_linear_decode
+; writes: ["0x0ED6"]
 func_cmd_clear:
 	jz	label_01B0
 	call	label_052A
@@ -1078,10 +1166,11 @@ func_cmd_clear:
 	pop	h
 	jmp	label_01B0
 ; func_cmd_run — RUN: сброс указателей на начало программы и запуск цикла исполнения. Идентичность — из плотной таблицы (токен 0x89).
-; calls: ["вход в цикл исполнения (0x049A dispatch по строкам)"]
-; params: HL = поток после RUN; необязательный стартовый номер.
+; calls: ["0x01AA", "0x05B9"]
+; params: in[] out[B] saves[]
 ; reads: ["0x3F21 — база программы", "GOSUB-стек/указатели"]
 ; role: cmd_run
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель = начало программы", "0x0625 (GOSUB-стек) = пусто"]
 func_cmd_run:
 	jz	func_01aa
@@ -1089,10 +1178,11 @@ func_cmd_run:
 	lxi	b,046bh
 	jmp	label_05C9
 ; func_cmd_gosub — GOSUB: сохранить точку возврата в стек (0x0625) с маркером 0x8C (его ищет RETURN), затем переход к строке. Парность с func_cmd_return подтверждена маркером 0x8C.
-; calls: ["MVI D,0x8C / PUSH D (маркер GOSUB в стек возвратов)", "CALL 0x053E func_053e (номер)", "затем семантика GOTO к цели"]
-; params: HL = поток после GOSUB.
-; reads: ["номер строки (0x053E)", "указатель возврата (0x0625 — стек GOSUB)"]
+; calls: ["0x0672", "0x004A", "0x053E"]
+; params: in[H] out[A,H,L] saves[B]
+; reads: ["0x0271"]
 ; role: cmd_gosub
+; size_source: stage17_linear_decode
 ; writes: ["0x0625 (stek GOSUB): пуш текущий текстовый указатель + маркер 0x8C"]
 func_cmd_gosub:
 	mvi	a,0d3h
@@ -1110,14 +1200,26 @@ label_05C9:
 	call	func_053e
 	call	func_cmd_rem
 	jmp	label_05E1
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_05D3:
-	defb	78h,92h,0C2h,0E6h,05h,79h,93h,0C2h
-	defb	0E6h,05h,21h,00h,00h,0C9h
-
+; func_resume_guard — Тест вектора CONTINUE/resume. `MOV A,B / SUB D / JNZ 05E6 / MOV A,C / SUB E / JNZ 05E6 / LXI H,0000 / RET` — сравнивает BC с DE (=вектор из var_resume_vector 0x05D1); не равно → уход 0x05E6; равно → HL=0, RET. Достижим через PCHL-вычислитель, потому вне CFG. Соседи: var_resume_vector(0x05D1) / func_cmd_goto(0x0602).
+; calls: []
+; cfg_reachable: no (PCHL entry)
+; compares: BC vs DE (resume vector 0x05D1)
+; miss_target: 0x05E6
+; params: in[B,C,D,E] out[A,H] saves[]
+; role: resume_vector_guard
+func_resume_guard:
+	mov	a,b
+	sub	d
+	jnz	label_05E6
+	mov	a,c
+	sub	e
+	jnz	label_05E6
+	lxi	h,0000h
+	ret
 label_05E1:
 	mvi	a,01h
 	sta	05d0h
+label_05E6:
 	push	h
 	xchg
 	shld	var_resume_vector
@@ -1135,30 +1237,44 @@ label_05E1:
 	rc
 	jmp	label_0637
 ; func_cmd_goto — GOTO: вычислить номер (0x053E), найти строку в цепочке программы (сравнение номера с каждой записью, возврат указателя или 0). Механизм line_find оформим отдельным объектом в под-пакете 5c.
-; calls: ["CALL 0x053E func_053e (вычислить номер)", "поиск строки по номеру (цикл сравнения BC/DE), нет -> ошибка"]
-; params: HL = поток после GOTO; цель — номер строки.
+; calls: ["0x0672", "0x0619", "0x053E"]
+; params: in[] out[] saves[]
 ; reads: ["номер строки (через 0x053E)", "цепочка строк программы (num/next)"]
 ; role: cmd_goto
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (0x404D) на найденную строку"]
 func_cmd_goto:
 	call	func_053e
 label_0605:
 	call	func_cmd_rem
 	jmp	func_prog_step
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_060B:
-	defb	78h,92h,0C2h,1Eh,06h,79h,93h,0C2h
-	defb	1Eh,06h,21h,00h,00h,0C9h
-
+; func_step_guard — Тест вектора шага/STOP. Зеркало func_resume_guard: сравнение BC с DE (=var_step_vector 0x0609), не равно → 0x061E, равно → HL=0, RET. Соседи: var_step_vector(0x0609) / func_prog_step(0x0619) — семантика шага подтверждения. Вне CFG (PCHL-вход).
+; calls: []
+; cfg_reachable: no (PCHL entry)
+; compares: BC vs DE (step vector 0x0609)
+; miss_target: 0x061E
+; params: in[B,C,D,E] out[A,H] saves[]
+; role: step_vector_guard
+func_step_guard:
+	mov	a,b
+	sub	d
+	jnz	label_061E
+	mov	a,c
+	sub	e
+	jnz	label_061E
+	lxi	h,0000h
+	ret
 ; func_prog_step — Резюмируемый пошаговый переход по строкам программы (указатель возобновления 0x0609, точка шага 0x0619). Общий механизм для GOTO/поиска, LIST, RUN, DELETE, INSERT. GOTO встраивает цикл сравнения номеров (0x060B).
-; calls: ["сравнение номера строки (B/D, C/E) — matched -> HL=0/RET"]
-; params: HL = текущая позиция в программе; возобновление по 0x0609.
+; calls: ["0x0020", "0x3F20", "0x0083"]
+; params: in[B,C,D,E,H,L] out[D,E] saves[H]
 ; reads: ["[LN_lo LN_hi] текущей строки", "пропуск тела до 0x00"]
 ; role: prog_next_line
-; writes: ["0x0609 — адрес возобновления скана (резюмируемый корутин)"]
+; size_source: stage17_linear_decode
+; writes: ["0x0260", "0x0261", "0x0268"]
 func_prog_step:
 	mvi	a,01h
 	sta	0608h
+label_061E:
 	push	h
 	xchg
 	shld	var_step_vector
@@ -1178,10 +1294,11 @@ label_0637:
 	mvi	e,0eh
 	jmp	func_error_raise
 ; func_cmd_return — RETURN: размотать стек возвратов, сопоставить маркер 0x8C (кладёт GOSUB), восстановить текстовый указатель на строку вызова. Пустой стек -> STOP/READY.
-; calls: ["POP PSW / CPI 0x8C (маркер GOSUB)", "размотка стека (DAD SP/INX H) до точки возврата"]
-; params: HL = поток после RETURN.
+; calls: ["0x063C"]
+; params: in[C,L] out[A,H,L] saves[]
 ; reads: ["стек возвратов от 0x0625 (поиск маркера 0x8C)", "PSW (POP PSW / CPI 0x8C)"]
 ; role: cmd_return
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (0x404D) на строку возврата"]
 func_cmd_return:
 	rnz
@@ -1218,10 +1335,11 @@ label_0669:
 	inx	h
 	jmp	label_0669
 ; func_cmd_rem — REM: комментарий — пропускает остальную часть строки до конца (0x00). Как исполняемый оператор ничего не делает. Тот же код используют GOTO/ELSE для «доесть до конца строки». Токен 0x8E.
-; calls: ["скан до terminator 0x00"]
-; params: HL = поток после REM (комментарий).
+; calls: ["0x0672"]
+; params: in[A,H,L] out[A,H,L] saves[]
 ; reads: ["`(HL)` до 0x00 (конец строки)"]
 ; role: cmd_rem_skip
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель — перемещён на конец строки"]
 func_cmd_rem:
 	xra	a
@@ -1231,10 +1349,11 @@ label_0673:
 	inx	h
 	jmp	label_0673
 ; func_cmd_data — DATA как исполняемый оператор — ничего не делает: пропускает список констант до разделителя/конца строки (данные читаются обработчиком READ через отдельный указатель DATA).
-; calls: ["скан до 0x3A/0x22/0x00 (RZ на конце строки)"]
-; params: HL = поток после DATA.
+; calls: ["0x0679"]
+; params: in[C,H,L] out[A,H,L] saves[]
 ; reads: ["`(HL)` до разделителя `:`(0x3A) или `\"`(0x22) или конца (0x00)"]
 ; role: cmd_data_skip
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (0x404D) — пропускает список констант"]
 func_cmd_data:
 	lxi	b,3a22h
@@ -1256,11 +1375,12 @@ label_0686:
 	jnz	label_0686
 	jmp	label_067C
 ; func_cmd_let — Обработчик присваивания/LET: разбор имени (0x0BCD) -> `=` (0xAC) -> вычисление выражения (0x09B1) -> запись. Сюда попадает func_cmd_dispatch при токене без флага команды (JNC 0x0691). Также инициализирует переменную цикла FOR (CALL из 0x03F3).
-; calls: ["CALL 0x0BCD func_var_lookup", "CPI 0xAC (`=`, иначе ошибка)", "CALL 0x09B1 func_eval_expression"]
-; params: HL = указатель на имя переменной (без флага команды). Общий путь присваивания (LET неявный и явный).
-; reads: ["поток токенов: имя, `=` (0xAC), правая часть"]
+; calls: ["0x0020", "0x09B1", "0x0E40", "0x0BCD"]
+; params: in[D,E,H,L] out[A,H,L] saves[A,D,H]
+; reads: ["0x0C33", "0x0C8C", "0x0ED6", "0x404D"]
 ; role: cmd_let_assign
-; writes: ["текстовый указатель (0x404D) на конец выражения", "слот переменной по адресу из func_var_lookup"]
+; size_source: stage17_linear_decode
+; writes: ["0x01D0"]
 func_cmd_let:
 	call	func_var_lookup
 	mov	a,m
@@ -1328,10 +1448,11 @@ lbl_06e1:
 	xchg
 	ret
 ; func_cmd_on — ON n GOTO/GOSUB list: вычислить n и выполнить n-й переход списка. Токен 0x91 из таблицы.
-; calls: ["CALL 0x053E — вычислить индекс", "разбор списка, выбор по N"]
-; params: HL = поток после ON (значение, затем GOTO/GOSUB-список).
+; calls: ["0x0008", "0x0010", "0x10C7"]
+; params: in[B,E,H,L] out[A,E,H,L] saves[]
 ; reads: ["вычисленное целое (FAC 0x404F..0x4052)"]
 ; role: cmd_on
+; size_source: stage17_linear_decode
 ; writes: ["выбор элемента списка -> переход к GOTO/GOSUB-обработчику"]
 func_cmd_on:
 	call	func_10c7
@@ -1353,10 +1474,11 @@ label_0708:
 	jz	label_0703
 	ret
 ; func_cmd_if — IF/THEN: вычислить условие, потребовать THEN (0xA1), проверить FAC (0x4050==0 -> ложь -> пропуск). Истина -> fallthrough к GOTO/GOSUB/присваиванию в ветке.
-; calls: ["CALL 0x09B1 func_eval_expression (условие)", "CPI 0xA1 (THEN)", "LDA 0x4050 (проверка истинности)", "JZ 0x0672 (ложь -> пропуск ветки)"]
-; params: HL = поток после IF (условие + THEN/GOTO/GOSUB).
-; reads: ["условие (0x09B1) -> FAC", "FAC экспонента 0x4050 (истина/ложь)", "THEN (0xA1) — ожидаемый разделитель"]
+; calls: ["0x0010", "0x09B1", "0x0008", "0x049A"]
+; params: in[B,H,L] out[A,H,L] saves[]
+; reads: ["0x0FD2"]
 ; role: cmd_if_then
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (0x404D)"]
 func_cmd_if:
 	call	func_eval_expression
@@ -1376,10 +1498,11 @@ label_071E:
 label_072C:
 	rst	func_rst_advance_text
 ; func_cmd_print — PRINT: цикл по элементам, разделители `,`/`;` (табуляция/без перевод), модификаторы TAB(/SPC(/AT; строки vs числа по 0x0C8C. Позиционирование курсора — через обработчик CUR (0x1C7A).
-; calls: ["CALL 0x09B1 func_eval_expression (каждый элемент)", "CALL 0x1C7A func_cmd_cur (позицион TAB/AT)", "RST 10 (вывод строки)"]
-; params: HL = поток токенов после PRINT.
+; calls: ["0x0010", "0x07BC", "0x1C7A"]
+; params: in[H,L] out[H,L] saves[]
 ; reads: ["разделители `,`(0x2C)/`;`(0x3B)", "TAB( 0x9D / SPC( 0x9F / AT 0xC8", "0x0C8C (строковый временный флаг — различает строка/число)"]
 ; role: cmd_print
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (0x404D)", "поток вывода на экран (func_putchar)"]
 func_cmd_print:
 	jz	func_07b2
@@ -1424,9 +1547,11 @@ label_077B:
 	pop	h
 	jmp	label_072C
 ; func_output_char_edit — Форматирование/вывод символа (BCD→ASCII). Вход `INX H / CALL 0x099E / DCX H / PUSH H / CALL 0x0531 / MVI A,20 / CALL 0x0378 (emit)`; хвост `MOV B,A / RRC×4 / ORI F0 / DAA / CPI 60 / SBI 1F / JMP 0x0378`. Строка-источник 0x077E. Достигается через ветку, которую CFG от 0x0000 не прошёл (условный вызов редактора вывода).
+; calls: ["0x0782", "0x0531", "0x0378", "0x099E"]
 ; cfg_reachable: no (branch not followed)
 ; emit_char: 0x0378
 ; helper: 0x0531, 0x099E
+; params: in[D,E,H,L] out[A,L] saves[]
 ; role: output_char_edit
 ; src_string: 0x077E
 func_output_char_edit:
@@ -1457,15 +1582,25 @@ label_07A3:
 	cpi	60h
 	sbi	1fh
 	jmp	func_0378
+; calls: []
+; params: in[] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_07ad:
 	mvi	m,00h
 	lxi	h,3f76h
+; calls: ["0x0378"]
+; params: in[] out[A] saves[]
+; size_source: stage17_linear_decode
 func_07b2:
 	mvi	a,0dh
 	call	func_0378
 label_07B7:
 	mvi	a,0ah
 	call	func_0378
+; calls: []
+; params: in[A] out[] saves[]
+; size_source: stage17_linear_decode
+; writes: ["0x038A"]
 func_07bc:
 	xra	a
 	sta	var_print_column
@@ -1526,10 +1661,11 @@ label_080F:
 	jnz	label_006E
 	jmp	lbl_1e6d
 ; func_cmd_input — INPUT: опциональный prompt в кавычках (0x22), печать (0x0E72), затем по списку переменных через `,`/`;` — запрос значения и присваивание. Токенизация строковых переменных (prompt) — п.6/59 change log.
-; calls: ["CALL 0x0E72 (напечатать prompt-строку)", "ожидание символа (0x2C40 func_kbd_dequeue)", "разбор/присваивание"]
-; params: HL = поток после INPUT (опц. prompt-строка "..." и список переменных через `,`/`;`).
+; calls: ["0x0819", "0x0869", "0x0010", "0x0E72", "0x0DA3"]
+; params: in[H,L] out[B] saves[B,H]
 ; reads: ["prompt `\"` (0x22) — литерал до закрывающей кавычки", "разделители `,`(0x2C)/`;`(0x3B)"]
 ; role: cmd_input
+; size_source: stage17_linear_decode
 ; writes: ["слоты переменных (0x0BCD)", "текстовый указатель (0x404D)"]
 func_cmd_input:
 	cpi	22h
@@ -1578,11 +1714,12 @@ label_085F:
 	mvi	a,08h
 	jmp	label_084B
 ; func_cmd_read — READ: читает следующий элемент из потока DATA и присваивает переменной (0x0BCD); двигает указатель DATA. Семантику указателя DATA/RESTORE уточним в под-пакете 5d (карта page-zero).
-; calls: ["CALL 0x0BCD func_var_lookup (назначить переменной)", "CALL 0x0BCD (разбор следующих имён списка)", "поиск следующего элемента DATA"]
-; params: HL = поток после READ (список переменных).
-; reads: ["указатель DATA (служебная ячейка)", "текущий элемент DATA"]
+; calls: ["0x0BCD", "0x0010", "0x0E68", "0x0691", "0x0378", "0x0819"]
+; params: in[D,E,H,L] out[B,E,H,L] saves[]
+; reads: ["0x0C8C"]
 ; role: cmd_read
-; writes: ["слоты переменных (0x0BCD)", "указатель DATA (продвинуть)", "текстовый указатель (0x404D)"]
+; size_source: stage17_linear_decode
+; writes: ["0x0372"]
 func_cmd_read:
 	push	h
 	lxi	h,0000h
@@ -1666,11 +1803,12 @@ label_08ED:
 	jnz	label_08D4
 	jmp	label_088F
 ; func_cmd_next — NEXT: соstack'а блоков достаёт ближайший FOR (проверка маркера 0x81; нет -> ошибка), инкрементит переменную на шаг, сравнивает с пределом; при переходе — переход к телу, иначе — снимаем блок.
-; calls: ["CPI 0x81 (найти FOR-блок)", "JNZ 0x007E (NEXT без FOR -> ошибка)", "SPHL/INX H (забрать адрес переменной из блока)"]
-; params: HL = поток после NEXT (список переменных).
+; calls: ["0x08F6"]
+; params: in[H,L] out[A,D,E] saves[]
 ; reads: ["стек блоков FOR (маркер 0x81)", "шаг/предел контрольного блока"]
 ; role: cmd_next
-; writes: ["переменная цикла (инкремент на шаг)", "текстовый указатель (0x404D)"]
+; size_source: stage17_linear_decode
+; writes: ["0x01D0"]
 func_cmd_next:
 	jnz	label_090E
 	shld	var_stmt_ptr
@@ -1777,33 +1915,47 @@ label_098F:
 	jnz	label_046B
 	rst	func_rst_advance_text
 	call	func_cmd_next
+; calls: ["0x09B1"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_099e:
 	call	func_eval_expression
 ; func_str_flush_guard — Гард: если есть незавершённая временная строка (0x0C8C<>0) — доделать её перед операцией. 4 вызова в eval-пути.
-; calls: ["ORA A / RZ (ничего нет — быстрый выход)", "JMP 0x1E6D (финализировать временную строку)"]
-; params: 0x0C8C (флаг незавершённой временной строки)
+; calls: ["0x1E6D"]
+; params: in[] out[A] saves[]
 ; reads: ["0x0C8C"]
 ; role: string_flush_guard
+; size_source: stage17_linear_decode
 ; writes: []
 func_str_flush_guard:
 	lda	var_type_flag
 	ora	a
 	rz
 	jmp	lbl_1e6d
+; calls: ["0x1E6D"]
+; params: in[] out[A] saves[]
+; reads: ["0x0C8C"]
+; size_source: stage17_linear_decode
 func_09a9:
 	lda	var_type_flag
 	ora	a
 	rnz
 	jmp	lbl_1e6d
 ; func_eval_expression — Вход в оценщик выражений (рекурсивный спуск с приоритетами). Уточнён ABI (Stage 5d): стек-guard (лимит 0x0CB3 -> JC 0069), цикл свёртки по приоритету 0x09D0, диспетчер бин. операций 0x09DD (SUI AB -> индекс,Routine ptr -> 0x0F45), строковая конкатенация по флагу 0x0C8C -> 0x1E6D.
-; calls: ["guard: LXI H,FFD1/DAD SP/JC 0069 (out of memory)", "CALL 0x0A43 — разбор/unary/primary", "0x09D0 — цикл свёртки по приоритету (MVI A,77/CMP B)", "0x09DD — диспетчер операций; строковая ветка -> 0x1E6D"]
-; params: HL = поток выражения; возврат значения в FAC.
+; calls: []
+; params: in[H,L] out[D,H,L] saves[]
 ; reads: ["0x0CB3 — лимит глубины стека", "0x0C8C — флаг строковых темпов", "0x09DD — индекс бинарной операции (SUI AB)"]
 ; role: eval_expression
+; size_source: stage17_linear_decode
 ; writes: ["0x0F45 — указатель подпрограммы бинарной операции", "FAC — значение выражения"]
 func_eval_expression:
 	dcx	h
 	mvi	d,00h
+; calls: ["0x0A43"]
+; params: in[D,E,H,L] out[A,D,E,H] saves[]
+; reads: ["0x0C8C", "0x0CB3"]
+; size_source: stage17_linear_decode
+; writes: ["0x09CD"]
 func_09b4:
 	push	d
 	xchg
@@ -1895,11 +2047,12 @@ label_0A28:
 	lhld	var_binop_operand
 	jmp	func_09b4
 ; func_eval_primary — Разбор первичного члена (литерал/переменная/скобка/унар/вызов функции). Вызывается func_eval_expression (0x09B1). Core назван в Stage 2/3; 5d подтверждает роль в цепочке приоритетов.
-; calls: ["func_099e — вычислить целое", "func_var_lookup — переменная", "func_exec_dispatch 0x0B09 — встроенная функция"]
-; params: HL = поток на первичном члене; значение -> FAC.
+; calls: []
+; params: in[A] out[] saves[]
 ; reads: ["разбор литералов/переменных/скобок/унарных/вызовов FN"]
 ; role: eval_primary
-; writes: ["FAC — значение первичного члена"]
+; size_source: stage17_linear_decode
+; writes: ["0x0C8C"]
 func_eval_primary:
 	xra	a
 	sta	var_type_flag
@@ -1946,6 +2099,9 @@ lbl_0a97:
 lbl_0aa1:
 	sui	0aeh
 	jnc	lbl_0ad0
+; calls: ["0x0008", "0x09B1"]
+; params: in[H,L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_0aa6:
 	rst	func_rst_fetch_sep
 	; unassigned i8080 opcode, executes as NOP -- emitted as byte
@@ -1964,11 +2120,12 @@ lbl_0aae:
 	pop	h
 	ret
 ; func_eval_ref — Ветка оценщика «ссылка на переменную или встроенную функцию»: var_lookup для идентификатора, иначе вычислительный прыжок в таблицу функций (0x0B09). Была меткой lbl_0abf.
-; calls: ["CALL 0x0BCD func_var_lookup", "CALL 0x09B1 func_eval_expression (аргумент функции/скобка)", "JMP 0x0B09 func_exec_dispatch (встройка по индексу токена)"]
-; params: HL = указатель на токен переменной/функции
-; reads: ["0x0C8C (флаг: строка/число)", "0x404D (текстовый указатель)"]
+; calls: ["0x0BCD"]
+; params: in[D,E,H,L] out[A,D,E,H] saves[H]
+; reads: ["0x0C8C"]
 ; role: reference_eval
-; writes: ["0x404D (продвинут за аргумент)", "FAC (значение переменной)"]
+; size_source: stage17_linear_decode
+; writes: ["0x404D"]
 func_eval_ref:
 	call	func_var_lookup
 	push	h
@@ -2016,8 +2173,11 @@ lbl_0b01:
 	lxi	d,0abah
 	push	d
 ; Диспетчер встроенных ФУНКЦИЙ: `LXI B,0x2770 / DAD B / MOV C,M / INX H / MOV H,M / MOV L,C / PCHL` — вычислительный прыжок по `data_dispatch_table`, индекс = токен − 0x00AE (смещение ×2). Достигается из оценщика выражений (`lbl_0ad0` после `sui 0aeh`). ВНИМАНИЕ: это НЕ диспетчер команд — исполнение операторов CLS..CLEAR идёт иным путём (не вскрыт, открытый пункт Stage 2).
+; calls: []
 ; index_formula: token - 0AEh
+; params: in[C,H,L] out[] saves[]
 ; role: function_dispatch
+; size_source: stage17_linear_decode
 func_exec_dispatch:
 	lxi	b,2770h
 	dad	b
@@ -2027,8 +2187,10 @@ func_exec_dispatch:
 	mov	l,c
 	pchl
 ; func_relation_dispatch — Диспатч отношений (сравнение/присваивание). `ORI AF / PUSH PSW / CALL 0x09A1 / CALL 0x0531 / POP PSW / XCHG / POP B / XTHL / XCHG / CALL 0x14C3 / LXI H,0D97 / JNZ 0B35 / ANA|ORA D,E / PCHL` — жонглирует операндами (XTHL/XCHG) и уходит по вычисленному адресу (PCHL). Вход динамический (адрес из вычислителя), потому не покрыт CFG.
+; calls: ["0x09A1", "0x0531", "0x14C3"]
 ; dispatch: PCHL (вычисленный переход)
 ; helper: 0x0531, 0x09A1, 0x14C3
+; params: in[C,D,E,H,L] out[A,C] saves[A]
 ; role: relational_operator_dispatch
 ; target_table: 0x0D97
 func_relation_dispatch:
@@ -2073,10 +2235,14 @@ lbl_0b3a:
 	rnc
 	jmp	label_0A28
 ; func_str_compare_let — Сравнение строк и путь LET-конкатенации. Читает флаг типа 0x0C8C (`LDA 0C8C / ADC A / ORA A / JPO 1E6D` — ветвь concat), цикл сравнения `LDAX B / CMP M / INX H / INX B`, хвост (0x0B93) пишет результат `SHLD 404D / SHLD 404F`. Самомодиф. слот data_render_lut_preamble (0x40FC) ссылается на 0x0B4C.
+; calls: ["0x14D1", "0x0028", "0x0FD8", "0x0FE9"]
 ; concat_branch: 0x1E6D
+; params: in[A,C,E,L] out[A,B,C,D,E,H,L] saves[A,B,D,H]
+; reads: ["0x0C8C"]
 ; result_cells: 0x404D, 0x404F
 ; role: string_compare_let_concat
 ; type_flag: 0x0C8C (var_type_flag)
+; writes: ["0x0C8C"]
 func_str_compare_let:
 	xra	a
 	ora	c
@@ -2149,27 +2315,36 @@ lbl_0ba8:
 	call	func_0d97
 	pop	b
 	jmp	label_09CC
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_0BBF:
-	defb	2Bh,0D7h,0C8h,0CFh,2Ch
-
+; func_0bbf — Хелпер сравнения: `DCX H / RST 10 / RZ / RST 8 / INR L` — вызывает RST 10h (func_rst_fac_sign) и RST 8h (func_rst_cmp_dehl), ранний выход по RZ. Островок кода между lbl_0ba8 и func_cmd_dim; CFG не дошёл (динамический вход).
+; calls: ["0x0010", "0x0008"]
+; cfg_reachable: no
+; params: in[H,L] out[H,L] saves[]
+; role: compare_rst_helper
+func_0bbf:
+	dcx	h
+	rst	func_rst_advance_text
+	rz
+	rst	func_rst_fetch_sep
+	inr	l
 ; func_cmd_dim — DIM: объявить массив(ы) — выделить место и занести в таблицу переменных. Токен 0x85 из таблицы.
-; calls: ["CALL func_var_lookup — разыменование имени"]
-; params: HL = поток после DIM (имя + размеры).
+; calls: []
+; params: in[] out[] saves[]
 ; reads: ["вычисляемые размеры массивов"]
 ; role: cmd_dim
-; writes: ["таблица переменных — записи массивов", "границы heap"]
+; size_source: stage17_linear_decode
+; writes: ["0x0C8B"]
 func_cmd_dim:
 	lxi	b,0bbfh
 	push	b
 	mvi	a,0ffh
 	sta	0c8bh
 ; func_var_lookup — Разбор имени переменной по (HL): кодировка буквы, `$`/целочисленный модификатор, опциональная вторая буква → поиск/создание слота. Одна из трёх сквозных точек ТЗ.
-; calls: ["0x0074 func_error_stub (некорректное имя)", "0x0BF5/0x0BFC/0x0C20 (разбор второго символа/модификатора)"]
-; params: HL = текстовый указатель на имя переменной
+; calls: []
+; params: in[H,L] out[] saves[]
 ; reads: ["(HL) — первый байт-токен имени (CPI 1A -> ошибка)", "следующие символы имени: `$` (0x24), вторая буква A–Z, пробелы", "0x0C8C (сбрасается)"]
 ; role: variable_lookup
-; writes: ["текстовый указатель (HL, в page-zero 0x404D) (на конец имени)", "0x0C8C=0"]
+; size_source: stage17_linear_decode
+; writes: ["0x0C8C"]
 func_var_lookup:
 	mov	b,m
 	mvi	a,0bfh
@@ -2444,12 +2619,13 @@ lbl_0d64:
 	rst	func_rst_advance_text
 	ret
 ; func_fre — FRE(0): объём свободной памяти; при активных строках делает сборку мусора.
-; calls: ["LXI H,0000 / DAD SP (запас стека)", "CALL 0x0FE5 / 0x0EF5 (сборка мусора строк, если 0x0C8C<>0)", "JMP 0x0D97 (результат DE -> FAC)"]
+; calls: ["0x0FD8", "0x0D97"]
 ; dispatch_index: 4
 ; function: FRE
-; params: 0 (значения не имеет)
-; reads: ["0x0CB3 (верх занятой памяти)", "0x0C8C (флаг стр. зоны)", "SP (стек)", "0x0ED6/0x0ED3 (границы строк)"]
+; params: in[D,E] out[A,C] saves[]
+; reads: ["0x0C8C", "0x0CB3", "0x0ED3", "0x0ED6"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B2
 ; word_index: 50
 ; writes: ["строковая зона (сборка мусора)"]
@@ -2474,12 +2650,13 @@ label_0D8A:
 	sbb	d
 	jmp	func_0d97
 ; func_pos — POS: колонка курсора. Её хвост 0x0D95 — общий return-помощник байт->FAC для INP/PEEK/POINT/LEN/ASC.
-; calls: ["CALL 0x3DEC (колонка курсора -> A)", "хвост 0x0D95: MOV C,A / MVI E,00 / MVI B,90 / JMP 0x1493 (байт->FAC)"]
+; calls: ["0x3DDF"]
 ; dispatch_index: 6
 ; function: POS
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050); позиция курсора
+; params: in[A] out[A,C] saves[]
 ; reads: ["состояние экрана через 0x3DEC"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B4
 ; word_index: 52
 ; writes: ["0x0C8C (флаг стр. зоны)"]
@@ -2488,6 +2665,9 @@ func_pos:
 label_0D95:
 	mov	c,a
 	xra	a
+; calls: ["0x1493"]
+; params: in[C] out[B,D,H,L] saves[]
+; size_source: stage17_linear_decode
 func_0d97:
 	mov	d,c
 	mvi	e,00h
@@ -2496,10 +2676,11 @@ func_0d97:
 	mvi	b,90h
 	jmp	func_fac_store_int
 ; func_cmd_def — DEF FN: определить пользовательскую функцию — связать имя FN с телом выражения в строке. Токен 0x96 из таблицы.
-; calls: ["регистрация FN -> строку с телом"]
-; params: HL = поток после DEF (FN name(args)=expr).
+; calls: ["0x09A1", "0x0008", "0x0BCD", "0x0E0D", "0x0DA3"]
+; params: in[D,H,L] out[A,B,C,H,L] saves[]
 ; reads: ["имя FN (после DEF)", "токены тела выражения"]
 ; role: cmd_def
+; size_source: stage17_linear_decode
 ; writes: ["таблица пользовательских FN (указатель на тело строки)"]
 func_cmd_def:
 	call	func_0e0d
@@ -2581,6 +2762,10 @@ label_0DFF:
 	rnz
 	mvi	e,16h
 	jmp	func_error_raise
+; func_0e0d — Гэп 0x0E3A..0x0E3F — конец тела func_0e0d (CFG покрыл, RDB длины нет). След. объект func_str @0x0E40 — продление до 0x0E3F.
+; calls: ["0x0010", "0x0008", "0x01E8", "0x0BFC"]
+; params: in[B,H,L] out[B,C] saves[]
+; writes: ["0x0C8C"]
 func_0e0d:
 	rst	func_rst_fetch_sep
 	ana	b
@@ -2610,12 +2795,13 @@ gap_0E3A:
 	defb	0CDh,0E6h,01h,0C3h,0A1h,09h
 
 ; func_str — STR$: число -> строка через float->ASCII форматировщик 0x16AD.
-; calls: ["CALL 0x09A1 (взять FAC)", "CALL 0x16AD (float->ASCII в буфер)", "CALL 0x0E71 (посчитать длину)", "CALL 0x0FE5 / 0x0ECE (выделить/скопировать)", "CALL 0x0E68 (dim) / 0x0FD8"]
+; calls: ["0x09A1", "0x0FD8", "0x0E68", "0x16A3", "0x0ECE"]
 ; dispatch_index: 17
 ; function: STR$
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050) (число)
+; params: in[H,L] out[B,C,D,L] saves[H]
 ; reads: ["стр. дескриптор: dim 0x4049, data-ptr 0x404B"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00BF
 ; word_index: 63
 ; writes: ["стр. дескриптор: dim 0x4049, data-ptr 0x404B", "строковая зона (0x0DF9 alloc)"]
@@ -2643,13 +2829,17 @@ label_0E50:
 	pop	d
 	ret
 ; func_str_make — Собрать строковый дескриптор: dim в 0x4049, data-ptr в 0x404B (внутренний хвост 0x0DF9/0x0DFF — не отдельные объекты). CHR$/INKEY$.
-; calls: ["CALL 0x0ECE func_str_window (выделение)", "LXI H,0x4049 / MOV M,A", "хвост 0x0DF9 (записать DE как data-ptr)"]
-; params: A = длина (dim)
+; calls: ["0x0ECE"]
+; params: in[] out[] saves[]
 ; reads: []
 ; role: string_descriptor_build
+; size_source: stage17_linear_decode
 ; writes: ["0x4049 (dim)", "0x404B (data-ptr через хвост 0x0DF9)"]
 func_str_make:
 	call	func_str_window
+; calls: ["0x0DA3"]
+; params: in[A] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_0e68:
 	lxi	h,4049h
 	push	h
@@ -2684,12 +2874,12 @@ lbl_0e87:
 	call	func_0e68
 	rst	func_rst_cmp_dehl
 	cnc	label_0E50
-; func_str_return — Вернуть временную строку как результат выражения: обновить указатель аллокации 0x0F07, текстовый 0x404D, флаг 0x0C8C. CHR$/STR$/LEFT$/RIGHT$/MID$/INKEY$. Был меткой label_0E97 (8 ссылок).
-; calls: ["LHLD 0x0F07 / SHLD 0x404D", "STA 0x0C8C=1", "CALL 0x18AA", "RST 0x20 (сверка)", "MVI E,1E / JZ 0x0083 (переполнение строки)"]
-; params: 0x4049 (дескриптор), 0x0F07 (указатель аллокации строк)
-; reads: ["0x4049", "0x0F07", "0x404F (проверка RST 0x20)"]
+; func_str_return — Гэп 0x0EB4..0x0EB7 — хвост возврата строковой функции. След. объект func_str_window @0x0ECE — продление до 0x0EB7 (0x0EB8..0x0ECD в CFG).
+; calls: ["0x0020", "0x18AA"]
+; params: in[] out[A,D,E] saves[]
+; reads: ["0x0F07"]
 ; role: string_return
-; writes: ["0x404D (текстовый указатель)", "0x0F07 (сдвиг аллокации)", "0x0C8C=1 (флаг временной строки)"]
+; writes: ["0x0C8C", "0x0F07", "0x404D"]
 func_str_return:
 	lxi	d,4049h
 	lhld	var_string_ptr
@@ -2722,11 +2912,12 @@ label_0EBF:
 	inx	b
 	jmp	label_0EBF
 ; func_str_window — Выделить и заокнировать окно под строку заданной длины в строковой зоне (0x0ED3/0x0ED6). Зовёт func_str_make.
-; calls: ["RST 0x20 (сравнение границы)", "JC 0x0EE9 (OUT OF MEMORY/сборка)", "SHLD 0x0ED3"]
-; params: A = требуемая длина
+; calls: ["0x0020"]
+; params: in[A,E,L] out[A,D,E,H,L] saves[A]
 ; reads: ["0x0ED3/0x0ED6 (границы строковой зоны)"]
 ; role: string_alloc_window
-; writes: ["0x0ED3 (окно строки)", "стек (RST 0x20)"]
+; size_source: stage17_linear_decode
+; writes: ["0x0ED3"]
 func_str_window:
 	ora	a
 	mvi	c,0f1h
@@ -2807,6 +2998,10 @@ lbl_0f27:
 lbl_0f4e:
 	push	b
 	ori	80h
+; calls: ["0x0020"]
+; params: in[H,L] out[A,B,E,H,L] saves[B,H]
+; reads: ["0x0ED3"]
+; size_source: stage17_linear_decode
 func_0f51:
 	mov	a,m
 	inx	h
@@ -2900,6 +3095,9 @@ lbl_0f98:
 	xthl
 	push	h
 	jmp	func_str_return
+; calls: []
+; params: in[L] out[B,C,L] saves[]
+; size_source: stage17_linear_decode
 func_0fcf:
 	pop	h
 	xthl
@@ -2910,6 +3108,9 @@ func_0fcf:
 	inx	h
 	mov	b,m
 	mov	l,a
+; calls: ["0x0FD8"]
+; params: in[B,C,D,E,L] out[B,C,D,E,L] saves[]
+; size_source: stage17_linear_decode
 func_0fd8:
 	inr	l
 label_0FD9:
@@ -2924,8 +3125,16 @@ label_0FE2:
 	call	func_09a9
 label_0FE5:
 	lhld	var_text_ptr
+; calls: []
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
+; size_source: stage17_linear_decode
 func_0fe8:
 	xchg
+; calls: ["0x0020"]
+; params: in[A,D,E] out[D,E] saves[]
+; reads: ["0x0ED3", "0x0F07"]
+; size_source: stage17_linear_decode
+; writes: ["0x0ED3", "0x0F07"]
 func_0fe9:
 	lhld	var_string_ptr
 	dcx	h
@@ -2953,15 +3162,16 @@ lbl_1009:
 	pop	h
 	ret
 ; func_len — LEN: вычисляет строковый аргумент и возвращает его длину (байт счётчика). Его хвост 0x100F — общий eval-помощник для ASC/VAL.
-; calls: ["CONT 0x0D95 (положить результат)", "CALL 0x0FE2 (eval строки -> дескриптор)", "хвост 0x100F переиспользуют ASC/VAL"]
+; calls: ["0x0FD8"]
 ; dispatch_index: 16
 ; function: LEN
-; params: строка (eval через 0x0FE2)
+; params: in[A,H,L] out[A,D] saves[]
 ; reads: ["дескриптор строки (длина в (HL))", "0x0C8C (флаг стр. зоны)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00BE
 ; word_index: 62
-; writes: ["0x0C8C=0"]
+; writes: ["0x0C8C"]
 func_len:
 	lxi	b,0d95h
 	push	b
@@ -2974,12 +3184,13 @@ label_100F:
 	ora	a
 	ret
 ; func_asc — ASC: код первого символа строки; пустая строка -> 255.
-; calls: ["CALL 0x100F (eval строки, хвост func_len)", "JNZ 0x0D95 (код символа), пустая строка -> MVI A,FF"]
+; calls: ["0x0D92", "0x100B"]
 ; dispatch_index: 19
 ; function: ASC
-; params: строка
+; params: in[H,L] out[A] saves[]
 ; reads: ["data-ptr дескриптора (LDAX D) — первый байт строки"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C1
 ; word_index: 65
 ; writes: []
@@ -2995,12 +3206,13 @@ func_asc:
 	mvi	a,0ffh
 	jmp	label_0D95
 ; func_chr — CHR$: строка из одного символа по его коду.
-; calls: ["CALL 0x0E65 (собрать дескриптор из 1 байта, dim=1)", "CALL 0x10CA (числовой аргумент)", "LHLD 0x404B / MOV M,E", "JMP 0x0E97 (вернуть временную строку)"]
+; calls: ["0x0E65", "0x0E97", "0x10CA"]
 ; dispatch_index: 20
 ; function: CHR$
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050); код символа
-; reads: ["0x404B (data-ptr временной строки)"]
+; params: in[E] out[A,B,H,L] saves[]
+; reads: ["0x404B"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C2
 ; word_index: 66
 ; writes: ["стр. дескриптор: dim 0x4049, data-ptr 0x404B", "0x404B-> (символ)"]
@@ -3013,12 +3225,13 @@ func_chr:
 	pop	b
 	jmp	func_str_return
 ; func_left — LEFT$: первые n байт; его хвост 0x103F — общий экстрактор подстроки для RIGHT$/MID$.
-; calls: ["CALL 0x10B6 (eval 2 аргумента)", "CLAMP n к длине (CMP B/JC)", "CALL 0x0ECE (копировать) / 0x0E68 (dim) / 0x0FD8", "хвост 0x103F.. переиспользуют RIGHT/MID", "JMP 0x0E97"]
+; calls: ["0x0E68", "0x0FE9", "0x0ECE", "0x10A7", "0x0E97", "0x0FD8"]
 ; dispatch_index: 21
 ; function: LEFT$
-; params: строка, число (0x10B6 eval)
+; params: in[A,B,H,L] out[B,C,D,L] saves[B,H]
 ; reads: ["дескриптор строки (dim/data-ptr)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C3
 ; word_index: 67
 ; writes: ["новый дескриптор подстроки"]
@@ -3056,12 +3269,13 @@ label_103F:
 	call	func_0fe9
 	jmp	func_str_return
 ; func_right — RIGHT$: сдвиг стартовой позиции на len-n и падение в общий экстрактор LEFT$.
-; calls: ["CALL 0x10B6 (eval)", "LDAX D / SUB B (старт = len - n)", "JMP 0x103F (хвост func_left)"]
+; calls: ["0x10A7", "0x103B"]
 ; dispatch_index: 22
 ; function: RIGHT$
-; params: строка, число
+; params: in[B,E] out[A] saves[D]
 ; reads: ["дескриптор строки"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C4
 ; word_index: 68
 ; writes: ["дескриптор подстроки"]
@@ -3073,12 +3287,13 @@ func_right:
 	sub	b
 	jmp	label_103F
 ; func_mid — MID$: start=p, len опционален; входит в общий экстрактор подстроки на 0x1041.
-; calls: ["CALL 0x10B9 (eval до 3 аргументов)", "MVI E,FF / CPI 29 (необязательный len)", "RST 08 (след. токен)", "LXI B,0x1041 / PUSH B (общий хвост func_left)"]
+; calls: ["0x10C7", "0x0008", "0x10A7"]
 ; dispatch_index: 23
 ; function: MID$
-; params: строка, позиция[, длина]
+; params: in[B,D,E,H,L] out[B,D] saves[]
 ; reads: ["дескриптор строки"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C5
 ; word_index: 69
 ; writes: ["дескриптор подстроки"]
@@ -3113,26 +3328,28 @@ label_1087:
 	mov	b,e
 	ret
 ; func_inp — INP(n): чтение порта n; номер порта патчится самомодификацией IN-инструкции.
-; calls: ["CALL 0x10CA (eval числа -> A)", "STA 0x10A3 (patch IN), IN 00", "JMP 0x0D95 (хвост func_pos: байт A -> FAC)"]
+; calls: ["0x10CA", "0x0D92"]
 ; dispatch_index: 5
 ; function: INP
-; params: число (номер порта)
+; params: in[A] out[A] saves[]
 ; reads: ["порт ввода IN 00 (номер подставляется)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B3
 ; word_index: 51
-; writes: ["0x10A3 (самомодифицируемый операнд порта инструкции IN)"]
+; writes: ["0x10A3"]
 func_inp:
 	call	func_fac_require_byte
 	sta	10a3h
 	in	00h
 	jmp	label_0D95
 ; func_cmd_out — OUT port,val: вывод байта в аппаратный порт. Подтверждено телом (0x10A7: CALL 099E/STA 10B4/CALL 10C3/OUT 00). Токен 0x90 (сегмент A).
-; calls: ["CALL 0x099E — порт", "CALL 0x10C3 — значение", "OUT (порт)"]
-; params: HL = поток после OUT; порт, значение.
+; calls: ["0x10A7", "0x10CA", "0x099E"]
+; params: in[A] out[] saves[]
 ; reads: ["номер порта (`CALL 0x099E`)", "значение (`CALL 0x10C3`)"]
 ; role: cmd_out
-; writes: ["`OUT порт` (самомодиф. операнд порта по `STA 0x10B4`)"]
+; size_source: stage17_linear_decode
+; writes: ["0x10B4"]
 func_cmd_out:
 	call	func_099e
 	call	func_fac_require_byte
@@ -3157,13 +3374,17 @@ label_10C3:
 	rst	func_rst_fetch_sep
 	inr	l
 	mvi	b,0d7h
+; calls: ["0x099E"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_10c7:
 	call	func_099e
 ; func_fac_require_byte — Вычислить числовое выражение → байт в A с проверкой диапазона. Используют INP/POINT/CHR$. Была меткой label_10CA.
-; calls: ["CALL 0x052D (eval → целое в DE)", "ORA D / JNZ 0x0539 (диапазон 0..255, иначе ошибка)", "RST 0x10 (продвинуть указатель)"]
-; params: HL = текстовый указатель на число
+; calls: ["0x0010", "0x052D"]
+; params: in[A,D,E,H,L] out[A,H,L] saves[]
 ; reads: ["0x4050/0x4051 (младший байт значения FAC)"]
 ; role: fac_byte_arg
+; size_source: stage17_linear_decode
 ; writes: ["текстовый указатель (HL, в page-zero 0x404D)"]
 func_fac_require_byte:
 	call	func_052d
@@ -3175,15 +3396,16 @@ func_fac_require_byte:
 	mov	a,e
 	ret
 ; func_val — VAL: прогоняет строку через арифметический парсер 0x15A8; пусто -> 0.
-; calls: ["CALL 0x100F (eval строки, хвост func_len)", "JZ 0x119A (пусто -> 0)", "CALL 0x15A8 (числовой парсер -> FAC)"]
+; calls: ["0x15A8", "0x100B"]
 ; dispatch_index: 18
 ; function: VAL
-; params: строка
+; params: in[A,D,H,L] out[H,L] saves[H]
 ; reads: ["data-ptr строки (HL из дескриптора)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C0
 ; word_index: 64
-; writes: ["0x00AE (текст. указатель парсера)", "0x00B0/0x00B1 (флаги разбора)", "FAC"]
+; writes: ["0x00AE", "0x00B0", "0x00B1"]
 func_val:
 	call	label_100F
 	jz	lbl_119a
@@ -3212,20 +3434,40 @@ label_10FA:
 	mvi	a,0feh
 	sta	00b0h
 	ret
+; calls: []
+; params: in[] out[H] saves[]
+; size_source: stage17_linear_decode
 func_1100:
 	lxi	h,1783h
+; calls: ["0x14D1", "0x1112"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_1103:
 	call	func_14d1
 	jmp	func_1112
+; calls: ["0x14D1"]
+; params: in[] out[H] saves[]
+; size_source: stage17_linear_decode
 func_1109:
 	call	func_14d1
 	lxi	h,0d1c1h
+; calls: ["0x14A3"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_110f:
 	call	func_14a3
+; calls: []
+; params: in[A,B] out[A] saves[]
+; size_source: stage17_linear_decode
 func_1112:
 	xra	a
 	ora	b
 	rz
+; calls: []
+; params: in[B,C,D,E] out[B,C,D,E,H,L] saves[]
+; reads: ["0x0FD2", "0x404D", "0x404F"]
+; size_source: stage17_linear_decode
+; writes: ["0x404D", "0x404F"]
 func_1115:
 	lda	4050h
 label_1118:
@@ -3301,10 +3543,11 @@ lbl_116d:
 	sbb	c
 	mov	c,a
 ; func_fac_normalize — Нормализация FAC; при уходе экспоненты обнуляет 0x4050 (число → 0).
-; calls: ["CC 0x1245 (хвост нормализации)", "XCHG"]
-; params: FAC (мантисса/экспонента)
+; calls: ["0x1183"]
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
 ; reads: ["0x4050 (экспонента)"]
 ; role: fac_normalize
+; size_source: stage17_linear_decode
 ; writes: ["0x4050=0 (underflow → FAC := 0)", "FAC (нормализованный)"]
 func_fac_normalize:
 	cc	label_1245
@@ -3483,18 +3726,19 @@ label_1250:
 	sub	d
 	mov	c,a
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_125A:
+; data_log_poly_coeffs — Коэффициенты полинома LN/LOG: байт-счётчик 03 + 3×4-байтных packed-float (AA 56 19 80 / F1 22 76 80 / 45 AA 38 82; экспоненты 0x80). Заканчивается ровно на func_log @0x1267 (внутри только данные).
+data_log_poly_coeffs:
 	defb	03h,0AAh,56h,19h,80h,0F1h,22h,76h
 	defb	80h,45h,0AAh,38h,82h
 
 ; func_log — LOG: натуральный логарифм рядом; ноль/отрицательное -> ошибка.
-; calls: ["RST 28 -> 0x0028 (проверка, 0 -> ошибка JPE 0539)", "CALL 0x1112 / 0x1109 / 0x13B8 / 0x1844 / 0x167D (float-ряд)", "константы 0x1840, 0x125A (табличные)"]
+; calls: ["0x1844", "0x0028", "0x1109", "0x1112", "0x13B8", "0x167D"]
 ; dispatch_index: 9
 ; function: LOG
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[A,L] out[A,B,D,H,L] saves[A,B,D]
 ; reads: ["0x4050 (экспонента)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B7
 ; word_index: 55
 ; writes: ["FAC (через float-хелперы)"]
@@ -3525,10 +3769,16 @@ func_log:
 	call	func_1112
 	pop	psw
 	call	func_167d
+; calls: []
+; params: in[] out[B,D,H] saves[]
+; size_source: stage17_linear_decode
 func_129d:
 	lxi	b,8031h
 	lxi	d,7218h
 	lxi	h,0d1c1h
+; calls: []
+; params: in[B,C,D,E,L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_12a6:
 	lxi	h,4050h
 	mov	a,m
@@ -3630,14 +3880,24 @@ lbl_132f:
 	sub	h
 	mov	c,a
 	jmp	lbl_1187
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_133D:
-	defb	4Ch,65h,6Ah,0C3h,87h,11h
-
+; func_133d — Сдвиг тройки байт + хвостовой переход: `MOV C,H / MOV H,L / MOV L,D / JMP 1187`. Заносит DE:HL в C:HL и передаёт управление 0x1187 (tail). Между lbl_132f и lbl_1343; CFG не покрыл (вход через выч. адрес).
+; calls: ["0x1187"]
+; cfg_reachable: no
+; params: in[D,H,L] out[C,H,L] saves[]
+; role: shift_and_tailjump
+; tail_jump: 0x1187
+func_133d:
+	mov	c,h
+	mov	h,l
+	mov	l,d
+	jmp	lbl_1187
 lbl_1343:
 	lxi	h,133dh
 	push	h
 	lhld	404eh
+; calls: []
+; params: in[B,C,H,L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_134a:
 	dad	h
 	jnc	lbl_134f
@@ -3671,6 +3931,9 @@ lbl_136d:
 	rnc
 	dad	b
 	ret
+; calls: []
+; params: in[A,B,D,E,L] out[A,H,L] saves[]
+; size_source: stage17_linear_decode
 func_1371:
 	lxi	h,0000h
 label_1374:
@@ -3721,6 +3984,9 @@ lbl_13a4:
 	dad	d
 	adc	b
 	ret
+; calls: ["0x14AB", "0x14C3"]
+; params: in[] out[B,D] saves[]
+; size_source: stage17_linear_decode
 func_13aa:
 	call	func_fac_continuation
 	lxi	b,8420h
@@ -3729,6 +3995,11 @@ func_13aa:
 label_13B6:
 	pop	b
 	pop	d
+; calls: []
+; params: in[B,C,D,E,L] out[D,E] saves[]
+; reads: ["0x404D", "0x404F"]
+; size_source: stage17_linear_decode
+; writes: ["0x404D", "0x404F"]
 func_13b8:
 	lxi	h,4050h
 	mov	a,m
@@ -3803,18 +4074,34 @@ lbl_141f:
 	mov	e,a
 	mvi	c,00h
 	jmp	label_11CE
+; calls: ["0x1440"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_143d:
 	call	func_1440
+; calls: ["0x1443"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_1440:
 	call	func_1443
+; calls: ["0x1446"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_1443:
 	call	func_1446
+; calls: []
+; params: in[C,H,L] out[C,H,L] saves[]
+; size_source: stage17_linear_decode
 func_1446:
 	dad	h
 	mov	a,c
 	adc	a
 	jc	lbl_145d
 	mov	c,a
+; calls: []
+; params: in[B,D,E,H,L] out[B,H,L] saves[]
+; size_source: stage17_linear_decode
+; writes: ["0x05B1"]
 func_144d:
 	shld	1457h
 	dad	d
@@ -3844,6 +4131,10 @@ lbl_1466:
 label_146B:
 	jp	lbl_119a
 	jmp	lbl_230c
+; calls: ["0x1115"]
+; params: in[A,D,E] out[B,C,D,E,H,L] saves[]
+; reads: ["0x404D", "0x404F"]
+; size_source: stage17_linear_decode
 func_1471:
 	lhld	var_fac
 	xra	a
@@ -3856,31 +4147,39 @@ func_1471:
 	jc	lbl_230c
 	mov	b,a
 	call	func_1115
+; calls: ["0x230C"]
+; params: in[L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_1485:
 	lxi	h,4050h
 	inr	m
 	rnz
 	jmp	lbl_230c
 ; func_sgn — SGN: результат -1/0/+1 константой в FAC.
-; calls: ["RST 28 -> 0x0028 (проверка/загрузка FAC)", "JMP 0x1183 (нормализация/сохранение FAC)"]
+; calls: ["0x0028"]
 ; dispatch_index: 0
 ; function: SGN
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[] out[] saves[]
 ; reads: ["0x4050 (экспонента/знак FAC)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00AE
 ; word_index: 46
 ; writes: ["0x4050=0x88 (масштаб результата)", "0x4051=0x80 (знак результата)"]
 func_sgn:
 	rst	func_rst_fac_sign
+; calls: []
+; params: in[] out[B,D] saves[]
+; size_source: stage17_linear_decode
 func_148e:
 	mvi	b,88h
 	lxi	d,0000h
 ; func_fac_store_int — Записать целое (A) во FAC с указанной шкалой (B) и нормализовать. Общий return-хвост 0x0D95 для POS/INP/PEEK/POINT/LEN/ASC и `&`.
-; calls: ["LXI H,0x4050 / MOV M,B", "JMP 0x1183 func_fac_normalize"]
-; params: A = значение, B = шкала экспоненты (0x98 целое, 0x90/0x91 прочие)
+; calls: ["0x1183"]
+; params: in[A,B] out[A,B,C,H,L] saves[]
 ; reads: []
 ; role: fac_store
+; size_source: stage17_linear_decode
 ; writes: ["0x4050=B (экспонента)", "0x4051 (мантисса/знак)", "0x404F (знак)"]
 func_fac_store_int:
 	lxi	h,4050h
@@ -3892,18 +4191,22 @@ func_fac_store_int:
 	ral
 	jmp	func_fac_normalize
 ; func_abs — ABS: инвертирует знаковый бит FAC. Её зовёт унарный минус (lbl_0aae: call func_14a3) и EXP (call 14A3).
-; calls: ["RST 28 -> 0x0028 (проверка FAC)", "RP ранний выход если >= 0"]
+; calls: ["0x0028"]
 ; dispatch_index: 2
 ; function: ABS
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[] out[] saves[]
 ; reads: ["0x404F (знак FAC)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B0
 ; word_index: 48
 ; writes: ["0x404F (сброс bit7 знака)"]
 func_abs:
 	rst	func_rst_fac_sign
 	rp
+; calls: []
+; params: in[L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_14a3:
 	lxi	h,404fh
 	mov	a,m
@@ -3911,11 +4214,12 @@ func_14a3:
 	mov	m,a
 	ret
 ; func_fac_continuation — Самый горячий хелпер (12 вызовов): сохранить FAC и текст в стек и перехватить продолжение через self-modified JMP в 0x14B8. Используют EXP/SIN/COS/TAN/ATN/SQR/RND/STR$/VAL.
-; calls: ["XTHL/SHLD 0x14B9", "PUSH H", "JMP 0x0000 (сапомодифицируемый трамплин)"]
-; params: FAC + 0x404D (текстовый указатель)
-; reads: ["0x404D", "0x404F (знак FAC)"]
+; calls: ["0x0000"]
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
+; reads: ["0x404D", "0x404F"]
 ; role: fac_trampoline
-; writes: ["стек (пуш FAC/текста)", "0x14B8/0x14B9 (самопатч JMP-адреса)"]
+; size_source: stage17_linear_decode
+; writes: ["0x14B9"]
 func_fac_continuation:
 	xchg
 	lhld	var_text_ptr
@@ -3926,10 +4230,11 @@ func_fac_continuation:
 	xchg
 	jmp	func_0000
 ; func_fac_fetch_operand — Загрузить inline-константу из потока программы во FAC и сдвинуть текстовый указатель. Хвост 0x14C3. Используют SQR (0.5), возведение в степень.
-; calls: ["MOV E,M/INX H... (загрузка 4 байт)", "SHLD 0x404D / SHLD 0x404F"]
-; params: HL = указатель на inline 4-байтный операнд (константу)
+; calls: []
+; params: in[H,L] out[B,C,D,E,H,L] saves[]
 ; reads: ["4 байта по HL (манистсса+экспонента константы)"]
 ; role: fac_operand_load
+; size_source: stage17_linear_decode
 ; writes: ["0x404D (текстовый указатель за операнд)", "0x404F (FAC)"]
 func_fac_fetch_operand:
 	mov	e,m
@@ -3940,6 +4245,10 @@ func_fac_fetch_operand:
 	inx	h
 	mov	b,m
 	inx	h
+; calls: []
+; params: in[B,C,D,E,H,L] out[D,E,H,L] saves[]
+; size_source: stage17_linear_decode
+; writes: ["0x404D", "0x404F"]
 func_14c3:
 	xchg
 	shld	var_text_ptr
@@ -3948,8 +4257,14 @@ func_14c3:
 	shld	var_fac
 	xchg
 	ret
+; calls: []
+; params: in[] out[H] saves[]
+; size_source: stage17_linear_decode
 func_14ce:
 	lxi	h,404dh
+; calls: []
+; params: in[H,L] out[B,C,D,E,H,L] saves[]
+; size_source: stage17_linear_decode
 func_14d1:
 	mov	e,m
 	inx	h
@@ -3961,8 +4276,14 @@ func_14d1:
 label_14D8:
 	inx	h
 	ret
+; calls: []
+; params: in[] out[H] saves[]
+; size_source: stage17_linear_decode
 func_14da:
 	lxi	h,404fh
+; calls: []
+; params: in[H,L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_14dd:
 	mov	a,m
 	xri	80h
@@ -3979,10 +4300,17 @@ lbl_14e4:
 	sbb	a
 	xra	m
 	ret
+; calls: []
+; params: in[A,B] out[A] saves[]
+; size_source: stage17_linear_decode
 func_14f0:
 	xra	a
 	ora	b
 	jz	func_rst_fac_sign
+; calls: []
+; params: in[A,B,C,D,E] out[A] saves[]
+; reads: ["0x404D", "0x404E", "0x404F"]
+; size_source: stage17_linear_decode
 func_14f5:
 	lhld	var_fac
 	xra	a
@@ -4025,8 +4353,16 @@ lbl_1526:
 	mov	d,a
 	mov	e,a
 	ret
+; calls: []
+; params: in[A] out[A] saves[]
+; size_source: stage17_linear_decode
 func_152a:
 	ora	a
+; calls: []
+; params: in[A,D,E,H] out[A,B,C,D,E,H,L] saves[]
+; reads: ["0x404D", "0x404F"]
+; size_source: stage17_linear_decode
+; writes: ["0x0FD3"]
 func_152b:
 	mov	b,a
 	jz	lbl_1526
@@ -4067,12 +4403,13 @@ label_156A:
 	pop	h
 	ret
 ; func_int — INT: отбрасывает дробную часть; RNC ранний выход, если уже целое.
-; calls: ["CALL 0x152A (усечение мантиссы)", "CALL 0x1183 (нормализация/сохранение FAC)"]
+; calls: ["0x152A", "0x1183"]
 ; dispatch_index: 1
 ; function: INT
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
-; reads: ["0x4050 (экспонента)", "0x404D (текстовый указатель)"]
+; params: in[C,E,L] out[A,H,L] saves[A]
+; reads: ["0x404D"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00AF
 ; word_index: 47
 ; writes: ["0x4050=0x98 (сдвиг на границу целого)"]
@@ -4092,6 +4429,9 @@ func_int:
 	call	func_fac_normalize
 	pop	psw
 	ret
+; calls: ["0x1371", "0x0CD7"]
+; params: in[A,B,C,L] out[B,H] saves[]
+; size_source: stage17_linear_decode
 func_1585:
 	xra	a
 	ora	b
@@ -4114,10 +4454,11 @@ label_15A1:
 	ora	a
 	jz	func_099e
 ; func_num_digitize — Парсер числового литерала из текста → FAC (знак, цифры, порядок). Его зовёт VAL (CALL 15A8) и func_eval_primary. Был меткой label_15A8.
-; calls: ["RST 0x10 (следующий символ)", "0x1631/0x15F3/0x15BF (ветки цифры/точки/экспоненты)"]
-; params: HL = текстовый указатель на числовой литерал
+; calls: []
+; params: in[H,L] out[A] saves[]
 ; reads: ["символы: знак (+/-), цифры 0-9, экспонента"]
 ; role: number_parser
+; size_source: stage17_linear_decode
 ; writes: ["0x4050 (экспонента FAC)", "0x4060 (накопитель мантиссы)", "0x00AE/0x00B0/0x00B1 (флаги разбора)", "текстовый указатель (HL, в page-zero 0x404D)"]
 func_num_digitize:
 	mov	a,m
@@ -4249,12 +4590,18 @@ lbl_166b:
 	ret
 label_1675:
 	rz
+; calls: ["0x1471"]
+; params: in[] out[A] saves[A]
+; size_source: stage17_linear_decode
 func_1676:
 	push	psw
 	call	func_1471
 	pop	psw
 	dcr	a
 	ret
+; calls: ["0x1112", "0x14AB", "0x148E"]
+; params: in[] out[B,D] saves[]
+; size_source: stage17_linear_decode
 func_167d:
 	call	func_fac_continuation
 	call	func_148e
@@ -4273,13 +4620,22 @@ lbl_1688:
 	mov	e,a
 	jp	lbl_164c
 	jmp	lbl_230c
+; calls: ["0x00A1"]
+; params: in[] out[H] saves[H]
+; size_source: stage17_linear_decode
 func_169a:
 	push	h
 	lxi	h,2557h
-	call	func_00a1
+	call	func_print_packed_string
 	pop	h
+; calls: []
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
+; size_source: stage17_linear_decode
 func_16a2:
 	xchg
+; calls: ["0x0028", "0x1493"]
+; params: in[A] out[A,B,H,L] saves[]
+; size_source: stage17_linear_decode
 func_16a3:
 	xra	a
 	mvi	b,98h
@@ -4420,6 +4776,9 @@ lbl_1771:
 	mov	m,c
 	pop	h
 	ret
+; calls: ["0x14F5"]
+; params: in[A,L] out[A,B,D] saves[]
+; size_source: stage17_linear_decode
 func_1774:
 	lxi	b,9474h
 	lxi	d,23f7h
@@ -4428,8 +4787,8 @@ func_1774:
 	pop	h
 	jpo	lbl_16dd
 	pchl
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_1783:
+; data_1783_poly_coeffs — Ряд float-коэффициентов в области SQR. Подтверждён ссылкой загрузчика: `LXI H,1783h` на 0x17A1 (сразу после func_sqr 0x179E). Сам блок дизассемблируется как байт-суп (RST 38=FF, heavy FF) → данные. Хвост на func_sqr @0x179E.
+data_1783_poly_coeffs:
 	defb	00h,00h,00h,80h,60h,79h,0FEh,0F0h
 	defb	0D8h,0FFh,18h,0FCh,0FFh,9Ch,0FFh,0FFh
 	defb	0F6h,0FFh,0FFh,0FFh,0FFh,0FFh
@@ -4439,12 +4798,13 @@ label_1799:
 	xthl
 	pchl
 ; func_sqr — SQR = x^0.5 через возведение в степень; ветка в EXP.
-; calls: ["CALL 0x14AB", "LXI H,0x1783 (0.5)", "CALL 0x14BB (степень)", "RST 28", "JZ 0x17E3 func_exp (особый путь)"]
+; calls: ["0x0028", "0x14AB", "0x156C", "0x14CE", "0x14F0", "0x14BB"]
 ; dispatch_index: 7
 ; function: SQR
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[A,C] out[A] saves[B,D]
 ; reads: ["константа 0x1783 (0.5)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B5
 ; word_index: 53
 ; writes: ["FAC (x^0.5)"]
@@ -4490,12 +4850,13 @@ lbl_17cb:
 	pop	d
 	call	func_12a6
 ; func_exp — EXP: exp(x); переполнение по CPI 88 -> 0x1466. Явно зовёт INT и ABS.
-; calls: ["CALL 0x14AB (сохранить FAC/текст)", "CALL 0x12A6 (сборка ряда)", "CALL 0x156C func_int", "CALL 0x14A3 func_abs", "CALL 0x1103 / 0x110F / 0x129D / 0x1853 (float)", "константы 0x8138/0xAA38 (мантиссы)"]
+; calls: ["0x1103", "0x14A3", "0x12A6", "0x14AB", "0x156C", "0x110F", "0x1853", "0x129D"]
 ; dispatch_index: 10
 ; function: EXP
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
-; reads: ["0x4050 (экспонента)"]
+; params: in[] out[A,B,C,H] saves[A]
+; reads: ["0x0FD2"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B8
 ; word_index: 56
 ; writes: ["FAC (итог), переполнение -> 0x1466"]
@@ -4535,6 +4896,9 @@ data_exp_poly_coeffs:
 	defb	7Fh,00h,00h,80h,81h,00h,00h,00h
 	defb	81h
 
+; calls: ["0x12A6", "0x14AB", "0x14CE"]
+; params: in[] out[] saves[H]
+; size_source: stage17_linear_decode
 func_1844:
 	call	func_fac_continuation
 	lxi	d,12a4h
@@ -4543,6 +4907,9 @@ func_1844:
 	call	func_14ce
 	call	func_12a6
 	pop	h
+; calls: ["0x12A6", "0x1853", "0x14AB", "0x1112", "0x14BB"]
+; params: in[H,L] out[A,B,C,D,E,H,L] saves[A,B,D,H]
+; size_source: stage17_linear_decode
 func_1853:
 	call	func_fac_continuation
 	mov	a,m
@@ -4573,12 +4940,13 @@ label_185B:
 	pop	psw
 	jmp	label_185B
 ; func_rnd — RND: линейный конгруэнтный ГПСЧ, состояние в 0x3DFC.
-; calls: ["RST 28", "JM 0x1895", "CALL 0x14BB", "CALL 0x12A6 (умножение)", "CALL 0x1112 (сложение)", "CALL 0x14CE", "CALL 0x1186"]
+; calls: ["0x12A6", "0x1183", "0x0028", "0x14CE", "0x1112", "0x14BB"]
 ; dispatch_index: 8
 ; function: RND
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050); состояние ГПСЧ в 0x3DFC
+; params: in[C,E] out[B,C,D,E,H,L] saves[]
 ; reads: ["0x3DFC.. (состояние ПСЧ)", "константы 0x9835/0x447A, 0x6828/0xB146"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B6
 ; word_index: 54
 ; writes: ["0x3DFC.. (новое состояние ПСЧ)", "FAC (результат)"]
@@ -4605,8 +4973,14 @@ label_1895:
 	mvi	m,80h
 	call	label_1186
 	lxi	h,3dfch
+; calls: []
+; params: in[] out[D] saves[]
+; size_source: stage17_linear_decode
 func_18a7:
 	lxi	d,404dh
+; calls: []
+; params: in[D,E] out[D,E,H,L] saves[]
+; size_source: stage17_linear_decode
 func_18aa:
 	ldax	d
 	mov	m,a
@@ -4627,12 +5001,13 @@ label_18B1:
 	inx	h
 	ret
 ; func_cos — COS: сдвиг фазы на pi/2 и вычисление синуса (fall-through в SIN).
-; calls: ["LXI H,0x1901 (константа pi/2)", "CALL 0x1103 (float-сложение)", "падение в 0x18C1 func_sin (cos x = sin(x+pi/2))"]
+; calls: ["0x1103"]
 ; dispatch_index: 11
 ; function: COS
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[] out[H] saves[]
 ; reads: ["FAC (аргумент x)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B9
 ; word_index: 57
 ; writes: ["FAC (x + pi/2 перед падением в SIN)"]
@@ -4640,12 +5015,13 @@ func_cos:
 	lxi	h,1901h
 	call	func_1103
 ; func_sin — SIN: ряд Тейлора с приведением аргумента (зовёт INT и ABS).
-; calls: ["CALL 0x14AB (сохранить FAC/текст)", "CALL 0x14C3 (деление)", "CALL 0x13B8 (умножение)", "CALL 0x156C func_int", "CALL 0x110F / 0x1109 / 0x1100 (float)", "CNC 0x14A3 func_abs", "JMP 0x1844 (сборка ряда)"]
+; calls: ["0x1100", "0x14C3", "0x1103", "0x1844", "0x1109", "0x110F", "0x14A3", "0x0028", "0x14AB", "0x156C", "0x13B8"]
 ; dispatch_index: 12
 ; function: SIN
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[A] out[A,B,D,H] saves[A]
 ; reads: ["0x4050 (экспонента)", "константы 0x1901/0x1905/0x1909 (pi/2, ряд)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00BA
 ; word_index: 58
 ; writes: ["FAC (итог ряда)"]
@@ -4687,12 +5063,13 @@ data_sin_atn_poly_coeffs:
 	defb	86h,0DAh,0Fh,49h,83h
 
 ; func_tan — TAN = SIN/COS: сохраняет SIN, вычисляет COS, делит (JMP 13B6).
-; calls: ["CALL 0x14AB", "CALL 0x18C1 func_sin", "CALL 0x14AB", "CALL 0x14C3", "CALL 0x18BB func_cos", "JMP 0x13B6 (деление SIN/COS)"]
+; calls: ["0x18C1", "0x14C3", "0x14AB", "0x13AA", "0x18BB"]
 ; dispatch_index: 13
 ; function: TAN
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
+; params: in[D,E,L] out[B,D,E,H,L] saves[]
 ; reads: ["FAC (аргумент x)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00BB
 ; word_index: 59
 ; writes: ["FAC (SIN/COS)"]
@@ -4707,12 +5084,13 @@ func_tan:
 	call	func_cos
 	jmp	label_13B6
 ; func_atn — ATN: арктангенс рядом; нечётность через условный вызов ABS.
-; calls: ["RST 28 -> 0x0028", "CM 0x1799 (если отрицательное -> знак)", "CM 0x14A3 func_abs (если отрицательное)", "CALL 0x13B8", "CALL 0x1844 (ряд)"]
+; calls: ["0x14A3", "0x13B8", "0x0028"]
 ; dispatch_index: 14
 ; function: ATN
-; params: FAC 0x404F..0x4052 (знак=404F bit7, экспонента=4050)
-; reads: ["0x4050 (экспонента, порог CPI 81)", "константы 0x1901/0x1958"]
+; params: in[C] out[A,B,D,E] saves[]
+; reads: ["0x0FD2"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00BC
 ; word_index: 60
 ; writes: ["FAC (итог ряда)"]
@@ -4743,12 +5121,13 @@ data_atn_poly_coeffs:
 	defb	7Fh,00h,00h,00h,81h
 
 ; func_peek — PEEK(a): чтение байта памяти по адресу с проверкой диапазона.
-; calls: ["CALL 0x0531 (eval числа -> DE = адрес)", "CALL 0x1987 (граница: D>=3 -> ошибка)", "LDAX D (чтение байта)", "JMP 0x0D95 (байт->FAC)"]
+; calls: ["0x0531", "0x0D92", "0x197D"]
 ; dispatch_index: 15
 ; function: PEEK
-; params: число (адрес)
+; params: in[D,E] out[A] saves[]
 ; reads: ["(DE) — байт памяти по адресу"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00BD
 ; word_index: 61
 ; writes: []
@@ -4781,10 +5160,11 @@ label_19A3:
 	rc
 	jmp	lbl_0539
 ; func_cmd_poke — POKE addr,val: запись байта в память. Подтверждено телом (0x19AA: CALL .../PUSH D/CALL 10C3/POP D/STAX D). Guard диапазона нет — таблиц адресов/масок недоступны (ТЗ п.40/67). Токен 0x94 (сегмент A).
-; calls: ["CALL 0x300A/0x1987 — вычислить адрес", "CALL 0x10C3 — значение"]
-; params: HL = поток после POKE; адрес, значение.
+; calls: ["0x10A7", "0x197D", "0x2FDE"]
+; params: in[] out[B] saves[D]
 ; reads: ["адрес (`CALL 0x1987`/`0x300A` -> DE)", "значение (`CALL 0x10C3`)"]
 ; role: cmd_poke
+; size_source: stage17_linear_decode
 ; writes: ["`STAX D` — запись байта по адресу DE (без guard-диапазона)"]
 func_cmd_poke:
 	call	label_300A
@@ -4810,11 +5190,12 @@ label_19B8:
 	jnz	lbl_19b7
 	jmp	func_error_stub
 ; func_boot_init — Инициализация при старте: PIA2 (OUT 04=81), растановка текстовых указателей, первичные вызовы, самомодификация, затем переход в REPL-цикл. Детальная RAM-карта ячеек — Stage 6.
-; calls: ["CALL 0x07BC/0x019F/0x01C5", "самомод. нач. адресов", "JMP 0x00E5 func_main_loop"]
-; params: вход с 0x0000 (LXI SP,7FFF / JMP 19CC).
-; reads: ["константы инициализации указателей 0x3F21/0EF6/0ED6/3DFC"]
+; calls: ["0x07BC", "0x019F"]
+; params: in[] out[] saves[]
+; reads: ["0x001A"]
 ; role: boot_init
-; writes: ["OUT 04 = 0x81 (PIA2)", "служебные указатели интерпретатора"]
+; size_source: stage17_linear_decode
+; writes: ["0x0ED6", "0x0EF6", "0x19F3", "0x3DFC", "0x3DFE", "0x3F21", "0x3F76"]
 func_boot_init:
 	mvi	a,81h
 	out	04h
@@ -4836,6 +5217,9 @@ func_boot_init:
 lbl_19fb:
 	call	func_01c5
 	jmp	func_main_loop
+; calls: ["0x16A2"]
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
+; size_source: stage17_linear_decode
 func_1a01:
 	xchg
 	call	func_16a2
@@ -4890,12 +5274,13 @@ label_1A3F:
 	inx	d
 	jmp	label_1A3F
 ; func_inkey — INKEY$: строка из нажатой клавиши или пустая, если клавиш нет.
-; calls: ["CALL 0x2C40 (скан клавиатуры -> A: код или <0 если пуста)", "JP 0x1A5F (есть клавиша -> строка 1 символ) / XRA A (пусто -> пустая строка)", "CALL 0x0E65 (собрать дескриптор) / JMP 0x0E97 (вернуть строку)"]
+; calls: ["0x2C40", "0x0E65", "0x0E97"]
 ; dispatch_index: 25
 ; function: INKEY$
-; params: (без аргумента)
+; params: in[A] out[E] saves[D]
 ; reads: ["клавиатура через 0x2C40"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C7
 ; word_index: 71
 ; writes: ["стр. дескриптор: dim 0x4049, data-ptr 0x404B"]
@@ -4919,10 +5304,11 @@ label_1A5F:
 	mov	m,e
 	jmp	func_str_return
 ; func_cmd_pause — PAUSE: приостановить выполнение до нажатия клавиши (или таймаута). Токен 0xCB.
-; calls: ["цикл опроса клавиатуры (RST key-input)"]
-; params: HL = поток после PAUSE (необяз. таймаут).
+; calls: ["0x1CA5"]
+; params: in[D,E] out[A] saves[]
 ; reads: ["ожидание клавиши/таймера"]
 ; role: cmd_pause
+; size_source: stage17_linear_decode
 ; writes: ["режим ожидания"]
 func_cmd_pause:
 	call	label_1CCC
@@ -4937,11 +5323,12 @@ label_1A72:
 	jnz	label_1A70
 	ret
 ; func_cmd_himem — HIMEM: показать/установить верхнюю границу памяти. Токен 0xD2.
-; calls: []
-; params: HL = поток после HIMEM (необяз. адрес).
-; reads: ["0x0EF6/границы RAM", "текущий HIMEM"]
+; calls: ["0x0010", "0x0531", "0x0020", "0x01AA", "0x099E"]
+; params: in[C,D,E,H,L] out[D,E,H] saves[H]
+; reads: ["0x0CB3"]
 ; role: cmd_himem
-; writes: ["верхняя граница памяти программы/гип"]
+; size_source: stage17_linear_decode
+; writes: ["0x0ED6", "0x0EF6"]
 func_cmd_himem:
 	call	func_099e
 	call	func_fac_require_int
@@ -4963,10 +5350,11 @@ func_cmd_himem:
 	pop	h
 	jmp	label_01B0
 ; func_cmd_edit — EDIT: загрузить строку по номеру в буфер для изменения (затем REPL вставляет её обратно через 0x012E). Подтверждено телом.
-; calls: ["CALL 0x053E — номер строки (RNZ, если нет)", "CALL 0x3F20", "шаг 0x0619 — найти"]
-; params: HL = поток после EDIT (номер строки).
+; calls: ["0x053E"]
+; params: in[] out[B] saves[]
 ; reads: ["[LN][токены] найденной строки", "0x3F20 (первая строка)"]
 ; role: cmd_edit
+; size_source: stage17_linear_decode
 ; writes: ["буфер 0x3F77 — строка для правки", "TEXT-указатель на строку"]
 func_cmd_edit:
 	call	func_053e
@@ -4987,10 +5375,11 @@ lbl_1aa7:
 	call	func_0279
 	jmp	label_0117
 ; func_cmd_delete — DELETE: удалить строку/диапазон (сдвиг хвоста). Требует аргумент (JNC 0074). Подтверждено телом (0x1ABE).
-; calls: ["CALL 0x03C7 — разбор диапазона (JNC 0074, если пусто)", "CALL 0x3F20", "сдвиг памяти через 0x003B"]
-; params: HL = поток после DELETE (номер или диапазон; обязателен).
-; reads: ["[LN] строк в диапазоне"]
+; calls: ["0x3F20", "0x0020", "0x1EDA", "0x03A6"]
+; params: in[L] out[A,C,D,E,H,L] saves[B,D,H]
+; reads: ["0x03E7"]
 ; role: cmd_delete
+; size_source: stage17_linear_decode
 ; writes: ["сдвиг программы вниз (удаление строк)", "0x0C33", "указатель конца программы"]
 func_cmd_delete:
 	call	label_03C7
@@ -5039,11 +5428,12 @@ label_1AEB:
 	jnz	label_1AEB
 	jmp	label_1F31
 ; func_cmd_renum — RENUM: перенумеровать программу (равный шаг) и поправить ссылки на номера. Токен 0xD7 из таблицы (сегмент B).
-; calls: ["обход строк", "вставка переписанных строк (0x012E)"]
-; params: HL = поток после RENUM (необяз. параметры).
-; reads: ["все строки программы (шаг 0x0619)"]
+; calls: ["0x1AFA", "0x004A", "0x18AA", "0x01AA"]
+; params: in[C,D,E,H,L] out[D,E,H,L] saves[B,D]
+; reads: ["0x0CB3", "0x3F21"]
 ; role: cmd_renum
-; writes: ["перезапись номеров строк с новым шагом", "перенумерация целей GOTO/GOSUB/RUN"]
+; size_source: stage17_linear_decode
+; writes: ["0x0C30", "0x0CB3"]
 func_cmd_renum:
 	xchg
 	call	label_01BC
@@ -5267,16 +5657,21 @@ label_1C3C:
 	sta	1b04h
 label_1C47:
 	xchg
+; calls: []
+; params: in[D,E,H,L] out[D,E,H,L] saves[]
+; size_source: stage17_linear_decode
+; writes: ["0x1C41"]
 func_1c48:
 	shld	1c41h
 	xchg
 	ret
 ; func_cmd_auto — AUTO: режим автонумерации при вводе — печатать следующий номер перед каждой строкой. Токен 0xD1 из таблицы (сегмент B).
-; calls: ["печать номера строки перед prompt", "REPL-вставка (0x012E)"]
-; params: HL = поток после AUTO (необяз. шаг/стартовый номер).
+; calls: ["0x1A01", "0x1AFA", "0x07AD", "0x0279", "0x00E5", "0x01AA"]
+; params: in[D,E,H,L] out[D,E,L] saves[]
 ; reads: ["текущий счётчик авто-номеров"]
 ; role: cmd_auto
-; writes: ["префикс номера перед вводом каждой строки", "счётчик (инкремент на шаг)"]
+; size_source: stage17_linear_decode
+; writes: ["0x00BE"]
 func_cmd_auto:
 	xchg
 	call	label_01BC
@@ -5301,10 +5696,11 @@ label_1C6C:
 	call	func_1c48
 	jmp	label_1C55
 ; func_cmd_cur — CUR: позиционирование курсора. Тот же код вызывает PRINT ...AT (позиционирование вывода) — отсюда вызов из обработчика PRINT. Подтверждено телом (0x1C7A: ESC 1B / 'Y' 59 / координата). Токен 0x87 (сегмент A).
-; calls: ["CALL 0x20A6 — вычислить", "CALL 0x1C95 — emit контрольных кодов"]
-; params: HL = поток после CUR (X,Y).
+; calls: ["0x1C95", "0x209C"]
+; params: in[B,C] out[A] saves[]
 ; reads: ["координаты курсора (вычисляемые)"]
 ; role: cmd_cur
+; size_source: stage17_linear_decode
 ; writes: ["позиция курсора ВГД через ESC-Y последовательность (0x1C95)"]
 func_cmd_cur:
 	call	label_20A6
@@ -5321,10 +5717,11 @@ func_cmd_cur:
 	adi	20h
 	jmp	func_putchar
 ; func_putchar — Вывод одного символа: код в A→C, сохранение BC, вызов терминального бэкенда 0x3E9F. Его зовёт печатающая петля 0x00A1 (строка до bit7) и boot-сообщения. Одна из трёх точек ТЗ.
-; calls: ["MOV C,A (переложить код)", "PUSH/POP B (сохранить BC)", "CALL 0x3E9F func_term_putc"]
-; params: A = код символа для вывода
+; calls: ["0x3E9F"]
+; params: in[A] out[C] saves[B]
 ; reads: []
 ; role: output_char
+; size_source: stage17_linear_decode
 ; writes: ["экран/терминал через 0x3E9F"]
 func_putchar:
 	push	b
@@ -5333,12 +5730,13 @@ func_putchar:
 	pop	b
 	ret
 ; func_point — POINT: состояние точки экрана (чтение пиксела через 0x3BD3, база 0x2B56).
-; calls: ["CALL 0x10CA (eval аргумента)", "CALL 0x1CA5 -> CALL 0x3BD3 (чтение пиксела)", "JMP 0x0D95 (результат->FAC)"]
+; calls: ["0x1CA5", "0x0D92", "0x10CA"]
 ; dispatch_index: 24
 ; function: POINT
-; params: выражение (координаты)
+; params: in[] out[] saves[]
 ; reads: ["0x2B56 (состояние экрана/луча)"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00C6
 ; word_index: 70
 ; writes: []
@@ -5346,6 +5744,10 @@ func_point:
 	call	func_fac_require_byte
 	call	func_1ca5
 	jmp	label_0D95
+; calls: ["0x3BD3"]
+; params: in[] out[H,L] saves[B,H]
+; reads: ["0x2B56"]
+; size_source: stage17_linear_decode
 func_1ca5:
 	push	h
 	push	b
@@ -5385,11 +5787,12 @@ label_1CCC:
 	pop	h
 	ret
 ; func_cmd_beep — BEEP: звуковой сигнал простого динамика. Токен 0xCA.
-; calls: ["генерация тона"]
-; params: HL = поток после BEEP (необяз. длительность/тон).
+; calls: ["0x1CE2", "0x0008", "0x179E", "0x1CA5", "0x052D", "0x13B8", "0x099E"]
+; params: in[C,E,H,L] out[A,B,H] saves[D,H]
 ; reads: ["вычисляемый аргумент тона"]
 ; role: cmd_beep
-; writes: ["порт динамика (пищалка)"]
+; size_source: stage17_linear_decode
+; writes: ["0x1D09"]
 func_cmd_beep:
 	call	label_1CCC
 	push	d
@@ -5513,11 +5916,12 @@ label_1DA0:
 	call	label_1D6E
 	ret
 ; func_cmd_csave — CSAVE: записать программу на магнитофон. Подтверждено телом (0x1DA8: MVI A,D3/STA.../CALL 1D2D/1D41/1D76/MVI A,55 — синхробайт). Токен 0x9B (сегмент A).
-; calls: ["CALL 0x1D2D / 0x1D41 / 0x1D76 — запись заголовка/байтов", "порт ленты (`D3` OUT)"]
-; params: HL = поток после CSAVE (необяз. имя/диапазон).
-; reads: ["программа/блок для записи", "имя (<=11 симв., ТЗ п.73)"]
+; calls: ["0x1CE2", "0x1DED"]
+; params: in[] out[A,B,E,H] saves[H]
+; reads: ["0x1F2A", "0x3F21"]
 ; role: cmd_csave
-; writes: ["магнитофон-выход: синхробайт `0x55`, заголовок, данные"]
+; size_source: stage17_linear_decode
+; writes: ["0x1D8D"]
 func_cmd_csave:
 	mvi	a,0d3h
 	sta	1d8dh
@@ -5554,12 +5958,12 @@ label_1DE8:
 	call	label_1E33
 	pop	h
 	ret
-; func_cmd_bsave — BSAVE: сохранить блок памяти на ленту в двоичном виде. Токен 0xE0 -> `0x1DED` (сегмент B).
-; calls: ["запись блока на ленту (хелперы ленты)"]
-; params: HL = поток после BSAVE (имя, адрес, длина).
+; func_cmd_bsave — Гэп 0x1E3C (1 байт) — последний байт тела BSAVE. След. объект func_cmd_bload @0x1E3D — продление ровно до 0x1E3C.
+; calls: ["0x0020", "0x2FDE", "0x1DA8", "0x1CE2", "0x0010", "0x1EDA"]
+; params: in[D,E,H,L] out[A,D,E,H,L] saves[B,H]
 ; reads: ["блок памяти (адрес..длина)"]
 ; role: cmd_bsave
-; writes: ["магнитофон-выход — двоичный блок"]
+; writes: ["0x1D8D"]
 func_cmd_bsave:
 	mvi	a,0d2h
 	sta	1d8dh
@@ -5611,11 +6015,12 @@ gap_1E3C:
 	defb	0C9h
 
 ; func_cmd_bload — BLOAD: загрузить блок памяти с ленты. Пара BSAVE. Токен 0xE1 -> `0x1E3D` (сегмент B).
-; calls: ["чтение блока с ленты (хелперы ленты)"]
-; params: HL = поток после BLOAD (имя).
+; calls: ["0x0010", "0x2FDE", "0x1EDA"]
+; params: in[D,E,H,L] out[A,B,E,H,L] saves[]
 ; reads: ["лента — двоичный блок (адрес, длина)"]
 ; role: cmd_bload
-; writes: ["блок памяти — загруженные данные"]
+; size_source: stage17_linear_decode
+; writes: ["0x1F81"]
 func_cmd_bload:
 	mvi	a,0d2h
 	sta	1f81h
@@ -5695,11 +6100,12 @@ label_1E9F:
 	rz
 	jmp	lbl_1e6d
 ; func_cmd_merge — MERGE: добавить строки с ленты к текущей программе (слияние по номерам, без стерания). Токен 0xD0. Tape-детали — в 5d.
-; calls: ["чтение с ленты", "вставка строк (0x012E)"]
-; params: HL = поток после MERGE (файл на ленте).
-; reads: ["лента/магнитофон вход — строки"]
+; calls: ["0x1EDA", "0x1CE2"]
+; params: in[] out[B] saves[H]
+; reads: ["0x001A", "0x0C33"]
 ; role: cmd_merge
-; writes: ["вливание строк в программу (перезапись по номерам)"]
+; size_source: stage17_linear_decode
+; writes: ["0x3F21"]
 func_cmd_merge:
 	lxi	b,0001h
 	cnz	label_1D2D
@@ -5714,11 +6120,11 @@ func_cmd_merge:
 	shld	var_program_base
 	jmp	label_1F36
 ; func_cmd_verify — VERIFY: сверить записанную на ленту программу с текущей (без загрузки). Токен 0xCC. Тape-подсистема детально — в 5d.
-; calls: ["чтение с ленты", "сверка байтов"]
-; params: HL = поток после VERIFY (диапазон строк/файл).
-; reads: ["лента/магнитофон вход", "строки программы"]
+; calls: ["0x1EDA", "0x005C"]
+; params: in[] out[A,B,C,E] saves[A,B]
+; reads: ["0x3F21"]
 ; role: cmd_verify
-; writes: ["сравнение без изменения памяти"]
+; writes: ["0x1F81"]
 func_cmd_verify:
 	mvi	b,06h
 	nop
@@ -5793,7 +6199,7 @@ label_1F49:
 	call	label_1F76
 	call	label_1F8C
 	lxi	h,2561h
-	call	func_00a1
+	call	func_print_packed_string
 	pop	h
 	push	h
 	ei
@@ -5889,6 +6295,9 @@ label_1FDC:
 label_1FDE:
 	mov	c,a
 	jmp	func_term_putc
+; calls: ["0x12A6", "0x0AA6", "0x0028", "0x14AB", "0x14CE", "0x110F", "0x0010", "0x1933", "0x13B8", "0x179E"]
+; params: in[C] out[B,D,E] saves[H]
+; size_source: stage17_linear_decode
 func_1fe2:
 	rst	func_rst_advance_text
 	call	func_0aa6
@@ -5934,11 +6343,12 @@ lbl_201b:
 	pop	h
 	ret
 ; func_cmd_lprint — LPRINT: печать выражений на принтер (младший брат PRINT). Токен 0xDA -> `0x2036` (сегмент B).
-; calls: ["тот же разбор списка, что PRINT", "вывод символа на принтер"]
-; params: HL = поток после LPRINT (список вывода).
+; calls: ["0x072D"]
+; params: in[] out[] saves[A]
 ; reads: ["вычисляемые значения/строки"]
 ; role: cmd_lprint
-; writes: ["печатающее устройство (порт принтера)"]
+; size_source: stage17_linear_decode
+; writes: ["0x00BE"]
 func_cmd_lprint:
 	push	psw
 	mvi	a,01h
@@ -5951,6 +6361,9 @@ func_cmd_lprint:
 lbl_2045:
 	mov	a,c
 	ani	7fh
+; calls: []
+; params: in[A,B] out[C] saves[]
+; size_source: stage17_linear_decode
 func_2048:
 	push	psw
 	push	b
@@ -5985,14 +6398,17 @@ lbl_206c:
 	pop	b
 	pop	psw
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2079:
+; Кириллическая кодовая перестановка: 30 букв а..я каждая по разу + служебные коды (0x2E, 0x5F, 0x76, 0xC1, 0xCD); порядок не азбучный ⇒ mapping/раскладка пути РУС/ЛАТ токенизатора, а не текст. Тип оставлен string; по природе ближе к таблице-маппингу.
+str_2079_cyrillic:
 	defb	0C0h,0A1h,0A2h,0B8h,0A5h,0A6h,0B6h,0A4h
 	defb	0B7h,0AAh,0ABh,0ACh,0ADh,0AEh,0AFh,0B0h
 	defb	0B1h,0C1h,0B2h,0B3h,0B4h,0B5h,0A8h,0A3h
 	defb	0BEh,0BDh,0A9h,0BAh,0BFh,0BBh,0B9h,5Fh
 	defb	0CDh,76h,2Eh
 
+; calls: ["0x1C95"]
+; params: in[H,L] out[A,H,L] saves[]
+; size_source: stage17_linear_decode
 func_209c:
 	mov	a,m
 	ana	a
@@ -6009,11 +6425,12 @@ label_20A6:
 	mov	b,a
 	ret
 ; func_cmd_paint — PAINT: заливка замкнутой области. Подтверждено телом (0x20B1: LDA 3769/STA 4028/CALL 28A0). ИСПРАВЛЕНИЕ 5b: адрес `0x20B1`, не `0x19B1` (то был середина POKE). Токен 0xE3 -> `0x276C`.
-; calls: ["CALL 0x28A0 — разобрать X,Y", "заливка (рекурсивный flood)"]
-; params: HL = поток после PAINT; X,Y(,цвет/заливка).
-; reads: ["текущий цвет (`LDA 0x3769` -> `0x4028`)", "координаты X,Y (`CALL 0x28A0`)"]
+; calls: ["0x281D", "0x10A7", "0x0010", "0x20B1"]
+; params: in[H,L] out[B,D,E,H,L] saves[A,B,D,H]
+; reads: ["0x0EB9", "0x3C57"]
 ; role: cmd_paint
-; writes: ["пиксельно-байтовая заливка области ВГД"]
+; size_source: stage17_linear_decode
+; writes: ["0x0FBC", "0x20FD", "0x210A", "0x3C5B", "0x3C5E"]
 func_cmd_paint:
 	lda	var_color_current
 	sta	var_paint_field
@@ -6098,9 +6515,10 @@ data_pixel_read_dispatch:
 	defb	90h,3Ch,8Bh,3Ch,86h,3Ch,82h,3Ch
 
 ; func_paint_floodfill — Тело заливки PAINT (рекурсивный flood). Вход из func_cmd_paint (0x20B1) через trampoline `LXI D,2152 / PUSH D / RET` — потому CFG от 0x0000 сюда не доходит. Начало `POP H / CALL 0x3BD3(POINT) / RZ`; обход соседей, writes ВГД через 0x3281/0x3284; проверка стека 0x2301. Конец ровно на lbl_230c (442 байта).
-; calls: 0x3BD3 (POINT), 0x3C60 (planes), 0x3281/0x3284 (VRAM)
+; calls: ["0x3BD3", "0x2152"]
 ; cfg_reachable: no (dynamic PUSH/RET entry)
 ; entry: trampoline from func_cmd_paint (0x20B1)
+; params: in[L] out[A] saves[H]
 ; role: paint_flood_fill_body
 func_paint_floodfill:
 	pop	h
@@ -6382,10 +6800,11 @@ label_2311:
 	pop	psw
 	ret
 ; func_cmd_screen — SCREEN: переключение режимов экрана (SCREEN0/3/4 — ТЗ). Подтверждено телом (0x231B: CALL 20A6 / DCR C / JZ...). Токен 0xDC -> 0x231B (в 5b-доке адрес был верен).
-; calls: ["CALL 0x20A6 — вычислить режим", "переконфигурировать ВГД"]
-; params: HL = поток после SCREEN; режим (0/3/4).
+; calls: ["0x209C"]
+; params: in[C] out[C] saves[]
 ; reads: ["аргумент режима (`CALL 0x20A6` -> C)"]
 ; role: cmd_screen
+; size_source: stage17_linear_decode
 ; writes: ["режим экрана (ветвление JZ 0x2384/0x23B9 по значению C)"]
 func_cmd_screen:
 	call	label_20A6
@@ -6462,10 +6881,11 @@ label_2399:
 	sta	2c97h
 	ret
 ; func_irq_palette_refresh — Попиксельная синхронизация палитры на каждый кадр (racing-the-beam): 16 пар OUT 02/OUT 0C из таблицы 0x2C7E с увеличенными паузами (XTHL) — это п.93 change log. Точный подбираемый эффект не вскрываем (открытый пункт Stage 4).
-; calls: ["цикл B=0x0F..00: OUT 02 / LDAX D / OUT 0C", "XTHL/XTHL (намеренные задержки — racing the beam)"]
-; params: таблица цветов 0x2C7E (16 ячеек); вызывается из 0x2C7F
-; reads: ["0x2C7E.. (LDAX D — цвета ячеек)"]
+; calls: ["0x231B"]
+; params: in[E,H,L] out[A,B,D,E,H,L] saves[]
+; reads: ["0x0000"]
 ; role: irq_palette_sync
+; size_source: stage17_linear_decode
 ; writes: ["OUT 02 (адрес/бордюр)", "OUT 0C (физический цвет в палитру)"]
 func_irq_palette_refresh:
 	lxi	d,2c7eh
@@ -6505,6 +6925,10 @@ lbl_23b9:
 	sta	3286h
 	sta	3f60h
 	ret
+; calls: []
+; params: in[D] out[D,H] saves[]
+; reads: ["0x2B56"]
+; size_source: stage17_linear_decode
 func_23f2:
 	push	d
 	lda	var_graph_xy
@@ -6542,11 +6966,12 @@ lbl_2413:
 	pop	d
 	ret
 ; func_cmd_play — PLAY list$: воспроизведение нот. Подтверждено телом (0x2428: PUSH PSW/XRA A/STA 27C8/STA 245F/DI/CPI 2C). Драйвер — на прерывании (ТЗ п.63/65/74). Токен 0xE2 -> `0x276A`.
-; calls: ["сброс курсора воспроизведения", "инициализация звуковых счётчиков"]
-; params: HL = поток после PLAY; список нот через `,`.
+; calls: ["0x0010", "0x2428"]
+; params: in[A,L] out[A,H] saves[A,H]
 ; reads: ["список нот/длительностей (разбор по `,` `CPI 2C`)"]
 ; role: cmd_play
-; writes: ["состояние проигрывания `0x27C8`/`0x245F`", "тон/громкость через `DI` (драйвер на ВBlank-прерывании)"]
+; size_source: stage17_linear_decode
+; writes: ["0x245F", "0x27C8"]
 func_cmd_play:
 	push	psw
 	xra	a
@@ -6669,8 +7094,9 @@ data_keyword_table:
 	defb	0C5h
 
 ; func_plot_column_step — Мелкий plot-хелпер (несколько точек входа: 0x26D8/0x26D9/0x26DD). Тело: `LXI H,2B57 / PUSH B / MOV C,M / MOV L,H / CALL 0x327A (func_render_glyph_column) / POP B / RET`. Хвост 0x26E5..0x26F6 — выравнивающий паддинг (нули). Вызывается из func_line_draw.
-; calls: 0x327A (func_render_glyph_column)
+; calls: ["0x327A"]
 ; entry_points: 0x26D8, 0x26D9, 0x26DD
+; params: in[E,L] out[C,L] saves[B]
 ; role: plot_column_step
 ; tail: 0x26E5..0x26F6 padding
 func_plot_column_step:
@@ -6702,8 +7128,8 @@ var_irq_stack_top:
 	xra	a
 	ora	b
 	jmp	label_146B
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_26FC:
+; data_26fc_pad — Выравнивающий zero-run между var_irq_stack_top (0x26F7) и data_cmd_table (0x2700). 4 нуля → паддинг под таблицу команд.
+data_26fc_pad:
 	defb	00h,00h,00h,00h
 
 ; data_cmd_table — Команды 0x80..0x9C + расширения 0xCA..0xE4 (56 записей, 0x2700..0x276F). CLS(0x80) и HOME(0xCD) оба указывают на 0x4022 — подтверждение формулы и плотной упаковки. Размер исправлен с 0x5C (5a) на 0x70 (добавлен сегмент расширений).
@@ -6733,8 +7159,8 @@ data_dispatch_table:
 	defb	2Bh,10h,3Bh,10h,6Bh,10h,75h,10h
 	defb	9Ch,1Ch,4Dh,1Ah,74h,00h,0FAh,15h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_27A8:
+; data_dispatch_extension — Продолжение data_dispatch_table (0x2770) для SOUND/PLAY-подсистемы (след. объект var_play_active@0x27C8). Boot+post-battery: unchanged → ROM-constant data.
+data_dispatch_extension:
 	defb	79h,83h,16h,79h,0Dh,11h,7Bh,0A4h
 	defb	12h,7Bh,0B6h,13h,7Fh,0A7h,17h,50h
 	defb	13h,0Bh,46h,12h,0Bh
@@ -6786,12 +7212,13 @@ label_27F3:
 	mvi	e,1ah
 	jmp	func_error_raise
 ; func_usr — USR(a): прыжок PCHL в машинный код по адресу a; возврат через 0x0D95 (байт->FAC).
-; calls: ["CALL 0x0531 (eval числа -> DE = адрес)", "CMP 42 / JNC 0x0539 (адрес 0x42.. -> ошибка)", "XCHG / LXI D,0x0D95 / PUSH D / PCHL (хвост-вызов по адресу)"]
+; calls: ["0x0531"]
 ; dispatch_index: 3
 ; function: USR
-; params: число (адрес машинного кода)
+; params: in[D,E,H,L] out[A,E] saves[]
 ; reads: ["(DE) — пользовательская подпрограмма"]
 ; role: function_handler
+; size_source: stage17_linear_decode
 ; token: 0x00B1
 ; word_index: 49
 ; writes: []
@@ -6805,11 +7232,12 @@ func_usr:
 	push	d
 	pchl
 ; func_cmd_color — COLOR: задать текущий цвет/палитру. Токен 0xDD (сегмент B, `0x2760` -> `0x281D`).
-; calls: ["вычислить аргументы цвета"]
-; params: HL = поток после COLOR; аргументы цвета/палитры.
-; reads: ["вычисляемые компоненты цвета"]
+; calls: ["0x10A7", "0x10C7", "0x0010", "0x231B", "0x281D"]
+; params: in[A,H,L] out[A,E,H,L] saves[D]
+; reads: ["0x0B24"]
 ; role: cmd_color
-; writes: ["текущий цвет/палитра вывода (переменная рисования)"]
+; size_source: stage17_linear_decode
+; writes: ["0x0B24", "0x0B26", "0x2C6F", "0x2DD8"]
 func_cmd_color:
 	call	func_10c7
 	mov	e,a
@@ -6823,7 +7251,7 @@ func_cmd_color:
 	jnz	label_284E
 	push	d
 	call	label_10C3
-	sta	2c6fh
+	sta	data_palette_subtable
 	call	label_2397
 	pop	d
 	dcx	h
@@ -6916,11 +7344,12 @@ label_28A0:
 	pop	h
 	ret
 ; func_cmd_plot — PLOT X,Y(,c): установить точку. Подтверждено телом (0x28C2: CALL 28A0 / CPI 2C ',' / CALL 10C3). Токен 0x92 (сегмент A).
-; calls: ["CALL 0x28A0 — разобрать X,Y", "CALL 0x10C3 — вычислить цвет", "примитив вывода точки"]
-; params: HL = поток после PLOT; аргументы X,Y(,цвет).
-; reads: ["вычисляемые X,Y (`CALL 0x28A0`)", "необязательный цвет через `,` (`CALL 0x10C3`)"]
+; calls: ["0x281D", "0x28FD", "0x10A7", "0x0010", "0x327A"]
+; params: in[A,H,L] out[A,H,L] saves[B,H]
+; reads: ["0x2B56"]
 ; role: cmd_plot
-; writes: ["установка точки ВГД (координатная кодировка режима экрана)"]
+; size_source: stage17_linear_decode
+; writes: ["0x26E1", "0x28DA", "0x28F9"]
 func_cmd_plot:
 	call	label_28A0
 	dcx	h
@@ -6954,10 +7383,11 @@ label_28EF:
 	pop	h
 	ret
 ; func_cmd_line — LINE (X,Y)-(X,Y)[,c][BF|BS]: отрезок/прямоугольник. Адрес из плотной таблицы (токен 0x93); группа графики, рядом с PLOT.
-; calls: ["разбор координат (`CALL 0x28A0`-подобный)", "драйвер линии"]
-; params: HL = поток после LINE; X1,Y1-X2,Y2 (,цвет), опц. BF/BS.
+; calls: ["0x281D", "0x0010", "0x28FD"]
+; params: in[H,L] out[B,H,L] saves[A]
 ; reads: ["две точки (координаты), цвет; флаг заливки/границы"]
 ; role: cmd_line
+; size_source: stage17_linear_decode
 ; writes: ["отрезок (или прямоугольник BF/BS) в ВГД"]
 func_cmd_line:
 	call	label_28A0
@@ -7028,6 +7458,7 @@ label_2960:
 label_2968:
 	rst	func_rst_advance_text
 	pop	psw
+label_296A:
 	push	h
 	push	d
 	push	psw
@@ -7172,7 +7603,8 @@ label_2A28:
 	xchg
 	pchl
 ; func_line_draw — Прорисовка линии/дуги (Брезенхэм-подобный обход). Считает дельты по var 0x2B56/0x2B57, состояние-байт 0x2A8C (самомодиф.), зовёт plot-хелперы 0x26D8/0x26D9/0x26DD (см. func_plot_column_step). Циклы `DCR C / DCR B`, возврат по переполнению. Вход динамический (адрес рутины из вычислителя графических команд).
-; calls: 0x26D8/0x26D9/0x26DD (plot step)
+; calls: ["0x2A49"]
+; params: in[] out[A] saves[]
 ; role: line_arc_draw
 ; state_cell: 0x2A8C (самомодифицируемый счётчик обхода)
 ; vars: 0x2B56, 0x2B57 (текущая позиция)
@@ -7250,6 +7682,9 @@ label_2ABA:
 	pop	b
 	pop	psw
 	ret
+; calls: []
+; params: in[C,L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_2abf:
 	mvi	b,41h
 	ldax	b
@@ -7295,6 +7730,9 @@ lbl_2af0:
 	jnc	lbl_0539
 	sta	2059h
 	ret
+; calls: []
+; params: in[B] out[A,B] saves[]
+; size_source: stage17_linear_decode
 func_2af9:
 	mov	a,b
 	rrc
@@ -7303,8 +7741,8 @@ func_2af9:
 	rc
 	xra	a
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2B01:
+; var_graph_scratch_2b01 — Zero byte between func_2af9 (GRAPH code) and var_graph_xy.
+var_graph_scratch_2b01:
 	defb	00h
 
 label_2B02:
@@ -7345,8 +7783,8 @@ label_2B0F:
 	jnz	label_2B40
 	xra	a
 	jmp	label_2B47
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2B3C:
+; var_graph_state — GRAPH state variables (0x2B3C..0x2B3F). Boot-diff: byte 0x2B3F 0x10→0x0D (initialized at boot). PROVEN mutable → var_.
+var_graph_state:
 	defb	00h,00h,00h,10h
 
 label_2B40:
@@ -7368,8 +7806,8 @@ label_2B4C:
 var_graph_xy:
 	defb	00h,00h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2B58:
+; var_graph_2b58 — Zero byte immediately after var_graph_xy (0x2B56,2B).
+var_graph_2b58:
 	defb	00h
 
 label_2B59:
@@ -7444,6 +7882,7 @@ lbl_2bae:
 lbl_2bb9:
 	mvi	e,7bh
 	mvi	a,01h
+label_2BBD:
 	out	00h
 lbl_2bbf:
 	dcr	e
@@ -7475,7 +7914,11 @@ lbl_2be6:
 	pop	psw
 	ret
 ; func_render_glyph — ОТРИСОВКА ГЛИФА СИМВОЛА В VRAM (был func_2beb). LHLD 3D8D (адрес текстового курсора в плоскостях), MVI A,0F8/ADD L, MOV C,H, MVI B,05 -> цикл CALL func_render_glyph_column / INR C / DCR B (5 колонок). Зовётся из refresh-контура терминала label_2C21 (рядом func_kbd_dequeue, опрос var_irq_prescaler bit3). Источник бит глифа — data_glyph_block (адрес готовит func_term_putc).
+; calls: []
+; params: in[A,B,D,H] out[B,C,L] saves[]
+; reads: ["0x3D8D"]
 ; role: render_glyph
+; size_source: stage17_linear_decode
 func_render_glyph:
 	push	psw
 	push	b
@@ -7513,6 +7956,9 @@ label_2C14:
 label_2C19:
 	mvi	a,32h
 	jmp	label_2B87
+; calls: ["0x2C1E"]
+; params: in[] out[] saves[]
+; size_source: stage17_linear_decode
 func_2c1e:
 	jmp	label_2C21
 label_2C21:
@@ -7533,11 +7979,12 @@ lbl_2c2e:
 	pop	b
 	ret
 ; func_kbd_dequeue — Выборка клавиши из буфера, собираемого ISR: возвращает код в A (или <0/0xFF если буфер пуст). Зовут func_inkey (INKEY$) и редакторский цикл ожидания символа. Был func_2c40.
-; calls: ["JZ/JP на пустой буфер (0x2C6D: A:=<0, RET)", "CPI 0x84 (проверка special-кода)"]
-; params: (нет); возвращает A = код клавиши или 0xFF/знак<0, если пусто
+; calls: ["0x2C40"]
+; params: in[C,H,L] out[B,H,L] saves[B]
 ; reads: ["0x2B3F (счётчик буфера клавиш)", "кольцевой буфер 0x4012", "0x2DCF (состояние мигания/повтора)"]
 ; role: kbd_read_key
-; writes: ["0x2B3F-- (DCR M — израсходован символ)", "0x2DCF bit1 (XRI 02 — сдвиг фазы курсора)"]
+; size_source: stage17_linear_decode
+; writes: ["0x2C50"]
 func_kbd_dequeue:
 	push	h
 label_2C41:
@@ -7569,21 +8016,22 @@ lbl_2c6b:
 lbl_2c6d:
 	pop	h
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2C6F:
+; data_palette_subtable — Data subtable (palette/color) preceding data_irq_palette_table. Bytes disassemble ambiguously (possible SHLD 02C0); no bp-hit in battery; boot-diff=0 → constant → data (conservative).
+data_palette_subtable:
 	defb	00h,80h,10h,0D0h,06h,86h,16h,36h
 	defb	00h,0C5h,22h,0C0h,02h,98h,52h
 
-; data_irq_palette_table — 16 ячеек физических цветов, из которых func_irq_palette_refresh каждый кадр перезаписывает палитру через OUT 02/OUT 0C.
+; data_irq_palette_table — 1 байт (0xAD) перед func_irq_handler (0x2C7F, RST38-вектор). Stage17: заявл. Stage14 размер 16 перекрывал доказанный код обработчика → сжат до 1; истинная таблица палитры под вопросом (Phase D).
 data_irq_palette_table:
 	defb	0ADh
 
 ; func_irq_handler — Главный обработчик прерываний 50 Гц: сохранить PSW/HL/SP/PC в блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC), переключить стек на 0x26F7, обновить палитру (0x239D), инкрементить прескейлер 0x3A1F и кадровый счётчик 0x3A20, выдать управление экраном OUT 00=0x8A, снять latch РУС/ЛАТ (IN 01/ANI 80), заморгать курсор (XRI 08 на 0x2DCD), сканировать матрицу клавиатуры (OUT 03/IN 02). Возврат — через lbl_irq_resume.
-; calls: ["CALL 0x239D func_irq_palette_refresh", "CALL 0x2DC8 func_kbd_matrix_prime", "падение в хвост 0x2D00 lbl_irq_resume (EI/JMP)"]
-; params: вход по прерыванию; контекст в HL/SP/PSW сохраняется в блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC)
-; reads: ["IN 01 bit7 (РУС/ЛАТ)", "IN 02 (состояние матрицы клавиатуры)", "прескейлер 0x3A1F / strobe 0x3A22"]
+; calls: ["0x239D"]
+; params: in[A,B,C,D,H,L] out[] saves[H]
+; reads: ["0x3A20"]
 ; role: irq_vblank_handler
-; writes: ["блок сохранения контекста 0x2D04(SP)/0x2D07(HL)/0x2D0B(PC)", "свой стек: LXI SP,0x26F7", "0x3A1F++ / 0x3A20:21++ (кадровый счётчик)", "OUT 00 (упр. ВВ55#1) = 0x8A", "0x2CB1 (за latch РУС/ЛАТ)", "0x2DCD bit3 (мигание курсора XRI 08)", "OUT 03/IN 02 (скан строк матрицы)"]
+; size_source: stage17_linear_decode
+; writes: ["0x2D04", "0x2D07", "0x2D0B", "0x3A20"]
 func_irq_handler:
 	shld	2d07h
 	pop	h
@@ -7744,24 +8192,66 @@ lbl_2d6b:
 lbl_2d7b:
 	adi	20h
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2D7E:
+; data_graph_op_table — 16-byte GRAPH opcode table. Preceded by lbl_2d7b; followed by func_graph_pixel_addr (0x2D8E). Unchanged at boot+battery → ROM-constant data.
+data_graph_op_table:
 	defb	89h,8Ah,8Dh,7Fh,88h,99h,98h,9Ah
 	defb	8Ch,9Fh,9Bh,80h,81h,82h,83h,84h
-	defb	21h,0E9h,2Ch,0E5h,47h,21h,3Eh,2Bh
-	defb	7Eh,0FEh,0FFh,0CAh,0B1h,2Dh,0B8h,0C0h
-	defb	2Bh,7Eh,0FEh,32h,0CAh,0A7h,2Dh,34h
-	defb	0C9h,2Bh,7Eh,0D6h,05h,0C2h,0A5h,2Dh
-	defb	77h,23h,23h,70h,23h,7Eh,0FEh,10h
-	defb	0D0h,34h,11h,00h,00h,7Bh,8Ah,21h
-	defb	12h,40h,19h,0E6h,0Fh,32h,0B9h,2Dh
-	defb	70h,0C9h
 
+; func_graph_pixel_addr — PROVEN: breakpoint HIT ×1 during battery + runtime selfmod byte 0x2DB9 ROM→post 00→01 (ANI 0F / STA 2DB9 writes operand of `LXI D,????` in-place). Reads graph-op-table, mutates D-operand, computes pixel address via 4012h base. Ends RET at 0x2DC7 (boundary with func_kbd_matrix_prime).
+; calls: []
+; cfg_reachable: no (PCHL dispatch via LXI H,2D8E at 0x2D19)
+; params: in[A,L] out[A,H,L] saves[]
+; phase_b_evidence: bp@2D8E HIT; 0x2DB9 mutated 00→01 post-battery
+; reads: data_graph_op_table(0x2D7E), var_graph(0x2B3E), 0x4012
+; role: selfmod_graph_pixel_address
+; selfmod_cell: 0x2DB9
+func_graph_pixel_addr:
+	lxi	h,2ce9h
+	push	h
+	mov	b,a
+	lxi	h,2b3eh
+	mov	a,m
+	cpi	0ffh
+	jz	label_2DB1
+	cmp	b
+	rnz
+	dcx	h
+	mov	a,m
+	cpi	32h
+	jz	label_2DA7
+label_2DA5:
+	inr	m
+	ret
+label_2DA7:
+	dcx	h
+	mov	a,m
+	sui	05h
+	jnz	label_2DA5
+	mov	m,a
+	inx	h
+	inx	h
+label_2DB1:
+	mov	m,b
+	inx	h
+	mov	a,m
+	cpi	10h
+	rnc
+	inr	m
+	lxi	d,0000h
+	mov	a,e
+	adc	d
+	lxi	h,4012h
+	dad	d
+	ani	0fh
+	sta	2db9h
+	mov	m,b
+	ret
 ; func_kbd_matrix_prime — Аппаратная подготовка клавиатурной матрицы перед чтением порта 0x02: выставить strobe строки и подтяжку. Зовётся из ISR (0x2CE0, 0x2D15) и из dequeue-цикла. Был func_2dc8.
-; calls: ["MVI A,88/OUT 00; OUT 01; LDA 3A22/OUT 03; OUT 02"]
-; params: (нет); строк/столбец задаётся 0x3A22
-; reads: ["0x3A22 (выбранная строка strobe)"]
+; calls: []
+; params: in[] out[] saves[]
+; reads: ["0x3A22"]
 ; role: kbd_scan_prime
+; size_source: stage17_linear_decode
 ; writes: ["OUT 00 = 0x88 (упр. ВВ55#1)", "OUT 01", "OUT 03 (0x3A22: маска строки)", "OUT 02 = 0 (подтяжка)"]
 func_kbd_matrix_prime:
 	mvi	a,88h
@@ -7774,29 +8264,126 @@ func_kbd_matrix_prime:
 	mvi	a,00h
 	out	02h
 	ret
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2DDC:
-	defb	0FEh,0Dh,0CAh,0BAh,2Ah,0FEh,0Ah,0C2h
-	defb	0F3h,2Dh,3Eh,21h,32h,0A8h,3Eh,3Eh
-	defb	0D4h,32h,6Fh,07h,0C3h,0BAh,2Ah,06h
-	defb	00h,21h,9Fh,37h,09h,09h,09h,09h
-	defb	09h,3Eh,05h,32h,3Eh,2Eh,3Ah,56h
-	defb	2Bh,0F5h,5Eh,3Ah,57h,2Bh,32h,0Eh
-	defb	2Eh,3Eh,00h,32h,57h,2Bh,0C6h,00h
-	defb	4Fh,3Ah,56h,2Bh,0C6h,00h,47h,0C5h
-	defb	0C6h,00h,47h,3Eh,00h,81h,4Fh,7Bh
-	defb	87h,5Fh,78h,0DCh,6Ah,29h,0C1h,78h
-	defb	32h,56h,2Bh,0AFh,0B3h,0C2h,0Dh,2Eh
-	defb	0B1h,32h,57h,2Bh,0F1h,32h,56h,2Bh
-	defb	23h,3Eh,00h,3Dh,0C2h,0FFh,2Dh,3Ah
-	defb	57h,2Bh,57h,3Ah,13h,2Eh,82h,32h
-	defb	57h,2Bh,0C3h,0BAh,2Ah,04h,04h,04h
-	defb	01h,01h,01h,05h,05h,05h,0D2h,0BDh
-	defb	2Bh,0B3h,1Ch,0A9h,9Eh,9Fh,0A9h,96h
-	defb	34h,8Eh,39h,86h,0B0h,7Eh,94h,77h
-	defb	0DEh,70h,88h,6Ah,8Eh,64h,0E9h,5Eh
-	defb	95h,59h
+; func_2ddc_scroll — Self-modifying GRAPH/text-scroll routine. Disassembly: 93 valid contiguous instructions ending with `JMP 2ABA` (common exit) at 0x2E4E. Checks CR/LF (CPI 0D/0A), writes var_cursor_blink(0x2DCD), reads/writes var_graph_xy(0x2B56/57), addresses glyphs(LXI H,379F). Selfmod writes: STA 3EA8 (loads own address via LXI H,2DDC for dispatch), STA 076F, STA 2E3E, STA 2E0E. Address-taken at 0x3EA9. BP did not fire in idle battery (scroll condition not met); conservative func_ per round-trip safety.
+; calls: []
+; cfg_reachable: no (PCHL dispatch)
+; params: in[] out[] saves[]
+; phase_b_evidence: clean disasm; address-taken (LXI H,2DDC @3EA9); bp not hit (scroll path not exercised)
+; role: selfmod_graph_scroll
+; selfmod_cells: 0x3EA8, 0x076F, 0x2E3E, 0x2E0E
+; writes: ["0x076F", "0x3EA8"]
+func_2ddc_scroll:
+	cpi	0dh
+	jz	label_2ABA
+	cpi	0ah
+	jnz	label_2DF3
+	mvi	a,21h
+	sta	3ea8h
+	mvi	a,0d4h
+	sta	076fh
+	jmp	label_2ABA
+label_2DF3:
+	mvi	b,00h
+	lxi	h,379fh
+	dad	b
+	dad	b
+	dad	b
+	dad	b
+	dad	b
+	mvi	a,05h
+label_2DFF:
+	sta	2e3eh
+	lda	var_graph_xy
+	push	psw
+	mov	e,m
+	lda	2b57h
+	sta	2e0eh
+label_2E0D:
+	mvi	a,00h
+	sta	2b57h
+	adi	00h
+	mov	c,a
+	lda	var_graph_xy
+	adi	00h
+	mov	b,a
+	push	b
+	adi	00h
+	mov	b,a
+	mvi	a,00h
+	add	c
+	mov	c,a
+	mov	a,e
+	add	a
+	mov	e,a
+	mov	a,b
+	cc	label_296A
+	pop	b
+	mov	a,b
+	sta	var_graph_xy
+	xra	a
+	ora	e
+	jnz	label_2E0D
+	ora	c
+	sta	2b57h
+	pop	psw
+	sta	var_graph_xy
+	inx	h
+	mvi	a,00h
+	dcr	a
+	jnz	label_2DFF
+	lda	2b57h
+	mov	d,a
+	lda	2e13h
+	add	d
+	sta	2b57h
+	jmp	label_2ABA
+; func_2e51 — Dispatch stub after JMP at 0x2E4E (unreachable by fallthrough). Address-taken via `LXI H,2E51` at 0x2EA3/0x2EFB/0x2FA9 (PCHL jump table). Code: INR B×3 / LXI B,0101 / DCR B×3 / JNC 2BBD.
+; calls: []
+; params: in[B] out[B] saves[]
+; phase_b_evidence: address-taken via PCHL table
+; role: dispatch_stub
+func_2e51:
+	inr	b
+	inr	b
+	inr	b
+	lxi	b,0101h
+	dcr	b
+	dcr	b
+	dcr	b
+	jnc	label_2BBD
+; data_2e5d_table — Data tail after dispatch stub. Disassembles to garbage (PCHL, varied opcodes) → not coherent code. Between func_2e51 and func_2e76@0x2E76. boot-diff=0 → constant table.
+; access: no static absolute xref; обращение через вычисляемый указатель/индекс или boot-init (см. phase_b_evidence/role)
+; phase_b_evidence: boot-diff=0, garbage disasm
+; role: delta_jump_table
+data_2e5d_table:
+	ora	e
+	inr	e
+	xra	c
+	sbb	m
+	sbb	a
+	xra	c
+	sub	m
+	inr	m
+	adc	m
+	dad	sp
+	add	m
+	ora	b
+	mov	a,m
+	sub	h
+	mov	m,a
+	sbi	70h
+	adc	b
+	mov	l,d
+	adc	m
+	mov	h,h
+	pchl
+; data_2e5d_table — Data tail after dispatch stub. Disassembles to garbage (PCHL, varied opcodes) → not coherent code. Between func_2e51 and func_2e76@0x2E76. boot-diff=0 → constant table.
+label_2E73:
+	defb	5Eh,95h,59h
 
+; calls: []
+; params: in[A,B,H] out[B] saves[]
+; size_source: stage17_linear_decode
 func_2e76:
 	push	psw
 	push	b
@@ -7822,6 +8409,9 @@ label_2E8B:
 	mov	a,m
 	ora	a
 	jp	lbl_2ec4
+; calls: []
+; params: in[B,C] out[A,H,L] saves[]
+; size_source: stage17_linear_decode
 func_2e9a:
 	mvi	m,00h
 	lxi	h,2e57h
@@ -7844,6 +8434,9 @@ lbl_2eb6:
 	lxi	h,2e54h
 	dad	b
 	mvi	m,01h
+; calls: []
+; params: in[C] out[] saves[]
+; size_source: stage17_linear_decode
 func_2ebc:
 	mvi	a,0c2h
 	sub	c
@@ -7937,8 +8530,8 @@ lbl_2f3e:
 	jnz	lbl_2eb6
 	mvi	m,00h
 	jmp	lbl_2eb6
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_2F4F:
+; data_2f4f_table — Малая таблица (00 04 08 0A 0E — арифм. прогрессия + шапка 12 16). Между lbl_2f3e и lbl_2f56; код-соседи это метки, внутри блока инструкций нет.
+data_2f4f_table:
 	defb	12h,16h,00h,04h,08h,0Ah,0Eh
 
 lbl_2f56:
@@ -8016,6 +8609,10 @@ label_2FAE:
 lbl_2fc3:
 	pop	h
 	ret
+; calls: []
+; params: in[C,H,L] out[A] saves[A]
+; size_source: stage17_linear_decode
+; writes: ["0x2FD8", "0x2FDB"]
 func_2fc5:
 	push	psw
 	mvi	a,09h
@@ -8033,6 +8630,9 @@ func_2fc5:
 	out	09h
 	pop	psw
 	ret
+; calls: []
+; params: in[A,B,D,E,H,L] out[C,D,E,H,L] saves[]
+; size_source: stage17_linear_decode
 func_2fde:
 	inr	m
 	inx	d
@@ -8099,11 +8699,12 @@ label_302A:
 	cpi	2ch
 	ret
 ; func_cmd_circle — CIRCLE (X,Y),R(,c): окружность/дуга. Подтверждено телом (0x3033: CALL 28A0/STA 2B56/CALL 10C3). ИСПРАВЛЕНИЕ 5b: адрес `0x3033`, не `0x1C21`. Токен 0xE4 -> `0x276E`.
-; calls: ["CALL 0x28A0 — центр", "CALL 0x10C3 — цвет", "примитив дуги"]
-; params: HL = поток после CIRCLE; X,Y, радиус(,цвет).
+; calls: ["0x281D", "0x10A7", "0x12A6", "0x0008", "0x2FDE", "0x052D", "0x099E", "0x3033"]
+; params: in[A,C,D,E,H,L] out[B,D,E,H] saves[H]
 ; reads: ["центр X,Y (`CALL 0x28A0`)", "радиус (-> `0x2B56`/`0x2B57`)", "цвет (`CALL 0x10C3` -> `0x30B4`)"]
 ; role: cmd_circle
-; writes: ["окружность/дуга в ВГД (синус-таблица, ТЗ п.23)"]
+; size_source: stage17_linear_decode
+; writes: ["0x2B56", "0x2B57", "0x30B4", "0x3BAB", "0x3BB8"]
 func_cmd_circle:
 	call	label_28A0
 	sta	var_graph_xy
@@ -8310,7 +8911,9 @@ label_3179:
 	pop	b
 	ret
 ; func_coord_variant_table — JP-таблица вариантов координатной рутины: `JMP 3190 / JMP 319A / JMP 3253 / JMP 31A4 / CALL 319A`, далее тела `XCHG / LHLD 3BA9 или 3BA7 / XCHG / RST 20 / JP 3253`. Общий `RST 20` + две именованные RAM-ячейки 0x3BA9/0x3BA7 (кандидаты в var_). Вход через адрес из таблицы (PCHL/JP), поэтому не покрыт CFG.
+; calls: ["0x3181"]
 ; layout: 5 JMP/CALL-векторов + тела
+; params: in[] out[] saves[]
 ; ram_cells: 0x3BA9, 0x3BA7
 ; role: coord_transform_variant_table
 ; shared_vector: RST 20 (0x0020)
@@ -8382,7 +8985,10 @@ label_326E:
 	mov	c,l
 	xchg
 ; func_render_glyph_column — ЗАПИСЬ ОДНОЙ КОЛОНКИ ГЛИФА в 4 плоскости VRAM (был func_327a). Берёт байт колонки, раскладывает биты по плоскостям: LXI B,2000h / DAD B — шаг между плоскостями (0x8000=plane3..0xE000=plane0). Вызывается 5 раз из func_render_glyph (по одной на колонку).
+; calls: []
+; params: in[C] out[B,D,H] saves[]
 ; role: render_glyph_column
+; size_source: stage17_linear_decode
 func_render_glyph_column:
 	mvi	b,41h
 	ldax	b
@@ -8393,6 +8999,9 @@ label_3280:
 	mov	d,a
 label_3281:
 	lxi	b,2000h
+; calls: []
+; params: in[B,C,D,H,L] out[H,L] saves[]
+; size_source: stage17_linear_decode
 func_3284:
 	ora	m
 	xra	a
@@ -8668,6 +9277,10 @@ lbl_33f8:
 	sta	2c1ah
 	pop	h
 	ret
+; calls: ["0x143D"]
+; params: in[A,D,E] out[D,E] saves[]
+; size_source: stage17_linear_decode
+; writes: ["0x05AC", "0x145F"]
 func_3419:
 	xra	a
 	mov	c,a
@@ -8692,12 +9305,12 @@ label_342A:
 	shld	3446h
 	xchg
 	ret
-; func_cmd_get — GET: считать блок изображения из экрана в память (пара PUT). Токен 0xDE -> `0x3441` (сегмент B). ТЗ п.45/47/69.
-; calls: ["разбор координат/размера", "чтение плоскостей ВГД"]
-; params: HL = поток после GET; X,Y, размер, буфер.
-; reads: ["прямоугольник ВГД (координаты + размеры)"]
+; func_cmd_get — Гэп 0x34DD..0x34E2 — хвост GET (после основного тела CFG дошёл лишь до 0x34DC). След. объект var_getput_ptr @0x3559 — продление до 0x34E2.
+; calls: ["0x3419", "0x3441"]
+; params: in[C,E,H] out[E,H] saves[]
+; reads: ["0x0006", "0x0DE7", "0x2B56", "0x2B57", "0x34B2", "0x3C57", "0x40FE"]
 ; role: cmd_get
-; writes: ["буфер памяти — считанный блок графики"]
+; writes: ["0x0007", "0x0DBC", "0x0DD4", "0x34B1", "0x34C1", "0x34C6", "0x34CB", "0x34CF", "0x350E"]
 func_cmd_get:
 	call	label_342A
 	push	h
@@ -8815,8 +9428,8 @@ label_350C:
 	mov	h,a
 	xchg
 	jmp	label_351F
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3518:
+; data_3518_pad — Run из 7 одинаковых байт 0x29 — резерв/филлер между func_cmd_get (0x3441) и var_getput_ptr (0x3559). Не код (DCX H/SUB L повтор = несвязный), не ссылка. Честно называем filler.
+data_3518_pad:
 	defb	29h,29h,29h,29h,29h,29h,29h
 
 label_351F:
@@ -8880,10 +9493,11 @@ label_3574:
 	shld	var_getput_ptr
 	ret
 ; func_cmd_put — PUT: вывести блок изображения из памяти на экран (пара GET). Токен 0xDF -> `0x357F` (сегмент B). ТЗ п.45/47/69.
-; calls: ["разбор координат/размера", "запись плоскостей ВГД"]
-; params: HL = поток после PUT; X,Y, размер, буфер.
+; calls: ["0x10A7", "0x3419", "0x357F"]
+; params: in[A,H] out[A,B,D,H] saves[]
 ; reads: ["буфер памяти — блок графики"]
 ; role: cmd_put
+; size_source: stage17_linear_decode
 ; writes: ["прямоугольник ВГД (восстановление изображения)"]
 func_cmd_put:
 	call	label_342A
@@ -8999,10 +9613,12 @@ label_3669:
 	sta	3742h
 	jmp	label_3692
 ; func_selfmod_patch — Самомодифицируемый сборщик трамплина. Straight-line: `MOV L,C / MOV H,B / MOV A,M / INX H / ORA M ×3 / MOV L,A / MVI A,C9 / STA 0x3737 / CALL 0x372B / CMA / STA 0x373A / STA 0x3740 / MVI A,EB / STA 0x3737 / XCHG`. Патшит байты (`C9`=RET, `EB`=JMP) в ячейки 0x3737/373A/3740 — пары с патч-областью 0x3730. Вход динамический.
-; calls: 0x372B
+; calls: []
+; params: in[B,C,D,E,H,L] out[B,C,D,E,H,L] saves[]
 ; patch_area: 0x3730 (residual gap)
 ; patch_cells: 0x3737, 0x373A, 0x3740
 ; role: selfmod_trampoline_patch
+; writes: ["0x0E99", "0x0E9C", "0x373A"]
 func_selfmod_patch:
 	xchg
 	mov	l,c
@@ -9117,10 +9733,14 @@ label_3712:
 	inx	b
 	call	label_374A
 	jmp	label_3712
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3722:
-	defb	11h,00h,00h,0C3h,38h,37h
-
+; func_3722_trampoline — Trampoline stub: `LXI H,0000 / JMP 3738`. PCHL-dispatched entry adjacent to func_selfmod_patch (0x366F). JMP target 0x3738 is in patch-area (0x3730). Clean 2-instruction code.
+; calls: ["0x3730"]
+; params: in[] out[D] saves[]
+; phase_b_evidence: code-shape, part of selfmod subsystem
+; role: selfmod_trampoline
+func_3722_trampoline:
+	lxi	d,0000h
+	jmp	label_3738
 label_3728:
 	xchg
 	ldax	b
@@ -9128,12 +9748,24 @@ label_3728:
 label_372B:
 	mvi	h,00h
 	jmp	label_372F
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3730:
+; data_selfmod_patch_cells — ROM-template bytes of the patch target area. Written at runtime by func_selfmod_patch (0x366F): STA 0x3737 (C9=RET), STA 0x373A/3740. Unchanged at idle (patch not yet triggered) → data_ (ROM template). DEFB preserves round-trip; runtime writes happen in RAM only.
+data_selfmod_patch_cells:
 	defb	29h,29h,29h,29h,29h,29h,29h,0EBh
-	defb	7Eh,0E6h,00h,0B2h,77h,24h,7Eh,0E6h
-	defb	00h,0B3h,77h,0C9h,65h,2Eh,00h,0C3h
-	defb	37h,37h
+
+label_3738:
+	mov	a,m
+	ani	00h
+	ora	d
+	mov	m,a
+	inr	h
+	mov	a,m
+	ani	00h
+	ora	e
+	mov	m,a
+	ret
+; data_selfmod_patch_cells — ROM-template bytes of the patch target area. Written at runtime by func_selfmod_patch (0x366F): STA 0x3737 (C9=RET), STA 0x373A/3740. Unchanged at idle (patch not yet triggered) → data_ (ROM template). DEFB preserves round-trip; runtime writes happen in RAM only.
+label_3744:
+	defb	65h,2Eh,00h,0C3h,37h,37h
 
 label_374A:
 	ani	0fh
@@ -9352,6 +9984,9 @@ label_3BCE:
 	mov	e,a
 	xchg
 	jmp	label_2BE3
+; calls: ["0x3C56"]
+; params: in[D,H,L] out[A] saves[]
+; size_source: stage17_linear_decode
 func_3bd3:
 	push	d
 	push	h
@@ -9446,8 +10081,10 @@ lbl_3c58:
 	cpi	00h
 	ret
 ; func_point_read_planes — POINT-читалка 4 плоскостей (E000/C000/A000/8000). Пролог `PUSH H / MOV E,H / MVI H,41 / MOV D,M` читает page_h из LUT 0x4100, затем `LXI B,2000 / DAD B` — stride плоскостей; комбинирование битов `MOV A,M / NOP / ANA E`. Это ровно цели 0x3C69..0x3C93 из таблицы data_pixel_read_dispatch (Stage 11). Подтверждение Stage 7 §8.3.
+; calls: []
 ; dispatch_table: data_pixel_read_dispatch (0x2132)
 ; lut: data_x_to_page_h_lut (0x4100)
+; params: in[C,H,L] out[A,D,H] saves[H]
 ; role: point_read_4_planes
 ; stride: 0x2000 (LXI B,2000)
 func_point_read_planes:
@@ -9564,8 +10201,8 @@ lbl_3cf2:
 lbl_3cff:
 	mov	h,a
 	jmp	label_2BE3
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3D03:
+; data_ctrl_char_seq — Inline control-character sequence (0D=CR, 0A=LF, 1B=ESC, 41='A', 08=BS, 1B 2A=ESC*, 01 00 02). Between code labels lbl_3cff/lbl_3d0d. boot-diff=0 → constant (embedded terminal command sequence).
+data_ctrl_char_seq:
 	defb	0Dh,0Ah,1Bh,41h,08h,1Bh,2Ah,01h
 	defb	00h,02h
 
@@ -9701,6 +10338,9 @@ lbl_3dc0:
 	mvi	c,0ah
 	call	func_3ea0
 	jmp	lbl_2be6
+; calls: ["0x2048", "0x3DDF"]
+; params: in[L] out[A,H,L] saves[]
+; size_source: stage17_linear_decode
 func_3ddf:
 	lxi	h,3d03h
 label_3DE2:
@@ -9725,8 +10365,8 @@ label_3DF5:
 var_string_alloc_ptr:
 	defb	00h,00h,00h,00h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_3E00:
+; var_workspace_scratch — RAM workspace scratch: 104 zero bytes between var_string_alloc_ptr (0x3DFC) and data_workspace_constants (0x3E68). Unwritten at idle; not touched by short battery (BASIC uses different workspace zone at 0x3Fxx). Reserved for program runtime.
+var_workspace_scratch:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
@@ -9740,6 +10380,9 @@ gap_3E00:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
+
+; data_workspace_init — Pre-initialized workspace constants (48B, 0x3E68..0x3E97). ROM-backed; boot+post-battery: unchanged. Immediately before func_3e98 (code). Not mutable (constant across all probes) → data_.
+data_workspace_init:
 	defb	0B5h,6Ah,0D5h,0ABh,2Dh,5Ah,0A2h,5Ah
 	defb	0D6h,98h,5Ah,0DBh,8Eh,6Dh,0B6h,83h
 	defb	5Bh,6Dh,78h,5Bh,76h,6Dh,5Dh,0BBh
@@ -9747,18 +10390,26 @@ gap_3E00:
 	defb	0EFh,3Eh,77h,0EBh,31h,3Bh,0DDh,25h
 	defb	5Eh,0F7h,19h,7Bh,0BDh,0Ch,6Eh,0F7h
 
+; calls: []
+; params: in[] out[A] saves[]
+; reads: ["0x00BE"]
+; size_source: stage17_linear_decode
 func_3e98:
 	lda	0190h
 	dcr	a
 	jz	lbl_2045
 ; func_term_putc — func_term_putc — ВВОД СИМВОЛА В ТЕРМИНАЛ (putchar->putc). Маскирует код `MVI A,7FH / ANA C` (128 глифов) и вычисляет адрес глифа в data_glyph_block: `LXI H,379Fh / DAD B x5` (=база + 5*код, путь lbl_3d4d), сохраняет (XCHG/PUSH D) и передаёт управление на отрисовку func_render_glyph (0x2BEB). Обработчики спец-кодов (CURSOR/ inversion) на lbl_3d36/lbl_3d44. Источник растровых глифов — data_glyph_block 0x379F (Stage 7).
-; calls: ["EI; PUSH PSW/B/D/H (полное сохранение регистров)"]
-; params: C = код символа (маскируется 0x7F)
+; calls: []
+; params: in[] out[] saves[]
 ; reads: ["0x402E (состояние терминала)"]
 ; role: terminal_putc
+; size_source: stage17_linear_decode
 ; writes: ["символьный экран/курсор (область BIOS 0x3EXX)"]
 func_term_putc:
 	ei
+; calls: ["0x2BE6"]
+; params: in[A,B,C,D,H,L] out[A,H,L] saves[]
+; size_source: stage17_linear_decode
 func_3ea0:
 	push	psw
 	push	b
@@ -9825,6 +10476,8 @@ data_bit_clear_masks:
 	defb	0C0h,0Fh,0E0h,07h,0F0h,03h,0F8h,01h
 	defb	0FFh,7Fh,3Fh,1Fh,0Fh,07h,03h,01h
 
+; calls: []
+; params: in[A,L] out[A,B,C] saves[]
 func_3f20:
 	lxi	h,0000h
 	lxi	b,6069h
@@ -9870,6 +10523,9 @@ label_3F50:
 	lxi	h,3f5ch
 	inr	m
 	mov	l,a
+; calls: []
+; params: in[] out[E] saves[]
+; size_source: stage17_linear_decode
 func_3f59:
 	mvi	e,09h
 lbl_3f5b:
@@ -9944,29 +10600,38 @@ str_autoload:
 	defb	30h,2Ch,31h,3Ah,43h,4Ch,53h,0Dh
 
 ; func_cmd_cls_home — CLS (0x80) и HOME (0xCD) — ОДИН обработчик `MVI A,1F / JMP 1C95`: послать ВГД код очистки/домашний курсор. Подтверждён телом; исправляет оговорку 5a (не RAM-мусор).
-; calls: ["JMP 0x1C95 — вывод кода"]
-; params: HL = поток после CLS/HOME.
+; calls: ["0x1C95"]
+; params: in[] out[A] saves[]
 ; reads: []
 ; role: cmd_cls_home
+; size_source: stage17_linear_decode
 ; writes: ["управляющий код 0x1F в ВГД через 0x1C95 (очистка экрана)"]
 func_cmd_cls_home:
 	mvi	a,1fh
 	jmp	func_putchar
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_4027:
+; var_paint_4027 — Byte between func_cmd_cls_home (0x4022) and var_paint_field (0x4028). Workspace variable; boot-diff=0.
+var_paint_4027:
 	defb	1Eh
 
 ; var_paint_field — ЦВЕТ/ЗНАЧЕНИЕ ЗАЛИВКИ PAINT (1б). func_cmd_paint `0x20B1` копирует текущий цвет (LDA 3769) в 0x4028 перед flood-заливкой.
 var_paint_field:
 	defb	00h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_4029:
-	defb	0CDh,6Bh,28h,0E1h,0C9h,00h,00h,00h
+; func_4029 — Redirect stub in workspace: `CALL 286B / POP H / RET`. 5-byte code immediately after var_paint_field. Unchanged at boot+battery → static initialization code. CALL target 0x286B in GRAPH area.
+; calls: ["0x281D"]
+; params: in[] out[H] saves[]
+; phase_b_evidence: boot-diff=0, valid disasm (3 instr, end RET)
+; role: redirect_stub
+func_4029:
+	call	label_286B
+	pop	h
+	ret
+; var_workspace_text_scratch — Zero workspace between func_4029 stub and var_text_ptr (0x404D). Reserved scratch; boot-diff=0.
+var_workspace_text_scratch:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
-	defb	00h,00h,00h,00h
+	defb	00h,00h,00h,00h,00h,00h,00h
 
 ; var_text_ptr — ГЛАВНЫЙ ТЕКСТОВЫЙ УКАЗАТЕЛЬ потока токенов (2б, ~30 обращений lhld/shld). RST 1 (сверка разделителя) и RST 2 (продвинуть на непробел) работают через него.
 var_text_ptr:
@@ -9976,10 +10641,13 @@ var_text_ptr:
 var_fac:
 	defb	00h,00h,00h,00h
 
-; Uncovered ROM bytes — neither code nor an RDB object
-gap_4053:
+; var_fac_scratch — 16 zero bytes between var_fac (0x404F) and data_float_pow2_coeffs (0x4063). FAC extension scratch; boot-diff=0.
+var_fac_scratch:
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
 	defb	00h,00h,00h,00h,00h,00h,00h,00h
+
+; data_float_pow2_coeffs — Float power-of-2 table: exponents 0x81..0x84 (2^0..2^3), mantissas 0x00/0x40/0x20/0x40/0x60/0x00/0x10. Unchanged boot+battery → ROM-constant data. Between var_fac_scratch and lbl_4074.
+data_float_pow2_coeffs:
 	defb	81h,00h,82h,40h,82h,00h,83h,20h
 	defb	83h,40h,83h,60h,83h,00h,84h,10h
 	defb	84h
