@@ -2,15 +2,15 @@
 """
 gen_assets.py — ассеты демки Mario 16-цвет для Вектора-06Ц.
 
-Читает src/tiles.png (карта уровня SMB 1-1), src/tiles.json (твёрдость тайлов,
-вариант C) и src/mario.png (лента из 18 спрайтов Small Mario), квантует
+Читает assets/tiles.png (карта уровня SMB 1-1), assets/tiles.json (твёрдость тайлов,
+вариант C) и assets/mario.png (лента из 18 спрайтов Small Mario), квантует
 всё в ОДНУ общую 16-цветную палитру Вектора и пишет:
 
-  src/level.inc   — палитра, тайлсет 8x8 (4 плоскости), тайлкарта уровня,
+  include/level.inc   — палитра, тайлсет 8x8 (4 плоскости), тайлкарта уровня,
                     tile_nz (карта непустых плоскостей тайла), pair_top
                     (верхняя «грязная» строка пары соседних колонок) и таблицу
                     твёрдости tile_solid[тайл] (см. load_tile_solid);
-  src/mario.inc   — спрайты Small Mario 16x16 с маской (вправо/влево).
+  include/mario.inc   — спрайты Small Mario 16x16 с маской (вправо/влево).
 
 Формат Вектора (256x256, 16 цветов, 4 битовые плоскости):
   плоскость вес 8 -> 0x8000, вес 4 -> 0xA000, вес 2 -> 0xC000, вес 1 -> 0xE000;
@@ -34,7 +34,8 @@ import sys
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, "..", "src")
+ASSETS = os.path.join(HERE, "..", "assets")     # сырьё/дизайн (json/png/tiles)
+INCLUDE = os.path.join(HERE, "..", "include")   # генерируемые .inc
 
 # ---- Геометрия уровня -------------------------------------------------------
 BAND_TOP = 176          # верх видимой полосы уровня (нативные пиксели tiles.png)
@@ -103,7 +104,7 @@ def quantize(rgb):
 # ---------------------------------------------------------------------------
 
 def build_level():
-    im = Image.open(os.path.join(SRC, "tiles.png")).convert("RGB")
+    im = Image.open(os.path.join(ASSETS, "tiles.png")).convert("RGB")
     W, H = im.size
     px = im.load()
     cols = W // TILE
@@ -204,7 +205,7 @@ def build_level():
 
 
 # ---------------------------------------------------------------------------
-# Уровень из редакторских файлов: src/level.json + src/tiles/*.png + tiles.json
+# Уровень из редакторских файлов: assets/level.json + assets/tiles/*.png + tiles.json
 # ---------------------------------------------------------------------------
 # Это источник истины для сборки ROM: раскладка из level.json, графика из
 # tile-PNG, твёрдость из tiles.json. tiles.png служит только затравкой
@@ -252,9 +253,9 @@ def _compute_pair_top(cols, rows, tilemap):
 
 
 def build_level_editor():
-    with open(os.path.join(SRC, "level.json")) as f:
+    with open(os.path.join(ASSETS, "level.json")) as f:
         lv = json.load(f)
-    with open(os.path.join(SRC, "tiles.json")) as f:
+    with open(os.path.join(ASSETS, "tiles.json")) as f:
         tj = json.load(f)
     cols, rows = int(lv["cols"]), int(lv["rows"])
     tilemap = bytearray(lv["grid"])
@@ -274,7 +275,7 @@ def build_level_editor():
     for i, t in enumerate(tiles):
         if int(t["index"]) != i:
             sys.exit(f"tiles.json: дыра/порядок индексов (ожидался {i})")
-        tileset.append(png_to_tile(os.path.join(SRC, t["file"])))
+        tileset.append(png_to_tile(os.path.join(ASSETS, t["file"])))
     if tileset[0] != bytes(TILE * 4):
         sys.exit("tiles.json: тайл 0 должен быть пустым (небо)")
     tile_nz = _compute_tile_nz(tileset)
@@ -284,7 +285,7 @@ def build_level_editor():
 
 
 # ---------------------------------------------------------------------------
-# Коллизии: вариант C — твёрдость как СВОЙСТВО ТАЙЛА (src/tiles.json)
+# Коллизии: вариант C — твёрдость как СВОЙСТВО ТАЙЛА (assets/tiles.json)
 # ---------------------------------------------------------------------------
 # Каждый тайл несёт битовую маску:
 #   COLL_PLAT (1) — опора сверху: на него встают, но проходят сбоку/снизу
@@ -300,11 +301,11 @@ COLL_PLAT, COLL_WALL = 1, 2
 
 
 def load_tile_solid(n_tiles):
-    """src/tiles.json -> bytes длины n_tiles, каждый = маска COLL_*.
+    """assets/tiles.json -> bytes длины n_tiles, каждый = маска COLL_*.
 
     Индекс массива = индекс тайла в tileset (порядок задаёт build_level).
     """
-    path = os.path.join(SRC, "tiles.json")
+    path = os.path.join(ASSETS, "tiles.json")
     with open(path) as f:
         data = json.load(f)
     tiles = data["tiles"]
@@ -327,8 +328,8 @@ def load_tile_solid(n_tiles):
 # Спрайты Small Mario: 16x16 с маской, вправо и зеркально влево
 # ---------------------------------------------------------------------------
 
-# src/mario.png — лента из 18 спрайтов Small Mario 16x16, пронумерованы 1..18.
-# Смысл каждого номера — в src/mario.txt. БАЗОВЫЕ СПРАЙТЫ СМОТРЯТ ВЛЕВО
+# assets/mario.png — лента из 18 спрайтов Small Mario 16x16, пронумерованы 1..18.
+# Смысл каждого номера — в assets/mario.txt. БАЗОВЫЕ СПРАЙТЫ СМОТРЯТ ВЛЕВО
 # (кожа лица смещена влево; #08 «в камеру» и #17 «спиной» — симметричны).
 # Значит _l рисуем как есть, _r — зеркалом.
 MARIO_TOP = 14          # верх спрайтовой полосы (строки 14..29)
@@ -338,7 +339,7 @@ MARIO_SIZE = 16
 # Прозрачны: фон ячейки (68,145,190) и поле листа (41,88,124).
 MARIO_BG = [(68, 145, 190), (41, 88, 124)]
 
-# Кадр анимации -> номер спрайта в mario.png (1..18). См. src/mario.txt.
+# Кадр анимации -> номер спрайта в mario.png (1..18). См. assets/mario.txt.
 # stand/walk0/walk2/duck сознательно указывают на одну ячейку #1: это один и
 # тот же побайтово массив, write_sprites оставит от него ОДИН образ, а прочие
 # имена сделает #define-алиасами (экономия ROM). skid (#7) в игру не выводится —
@@ -415,7 +416,7 @@ def grid_to_sprite(grid, mirror=False):
 
 
 def build_sprites():
-    im = Image.open(os.path.join(SRC, "mario.png")).convert("RGB")
+    im = Image.open(os.path.join(ASSETS, "mario.png")).convert("RGB")
     px = im.load()
     out = {}
     for name, num in FRAMES.items():
@@ -440,7 +441,7 @@ def fmt_array(f, name, data, per_line=16):
 
 
 def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid):
-    path = os.path.join(SRC, "level.inc")
+    path = os.path.join(INCLUDE, "level.inc")
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py из tiles.png/tiles.json. Не править руками. */\n\n")
         f.write(f"#define LEVEL_COLS   {cols}\n")
@@ -456,7 +457,7 @@ def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid):
         fmt_array(f, "tile_nz", tile_nz)      # карта непустых плоскостей на тайл
         fmt_array(f, "pair_top", pair_top)    # верхdiff'а на пару соседних колонок
         # Твёрдость как свойство тайла (вариант C). Индекс = тайл; биты COLL_*.
-        f.write("\n/* Коллизии (src/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
+        f.write("\n/* Коллизии (assets/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
         f.write("#define COLL_WALL   2   /* непроходимо */\n")
         f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
         fmt_array(f, "tile_solid", tile_solid)
@@ -464,7 +465,7 @@ def write_level(cols, rows, tileset, tilemap, tile_nz, pair_top, tile_solid):
 
 
 def write_sprites(sprites):
-    path = os.path.join(SRC, "mario.inc")
+    path = os.path.join(INCLUDE, "mario.inc")
     order = []
     for name in FRAMES:
         order.append((name + "_r", sprites[name + "_r"]))

@@ -21,8 +21,8 @@
 
 #include "v06.h"
 
-#include "src/level.inc"      /* level_palette, tileset, tilemap, LEVEL_* */
-#include "src/mario.inc"      /* mario_<frame>_<r|l>                     */
+#include "level.inc"      /* level_palette, tileset, tilemap, LEVEL_* */
+#include "mario.inc"      /* mario_<frame>_<r|l>                     */
 
 /* Горячие функции — см. mario.asm. */
 extern void render_window(unsigned int cam, unsigned int old_cam,
