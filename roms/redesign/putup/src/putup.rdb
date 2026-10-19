@@ -51,6 +51,7 @@
       "properties": {
         "params": "in: HL=addr of coordinate word (x,y); out: none. Draws a 2x2 glyph tile at the coordinates read from (HL)."
       },
+      "size": 29,
       "type": "function"
     },
     {
@@ -84,6 +85,7 @@
       "properties": {
         "params": "in: HL=new text cursor address; out: none. Stores HL to var_text_ptr @0x0B53."
       },
+      "size": 4,
       "type": "function"
     },
     {
@@ -128,6 +130,7 @@
       "properties": {
         "params": "in: A=keyboard row index (0..7); out: A=matrix row byte from data_kbd_matrix @0x08D3+A. Preserves HL."
       },
+      "size": 10,
       "type": "function"
     },
     {
@@ -140,6 +143,7 @@
       "properties": {
         "params": "in: A=char code; out: none. Draws A at cursor var_text_ptr @0x0B53 and increments cursor."
       },
+      "size": 13,
       "type": "function"
     },
     {
@@ -177,6 +181,20 @@
       "type": "table"
     },
     {
+      "address": "0x01ED",
+      "comment": "Заглушка PCHL-диспетчера func_sound_op: запись младшего байта периода канала 0 (AY).",
+      "name": "func_snd_set_ch0_lo",
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x01F7",
+      "comment": "Заглушка PCHL-диспетчера func_sound_op: запись старшего байта периода канала 0 (AY).",
+      "name": "func_snd_set_ch0_hi",
+      "size": 10,
+      "type": "function"
+    },
+    {
       "address": "0x0201",
       "links": [
         "0x020E",
@@ -200,6 +218,20 @@
       "type": "function"
     },
     {
+      "address": "0x0219",
+      "comment": "Заглушка PCHL-диспетчера func_sound_op: запись младшего байта периода канала 1 (AY).",
+      "name": "func_snd_set_ch1_lo",
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x0223",
+      "comment": "Заглушка PCHL-диспетчера func_sound_op: запись старшего байта периода канала 1 (AY).",
+      "name": "func_snd_set_ch1_hi",
+      "size": 10,
+      "type": "function"
+    },
+    {
       "address": "0x022D",
       "links": [
         "0x031C"
@@ -212,6 +244,20 @@
       "type": "function"
     },
     {
+      "address": "0x023A",
+      "comment": "Заглушка PCHL-диспетчера func_sound_op: запись младшего байта периода канала 2 (AY).",
+      "name": "func_snd_set_ch2_lo",
+      "size": 10,
+      "type": "function"
+    },
+    {
+      "address": "0x0244",
+      "comment": "Заглушка PCHL-диспетчера func_sound_op: запись старшего байта периода канала 2 (AY).",
+      "name": "func_snd_set_ch2_hi",
+      "size": 11,
+      "type": "function"
+    },
+    {
       "address": "0x024E",
       "links": [
         "0x031E"
@@ -221,6 +267,41 @@
         "params": "in: none (reads var_snd_period_ch2 @0x031E); out: none. Writes ch2 period to port 09h."
       },
       "size": 13,
+      "type": "function"
+    },
+    {
+      "address": "0x025B",
+      "comment": "No-op handler таблицы func_sound_op: JMP 026Ah.",
+      "name": "func_snd_op_nop11",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x025E",
+      "comment": "No-op handler таблицы func_sound_op: JMP 026Ah.",
+      "name": "func_snd_op_nop12",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x0261",
+      "comment": "No-op handler таблицы func_sound_op: JMP 026Ah.",
+      "name": "func_snd_op_nop13",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x0264",
+      "comment": "No-op handler таблицы func_sound_op: JMP 026Ah.",
+      "name": "func_snd_op_nop14",
+      "size": 3,
+      "type": "function"
+    },
+    {
+      "address": "0x0267",
+      "comment": "No-op handler таблицы func_sound_op: JMP 026Ah.",
+      "name": "func_snd_op_nop15",
+      "size": 3,
       "type": "function"
     },
     {
@@ -369,6 +450,7 @@
       "properties": {
         "params": "in: HL=string address (chars terminated by 0xFF); out: none. Prints string at cursor via func_print_char_at_ptr."
       },
+      "size": 11,
       "type": "function"
     },
     {
@@ -378,6 +460,7 @@
       "properties": {
         "params": "in: HL=base, A=unsigned offset; out: HL = HL + A. Flags clobbered."
       },
+      "size": 5,
       "type": "function"
     },
     {
@@ -418,6 +501,7 @@
         "params": "in: none; out: none. Bank 0 (port 10h); scroll/mode vars; installs RST7 vector 0x0038->func_vblank_isr and reset vector->func_main_init; EI.",
         "role": "patches RESET vector 0x0000->func_main_init(0x0B57) and RST7 vector 0x0038->func_vblank_isr(0x03A4); then EI"
       },
+      "size": 33,
       "type": "function"
     },
     {
@@ -437,6 +521,7 @@
         "interrupt": "RST7 hardware VBlank; vector 0x0038; ~50.08 Hz; preserves H/D/B/PSW; EI before RET",
         "params": "in: none (RST7/VBlank ISR); out: none. Preserves H/D/B/PSW; frame counter++, palette update, 8x8 keyboard matrix scan -> @0x08D3, CALL func_music_tick; EI; RET."
       },
+      "size": 93,
       "type": "function"
     },
     {
@@ -505,6 +590,7 @@
       "properties": {
         "params": "in: none (fixed: src ROM gfx 0x2761, dst 0x6000); out: none. Copies gfx in 8-byte chunks (source descending)."
       },
+      "size": 78,
       "type": "function"
     },
     {
@@ -513,6 +599,26 @@
       "name": "data_vram_col_table",
       "size": 32,
       "type": "table"
+    },
+    {
+      "address": "0x053B",
+      "comment": "Трамплин: CALL [0015h], CALL [0015h], RET — вызов обработчика из RAM-вектора. Вход только по PCHL/адресу.",
+      "name": "func_call_vector_053B",
+      "size": 7,
+      "type": "function"
+    },
+    {
+      "address": "0x0542",
+      "comment": "Диспетчер отрисовки объекта-тайла: сохраняет SP->0013h, проверяет счётчик 0010h, читает адрес VRAM из 000Ch, JMP 038Ah / переходы к blit_plane_mask 10/20/40/80. Прямых вызовов нет — вход через PCHL/RAM-вектор.",
+      "name": "func_blit_object_tile",
+      "size": 190,
+      "type": "function"
+    },
+    {
+      "address": "0x0564",
+      "comment": "Скан очереди объектов: CALL 0691, decrement счётчика [0010h], поиск колонки в data_vram_col_table(0538h), ветвление к обработчикам отрисовки по флагам объекта (D). Продолжается в код 0x05FF+. Вход через PCHL.",
+      "name": "func_blit_object_scan",
+      "type": "function"
     },
     {
       "address": "0x0600",
@@ -551,7 +657,15 @@
       "properties": {
         "params": "in: A=char code, HL=buffer addr; out: none. Renders glyph to VRAM (glyph ptr = word @0x0600+A*2; col base @0x051B). Clobbers DE/BC; saves SP to var_saved_sp @0x08DD; runs DI-protected."
       },
+      "size": 160,
       "type": "function"
+    },
+    {
+      "address": "0x08A3",
+      "comment": "RAM-оверлей: scratch-буфер рендера глифов (32Б) после func_render_glyph.",
+      "name": "data_glyph_scratch_08A3",
+      "size": 32,
+      "type": "data"
     },
     {
       "address": "0x08C3",
@@ -568,6 +682,13 @@
       "type": "variable"
     },
     {
+      "address": "0x08C5",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_08C5",
+      "size": 10,
+      "type": "variable"
+    },
+    {
       "address": "0x08CF",
       "comment": "Тень Port A (03h) ВВ55 = регистр скролла (скролл на Port A согласно VECTOR_VERIFIED.md 7.4.1). func_vblank_isr восстанавливает его через LDA 0x08CF; OUT 03h после сканирования клавиатуры перенастраивает ВВ55.",
       "name": "var_scroll",
@@ -578,6 +699,13 @@
       "address": "0x08D0",
       "name": "var_screen_mode",
       "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08D1",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_08D1",
+      "size": 2,
       "type": "variable"
     },
     {
@@ -607,9 +735,23 @@
       "type": "variable"
     },
     {
+      "address": "0x08E0",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_08E0",
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x08E2",
       "name": "var_num_leading_zero_flag",
       "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08E3",
+      "comment": "RAM-оверлей: рабочий буфер 16Б — пары LXI H,08E3h / SHLD 08E3h в func_game_update и отрисовке объектов (6 мест).",
+      "name": "var_work_buffer_08E3",
+      "size": 16,
       "type": "variable"
     },
     {
@@ -624,6 +766,13 @@
       "comment": "Номер текущего уровня (1..15). Инкрементируется (INR M) func_level_loader(0x197F) при старте каждого уровня; индексирует data_level_maps(0x1C8E) [addr=0x1C8E+(level-1)*176] и data_level_params(0x1C0E) [addr=0x1C0E+level*8]. Печатается как ЧИСЛО func_draw_status_hud(0x121A) по курсору 0x52F2 через func_print_uint16(0x0331). При >=16(0x10) func_level_loader идёт по пути завершения (0x1A3B). ИСПРАВЛЕНИЕ: ранее в комментариях RDB 0x08F5 ошибочно помечался как 'lives' -> это LEVEL (уровень); жизни = var_lives_icons(0x091E). Снимок рантайма: 1. MCP-verified.",
       "name": "var_level",
       "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x08F6",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_08F6",
+      "size": 3,
       "type": "variable"
     },
     {
@@ -644,6 +793,13 @@
       "address": "0x08FC",
       "comment": "Порог очков бонуса (16-бит). func_draw_score_hud(0x1197) добавляет к нему 0x07D0(2000) за каждый бонус (LHLD 08FC; LXI B,07D0; DAD B; SHLD 08FC) и вычисляет остаток = (0x08FC-1) - очки для HUD. Снимок рантайма: 2000 (0x07D0). MCP-verified.",
       "name": "var_bonus_threshold",
+      "size": 2,
+      "type": "variable"
+    },
+    {
+      "address": "0x08FE",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_08FE",
       "size": 2,
       "type": "variable"
     },
@@ -683,10 +839,24 @@
       "type": "variable"
     },
     {
+      "address": "0x0906",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_0906",
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x0907",
       "comment": "Рабочая константа кадра = 3 (НЕ жизни; ошибка раннего анализа исправлена). Устанавливается func_game_update(0x0D68: MVI A,03; STA 0907) и func_level_loader(0x1A35). Используется как база в вычислении индекса тайла: var_090C(0x090C) = 0x0907 + var_090D(0x090D)*3 - 1. Снимок рантайма: 1 (середина кадра). MCP-verified.",
       "name": "var_work_const",
       "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x0908",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_0908",
+      "size": 6,
       "type": "variable"
     },
     {
@@ -697,11 +867,25 @@
       "type": "variable"
     },
     {
+      "address": "0x090F",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_090F",
+      "size": 2,
+      "type": "variable"
+    },
+    {
       "address": "0x0911",
       "comment": "Буфер параметров уровня (8 байт, 0x0911..0x0918). func_level_loader копирует (func_memcpy) сюда 8-байтную запись текущего уровня из data_level_params(0x1C0E), затем распределяет по состояниям/координатам сущностей: 0x0913->entity1_state(0x091A), 0x0916->entity2_state(0x091B), 0x0914->0x0920(e1X), 0x0915->0x0923(e1Y), 0x0917->0x0921(e2X), 0x0918->0x0924(e2Y). MCP-verified.",
       "name": "data_level_param_buf",
       "size": 8,
       "type": "data"
+    },
+    {
+      "address": "0x0919",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_0919",
+      "size": 1,
+      "type": "variable"
     },
     {
       "address": "0x091A",
@@ -715,6 +899,13 @@
       "comment": "Состояние сущности 2 (1..10) = байт по адресу 0x0919 + entity_index(2). Диспетчеризируется в func_entity_stateN в lbl_main_game_loop. Init из параметра уровня 0x0916 в func_level_loader(0x1A07). Снимок рантайма: 1. MCP-verified.",
       "name": "var_entity2_state",
       "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x091C",
+      "comment": "RAM-оверлей: неиспользуемый зазор между переменными.",
+      "name": "var_pad_091C",
+      "size": 2,
       "type": "variable"
     },
     {
@@ -740,10 +931,17 @@
     },
     {
       "address": "0x0925",
-      "comment": "Строка титров в KOI8-R, завершается 0xFF @0x0988 (99 символов, размер 100 включая FF). Содержимое: « Версия для \"Вектор-06Ц\"  1991» + 39 пробелов + «Центр \"КОМПЬЮТЕР\" г.Кишинев   ». Обе русские строки титров в ОДНОЙ строке. Печатается на заставке по курсору 0x52E0 (код @0x0C5F: LXI H,0925; CALL func_print_string(0x0321)). Кодировка KOI8-R: строчные а-я=0xC1-0xDF, заглавные А-Я=0xE1-0xFF (В=0xF7,е=0xC5,р=0xD2,с=0xD3,и=0xC9,я=0xD1,Ц=0xE3,К=0xEB,О=0xEF,М=0xED,П=0xF0,Ь=0xF8,Ю=0xE0,Т=0xF4,Е=0xE5,Р=0xF2,г=0xC7,ш=0xDB,в=0xD7,н=0xCE,к=0xCB,т=0xD4,о=0xCF,д=0xC4,л=0xCC). 0xFF = терминатор.",
+      "comment": "Строка титров в KOI8-R, завершается 0xFF @0x0988 (99 символов, размер 100 включая FF). Содержимое: « Версия для \"Вектор-06Ц\" 1991» + 39 пробелов + «Центр \"КОМПЬЮТЕР\" г.Кишинев ». Обе русские строки титров в ОДНОЙ строке. Печатается на заставке по курсору 0x52E0 (код @0x0C5F: LXI H,0925; CALL func_print_string(0x0321)). Кодировка KOI8-R: строчные а-я=0xC1-0xDF, заглавные А-Я=0xE1-0xFF (В=0xF7,е=0xC5,р=0xD2,с=0xD3,и=0xC9,я=0xD1,Ц=0xE3,К=0xEB,О=0xEF,М=0xED,П=0xF0,Ь=0xF8,Ю=0xE0,Т=0xF4,Е=0xE5,Р=0xF2,г=0xC7,ш=0xDB,в=0xD7,н=0xCE,к=0xCB,т=0xD4,о=0xCF,д=0xC4,л=0xCC). 0xFF = терминатор.",
       "name": "str_credits_koi8",
       "size": 100,
       "type": "string"
+    },
+    {
+      "address": "0x0989",
+      "comment": "Таблица атрибутов заголовка/логотипа перед str_title_logo (значения 1,2,6,8).",
+      "name": "data_title_attr_0989",
+      "size": 125,
+      "type": "data"
     },
     {
       "address": "0x0A06",
@@ -823,10 +1021,22 @@
       "type": "string"
     },
     {
+      "address": "0x0B3C",
+      "comment": "Фрагмент кода в зоне RAM-оверлея: NOP, JC 06FEh, MOV A,L, STAX B, INX B, JMP 093Ah. Прямых ссылок нет; байты пересекают var_music_work_ptr (alias).",
+      "name": "func_unknown_0B3C",
+      "type": "function"
+    },
+    {
       "address": "0x0B41",
       "name": "var_music_work_ptr",
       "size": 2,
       "type": "variable"
+    },
+    {
+      "address": "0x0B46",
+      "comment": "Блок с отдельным входом (PCHL): XRA A, STA 193Fh, CALL 1244h, CALL 144Ah, STA 1940h, CALL 12E1h, PUSH H. Вызывает известные игровые подпрограммы.",
+      "name": "func_unknown_0B46",
+      "type": "function"
     },
     {
       "address": "0x0B53",
@@ -853,6 +1063,7 @@
       "properties": {
         "params": "in: none; out: none. Sets SP=0x0100; clears VRAM/text buffer; hw_init; draws title image; loads sprites 0x2F61->0x7418; inits game vars; music_init."
       },
+      "size": 270,
       "type": "function"
     },
     {
@@ -900,6 +1111,7 @@
       "properties": {
         "params": "in: none (reads var_game_state @0x0900, position vars @0x0901/0x0902); out: none. Per-frame game update; start-key check and state dispatch (1->0x12B3, 2->0x12F6); collision scan into var @0x0905."
       },
+      "size": 421,
       "type": "function"
     },
     {
@@ -957,6 +1169,13 @@
       },
       "size": 50,
       "type": "function"
+    },
+    {
+      "address": "0x1155",
+      "comment": "2Б паддинга после func_prng (RET).",
+      "name": "data_pad_1155",
+      "size": 2,
+      "type": "data"
     },
     {
       "address": "0x1197",
@@ -1032,6 +1251,7 @@
       "properties": {
         "params": "in: none (reads object coords @0x0909/0x090A, tile index @0x090C); out: none. Draws game objects from tile table @0x26DE via func_render_tile_vram."
       },
+      "size": 160,
       "type": "function"
     },
     {
@@ -1138,7 +1358,7 @@
         "0x1197"
       ],
       "name": "func_level_loader",
-      "size": 4294967295,
+      "size": 523,
       "type": "function"
     },
     {
@@ -1205,6 +1425,13 @@
       },
       "size": 21,
       "type": "function"
+    },
+    {
+      "address": "0x1BFA",
+      "comment": "Таблица квадратов 10 09 04 01 00 01 04 09 10 19 24 31 40 51 64 79 90 A9 C4, терминатор FF (n^2).",
+      "name": "data_squares_table_1BFA",
+      "size": 20,
+      "type": "data"
     },
     {
       "address": "0x1C0E",
@@ -1321,31 +1548,34 @@
     {
       "address": "0x26DE",
       "name": "data_tile_table_26DE",
+      "size": 40,
       "type": "data"
     },
     {
       "address": "0x2706",
       "comment": "Таблица графики тайлов (Stage 6 шаг 4). Индексируется кодом тайла из data_level_maps: func_level_loader вычисляет A=tile*4, HL=0x2706+A -> 4 байта = один символьный тайл 2x2, рисуется через func_draw_tile_to_buf(0x1B87). Спрайты сущностей также рисуются из 0x270A и 0x2756 (внутри/после этой таблицы) в func_entity_state1. Размер Unknown (простирается за 0x2756). MCP-verified.",
       "name": "data_tile_graphics",
-      "size": 4294967295,
+      "size": 91,
       "type": "table"
     },
     {
       "address": "0x2761",
       "comment": "Графические данные ROM, копируемые в back-буфер 0x6000 функцией func_load_gfx_2761 (0x04CD).",
       "name": "data_gfx_2761",
+      "size": 2048,
       "type": "data"
     },
     {
       "address": "0x2F61",
       "name": "data_sprites_2F61",
+      "size": 224,
       "type": "data"
     },
     {
       "address": "0x3041",
       "comment": "УПАКОВАННЫЙ ИСТОЧНИК ШРИФТА/ГЛИФОВ (был data_bitmap_3041). Читается ПО УБЫВАНИЮ 4 записчиками битовых плоскостей функции func_load_glyph_block(0x0401) для построения блока глифов @0x6000. Указатель источника DE=0x3041; потребляемая область ~0x303A-0x3839 (256 глифов, DE+=8 на глиф). Битовая упаковка: 4 плоскости каждого глифа разворачиваются из пар битов источника {7,3},{6,2},{5,1},{4,0}. VERIFIED: источник глифа-0 0x303A-0x3041 = 0x61 x8 -> glyph0 = [00 x24, FF x8] (трассировано + подтверждено в runtime). Область 0x3000-0x3039 содержит другую упакованную графику; 0x303A+ — шрифт. Точная схема упаковки/RLE полностью не расшифрована (Unknown). Не то же самое, что data_gfx_2761(0x2761), которая инициализирует глиф 0.",
       "name": "data_packed_font_3041",
-      "size": 4294967295,
+      "size": 2041,
       "type": "data"
     },
     {
@@ -1372,6 +1602,13 @@
       "address": "0x383D",
       "comment": "Stage11: Voice 03 (ch2) step index 0..95; wraps at scores[+8]=96. + var_music_stream_base_03 = current read address.",
       "name": "var_music_ptr_03",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x383E",
+      "comment": "Зазор в блоке переменных музыкального драйвера.",
+      "name": "var_music_pad_383E",
       "size": 1,
       "type": "variable"
     },
@@ -1404,6 +1641,13 @@
       "type": "data"
     },
     {
+      "address": "0x3853",
+      "comment": "Зазор в блоке переменных музыкального драйвера.",
+      "name": "var_music_pad_3853",
+      "size": 1,
+      "type": "variable"
+    },
+    {
       "address": "0x3854",
       "comment": "Указатель текущей позиции музыкального трека (word). Копируется в рабочий указатель var_0B41 функциями func_music_tick и нотными рутинами; продвигается по ходу воспроизведения секвенции.",
       "name": "var_music_track_ptr",
@@ -1434,6 +1678,13 @@
       },
       "size": 52,
       "type": "function"
+    },
+    {
+      "address": "0x388C",
+      "comment": "4Б паддинга перед func_music_sub_3890.",
+      "name": "data_music_tick_pad_388C",
+      "size": 4,
+      "type": "data"
     },
     {
       "address": "0x3890",
@@ -1488,6 +1739,7 @@
       "properties": {
         "params": "in: none (reads track ptr var_3854); out: none. Per-voice note parameter processing."
       },
+      "size": 457,
       "type": "function"
     },
     {
@@ -1500,12 +1752,20 @@
       "properties": {
         "params": "in: HL=note selector (byte, masked 0x7F); out: none. Copies 14-byte note param block from data_note_param_table_43F9 into data_voice_param_buf @0x3845."
       },
+      "size": 185,
       "type": "function"
     },
     {
       "address": "0x3BC8",
       "comment": "Stage11: Despite prior name, this is the working copy of the voice-0 (ch0) current note byte (bit7 = reserved on ch0; low 7 bits = note code), stored by func_music_process_voice @0x39DE; read by func_music_play_note_ch0 (LDA 3BC8). var at 0x3BC9 = same for voice-1/ch1.",
       "name": "var_music_voice2_flag",
+      "size": 1,
+      "type": "variable"
+    },
+    {
+      "address": "0x3BC9",
+      "comment": "RAM-оверлей: зазор перед func_music_play_note_ch0.",
+      "name": "var_pad_3BC9",
       "size": 1,
       "type": "variable"
     },
@@ -1520,6 +1780,7 @@
       "properties": {
         "params": "in: none (reads track ptr var_3854, tick var_383A); out: none. Sounds voice-1 note via table @0x445D (stride 20)."
       },
+      "size": 173,
       "type": "function"
     },
     {
@@ -1546,6 +1807,7 @@
       "properties": {
         "params": "in: none (reads track ptr var_3854, flag var_3BC8); out: none. Sounds voice-2 note via table @0x42F9 (stride 10)."
       },
+      "size": 203,
       "type": "function"
     },
     {
@@ -1574,6 +1836,7 @@
       "properties": {
         "params": "in: none; out: none. Resets music vars (0x383A-0x383D) and loads track base ptr from var_music_track_base @0x3856. Runs DI-protected."
       },
+      "size": 106,
       "type": "function"
     },
     {
@@ -1585,6 +1848,13 @@
       },
       "size": 13,
       "type": "function"
+    },
+    {
+      "address": "0x3DCA",
+      "comment": "3Б паддинга перед func_music_play_note_ch0.",
+      "name": "data_pad_3DCA",
+      "size": 3,
+      "type": "data"
     },
     {
       "address": "0x3DCD",
@@ -1607,6 +1877,13 @@
       "type": "data"
     },
     {
+      "address": "0x3DEB",
+      "comment": "Загрузчик партитуры: проверяет номер дорожки 1..6, устанавливает track_ptr/base (SHLD 3854h/3856h), CALL 3888h, RET.",
+      "name": "func_music_load_score",
+      "size": 47,
+      "type": "function"
+    },
+    {
       "address": "0x3E1A",
       "comment": "Stage11: Title-melody SCORE control block (15 bytes, ROM @0x3E1A). var_music_track_ptr(0x3854)=0x3E1A points here. Layout: +0=0x38 (base byte -> op7/toggle); +1=0x06 = BASE NOTE (semitone offset added to every voice note code); +2=0x06 = DURATION = 6 VBlank ticks per step (tempo); +3=0x0F op8 (gate ch0); +4=0x00 op9 (gate ch1); +5=0x0E op10 (gate ch2); +6/+7/+8 = 0x60(96) per-voice LOOP LENGTH (each stream wraps at 96 steps); +9=0x1F op6; +A=0 op11; +B=3 op12; +C=2 op13; +D=5 = ch0 per-tick modulation (vibrato) row in data_music_vibrato_table; +E=0. NOTE: this engine has NO separate DEFW pointer table; the three voice note-streams are at fixed offsets from var_music_track_base(0x3856)=0x3E29: track01=0x3E29, track02=base+0x100, track03=base+0x200 (func_music_init@0x3D4E seeds stream-base ptrs 0x383F/0x3841/0x3843 with stride +0x100).",
       "links": [
@@ -1621,32 +1898,39 @@
     },
     {
       "address": "0x3E29",
-      "comment": "Stage11: Voice 01 note stream -> VI53 counter ch0 (port 0Bh). 96 step bytes. Each byte = NOTE CODE: 0x00 = REST (silence, period slot left as rest); else pitch = data_music_period_table[BASE(=scores+1=6) + code]. This voice uses no bit7 commands (all codes <=0x39). Fixed note length = scores+2 = 6 ticks. Per-tick vibrato offset from data_music_vibrato_table (stride 20, row = scores+13). Current read addr = var_music_stream_base_01(0x383F) + var_music_ptr_01(0x383B). Processed by func_music_process_voice @0x39D3.",
+      "comment": "Дорожка 1: 96Б нот + 160Б нулевого паддинга, stride 0x100.",
       "links": [
         "0x383B"
       ],
       "name": "data_music_track_01",
-      "size": 96,
+      "size": 256,
       "type": "data"
     },
     {
       "address": "0x3F29",
-      "comment": "Stage11: Voice 02 note stream -> VI53 counter ch1 (port 0Ah). 96 step bytes. Same format as track_01: 0=REST, else period = data_music_period_table[6 + code]. No bit7 commands. Read addr = var_music_stream_base_02(0x3841) + var_music_ptr_02(0x383C). Processed by func_music_process_voice @0x3A32.",
+      "comment": "Дорожка 2: 96Б нот + 160Б нулевого паддинга, stride 0x100.",
       "links": [
         "0x383C"
       ],
       "name": "data_music_track_02",
-      "size": 96,
+      "size": 256,
       "type": "data"
     },
     {
       "address": "0x4029",
-      "comment": "Stage11: Voice 03 note stream -> VI53 counter ch2 (port 09h, bass). 96 step bytes. 0=REST (buf[10] cleared). Bit7 CLEAR (code<0x80): period = data_music_period_table[6 + code]. Bit7 SET (code>=0x80): EXTENDED note -> func_music_set_note_params uses data_note_param_table_43F9[((code&0x7F)-1)*8] 8-byte block: block[0..1]=literal ch2 period, block[3..7]=envelope/gate/timbre params (buf slots 10..14). Read addr = var_music_stream_base_03(0x3843) + var_music_ptr_03(0x383D). Processed by func_music_process_voice @0x3A95.",
+      "comment": "Дорожка 3: 96Б нот + 160Б нулевого паддинга, stride 0x100.",
       "links": [
         "0x383D"
       ],
       "name": "data_music_track_03",
-      "size": 96,
+      "size": 256,
+      "type": "data"
+    },
+    {
+      "address": "0x4129",
+      "comment": "Заголовок второй партитуры (сигнатура 38 06 06 0F ... 60 60 60), 241Б — читается func_music_load_score.",
+      "name": "data_music_score_02",
+      "size": 241,
       "type": "data"
     },
     {
@@ -1657,22 +1941,39 @@
       "type": "table"
     },
     {
+      "address": "0x42DA",
+      "comment": "ASCII-фрагмент 'disk with b-CcDdEfGgAaBbC =[' — остаточные данные разработчика, кодом не используются.",
+      "name": "data_note_names_42DA",
+      "size": 31,
+      "type": "data"
+    },
+    {
       "address": "0x42F9",
       "comment": "Таблица частот/параметров нот для музыкального канала 1, шаг 10 байт на ноту. Индексируется селектором ноты в func_music_play_note_ch1(0x3C7D).",
       "name": "data_note_table_ch1",
+      "size": 256,
       "type": "data"
     },
     {
       "address": "0x43F9",
-      "comment": "Stage11: data_note_param_table_43F9 — 8-byte-per-entry extended-note parameter table for ch2 (voice 03) when a note code has bit7 SET. Index=((code&0x7F)-1)*8. block[0..1]=literal ch2 period (written to buf[4..5]); block[3..6]->buf[10..13] (gate/envelope/timbre ops 10..13); block[7]!=0 -> set bit5 on op7 toggle buf[14] else clear. Used by func_music_set_note_params(0x3B0F). For MIDI the ch2 pitch of these notes = value in block[0..1].",
+      "comment": "Таблица параметров нот, 100Б (включая байт 0x445C).",
       "name": "data_note_param_table_43F9",
+      "size": 100,
       "type": "data"
     },
     {
       "address": "0x445D",
-      "comment": "Stage11 (renamed from data_note_freq_table_ch0): per-tick pitch-modulation (vibrato) table, 20 bytes per row (stride 0x14). Read by func_music_play_note_ch0(0x3BCA)/ch1(0x3C7D): value = table[ (scores[+13]-1)*20 + tick ] (small 0..3 offsets), ADDED to the channel period in var before OUT, producing subtle vibrato. Row selector = data_music_scores[+0x0D]=5. Inference: amplitude 0..3 on period ~ tens of cents. Not an exact frequency table (period comes from data_music_period_table). Extent unknown (size 0).",
+      "comment": "Таблица вибрато, 184Б (0x445D..0x4514).",
       "name": "data_music_vibrato_table",
+      "size": 184,
       "type": "table"
+    },
+    {
+      "address": "0x4515",
+      "comment": "Нулевой паддинг хвоста ROM до 0x45FF.",
+      "name": "data_rom_tail_padding_4515",
+      "size": 235,
+      "type": "data"
     },
     {
       "address": "0x5000",
