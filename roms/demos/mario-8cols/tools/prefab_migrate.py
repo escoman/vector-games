@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """prefab_migrate.py — перенос карты из прямоугольников в экземпляры префабов.
 
-Вход:  src/objects.json (v1: список rect'ов {t,x,y,w,h}) + src/prefabs.json.
-Выход: src/objects.json (v2: список экземпляров {pf,x,y[,w][,h]}) и
-       дополненный src/prefabs.json (узнанные узоры + «Тайл N» в «одиночных»).
+Вход:  assets/objects.json (v1: список rect'ов {t,x,y,w,h}) + assets/prefabs.json.
+Выход: assets/objects.json (v2: список экземпляров {pf,x,y[,w][,h]}) и
+       дополненный assets/prefabs.json (узнанные узоры + «Тайл N» в «одиночных»).
 
 Как узнаём префабы:
 
@@ -37,7 +37,7 @@
   python3 tools/prefab_migrate.py --debug      # + узнанные узоры и варианты
   python3 tools/prefab_migrate.py --out-objects OUT.json --out-prefabs PF.json \
           --apply                              # запись в OUT/PF (проверка)
-  python3 tools/prefab_migrate.py --apply --force   # запись в src/ (этап 4)
+  python3 tools/prefab_migrate.py --apply --force   # запись в assets/ (этап 4)
 """
 import argparse
 import os
@@ -764,9 +764,9 @@ def used_prefabs(cands, instances):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="перенос src/objects.json v1 в список экземпляров префабов")
+        description="перенос assets/objects.json v1 в список экземпляров префабов")
     ap.add_argument("--apply", action="store_true",
-                    help="записать src/objects.json и src/prefabs.json")
+                    help="записать assets/objects.json и assets/prefabs.json")
     ap.add_argument("--debug", action="store_true",
                     help="печатать узнанные узоры и варианты")
     ap.add_argument("--objects", default=P.OBJECTS_FILE)
@@ -776,18 +776,18 @@ def main():
     ap.add_argument("--out-prefabs", default=None,
                     help="куда писать библиотеку (по умолчанию --prefabs)")
     ap.add_argument("--force", action="store_true",
-                    help="разрешить запись в src/ до этапа 4 (сборка сломается)")
+                    help="разрешить запись в assets/ до этапа 4 (сборка сломается)")
     args = ap.parse_args()
 
     cols, rows, objects = G.load_objects()
     if objects is None:
-        # src/objects.json уже v2 (миграция выполнена) или его нет: эталон берём
-        # из плоской сетки src/level.json, а «старую смету» — из её же разбиения
+        # assets/objects.json уже v2 (миграция выполнена) или его нет: эталон берём
+        # из плоской сетки assets/level.json, а «старую смету» — из её же разбиения
         # на прямоугольники (ровно тот список, из которого когда-то вырос v1).
         lv = P.load_level()
         cols, rows = int(lv["cols"]), int(lv["rows"])
         objects = cover_rectangles(cols, rows, lv["grid"])
-        print("эталон: src/level.json (objects.json уже не v1) — %d rect'ов" %
+        print("эталон: assets/level.json (objects.json уже не v1) — %d rect'ов" %
               len(objects))
     ref = Ref(cols, rows, G.expand_objects(cols, rows, objects))
 
@@ -842,10 +842,10 @@ def main():
         p_path = args.out_prefabs or args.prefabs
         if not args.force and (o_path == P.OBJECTS_FILE or
                                p_path == P.PREFAB_FILE):
-            sys.exit("в src/ объекты v2 пока нечем читать: gen_assets и main.c "
+            sys.exit("в assets/ объекты v2 пока нечем читать: gen_assets и main.c "
                      "переезжают на словарь вариантов этапом 4, до него сборка "
                      "сломается. Проверка — --out-objects/--out-prefabs, "
-                     "запись в src/ — с --force")
+                     "запись в assets/ — с --force")
         P.save_instances(cols, rows, inst, o_path)
         P.save_prefabs(prefabs_out, p_path, comment=COMMENT)
         print("записано: %s (%d экземпляров), %s (%d префабов)"
@@ -864,7 +864,7 @@ COMMENT = [
     "колонок/строк a..b, края остаются целыми. min_w/min_h — низкая граница",
     "резинки. section — группировка в палитре: рельеф / блоки / декор /",
     "одиночные (авто-префабы 1×1 по тайлам карты).",
-    "src/objects.json хранит список ЭКЗЕМПЛЯРОВ {pf,x,y[,w][,h]}; порядок списка =",
+    "assets/objects.json хранит список ЭКЗЕМПЛЯРОВ {pf,x,y[,w][,h]}; порядок списка =",
     "z-order (первый рисуется первым). При запекании окна экземпляр разворачивается",
     "в тайлы на лету — в ROM лежат словарь вариантов и список экземпляров.",
 ]

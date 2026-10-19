@@ -12,7 +12,7 @@
 Чистой (без Tk/PIL) частью может пользоваться генератор и офлайн-проверки:
 Image нужен только в load_tile_images(), он импортируется внутри функции.
 
-Формат src/prefabs.json (v2):
+Формат assets/prefabs.json (v2):
   {"version": 2, "prefabs": [{"name", "grid", "section", "stretch_x",
                               "stretch_y", "min_w", "min_h"}, ...]}
 grid — row-major сетка индексов тайлов, 0 = пусто (небо, не закрашиваем).
@@ -29,14 +29,15 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.abspath(os.path.join(HERE, "..", "src"))
+ASSETS = os.path.abspath(os.path.join(HERE, "..", "assets"))   # сырьё/дизайн (json/png/tiles)
+INCLUDE = os.path.abspath(os.path.join(HERE, "..", "include"))  # генерируемые .inc + код
 ROM = os.path.abspath(os.path.join(HERE, "..", "mario-8c.rom"))
 MAP = os.path.abspath(os.path.join(HERE, "..", "mario-8c.map"))
-LEVEL_INC = os.path.join(SRC, "level.inc")
-PREFAB_FILE = os.path.join(SRC, "prefabs.json")
-TILES_FILE = os.path.join(SRC, "tiles.json")
-LEVEL_FILE = os.path.join(SRC, "level.json")
-OBJECTS_FILE = os.path.join(SRC, "objects.json")
+LEVEL_INC = os.path.join(INCLUDE, "level.inc")
+PREFAB_FILE = os.path.join(ASSETS, "prefabs.json")
+TILES_FILE = os.path.join(ASSETS, "tiles.json")
+LEVEL_FILE = os.path.join(ASSETS, "level.json")
+OBJECTS_FILE = os.path.join(ASSETS, "objects.json")
 
 sys.path.insert(0, HERE)
 from objects_from_grid import cover_rectangles            # noqa: E402
@@ -46,7 +47,7 @@ PREFAB_VERSION = 2
 # Порядок секций в палитре префабов (неизвестная секция — в конец).
 PF_SECTIONS = ("рельеф", "блоки", "декор", "одиночные")
 
-TILE_PX = 8                  # сторона тайла в исходниках (src/tiles/*.png)
+TILE_PX = 8                  # сторона тайла в исходниках (assets/tiles/*.png)
 SKY = (13, 26, 43)
 COLL_RED = (224, 58, 58)     # сплошной (wall)
 COLL_BLUE = (58, 123, 224)   # платформа (platform)
@@ -99,7 +100,7 @@ def defines(path=LEVEL_INC, names=("OBJ_WIN_COLS", "OBJ_WIN_STEP", "LEVEL_ROWS",
 
 
 def load_level(path=LEVEL_FILE):
-    """src/level.json (cols/rows/tile/grid) — размер карты и производная сетка."""
+    """assets/level.json (cols/rows/tile/grid) — размер карты и производная сетка."""
     if not os.path.isfile(path):
         sys.exit("Нет %s — сначала: python3 tools/export_assets.py" % path)
     with open(path, encoding="utf-8") as f:
@@ -107,7 +108,7 @@ def load_level(path=LEVEL_FILE):
 
 
 def load_tiles(path=TILES_FILE):
-    """src/tiles.json: список тайлов с их свойствами (wall/platform/transparent)."""
+    """assets/tiles.json: список тайлов с их свойствами (wall/platform/transparent)."""
     if not os.path.isfile(path):
         sys.exit("Нет %s — сначала: python3 tools/export_assets.py" % path)
     with open(path, encoding="utf-8") as f:
@@ -125,8 +126,8 @@ def tile_props(tiles=None):
     return out
 
 
-def load_tile_images(tiles=None, src=SRC):
-    """Изображения тайлов src/tiles/*.png (index-мажорный список, нативный 8×8).
+def load_tile_images(tiles=None, src=ASSETS):
+    """Изображения тайлов assets/tiles/*.png (index-мажорный список, нативный 8×8).
 
     Не масштабируем: зум — дело руки окна (редактор перерисовывает сетку под
     свой cell).
@@ -151,7 +152,7 @@ def frame_color(tile):
 
 
 def load_prefabs(path=PREFAB_FILE, n_tiles=None):
-    """src/prefabs.json -> список префабов.
+    """assets/prefabs.json -> список префабов.
 
     Битые/пустые паттерны и индексы вне набора тайлов выбрасываем молча:
     опечатка в JSON не должна ронять GUI на первом же превью. Файла нет —
@@ -424,7 +425,7 @@ def single_tile_stretchable(t, name=None):
 
 
 # ---------------------------------------------------------------------------
-# Модель уровня v2: src/objects.json = список экземпляров префабов
+# Модель уровня v2: assets/objects.json = список экземпляров префабов
 # ---------------------------------------------------------------------------
 
 def instance_size(pf, inst):
@@ -436,7 +437,7 @@ def instance_size(pf, inst):
 
 
 def load_instances(path=OBJECTS_FILE):
-    """src/objects.json (v2) -> (cols, rows, instances); нет файла -> (None, None, None)."""
+    """assets/objects.json (v2) -> (cols, rows, instances); нет файла -> (None, None, None)."""
     if not os.path.isfile(path):
         return None, None, None
     with open(path, encoding="utf-8") as f:

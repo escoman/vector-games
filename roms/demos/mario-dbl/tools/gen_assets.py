@@ -42,7 +42,7 @@ OUT = os.path.join(ROOT, 'include')      # результат: данные дл
 SHEET = os.path.join(ASSETS, 'raccoon_mario.png')
 # Тайл-донор поверхности — из соседней демки mario-8cols.
 DONOR_TILES = os.path.abspath(os.path.join(
-    HERE, '..', '..', 'mario-8cols', 'src', 'tiles'))
+    HERE, '..', '..', 'mario-8cols', 'assets', 'tiles'))
 
 # Полоса тел поз: y=20..51 (32 px = 4 клетки). Выше (y<20) — встроенное имя
 # «Raccoon Mario», в зазоре y=52..57 пусто, ниже (y>=58) — запечённые ID поз.

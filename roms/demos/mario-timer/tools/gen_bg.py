@@ -8,7 +8,7 @@
 
 Тайлы и формы префабов (кусты/облака/земля) берутся НЕ перекодируя из соседней
 демки mario-8cols:
-  * тайлсет — массив `tileset[]` в ../mario-8cols/src/level.inc (130 тайлов по
+  * тайлсет — массив `tileset[]` в ../mario-8cols/include/level.inc (130 тайлов по
     16 байт = 2 фоновые плоскости, порядок весов 8,4; байт r = строка сверху
     вниз, бит 0x80 = левый пиксель);
   * формы составных объектов — `prefabs.json` (grid глобальных индексов тайлов).
@@ -26,9 +26,9 @@ import json
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
 OUT = os.path.join(ROOT, 'include')      # результат: .inc для сборки
-M8 = os.path.abspath(os.path.join(ROOT, '..', 'mario-8cols', 'src'))
-LEVEL_INC = os.path.join(M8, 'level.inc')
-PREFABS_JSON = os.path.join(M8, 'prefabs.json')
+M8 = os.path.abspath(os.path.join(ROOT, '..', 'mario-8cols'))
+LEVEL_INC = os.path.join(M8, 'include', 'level.inc')
+PREFABS_JSON = os.path.join(M8, 'assets', 'prefabs.json')
 
 BG_COLS = 32
 BG_ROWS = 32

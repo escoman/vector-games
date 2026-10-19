@@ -5,10 +5,10 @@
 zcc_opt.def
 *.c.asm
 
-# Генерируемые ассеты: ИСТОЧНИКИ — src/tiles.png, src/sprites.png +
+# Генерируемые ассеты: ИСТОЧНИКИ — assets/tiles.png, assets/sprites.png +
 # tools/gen_assets.py. level.inc/mario.inc перегенерируются на сборке.
-src/level.inc
-src/mario.inc
+include/level.inc
+include/mario.inc
 
 # Диагностика офлайн-рендера (генерируется tools/render_png.py)
 tools/render_dump*.png

@@ -25,7 +25,7 @@ def main():
     steps = int(sys.argv[3]) if len(sys.argv) > 3 else 40
     print(f"# ROM {rom_path} ({rom_path.stat().st_size} байт), шагов {steps}")
     rom = Rom(rom_path, map_path)
-    lv = parse_incs(HERE / "src" / "level.inc")
+    lv = parse_incs(HERE / "include" / "level.inc")
     rows = lv["ROWS"]
     a = {k: rom.at(k) for k in ("_render_window", "_render_rowband", "_tile_win",
                                 "_tile_win_base", "_cam_row", "_tile_stride")}

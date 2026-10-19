@@ -4,7 +4,7 @@
 Запуск:  python3 tools/level_editor.py
 Нужен Tkinter: sudo apt install python3-tk  (Pillow уже в зависимостях проекта).
 
-МОДЕЛЬ: уровень — список ЭКземПЛЯРОВ префабов (src/objects.json v2), а не тайлы
+МОДЕЛЬ: уровень — список ЭКземПЛЯРОВ префабов (assets/objects.json v2), а не тайлы
 и не прямоугольники:
     {"pf": "Труба вверх", "x": 44, "y": 56, "h": 6}
 w/h есть только у тянущихся осей; остальное — нативный размер префаба. Тайловая
@@ -12,7 +12,7 @@ w/h есть только у тянущихся осей; остальное —
 Порядок списка = z-order: первый печатается первым, последний — поверх.
 
 ЧТО УМЕТ:
-  * палитра = библиотека префабов (src/prefabs.json, группы по section);
+  * палитра = библиотека префабов (assets/prefabs.json, группы по section);
     секция «одиночные» (авто-тайлы «Тайл N») в палитре не показывается вовсе —
     уровнем правят целыми объектами, а не отдельными плитками;
   * клик по карточке префаба ВКЛЮЧАЕТ штамп (он же инструмент), клик по той же
@@ -50,8 +50,8 @@ _limits()), а не только рамками спинбоксов, — ина
 падает на make. Смета образа = база из mario-8c.map + tile_win (64·rows) +
 pf_data (4·экземпляров) + словарь вариантов (3·вариантов + 5·rect'ов) + pf_start.
 
-Сохранение пишет src/objects.json (v2), src/level.json (cols/rows/grid — для
-совместимости генератора и фолбэка) и src/tiles.json (твёрдость). src/prefabs.json
+Сохранение пишет assets/objects.json (v2), assets/level.json (cols/rows/grid — для
+совместимости генератора и фолбэка) и assets/tiles.json (твёрдость). assets/prefabs.json
 перезаписывается только если «заменить на тайл» завёл в библиотеке новый
 одиночный тайл — без этого объекты на карте висели бы на несуществующем префабе.
 Ничего не пишет, если валидация или парити не прошли. После — `make`.
@@ -79,7 +79,7 @@ except ImportError:
              "Перезапусти:  python3 tools/level_editor.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.abspath(os.path.join(HERE, "..", "src"))
+SRC = os.path.abspath(os.path.join(HERE, "..", "assets"))
 sys.path.insert(0, HERE)
 
 # prefablib — общий с окном префабов и генератором движок: пути, лимиты сборки,
@@ -88,7 +88,7 @@ sys.path.insert(0, HERE)
 # иначе превью редактора разойдётся с тем, что напечатает ROM.
 import gen_assets as G                                     # noqa: E402
 from prefablib import (                                    # noqa: E402,F401
-    SRC as PF_SRC, ROM, MAP, LEVEL_INC, PREFAB_FILE, TILES_FILE, LEVEL_FILE,
+    ASSETS as PF_SRC, ROM, MAP, LEVEL_INC, PREFAB_FILE, TILES_FILE, LEVEL_FILE,
     OBJECTS_FILE, SKY, COLL_RED, COLL_BLUE, TILE_PX, PF_SECTIONS, MAX_COLS,
     MAX_ROWS, MIN_COLS, MIN_ROWS, TILEMAP_LIMIT, TILE_INDEX_LIMIT, MAX_VARIANTS,
     WIN_RAM_PER_ROW, OBJ_WIN_STEP, OBJ_BYTES, INST_BYTES, RECT_BYTES,
@@ -202,7 +202,7 @@ class LevelEditor:
         return level, tiles
 
     def _load_instances(self):
-        """src/objects.json v2 — список экземпляров. Нет файла (или старая
+        """assets/objects.json v2 — список экземпляров. Нет файла (или старая
         версия) — пустой список: mигрировать карту умеет tools/prefab_migrate.py,
         редактор же не имеет права молча выбрасывать то, чего не понимает
         (load_instances на v1 сам падает с внятным сообщением)."""
@@ -228,7 +228,7 @@ class LevelEditor:
         return imgs
 
     def _load_prefabs(self):
-        """src/prefabs.json — именованные составные объекты (штампы).
+        """assets/prefabs.json — именованные составные объекты (штампы).
 
         Нет файла / битые индексы тайлов — не фатально: палитра просто пустая,
         но и ставить тогда нечего. Индексы вне набора отсекаем, чтобы опечатка в
@@ -677,7 +677,7 @@ class LevelEditor:
         self._set_status("окно префабов открыто — после правок «⟳ префабы»")
 
     def reload_prefabs(self):
-        """Перечитать src/prefabs.json (например, после окна префабов).
+        """Перечитать assets/prefabs.json (например, после окна префабов).
 
         Экземпляры, ссылающиеся на исчезнувшие префабы, НЕ удаляем молча:
         определение такого префаба остаётся в памяти (и уедет в prefabs.json

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """objects_from_grid.py — разложить плоскую сетку уровня на список объектов.
 
-Затравка объектной модели (Фаза 1): читаем src/level.json (grid col-major,
+Затравка объектной модели (Фаза 1): читаем assets/level.json (grid col-major,
 grid[col*rows+row] = индекс тайла) и покрываем все непустые клетки набором
 максимальных прямоугольников ОДНОГО тайла. Каждый прямоугольник -> объект
 {t, x, y, w, h} (t — индекс тайла, x/y — левый-верхний угол в тайлах).
@@ -14,13 +14,13 @@ grid[col*rows+row] = индекс тайла) и покрываем все не�
 
 Порядок объектов = порядок обхода (сверху-вниз, слева-направо) — детерминирован.
 
-    python3 tools/objects_from_grid.py        # -> src/objects.json
+    python3 tools/objects_from_grid.py        # -> assets/objects.json
 """
 import os
 import json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, "..", "src")
+SRC = os.path.join(HERE, "..", "assets")
 
 
 def cover_rectangles(cols, rows, grid):

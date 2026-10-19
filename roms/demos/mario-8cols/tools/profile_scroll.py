@@ -542,7 +542,7 @@ def main():
             pos.remove(raw[raw.index(flag) + 1])
     frames = 100 if only_sweep else (int(pos[0]) if pos else 240)
     rom = Rom(rom_path, map_path)
-    lv = parse_incs(HERE / "src" / "level.inc")
+    lv = parse_incs(HERE / "include" / "level.inc")
     rows = lv["ROWS"]
     print(f"ROM {rom_path.name} {len(rom.data)} байт, LEVEL {lv['COLS']}x{rows}, "
           f"окно {lv['WIN_COLS']} кол. шаг {lv['WIN_STEP']}, "

@@ -48,7 +48,7 @@ assets:
 include/sprites.inc include/tiles.inc: assets/raccoon_mario.png tools/gen_assets.py
 	python3 tools/gen_assets.py
 
-include/background.inc: tools/gen_bg.py ../mario-8cols/src/level.inc ../mario-8cols/src/prefabs.json
+include/background.inc: tools/gen_bg.py ../mario-8cols/include/level.inc ../mario-8cols/assets/prefabs.json
 	python3 tools/gen_bg.py
 
 GEN_SRC = include/sprites.inc include/tiles.inc include/background.inc \

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """check_parity.py — ЧЕКПОИНТ паритета объектной модели.
 
-src/objects.json разворачивается обратно в плоскую tilemap и сверяется
-побайтово с сеткой src/level.json. Формат берётся из поля version:
+assets/objects.json разворачивается обратно в плоскую tilemap и сверяется
+побайтово с сеткой assets/level.json. Формат берётся из поля version:
 
   v1 — список прямоугольников {t,x,y,w,h}      -> gen_assets.expand_objects;
   v2 — список экземпляров префабов {pf,x,y[,w][,h]} -> prefablib.expand_
@@ -12,7 +12,7 @@ src/objects.json разворачивается обратно в плоскую
 Пока расхождений 0 — модель точно воспроизводит уровень, и можно переводить
 рендер/коллизии на runtime-печь, не боясь изменить картинку.
 
-    python3 tools/check_parity.py                       # src/objects.json
+    python3 tools/check_parity.py                       # assets/objects.json
     python3 tools/check_parity.py ФАЙЛ.json [ПРЕФАБЫ]  # dry-run миграции
 """
 import os
@@ -20,7 +20,7 @@ import sys
 import json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, "..", "src")
+SRC = os.path.join(HERE, "..", "assets")
 sys.path.insert(0, HERE)
 import gen_assets as G                                    # noqa: E402
 import prefablib as P                                     # noqa: E402

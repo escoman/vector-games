@@ -3,10 +3,10 @@
 
 Одноразовая (повторяемая) затравка перед переходом на редактор уровня:
 
-  src/tiles/tile_NNN.png   — каждый уникальный тайл 8x8 (RGB, палитра Вектора);
-  src/sprites/mario_NN.png — все 18 спрайтов Small Mario 16x16 (RGBA, альфа);
-  src/level.json           — сетка уровня: grid[col*rows+row] = индекс тайла;
-  src/tiles.json           — свойства тайла: solid (none|platform|wall), transparent.
+  assets/tiles/tile_NNN.png   — каждый уникальный тайл 8x8 (RGB, палитра Вектора);
+  assets/sprites/mario_NN.png — все 18 спрайтов Small Mario 16x16 (RGBA, альфа);
+  assets/level.json           — сетка уровня: grid[col*rows+row] = индекс тайла;
+  assets/tiles.json           — свойства тайла: solid (none|platform|wall), transparent.
 
 Источник — те же gen_assets.build_level()/build_collision(), что и прошивка,
 поэтому затравка точно повторяет текущий уровень. solid считается ПО ТАЙЛАМ
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_assets as G                                    # noqa: E402
 from PIL import Image                                     # noqa: E402
 
-SRC = G.SRC
+SRC = G.ASSETS
 TILES_DIR = os.path.join(SRC, "tiles")
 SPRITES_DIR = os.path.join(SRC, "sprites")
 

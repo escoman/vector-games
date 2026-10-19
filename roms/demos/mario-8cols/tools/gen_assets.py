@@ -13,21 +13,21 @@ gen_assets.py — ассеты демки Mario 8-цвет (сплит по пл
 спрайта CH[ch] (один и тот же RGB во всех четырёх «рядах» bg). Пустой пиксель =
 индекс 0 = небо, поэтому тайл из чистого неба = все нули и в VRAM не пишется.
 
-Источник истины: src/objects.json (список экземпляров префабов, схема v2) +
-src/prefabs.json (библиотека), src/tiles/*.png (графика тайлов),
-src/tiles.json (твёрдость, вариант C), src/mario.png (лента спрайтов Mario),
-src/palette.json (финальные цвета: 4 кода фона + 4 кода персонажа).
-src/level.json — плоская сетка, из которой исторически выросли объекты; она
+Источник истины: assets/objects.json (список экземпляров префабов, схема v2) +
+assets/prefabs.json (библиотека), assets/tiles/*.png (графика тайлов),
+assets/tiles.json (твёрдость, вариант C), assets/mario.png (лента спрайтов Mario),
+assets/palette.json (финальные цвета: 4 кода фона + 4 кода персонажа).
+assets/level.json — плоская сетка, из которой исторически выросли объекты; она
 обязана побайтово совпадать с развёрнутым списком экземпляров (чекпоинт
 паритета tools/check_parity.py).
 
 Выход:
-  src/level.inc  — палитра (16 слотов из palette.json), тайлсет 8x8
+  include/level.inc  — палитра (16 слотов из palette.json), тайлсет 8x8
                    (2 плоскости, 16 Б), словарь вариантов префабов
                    (pf_rects/pf_var_ofs/pf_var_n), список экземпляров
                    (pf_data) и старты групп по блокам
                    (pf_start), tile_nz (2 бита), pair_top, tile_solid;
-  src/mario.inc  — спрайты 16x16 (2 плоскости, 64 Б, без маски).
+  include/mario.inc  — спрайты 16x16 (2 плоскости, 64 Б, без маски).
 
 Формат Вектора (256x256, блок = x/8 = 256 байт, байт i = строка y=255-i,
 старший бит = левый пиксель).
@@ -39,7 +39,8 @@ import json
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, "..", "src")
+ASSETS = os.path.join(HERE, "..", "assets")     # сырьё/дизайн (json/png/tiles)
+INCLUDE = os.path.join(HERE, "..", "include")   # генерируемые .inc
 sys.path.insert(0, HERE)
 import prefablib as PL                                     # noqa: E402
 
@@ -51,11 +52,11 @@ TILE_BYTES = TILE * 2   # тайл фона = 2 плоскости по 8 бай
 VEC_BYTES = 0x8000      # размер видеопамяти (для проверки)
 
 # ---- Палитра 4+4: фон (старшие 2 бита) + персонаж (младшие 2 бита) ----------
-# Байт порта 0C = RRRGGGBB. Источник истины — src/palette.json (редактируется
+# Байт порта 0C = RRRGGGBB. Источник истины — assets/palette.json (редактируется
 # руками): 4 кода фона + 4 кода персонажа. Порядок элементов в файле задаёт код
 # цвета, имена нужны дизерингу (green/sky в bg_quantize). Из этих же цветов
 # считается BG_RGB/CH_RGB, поэтому правка цвета перепекает и фон, и спрайты.
-PALETTE_FILE = os.path.join(SRC, "palette.json")
+PALETTE_FILE = os.path.join(ASSETS, "palette.json")
 
 # Имена, без которых не работают ветки квантования; порядок — код цвета.
 BG_NAMES = ("sky", "black", "white", "green")   # коды фона (bg) 0..3
@@ -63,7 +64,7 @@ CH_NAMES = ("transparent", "red", "pink", "black")
 
 
 def load_palette(path=PALETTE_FILE):
-    """src/palette.json -> (BG_LIST, CH_LIST); ch[0] = None (прозрачность)."""
+    """assets/palette.json -> (BG_LIST, CH_LIST); ch[0] = None (прозрачность)."""
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     lists = []
@@ -194,7 +195,7 @@ def char_quantize(rgb):
 
 
 # ---------------------------------------------------------------------------
-# Уровень из редакторских файлов: src/level.json + src/tiles/*.png + tiles.json
+# Уровень из редакторских файлов: assets/level.json + assets/tiles/*.png + tiles.json
 # ---------------------------------------------------------------------------
 # Источник истины для сборки ROM: раскладка из level.json, графика из tile-PNG,
 # твёрдость из tiles.json.
@@ -247,10 +248,10 @@ def _compute_pair_top(cols, rows, tilemap):
 
 
 def build_level_editor():
-    """src/objects.json v2 (экземпляры) + src/prefabs.json -> модель уровня."""
-    with open(os.path.join(SRC, "level.json")) as f:
+    """assets/objects.json v2 (экземпляры) + assets/prefabs.json -> модель уровня."""
+    with open(os.path.join(ASSETS, "level.json")) as f:
         lv = json.load(f)
-    with open(os.path.join(SRC, "tiles.json")) as f:
+    with open(os.path.join(ASSETS, "tiles.json")) as f:
         tj = json.load(f)
     cols, rows = int(lv["cols"]), int(lv["rows"])
     # Источник карты — список экземпляров префабов. Плоскую сетку level.json
@@ -259,7 +260,7 @@ def build_level_editor():
     prefabs = PL.load_prefabs()
     o_cols, o_rows, instances = PL.load_instances()
     if instances is None:
-        sys.exit("нет src/objects.json — уровень собирается из списка "
+        sys.exit("нет assets/objects.json — уровень собирается из списка "
                  "экземпляров: python3 tools/prefab_migrate.py --apply --force "
                  "или tools/level_editor.py")
     if (o_cols, o_rows) != (cols, rows):
@@ -304,7 +305,7 @@ def build_level_editor():
     for i, t in enumerate(tiles):
         if int(t["index"]) != i:
             sys.exit(f"tiles.json: дыра/порядок индексов (ожидался {i})")
-        tileset.append(png_to_tile(os.path.join(SRC, t["file"])))
+        tileset.append(png_to_tile(os.path.join(ASSETS, t["file"])))
     if tileset[0] != bytes(TILE_BYTES):
         sys.exit("tiles.json: тайл 0 должен быть пустым (небо = все нули)")
     tile_nz = _compute_tile_nz(tileset)
@@ -407,14 +408,14 @@ def var_tables(variants):
 # ---------------------------------------------------------------------------
 # Чтение старого формата (rect'ы) — нужно мигратору и чекпоинту паритета
 # ---------------------------------------------------------------------------
-# src/objects.json версии 1 хранил уровень как набор объектов {t, x, y, w, h}.
+# assets/objects.json версии 1 хранил уровень как набор объектов {t, x, y, w, h}.
 # expand_objects разворачивает их обратно в tilemap col-major побайтово к той же
 # карте, что и grid (чекпоинт паритета tools/check_parity.py). ROM этот формат
 # больше не читает: v2 — словарь вариантов + список экземпляров.
 
 def load_objects():
-    """src/objects.json v1 -> (cols, rows, objects); v2/нет файла -> None."""
-    path = os.path.join(SRC, "objects.json")
+    """assets/objects.json v1 -> (cols, rows, objects); v2/нет файла -> None."""
+    path = os.path.join(ASSETS, "objects.json")
     if not os.path.exists(path):
         return None, None, None
     with open(path, encoding="utf-8") as f:
@@ -441,15 +442,15 @@ def expand_objects(cols, rows, objects):
 
 
 # ---------------------------------------------------------------------------
-# Коллизии: вариант C — твёрдость как СВОЙСТВО ТАЙЛА (src/tiles.json)
+# Коллизии: вариант C — твёрдость как СВОЙСТВО ТАЙЛА (assets/tiles.json)
 # ---------------------------------------------------------------------------
 # COLL_PLAT (1) — опора сверху; COLL_WALL (2) — непроходимо; 3 — и то, и другое.
 COLL_PLAT, COLL_WALL = 1, 2
 
 
 def load_tile_solid(n_tiles):
-    """src/tiles.json -> bytes длины n_tiles, каждый = маска COLL_*."""
-    path = os.path.join(SRC, "tiles.json")
+    """assets/tiles.json -> bytes длины n_tiles, каждый = маска COLL_*."""
+    path = os.path.join(ASSETS, "tiles.json")
     with open(path) as f:
         data = json.load(f)
     tiles = data["tiles"]
@@ -469,7 +470,7 @@ def load_tile_solid(n_tiles):
 # ---------------------------------------------------------------------------
 # Спрайты Small Mario: 16x16, 2 плоскости персонажа, без маски
 # ---------------------------------------------------------------------------
-# src/mario.png — лента из 18 спрайтов Small Mario 16x16, пронумерованы 1..18.
+# assets/mario.png — лента из 18 спрайтов Small Mario 16x16, пронумерованы 1..18.
 # БАЗОВЫЕ СПРАЙТЫ СМОТРЯТ ВЛЕВО; _l рисуем как есть, _r — зеркалом.
 MARIO_TOP = 14          # верх спрайтовой полосы (строки 14..29)
 MARIO_PITCH = 18        # шаг ячейки по X
@@ -543,7 +544,7 @@ def grid_to_sprite(grid, mirror=False):
 
 
 def build_sprites():
-    im = Image.open(os.path.join(SRC, "mario.png")).convert("RGB")
+    im = Image.open(os.path.join(ASSETS, "mario.png")).convert("RGB")
     px = im.load()
     out = {}
     for name, num in FRAMES.items():
@@ -577,7 +578,7 @@ def fmt_array_u16(f, name, vals, per_line=10):
 
 
 def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
-    path = os.path.join(SRC, "level.inc")
+    path = os.path.join(INCLUDE, "level.inc")
     inst = model["instances"]
     variants = model["variants"]
     pf_data = pack_instances(inst, model["ids"])
@@ -619,8 +620,8 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
         f.write("   Список отсортирован по (x>>5, z-order), pf_start[блок] — начало группы;\n")
         f.write("   pf_start[OBJ_WIN_BLOCKS] = PF_COUNT (sentinel). Развёртка в окне —\n")
         f.write("   bake_groups() в main.c. */\n")
-        # Палитра берётся из src/palette.json; слот = bg*4 + ch (см. build_palette).
-        f.write("/* Палитра ниже — из src/palette.json (слот = bg*4 + ch). */\n")
+        # Палитра берётся из assets/palette.json; слот = bg*4 + ch (см. build_palette).
+        f.write("/* Палитра ниже — из assets/palette.json (слот = bg*4 + ch). */\n")
         fmt_array(f, "level_palette", bytes(PALETTE))
         joined = b"".join(tileset)
         fmt_array(f, "tileset", joined)
@@ -631,7 +632,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
         fmt_array_u16(f, "pf_start", pf_start)     # старт группы блока экземпляров
         fmt_array(f, "tile_nz", tile_nz)           # 2 бита: непустая плоскость веса 8 / 4
         fmt_array(f, "pair_top", pair_top)         # верх diff'а на пару соседних колонок
-        f.write("\n/* Коллизии (src/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
+        f.write("\n/* Коллизии (assets/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
         f.write("#define COLL_WALL   2   /* непроходимо */\n")
         f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
         fmt_array(f, "tile_solid", tile_solid)
@@ -642,7 +643,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
 
 
 def write_sprites(sprites):
-    path = os.path.join(SRC, "mario.inc")
+    path = os.path.join(INCLUDE, "mario.inc")
     order = []
     for name in FRAMES:
         order.append((name + "_r", sprites[name + "_r"]))

@@ -64,7 +64,7 @@ def main():
     cam_b = int(args[0]) if args else 32
     map_path = HERE / "mario-8c.map"
     rom = Rom(HERE / "mario-8c.rom", map_path)
-    lv = parse_incs(HERE / "src" / "level.inc")
+    lv = parse_incs(HERE / "include" / "level.inc")
     rows = lv["ROWS"]
     step = lv["WIN_STEP"]
     a = {k: rom.at(k) for k in ("_render_window", "_bake_window", "_bake_shift",

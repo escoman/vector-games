@@ -15,7 +15,7 @@ from profile_scroll import (Rom, parse_incs, bake_window, bake_groups, HERE,
 
 def main():
     rom = Rom(HERE / "mario-8c.rom", HERE / "mario-8c.map")
-    lv = parse_incs(HERE / "src" / "level.inc")
+    lv = parse_incs(HERE / "include" / "level.inc")
     rows = lv["ROWS"]
     a = {k: rom.at(k) for k in ("_tile_win", "_tile_win_base", "_tile_stride",
                                 "_bake_groups", "_bake_window", "_bake_clear")}
