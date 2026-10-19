@@ -36,6 +36,12 @@ REF = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(PROJ))),
 # узаконенные заглушки внутри func_main_init (метки патчей, НЕ dead-диапазоны)
 NOP_PATCHES = [(0x0B83, 0x0B86), (0x0B86, 0x0BA8)]
 NOP = {a for s, e in NOP_PATCHES for a in range(s - ORG, e - ORG)}
+# Осознанное отхождение от оригинала: таблица палитры 0x08A3..0x08B2 (16 слотов).
+# Чанк плоскости E000 (вес бита 1) инвертирован во всех глифах -> индекс цвета
+# I меняется на I^1; компенсация — перестановка соседних пар слотов палитры
+# PAL'[j]=PAL[j^1], из-за чего эти 16 байтов отличаются от оригинала, а картинка
+# остаётся побайтово той же. Это легальный diff (ниже byte_exact_end в обоих режимах).
+PALETTE_DIVERGENCE = {a - ORG for a in range(0x08A3, 0x08B3)}
 # сигнатура релокации базы буфера (0x5000 -> 0x6600): высший байт операнда
 # меняется на +0x16 (позиции курсора в 0x50..0x53) либо B0->9A (константа render).
 RELOC_HIGH = {0x50, 0x51, 0x52, 0x53}   # исходные высшие байты страниц 0x50xx..0x53xx
@@ -71,7 +77,7 @@ def ptr_diff_positions(info, b):
 
 def verify_verbatim(a, b, info):
     keep_dead = os.environ.get("KEEP_DEAD", "0") != "0"
-    allow = set(NOP)
+    allow = set(NOP) | PALETTE_DIVERGENCE
     dead = []
     if info and not keep_dead:
         dead = info["dead_ranges"]
@@ -88,6 +94,7 @@ def verify_verbatim(a, b, info):
     print("dead-диапазоны выжжены:", [(hex(s), hex(e), n) for s, e, n in dead] or "нет (KEEP_DEAD=1)")
     print("ptr_table перемещена под glyph_base: %d слов" % (len(ptrd) // 2))
     print("релокация базы буфера (+0x%X в высшем байте): %d байт" % (RELOC_DELTA, len(reloc)))
+    print("палитра 0x08A3..0x08B2 — осознанное отхождение (компенсация инверсии E000): %d байт" % len(PALETTE_DIVERGENCE))
     if diffs:
         print("unexpected diffs:", [(hex(i + ORG), hex(x), hex(y)) for i, x, y in diffs][:20],
               "... всего %d" % len(diffs))
@@ -131,7 +138,7 @@ def verify_compact(a, b, info):
         return 1
 
     # нижние dead-диапазоны (< byte_exact_end) и NOP-заглушки — легальны в нижней зоне
-    allow_low = set(NOP)
+    allow_low = set(NOP) | PALETTE_DIVERGENCE
     allow_low |= {i for s, e, _ in info["dead_ranges"]
                   for i in range(s - ORG, min(e, byte_exact_end) - ORG)}
     ptrd = ptr_diff_positions(info, b)
