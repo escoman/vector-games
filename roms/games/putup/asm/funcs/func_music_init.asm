@@ -79,7 +79,7 @@ func_music_init:
     MOV M, D                    ; 0x3DA9
     POP H                       ; 0x3DAA
     XCHG                        ; 0x3DAB
-    LXI H, 3DCAh                ; 0x3DAC
+    LXI H, data_pad_3DCA        ; 0x3DAC
     LXI D, 03F8h                ; 0x3DAF
     LXI B, 0003h                ; 0x3DB2
-    JMP 3DC5h                   ; 0x3DB5
+    JMP func_memcpy_trampoline  ; 0x3DB5

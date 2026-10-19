@@ -22,6 +22,12 @@ python3 tools/lint_ptrs.py  # линт символьных ссылок (GLYPH_
 make GLYPH_BASE=0x6000 KEEP_DEAD=1   # регрессия этапа A
 make layout                 # перегенерировать компоновку (asm/putup_unpacked.asm + gap-бины)
 make deploy / make full     # стандарт проекта (finally.mk)
+
+# Фаза 2 (COMPACT): вырез мёртвых дыр + relocation верха, GLYPH_BASE=0x3608
+make COMPACT=1              # PUTUP_NEW.ROM компактный (21768 Б, 0x100..0x5607)
+make COMPACT=1 verify        # byte-exact [0x100,0x2761) + инвариант чистого сдвига выше
+python3 tools/lint_ptrs.py   # линт (glyph_base/режим берутся из dead_ranges.json)
+python3 .scratch/behavior_phase2.py    # behavioral orig↔new (textbuf/glyph/VRAM на кадре)
 ```
 
 Перенос блока = одна константа `GLYPH_BASE`. Изначально кандидат 0x4600 был
@@ -62,6 +68,65 @@ make deploy / make full     # стандарт проекта (finally.mk)
 мёртвый пакет. Это остаток распаковщика — поведенческий снимок подтверждает:
 VRAM побайтово совпадает с оригиналом и без копира (0x7418 инертен).
 
+## Фаза 2: компакция мёртвых пакетов (relocation-модель)
+
+Компоновщик умеет второй режим `COMPACT=1`: две мёртвые data-дыры внутри кодовой
+зоны вырезаются из образа вовсе, а верхняя половина сдвигается вверх. Экономия
+~4 КБ: 25856 → **21768 Б** (дыры 2048 + 2041 = 4089 Б, плюс глиф-блок опускается).
+
+Модель адресации (`new_addr` в `tools/gen_layout.py`):
+
+```
+new_addr(a) = a          для a < 0x2761            (нижняя зона — byte-exact не тронута)
+            = a - 2048   для 0x2F61 <= a < 0x3041  (между-дырный гэп — живые спрайты)
+            = a - 4089   для a >= 0x383A           (весь код/данные после 2-й дыры)
+```
+
+Дыры: `data_gfx_2761` = `[0x2761,0x2F61)`, `data_packed_font_3041` = `[0x3041,0x383A)`.
+Между-дырный интервал `[0x2F61,0x3041)` (224 Б живых спрайтов) сдвигается на −2048.
+Новый `code_end_new = new_addr(0x4600) = 0x3607`, блок поднимается вплотную:
+`GLYPH_BASE = 0x3608`, образ `[0x0100,0x5608)`.
+
+Жертва: компоновщик перестаёт быть verbatim-реконструктором для `a >= 0x2761`.
+Побайтовая эквивалентность сохранена только для `[0x0100,0x2761)`; выше —
+гарантия переносится на **поведенческую сверку** (gate) + структурный инвариант
+`verify` (см. ниже).
+
+Что сделано:
+- **Символизация сырых abs-ссылок в перемещаемую зону** (иначе `new_addr` их не
+  поймает): `LXI H,421Ah`→`data_music_period_table` (нотная таблица промоутнута из
+  gap-verbatim в `asm/data/`), `3DCAh`→`data_pad_3DCA`/`3DC5h`→`func_memcpy_trampoline`
+  (trampoline `DW func_music_tick` — цель тика переезжает сама), `3890h`→`func_music_sub_3890`
+  (gap-подпрограмма промоутнута в именованный слот), `3BC9h`→`var_music_voice2_flag_hi`.
+- **Relocate-якоря** `var_music_*` / `data_voice_param_buf` / `var_music_voice2_flag(_hi)`
+  больше не EQU-литералы: их адреса пишет компоновщик в генерируемый
+  `asm/var_reloc_anchors.asm` (= `new_addr` оригинала; verbatim = исходный адрес).
+  Инициализированные значения (var-init блок `0x383A..0x3857`) — часть образа,
+  едут вместе с кодом; встроенные 16-бит указатели потоков (`pointer_sites`
+  `0x383F/0x3841/0x3843/0x3854/0x3856`) переписываются на `new_addr` при эмиссии.
+- **Assert-ловушки** в компоновщике: перемещённые RAM-якоря и `data_text_buffer`
+  (0x6600, Фаза 1 — выше компактного блока) не пересекают read-only окно
+  `[GLYPH_BASE,GLYPH_BASE+8192)`; `GLYPH_BASE >= code_end_new`.
+- **RDB**: исходный `redesign/putup/src/putup.rdb` НЕ мутируется; компакт-режим
+  эмитирует `putup_compact.rdb` (адреса/ссылки `>=0x2761` через `new_addr`, объекты
+  внутри дыр удалены; RAM-артефакты `data_glyph_block`→`GLYPH_BASE`,
+  текстовый буфер→0x6600 — не сдвигаются `new_addr`).
+
+Инвариант `verify` (компакт): длина == 21768; нижняя зона byte-exact; выше
+`0x2761` — каждый байт обязан быть равен оригиналу на `new_addr⁻¹`, кроме
+16-бит операндов/указателей, значение которых перемещается согласованно
+(`new_word == new_addr(orig_word)`); filler до `GLYPH_BASE` — нули. На текущем
+образе: 123 операнд-фиксапа + var-init указатели, **0 необъяснённых расхождений**.
+
+Поведенческий гейт (`.scratch/behavior_phase2.py`, кадр с музыкой на заставке):
+текстовый back-буфер, глиф-блок (8192) и весь VRAM (32768) — **побайтово
+совпадают** orig↔new; музыкальный скретч сверяется справочно (reloc var-init +
+недетерминизм фазы счётчиков). Деплой/прогон — `make COMPACT=1 full`.
+
+A-регрессия сохранена: `COMPACT=0` (по умолчанию) = прежний verbatim-режим Фазы 1
+(byte-exact 25856 Б).
+
+
 ## Как это работает
 
 Оригинал на старте распаковывает шрифт в RAM 0x6000..0x7FFF
@@ -77,11 +142,12 @@ CALL запатчен в 3×NOP, а распакованный блок — по
 
 | | |
 |---|---|
-| `tools/gen_layout.py` | компоновщик: мастер-asm с inline DEFB для гэпов + `tools/dead_ranges.json` |
+| `tools/gen_layout.py` | компоновщик: мастер-asm с inline DEFB для гэпов + `tools/dead_ranges.json`; `COMPACT=1` — relocation + `putup_compact.rdb` |
 | `tools/get_glyph_block.py` | снятие блока 0x6000..0x7FFF через MCP (вербатим → DEFB в asm) |
-| `tools/verify_image.py` | `make verify`: кодовая зона vs оригинал (allow-list заглушек) |
+| `tools/verify_image.py` | `make verify`: verbatim (байт-точность) / compact (byte-exact низ + инвариант чистого сдвига) |
 | `tools/lint_ptrs.py` | этап B: абсолютные ссылки на удаляемые/смещаемые адреса (+ RDB-сверка) |
-| `tools/compare_behavior.py` | поведенческая сверка orig→new→orig: VRAM/глифы/порты по CPU-кадрам |
+| `tools/compare_behavior.py` | поведенческая сверка orig→new→orig: VRAM/глифы/порты по CPU-кадрам (Фаза 1) |
+| `.scratch/behavior_phase2.py` | behavioral гейт Фазы 2: textbuf/glyph/VRAM orig↔compact на совпадающем кадре |
 
 Подтверждение корректности: `make verify` (байты) + поведенческие прогоны
 `compare_behavior.py` (ориг→new→ориг, заставка/play1/play2): VRAM 0/32768

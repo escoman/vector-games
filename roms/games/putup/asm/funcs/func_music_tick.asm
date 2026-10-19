@@ -29,7 +29,7 @@ func_music_tick:
     STA var_music_tick          ; 0x3872
 loc_3875:
     CPI 00h                     ; 0x3875
-    CZ 3890h                    ; 0x3877
+    CZ func_music_sub_3890      ; 0x3877
     CALL func_music_play_note_ch0 ; 0x387A
     CALL func_music_play_note_ch1 ; 0x387D
     LDA var_music_tick          ; 0x3880

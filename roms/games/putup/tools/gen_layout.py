@@ -26,7 +26,58 @@ RDB  = os.path.join(REF, "putup.rdb")
 ORG  = 0x0100
 SIZE = 17664
 CODE_END = ORG + SIZE          # 0x4600 — конец оригинального образа
-GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x4600"), 0)   # переносится константой (Фаза 1)
+
+# --- Фаза 2: компакция мёртвых дыр (relocation-модель) ----------------------
+# COMPACT=1 исключает две мёртвые data-дыры из образа и сдвигает верхнюю
+# половину вверх (new_addr), понижая GLYPH_BASE. COMPACT=0 — verbatim-режим
+# Фазы 1 (полная побайтовая реконструкция) для регрессии.
+COMPACT = os.environ.get("COMPACT", "0") != "0"
+HOLES = [(0x2761, 0x2F61), (0x3041, 0x383A)]   # data_gfx_2761(2048), data_packed_font_3041(2041)
+DELTA1 = HOLES[0][1] - HOLES[0][0]             # 2048
+DELTA2 = HOLES[1][1] - HOLES[1][0]             # 2041
+TOTAL_DELTA = DELTA1 + DELTA2                  # 4089
+
+def new_addr(a):
+    """Оригинальный адрес -> адрес в компактном образе (дыры вырезаны)."""
+    if not COMPACT:
+        return a
+    if a < HOLES[0][0]:
+        return a                       # нижняя кодовая зона — не трогаем (byte-exact)
+    if a < HOLES[0][1]:
+        return a                       # внутри дыры 1 — не эмится
+    if a < HOLES[1][0]:
+        return a - DELTA1              # между-дырный гэп (спрайты) — сдвиг −2048
+    if a < HOLES[1][1]:
+        return a                       # внутри дыры 2 — не эмится
+    return a - TOTAL_DELTA             # весь код/данные после дыры 2 — сдвиг −4089
+
+# relocate-якоря: RAM-символы, чьи инициализированные значения лежат в
+# перемещаемой зоне (>=0x2761). Имена больше не EQU-литералы в var_ram_symbols;
+# компоновщик пишет asm/var_reloc_anchors.asm со значением new_addr(оригинал).
+ANCHORS = {
+    "var_music_tick":          0x383A,
+    "var_music_ptr_01":        0x383B,
+    "var_music_ptr_02":        0x383C,
+    "var_music_ptr_03":        0x383D,
+    "var_music_stream_base_01": 0x383F,
+    "var_music_stream_base_02": 0x3841,
+    "var_music_stream_base_03": 0x3843,
+    "data_voice_param_buf":    0x3845,
+    "data_voice_param_buf_end": 0x3853,
+    "var_music_track_ptr":     0x3854,
+    "var_music_track_base":    0x3856,
+    "var_music_voice2_flag":   0x3BC8,
+    "var_music_voice2_flag_hi": 0x3BC9,
+}
+# Встроенные 16-бит УКАЗАТЕЛИ в инициализированных RAM-значениях (var-init блок
+# 0x383A..0x3857): содержат базы потоков нот, указывающие в перемещаемые data-
+# таблицы. Их содержимое надо переписать через new_addr. Это ЕДИНСТВЕННЫЕ
+# abs-поинтеры в verbatim-данных;Interior нотных/периодных таблиц — значения
+# (периоды), НЕ патчится (иначе испортим музыку).
+POINTER_SITES = (0x383F, 0x3841, 0x3843, 0x3854, 0x3856)
+
+# compact: перемещённый код кончается на new_addr(0x4600)=0x3607 -> блок от 0x3608.
+GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x3608" if COMPACT else "0x4600"), 0)
 GLYPH_SIZE = 8192                                          # 256 глифов x 32 Б
 GLYPH_ASM  = "data_glyph_block_unpacked.asm"   # снимок — побайтовые DEFB в asm
 IMG_END = GLYPH_BASE + GLYPH_SIZE
@@ -131,54 +182,113 @@ for name, a, sz, rel in kept:
 if cur < CODE_END:
     segs.append(("gap", cur, CODE_END - cur))
 
+CODE_END_EFF = new_addr(CODE_END)   # compact: 0x35FF; verbatim: 0x4600
 assert GLYPH_BASE + GLYPH_SIZE <= 0x8000, "не влезает в нижние 32КБ"
-assert GLYPH_BASE >= CODE_END, "блок не должен наезжать на код"
+assert GLYPH_BASE >= CODE_END_EFF, "блок не должен наезжать на (перемещённый) код"
+if COMPACT:
+    # перемещённые RAM-скретч-якоря не должны попасть в read-only глиф-окно.
+    for _nm, _oa in ANCHORS.items():
+        _na = new_addr(_oa)
+        assert _na < GLYPH_BASE or _na >= GLYPH_BASE + GLYPH_SIZE, \
+            "RAM-якорь %s после reloc 0x%04X попал в глиф-окно" % (_nm, _na)
+    # текстовый back-буфер (Фаза 1, 0x6600) — выше компактного блока, вне коллизии.
+    assert not (GLYPH_BASE <= 0x6600 < GLYPH_BASE + GLYPH_SIZE), "data_text_buffer в глиф-окне"
 
 glyph_txt = open(os.path.join(ASM, "data", GLYPH_ASM), encoding="utf-8").read()
 assert "DEFB" in glyph_txt, ("нет снимка глиф-блока в %s — сначала tools/get_glyph_block" % GLYPH_ASM)
 assert defb_bytes(glyph_txt) == GLYPH_SIZE, "DEFB-снимок глиф-блока != 8192 Б"
 
+# --- asm-эмиттеры -----------------------------------------------------------
+def clip_holes(a, b):
+    """Подынтервалы [s,e) диапазона [a,b) за вычетом мёртвых дыр (только compact)."""
+    if not COMPACT:
+        yield a, b
+        return
+    cur = a
+    for hs, he in sorted(HOLES):
+        if he <= cur or hs >= b:
+            continue
+        if hs > cur:
+            yield cur, hs
+        cur = max(cur, he)
+    if cur < b:
+        yield cur, b
+
+def emit_gap(s, e, out):
+    """Гэп [s,e): байты влоб из оригинала, dead-поддиапазоны -> нули, встроенные
+    указатели (POINTER_SITES) -> DW new_addr(содержимое). Размещение по new_addr(s)."""
+    global gapcount, gapbytes
+    chunk = bytearray(rom[s - ORG: e - ORG])
+    for ds, de, _nm in dead_ranges:
+        lo, hi = max(s, ds), min(e, de)
+        if lo < hi:
+            chunk[lo - s: hi - s] = b"\x00" * (hi - lo)
+    na = new_addr(s)
+    tag = (" @reloc 0x%04X" % na) if COMPACT else ""
+    out.append("; --- gap 0x%04X..0x%04X (%d bytes) from original image%s ---" % (s, e, e - s, tag))
+    out.append("    defs 0x%04X - $ ; align" % na)
+    gapcount += 1; gapbytes += (e - s)
+    i = s
+    while i < e:
+        if i in POINTER_SITES:
+            content = rom[i - ORG] | (rom[i - ORG + 1] << 8)
+            if content >= HOLES[0][0]:      # указатель в перемещаемую зону
+                out.append("    DW 0%04Xh   ; reloc-указатель (orig 0x%04X -> 0x%04X)" %
+                           (new_addr(content), i, content))
+            else:                            # указатель в неизменную зону — как есть
+                out.append("    DW 0%04Xh   ; abs-ptr (не reloc)" % content)
+            i += 2
+            continue
+        run = []
+        while i < e and i not in POINTER_SITES:
+            run.append(chunk[i - s]); i += 1
+        for j in range(0, len(run), 8):
+            octet = run[j:j + 8]
+            body = ", ".join("0%Xh" % b for b in octet)
+            out.append("    DEFB %s" % body)
+
+# relocate-якоря — генерируемый include (значение = new_addr(оригинал)).
+anch_lines = ["; var_reloc_anchors.asm — ГЕНЕРИРУЕТСЯ tools/gen_layout.py, не править руками.",
+              "; RAM-символы перемещаемой зоны: verbatim = исходный адрес, compact = new_addr.", ""]
+for nm in sorted(ANCHORS, key=lambda k: ANCHORS[k]):
+    anch_lines.append("%-24s EQU 0%04Xh" % (nm + ":", new_addr(ANCHORS[nm])))
+open(os.path.join(ASM, "var_reloc_anchors.asm"), "w", encoding="utf-8").write("\n".join(anch_lines) + "\n")
+
 lines = []
 lines.append("; PUTUP_NEW.ROM (games/putup) — putup с РАСПАКОВАННЫМИ данными")
 lines.append("; ГЕНЕРАТОР tools/gen_layout.py — не править руками.")
-lines.append("; 0x0100..0x45FF: все объекты на ИСХОДНЫХ адресах, гэпы — вербатим из putup.rom;")
-lines.append("; 0x4600..0x%X: нули (в оригинале — RAM);" % (GLYPH_BASE - 1))
+if COMPACT:
+    lines.append("; РЕЖИМ COMPACT (Фаза 2): мёртвые дыры [0x2761,0x2F61)+[0x3041,0x383A) вырезаны;")
+    lines.append("; объекты >=0x2761 сдвинуты вверх (new_addr, суммарный сдвиг -%d Б);" % TOTAL_DELTA)
+    lines.append("; byte-exact сохранён только для [0x0100,0x2761); выше — поведенческая сверка.")
+else:
+    lines.append("; РЕЖИМ VERBATIM (Фаза 1): все объекты на ИСХОДНЫХ адресах, гэпы — вербатим из putup.rom;")
 lines.append("; 0x%X..0x%X: data_glyph_block_unpacked (%d Б, снимок пост-иниц 0x6000..0x7FFF)."
              % (GLYPH_BASE, IMG_END - 1, GLYPH_SIZE))
 lines.append("")
 lines.append("    org 0h")
 lines.append('    include "var_ram_symbols.asm"')
+lines.append('    include "var_reloc_anchors.asm"')
 lines.append("")
 gapcount = gapbytes = 0
 for seg in segs:
     if seg[0] == "emit":
         _, a, sz, name, rel = seg
-        lines.append("; --- emit %s @0x%04X (%d bytes) ---" % (name, a, sz))
-        lines.append("    defs 0x%04X - $ ; align" % a)
+        na = new_addr(a)
+        tag = (" @reloc 0x%04X" % na) if COMPACT and na != a else ""
+        lines.append("; --- emit %s @0x%04X (%d bytes)%s ---" % (name, a, sz, tag))
+        lines.append("    defs 0x%04X - $ ; align" % na)
         lines.append('    include "%s"' % rel)
         lines.append("")
     else:
         _, a, sz = seg
-        chunk = bytearray(rom[a - ORG : a - ORG + sz])
-        # этап B: мёртвые диапазоны внутри гэпов выжигаем нулями
-        for ds, de, _nm in dead_ranges:
-            lo, hi = max(a, ds), min(a + sz, de)
-            if lo < hi:
-                chunk[lo - a : hi - a] = b"\x00" * (hi - lo)
-        gapcount += 1; gapbytes += sz
-        lines.append("; --- gap 0x%04X..0x%04X (%d bytes) from original image ---" % (a, a + sz, sz))
-        lines.append("    defs 0x%04X - $ ; align" % a)
-        for i in range(0, len(chunk), 8):
-            octet = chunk[i:i + 8]
-            body = ", ".join("0%Xh" % b for b in octet)   # 0C1h: ведущий 0 обязателен
-            cmt = "   ; 0x%04X" % (a + i) if i == 0 else ""
-            lines.append("    DEFB %s%s" % (body, cmt))
-        lines.append("")
+        for cs, ce in clip_holes(a, a + sz):
+            emit_gap(cs, ce, lines)
 
 # дыра между концом кода и блоком — нули (эмулятор при старте держит её чистой RAM)
-if GLYPH_BASE > CODE_END:
+if GLYPH_BASE > CODE_END_EFF:
     lines.append("; --- filler 0x%04X..0x%04X (%d bytes) zeros (RAM в оригинале) ---"
-                 % (CODE_END, GLYPH_BASE - 1, GLYPH_BASE - CODE_END))
+                 % (CODE_END_EFF, GLYPH_BASE - 1, GLYPH_BASE - CODE_END_EFF))
     lines.append("    defs 0x%04X - $ ; align" % GLYPH_BASE)
     lines.append("")
 
@@ -196,7 +306,58 @@ ptr = emit.get("data_glyph_ptr_table")
 with open(os.path.join(rep, "dead_ranges.json"), "w", encoding="utf-8") as f:
     _json.dump({"dead_ranges": [[s, e, n] for s, e, n in dead_ranges],
                 "glyph_base": GLYPH_BASE,
-                "ptr_table": [ptr[0], ptr[0] + 512] if ptr else None}, f)
+                "ptr_table": [ptr[0], ptr[0] + 512] if ptr else None,
+                # Фаза 2: relocate-метаданные для verify/lint (compact-режим).
+                "compact": COMPACT,
+                "byte_exact_end": HOLES[0][0],          # 0x2761 — ниже строго byte-exact
+                "holes": [list(h) for h in HOLES],       # вырезанные дыры (ориг-адреса)
+                "delta_total": TOTAL_DELTA,              # 4089 — суммарный сдвиг верха
+                "code_end_orig": CODE_END,               # 0x4600
+                "code_end_new": CODE_END_EFF,            # verbatim 0x4600 / compact 0x3607
+                "pointer_sites": list(POINTER_SITES)},   # var-init embedded-указатели
+              f)
+
+# --- compact: RDB перемещённого образа (не мутируем исходный redesign/putup.rdb) ---
+# Адреса объектов/ссылок >=0x2761 проходят через new_addr; объекты, целиком
+# лежащие в вырезанной дыре, удаляются (их нет в компактном образе). Используется
+# для disassembly/линтов компактного PUTUP_NEW.ROM. Компактный режим только.
+if COMPACT:
+    def _in_hole(x):
+        return any(hs <= x < he for hs, he in HOLES)
+    # Артефакты рантайм-RAM на/выше конца кодового образа (>= CODE_END) НЕ едут
+    # по new_addr — компакция кода их не двигает; их компактная позиция задаётся
+    # явно: глиф-блок печётся на GLYPH_BASE, текстовый back-буфер (Фаза 1) на 0x6600.
+    RAM_REMAP = {0x6000: GLYPH_BASE, 0x5000: 0x6600}
+
+    def _map(x):
+        if x >= CODE_END:
+            return RAM_REMAP.get(x, x)
+        return new_addr(x)
+    cobjs = []
+    for o in rdb["objects"]:
+        a = int(o["address"], 16)
+        if _in_hole(a):
+            continue
+        no = dict(o)
+        no["address"] = "0x%04X" % _map(a)
+        if "links" in o and isinstance(o["links"], list):
+            no["links"] = ["0x%04X" % _map(int(L, 16))
+                           for L in o["links"]
+                           if not _in_hole(int(L, 16))]
+        cobjs.append(no)
+    compact_rdb = dict(rdb)
+    compact_rdb["objects"] = cobjs
+    compact_rdb["rom"] = dict(rdb.get("rom", {}))
+    compact_rdb["rom"]["comment"] = (
+        "COMPACT (Фаза 2): дыры %s вырезаны; объекты >=0x%04X сдвинуты new_addr (-%d); "
+        "byte-exact только [0x0100,0x%04X)." % (
+            [list(h) for h in HOLES], HOLES[0][0], TOTAL_DELTA, HOLES[0][0]))
+    compact_rdb["rom"]["size"] = IMG_END - ORG
+    with open(os.path.join(ROOT, "putup_compact.rdb"), "w", encoding="utf-8") as f:
+        _json.dump(compact_rdb, f, ensure_ascii=False, indent=1)
+    dropped = len(rdb["objects"]) - len(cobjs)
+    print("putup_compact.rdb: %d объектов (%d в дырах -> удалено), reloc >=0x%04X"
+          % (len(cobjs), dropped, HOLES[0][0]))
 
 emitbytes = sum(k[2] for k in kept)
 imgsize = IMG_END - ORG

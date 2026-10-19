@@ -160,7 +160,7 @@ loc_3A01:
     ADD A                       ; 0x3A12
     MOV C, A                    ; 0x3A13
     MVI B, 00h                  ; 0x3A14
-    LXI H, 421Ah                ; 0x3A16
+    LXI H, data_music_period_table    ; 0x3A16
     DAD B                       ; 0x3A19
     MOV C, M                    ; 0x3A1A
     INX H                       ; 0x3A1B
@@ -185,7 +185,7 @@ loc_3A32:
     MVI B, 00h                  ; 0x3A39
     DAD B                       ; 0x3A3B
     MOV A, M                    ; 0x3A3C
-    STA 3BC9h                   ; 0x3A3D
+    STA var_music_voice2_flag_hi ; 0x3A3D
     CPI 00h                     ; 0x3A40
     JNZ loc_3A60                ; 0x3A42
     MVI A, 00h                  ; 0x3A45
@@ -219,7 +219,7 @@ loc_3A60:
     ADD A                       ; 0x3A71
     MOV C, A                    ; 0x3A72
     MVI B, 00h                  ; 0x3A73
-    LXI H, 421Ah                ; 0x3A75
+    LXI H, data_music_period_table    ; 0x3A75
     DAD B                       ; 0x3A78
     MOV C, M                    ; 0x3A79
     INX H                       ; 0x3A7A
@@ -289,7 +289,7 @@ loc_3AD1:
     ADD A                       ; 0x3AE3
     MOV C, A                    ; 0x3AE4
     MVI B, 00h                  ; 0x3AE5
-    LXI H, 421Ah                ; 0x3AE7
+    LXI H, data_music_period_table    ; 0x3AE7
     DAD B                       ; 0x3AEA
     MOV C, M                    ; 0x3AEB
     INX H                       ; 0x3AEC

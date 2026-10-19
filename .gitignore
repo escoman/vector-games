@@ -61,3 +61,6 @@ roms/redesign/basic/src/basic_new.zx0
 
 # games/putup: lint-отчёт (генерируется)
 roms/games/putup/tools/stage_b_lint.json
+
+# Генерируемый compact-RDB (регенерируется make COMPACT=1)
+roms/games/putup/putup_compact.rdb

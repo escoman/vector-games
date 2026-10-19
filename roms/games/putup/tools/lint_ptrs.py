@@ -38,6 +38,11 @@ from analyze import export_asm, symbolic_operand_lint as sol  # noqa: E402
 ASM = os.path.join(PROJ, "asm")
 REF = os.path.join(ROOT, "roms", "redesign", "putup", "src")  # оригиналы putup.rom/rdb
 MASTER = "putup_unpacked.asm"
+#skip_scan = файлы, где числовые значения — ОПРЕДЕЛЕНИЯ (EQU/incbin по константе),
+#а не ссылки кода: мастер-макет и генерируемая таблица relocate-якорей
+#var_reloc_anchors.asm (ее EQU-литералы = перемещённые RAM-адреса, численно
+#попадают в оригинальное окно удалённого data_gfx_2761 — это не ссылки).
+SKIP_SCAN = {MASTER, "var_reloc_anchors.asm"}
 
 
 def _resolve_glyph_base():
@@ -100,8 +105,8 @@ def scan(files, equ, glyph_win, dead_wins):
     ram_alias = set(equ.values())
     findings = []
     for name in files:
-        if name == MASTER:
-            continue  # макет: defs/incbin по константе, не ссылки кода
+        if name in SKIP_SCAN:
+            continue  # макет/таблица якорей: defs/EQU-определения по константе, не ссылки кода
         path = os.path.join(ASM, name)
         if not os.path.isfile(path):
             continue

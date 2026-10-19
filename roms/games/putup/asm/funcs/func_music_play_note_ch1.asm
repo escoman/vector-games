@@ -77,7 +77,7 @@ loc_3CBA:
     MVI A, 08h                      ; 0x3CDE
     CALL func_snd_op_keep_a3        ; 0x3CE0
 loc_3CE3:
-    LDA 3BC9h                       ; 0x3CE3
+    LDA var_music_voice2_flag_hi     ; 0x3CE3
     CPI 00h                         ; 0x3CE6
     JZ loc_3D47                     ; 0x3CE8
     PUSH H                          ; 0x3CEB

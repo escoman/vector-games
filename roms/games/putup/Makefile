@@ -20,7 +20,13 @@ FULLBIN   = build_full.bin
 MASTER    = putup_unpacked.asm
 GEN       = tools/gen_layout.py
 IMGADDR   = 0x100
-GLYPH_BASE ?= 0x4600         # одна константа переноса: make GLYPH_BASE=0x6000 (A)
+COMPACT  ?= 0               # 1 = Фаза 2: вырез мёртвых дыр + relocation (не byte-exact выше 0x2761)
+ifeq ($(strip $(COMPACT)),0)
+  DEFAULT_GLYPH_BASE = 0x4600   # Фаза 1: блок вплотную к концу оригинального кода
+else
+  DEFAULT_GLYPH_BASE = 0x3608   # Фаза 2: после reloc код кончается на 0x3607
+endif
+GLYPH_BASE ?= $(DEFAULT_GLYPH_BASE)   # константа переноса (make GLYPH_BASE=... для A-регрессии)
 GLYPH_SIZE = 8192
 KEEP_DEAD  ?= 0              # 1 = Stage A: мёртвые распаковщики остаются в сборке
 
@@ -30,14 +36,14 @@ all: $(TARGET)
 
 # Перегенерировать компоновку (мастер + gap-бинари) из asm/ и оригинала.
 layout:
-	@GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
+	@COMPACT=$(COMPACT) GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
 
 $(TARGET): $(GEN) $(ORIG) $(wildcard asm/*.asm)
-	@GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
+	@COMPACT=$(COMPACT) GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
 	@cd asm && $(Z80ASM) $(ASMFLAGS) -o=../$(FULLBIN) $(MASTER)
-	@GLYPH_BASE=$(GLYPH_BASE) GLYPH_SIZE=$(GLYPH_SIZE) python3 -c "import os; gb=int(os.environ['GLYPH_BASE'],0); gs=int(os.environ['GLYPH_SIZE']); d=open('$(FULLBIN)','rb').read(); open('$(TARGET)','wb').write(d[256:gb+gs])"
+	@python3 -c "import json;d=open('$(FULLBIN)','rb').read();gb=json.load(open('tools/dead_ranges.json'))['glyph_base'];gs=$(GLYPH_SIZE);open('$(TARGET)','wb').write(d[256:gb+gs])"
 	@rm -f $(FULLBIN) asm/*.o asm/*.sym
-	@echo "=== Done: $@ ($$(stat -c%s $@) bytes) ==="
+	@echo "=== Done: $@ ($$(stat -c%s $@) bytes, COMPACT=$(COMPACT)) ==="
 
 # Кодовая зона 0x0100..0x45FF = оригинал с точностью до: заглушек в
 # func_main_init (3 NOP на месте CALL func_load_glyph_block, 0x0B83; 34 NOP
