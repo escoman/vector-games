@@ -1,15 +1,21 @@
 # Makefile — roms/games/putup: Putup с распакованными данными.
 #
-# PUTUP_NEW.ROM (в корне проекта) = адресно-точная реконструкция оригинала
-# (0x0100..0x45FF, asm-ветка Stage 12 redesign/putup) + распакованный блок глифов
-# data_glyph_block_unpacked (8192 Б) по адресу GLYPH_BASE (итог Фазы 1:
-# 0x4600 — вплотную к концу кода; текстовый back-буфер перенесён на 0x6600,
-# дыра 0x4600..0x55FF схлопнута; копир спрайтов возвращён).
+# PUTUP_NEW.ROM (в корне проекта) = реконструкция Putup (asm-ветка Stage 12
+# redesign/putup) с распакованным блоком глифов data_glyph_block_unpacked.
+# ПО УМОЛЧАНИЮ собирается КОМПАКТНЫЙ образ (Фаза 2, COMPACT=1, ~21768 Б):
+# два мёртвых пакета в.code вырезаны, верхняя половина поднята new_addr(),
+# GLYPH_BASE=0x3608. Побайтовая точность гарантирована только на [0x0100,
+# 0x2761); выше — корректность доказывается поведенчески (compare_behavior.py:
+# VRAM/глифы title/play1/play2). Дефолт осознанно смещён в compact: образ и
+# дальше будет уходить от оригинала, поэтому главный гейт — сравнение экранов
+# и поведения, а не побайтовый diff. Побайтовый A/B-режим — `make COMPACT=0`
+# (25856 Б, byte-exact [0x0100,0x45FF), GLYPH_BASE=0x4600).
 #
 # Компоновка: tools/gen_layout.py -> asm/putup_unpacked.asm (гэпы — inline DEFB).
 # Все данные — побайтовыми DEFB в asm-файлах, bin-артефактов нет.
-# Режим 8080: -m=8080_strict. make verify — побайтовая сверка кодовой зоны
-# с оригиналом (отличия — только заглушки удалённой распаковки).
+# Режим 8080: -m=8080_strict. make verify — сверка с оригиналом: в COMPACT=0
+# побайтовая по кодовой зоне; в COMPACT=1 инвариант перемещения (каждый diff
+# выше 0x2761 = 16-битный операнд new_addr).
 
 include ../../../config.mk
 
@@ -20,7 +26,7 @@ FULLBIN   = build_full.bin
 MASTER    = putup_unpacked.asm
 GEN       = tools/gen_layout.py
 IMGADDR   = 0x100
-COMPACT  ?= 0               # 1 = Фаза 2: вырез мёртвых дыр + relocation (не byte-exact выше 0x2761)
+COMPACT  ?= 1               # по умолчанию Фаза 2 (вырез дыр + relocation); COMPACT=0 — побайтовый A/B
 ifeq ($(strip $(COMPACT)),0)
   DEFAULT_GLYPH_BASE = 0x4600   # Фаза 1: блок вплотную к концу оригинального кода
 else
@@ -43,7 +49,7 @@ $(TARGET): $(GEN) $(ORIG) $(wildcard asm/*.asm)
 	@cd asm && $(Z80ASM) $(ASMFLAGS) -o=../$(FULLBIN) $(MASTER)
 	@python3 -c "import json;d=open('$(FULLBIN)','rb').read();gb=json.load(open('tools/dead_ranges.json'))['glyph_base'];gs=$(GLYPH_SIZE);open('$(TARGET)','wb').write(d[256:gb+gs])"
 	@rm -f $(FULLBIN) asm/*.o asm/*.sym
-	@echo "=== Done: $@ ($$(stat -c%s $@) bytes, COMPACT=$(COMPACT)) ==="
+	@echo "=== Done: $@ ($$(stat -c%s $@) bytes, COMPACT=$(strip $(COMPACT))) ==="
 
 # Кодовая зона 0x0100..0x45FF = оригинал с точностью до: заглушек в
 # func_main_init (3 NOP на месте CALL func_load_glyph_block, 0x0B83; 34 NOP

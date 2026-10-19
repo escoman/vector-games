@@ -15,19 +15,25 @@
 
 ## Сборка
 
-```bash
-make                        # PUTUP_NEW.ROM в корне проекта (GLYPH_BASE=0x4600, dead-блоки выжжены)
-make verify                 # кодовая зона 0x0100..0x45FF = оригинал + заглушки + dead-нули + релокация базы
-python3 tools/lint_ptrs.py  # линт символьных ссылок (GLYPH_BASE берётся из dead_ranges.json)
-make GLYPH_BASE=0x6000 KEEP_DEAD=1   # регрессия этапа A
-make layout                 # перегенерировать компоновку (asm/putup_unpacked.asm + gap-бины)
-make deploy / make full     # стандарт проекта (finally.mk)
+Дефолт — **компактный** образ (Фаза 2, `COMPACT=1`, 21768 Б, GLYPH_BASE=0x3608).
+Дефолт смещён в compact осознанно: образ и дальше будет уходить от оригинала,
+поэтому главный гейт корректности — **сравнение экранов и поведения**
+(`compare_behavior.py`), а не побайтовый diff. Побайтовый A/B-режим Фазы 1 —
+`make COMPACT=0` (25856 Б, byte-exact `[0x0100,0x45FF)`, GLYPH_BASE=0x4600).
 
-# Фаза 2 (COMPACT): вырез мёртвых дыр + relocation верха, GLYPH_BASE=0x3608
-make COMPACT=1              # PUTUP_NEW.ROM компактный (21768 Б, 0x100..0x5607)
-make COMPACT=1 verify        # byte-exact [0x100,0x2761) + инвариант чистого сдвига выше
-python3 tools/lint_ptrs.py   # линт (glyph_base/режим берутся из dead_ranges.json)
-python3 .scratch/behavior_phase2.py    # behavioral orig↔new (textbuf/glyph/VRAM на кадре)
+```bash
+make                        # PUTUP_NEW.ROM компактный (21768 Б, 0x100..0x5607, GLYPH_BASE=0x3608)
+make verify                 # compact: byte-exact [0x0100,0x2761) + инвариант чистого сдвига new_addr выше
+python3 tools/lint_ptrs.py  # линт символьных ссылок (glyph_base/режим из dead_ranges.json)
+make deploy / make full     # стандарт проекта (finally.mk) — собирает и деплоит компактный образ
+python3 tools/compare_behavior.py --new PUTUP_NEW.ROM --glyph-base 0x3608 --label B
+                            # поведенческий гейт orig→new→orig: VRAM/глифы title/play1/play2 (см. ниже)
+
+# Побайтовый A/B-режим Фазы 1 (byte-exact весь код):
+make COMPACT=0              # 25856 Б, GLYPH_BASE=0x4600
+make COMPACT=0 verify        # побайтовая сверка 0x0100..0x45FF
+make COMPACT=0 GLYPH_BASE=0x6000 KEEP_DEAD=1   # регрессия этапа A
+make layout                 # перегенерировать компоновку (asm/putup_unpacked.asm + gap-бины)
 ```
 
 Перенос блока = одна константа `GLYPH_BASE`. Изначально кандидат 0x4600 был
@@ -118,13 +124,20 @@ new_addr(a) = a          для a < 0x2761            (нижняя зона —
 (`new_word == new_addr(orig_word)`); filler до `GLYPH_BASE` — нули. На текущем
 образе: 123 операнд-фиксапа + var-init указатели, **0 необъяснённых расхождений**.
 
-Поведенческий гейт (`.scratch/behavior_phase2.py`, кадр с музыкой на заставке):
-текстовый back-буфер, глиф-блок (8192) и весь VRAM (32768) — **побайтово
-совпадают** orig↔new; музыкальный скретч сверяется справочно (reloc var-init +
-недетерминизм фазы счётчиков). Деплой/прогон — `make COMPACT=1 full`.
+Поведенческий гейт — `compare_behavior.py` (три прогона orig→new→orig, фазы
+title/play1/play2, синхронизация по CPU-кадрам beam state): VRAM (32768) и
+глиф-блок (8192) совпадают **0 расхождений** на всех фазах, в пределах шума
+orig-vs-orig. Скретч music-state и `.scratch/behavior_phase2.py` (textbuf/glyph/
+VRAM на заставке) — справочно. Деплой/прогон — `make full` (дефолт compact).
 
-A-регрессия сохранена: `COMPACT=0` (по умолчанию) = прежний verbatim-режим Фазы 1
-(byte-exact 25856 Б).
+Caveat по музыке: io-трек порта music на заставке у реконструкции отличается от
+`orig` (~0.54 jaccard) ОДИНАКОВО и в compact, и в verbatim, тогда как
+compact-музыка ↔ verbatim-музыка совпадают **1.000**. Значит это свойство
+реконструкции Фазы 1, а не регрессия компакции; экран (VRAM) при этом 0/32768.
+Ио-трек к оригиналу как гейт НЕ использовать — только VRAM/глифы и compact↔verbatim.
+
+A-регрессия сохранена: `COMPACT=0` = прежний verbatim-режим Фазы 1 (byte-exact
+25856 Б); `make COMPACT=0 verify` по-прежнему требует побайтовой точности кода.
 
 
 ## Как это работает

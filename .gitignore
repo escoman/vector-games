@@ -62,5 +62,12 @@ roms/redesign/basic/src/basic_new.zx0
 # games/putup: lint-отчёт (генерируется)
 roms/games/putup/tools/stage_b_lint.json
 
-# Генерируемый compact-RDB (регенерируется make COMPACT=1)
+# Генерируемый compact-RDB (регенерируется make / make COMPACT=1)
 roms/games/putup/putup_compact.rdb
+
+# games/putup: артефакты поведенческой сверки compare_behavior.py (регенерируются)
+roms/games/putup/tools/capture_*
+roms/games/putup/tools/*_verdicts.json
+roms/games/putup/tools/*_ports.json
+roms/games/putup/tools/*_vram.bin
+roms/games/putup/tools/*_glyph.bin

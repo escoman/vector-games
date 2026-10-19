@@ -1,7 +1,9 @@
 ; PUTUP_NEW.ROM (games/putup) — putup с РАСПАКОВАННЫМИ данными
 ; ГЕНЕРАТОР tools/gen_layout.py — не править руками.
-; РЕЖИМ VERBATIM (Фаза 1): все объекты на ИСХОДНЫХ адресах, гэпы — вербатим из putup.rom;
-; 0x4600..0x65FF: data_glyph_block_unpacked (8192 Б, снимок пост-иниц 0x6000..0x7FFF).
+; РЕЖИМ COMPACT (Фаза 2): мёртвые дыры [0x2761,0x2F61)+[0x3041,0x383A) вырезаны;
+; объекты >=0x2761 сдвинуты вверх (new_addr, суммарный сдвиг -4089 Б);
+; byte-exact сохранён только для [0x0100,0x2761); выше — поведенческая сверка.
+; 0x3608..0x5607: data_glyph_block_unpacked (8192 Б, снимок пост-иниц 0x6000..0x7FFF).
 
     org 0h
     include "var_ram_symbols.asm"
@@ -59,7 +61,7 @@
     defs 0x01CD - $ ; align
     include "data/data_snd_dispatch_table.asm"
 
-; --- gap 0x01ED..0x0201 (20 bytes) from original image ---
+; --- gap 0x01ED..0x0201 (20 bytes) from original image @reloc 0x01ED ---
     defs 0x01ED - $ ; align
     DEFB 07Bh, 032h, 01Ah, 03h, 0CDh, 01h, 02h, 0C3h
     DEFB 06Ah, 02h, 07Bh, 032h, 01Bh, 03h, 0CDh, 01h
@@ -72,7 +74,7 @@
     defs 0x020E - $ ; align
     include "funcs/func_snd_calc_period.asm"
 
-; --- gap 0x0219..0x022D (20 bytes) from original image ---
+; --- gap 0x0219..0x022D (20 bytes) from original image @reloc 0x0219 ---
     defs 0x0219 - $ ; align
     DEFB 07Bh, 032h, 01Ch, 03h, 0CDh, 02Dh, 02h, 0C3h
     DEFB 06Ah, 02h, 07Bh, 032h, 01Dh, 03h, 0CDh, 02Dh
@@ -81,7 +83,7 @@
     defs 0x022D - $ ; align
     include "funcs/func_snd_out_ch1.asm"
 
-; --- gap 0x023A..0x024E (20 bytes) from original image ---
+; --- gap 0x023A..0x024E (20 bytes) from original image @reloc 0x023A ---
     defs 0x023A - $ ; align
     DEFB 07Bh, 032h, 01Eh, 03h, 0CDh, 04Eh, 02h, 0C3h
     DEFB 06Ah, 02h, 07Bh, 032h, 01Fh, 03h, 0CDh, 04Eh
@@ -90,7 +92,7 @@
     defs 0x024E - $ ; align
     include "funcs/func_snd_out_ch2.asm"
 
-; --- gap 0x025B..0x026E (19 bytes) from original image ---
+; --- gap 0x025B..0x026E (19 bytes) from original image @reloc 0x025B ---
     defs 0x025B - $ ; align
     DEFB 0C3h, 06Ah, 02h, 0C3h, 06Ah, 02h, 0C3h, 06Ah
     DEFB 02h, 0C3h, 06Ah, 02h, 0CDh, 06Eh, 02h, 0F1h
@@ -143,7 +145,7 @@
     defs 0x0302 - $ ; align
     include "funcs/func_snd_gate_ch2.asm"
 
-; --- gap 0x031A..0x0321 (7 bytes) from original image ---
+; --- gap 0x031A..0x0321 (7 bytes) from original image @reloc 0x031A ---
     defs 0x031A - $ ; align
     DEFB 01h, 01h, 01h, 01h, 01h, 01h, 0FFh
 ; --- emit func_print_string @0x0321 (11 bytes) ---
@@ -162,7 +164,7 @@
     defs 0x0355 - $ ; align
     include "funcs/func_divmod_u16.asm"
 
-; --- gap 0x0364..0x0383 (31 bytes) from original image ---
+; --- gap 0x0364..0x0383 (31 bytes) from original image @reloc 0x0364 ---
     defs 0x0364 - $ ; align
     DEFB 0F6h, 030h, 0F5h, 0FEh, 030h, 0CAh, 071h, 03h
     DEFB 03Eh, 01h, 032h, 0E2h, 08h, 03Ah, 0E2h, 08h
@@ -176,7 +178,7 @@
     defs 0x03A4 - $ ; align
     include "funcs/func_vblank_isr.asm"
 
-; --- gap 0x0401..0x0439 (56 bytes) from original image ---
+; --- gap 0x0401..0x0439 (56 bytes) from original image @reloc 0x0401 ---
     defs 0x0401 - $ ; align
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
@@ -201,7 +203,7 @@
     defs 0x04A8 - $ ; align
     include "funcs/func_blit_plane_mask10.asm"
 
-; --- gap 0x04CD..0x051B (78 bytes) from original image ---
+; --- gap 0x04CD..0x051B (78 bytes) from original image @reloc 0x04CD ---
     defs 0x04CD - $ ; align
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
@@ -217,7 +219,7 @@
     defs 0x051B - $ ; align
     include "data/data_vram_col_table.asm"
 
-; --- gap 0x053B..0x0600 (197 bytes) from original image ---
+; --- gap 0x053B..0x0600 (197 bytes) from original image @reloc 0x053B ---
     defs 0x053B - $ ; align
     DEFB 0CDh, 015h, 00h, 0CDh, 015h, 00h, 0C9h, 021h
     DEFB 00h, 00h, 039h, 022h, 013h, 00h, 03Ah, 010h
@@ -256,7 +258,7 @@
     defs 0x0803 - $ ; align
     include "funcs/func_render_glyph.asm"
 
-; --- gap 0x08C3..0x0925 (98 bytes) from original image ---
+; --- gap 0x08C3..0x0925 (98 bytes) from original image @reloc 0x08C3 ---
     defs 0x08C3 - $ ; align
     DEFB 03h, 00h, 0Ch, 00h, 022h, 05Eh, 019h, 022h
     DEFB 020h, 01Ah, 022h, 0EEh, 019h, 021h, 00h, 01h
@@ -275,7 +277,7 @@
     defs 0x0925 - $ ; align
     include "data/str_credits_koi8.asm"
 
-; --- gap 0x09A3..0x0A06 (99 bytes) from original image ---
+; --- gap 0x09A3..0x0A06 (99 bytes) from original image @reloc 0x09A3 ---
     defs 0x09A3 - $ ; align
     DEFB 01h, 01h, 02h, 01h, 01h, 01h, 01h, 01h
     DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
@@ -334,7 +336,7 @@
     defs 0x0B29 - $ ; align
     include "data/str_bonus.asm"
 
-; --- gap 0x0B3C..0x0B57 (27 bytes) from original image ---
+; --- gap 0x0B3C..0x0B57 (27 bytes) from original image @reloc 0x0B3C ---
     defs 0x0B3C - $ ; align
     DEFB 08h, 0DAh, 0FEh, 06h, 07Dh, 02h, 03h, 0C3h
     DEFB 03Ah, 09h, 0AFh, 032h, 03Fh, 019h, 0CDh, 044h
@@ -368,7 +370,7 @@
     defs 0x0F09 - $ ; align
     include "funcs/func_score_and_redraw.asm"
 
-; --- gap 0x0F39..0x1123 (490 bytes) from original image ---
+; --- gap 0x0F39..0x1123 (490 bytes) from original image @reloc 0x0F39 ---
     defs 0x0F39 - $ ; align
     DEFB 02Ah, 0F3h, 08h, 01h, 064h, 00h, 09h, 022h
     DEFB 0F3h, 08h, 021h, 0Fh, 09h, 034h, 07Eh, 07h
@@ -436,7 +438,7 @@
     defs 0x1123 - $ ; align
     include "funcs/func_prng.asm"
 
-; --- gap 0x1155..0x1197 (66 bytes) from original image ---
+; --- gap 0x1155..0x1197 (66 bytes) from original image @reloc 0x1155 ---
     defs 0x1155 - $ ; align
     DEFB 01h, 00h, 0CDh, 023h, 011h, 0E6h, 07h, 0FEh
     DEFB 05h, 0D2h, 020h, 011h, 032h, 01Ch, 09h, 03Ah
@@ -463,7 +465,7 @@
     defs 0x121A - $ ; align
     include "funcs/func_draw_status_hud.asm"
 
-; --- gap 0x1252..0x130A (184 bytes) from original image ---
+; --- gap 0x1252..0x130A (184 bytes) from original image @reloc 0x1252 ---
     defs 0x1252 - $ ; align
     DEFB 021h, 0E0h, 00h, 022h, 0E9h, 08h, 03Eh, 07h
     DEFB 032h, 01Eh, 09h, 0CDh, 01Ah, 012h, 0CDh, 023h
@@ -492,7 +494,7 @@
     defs 0x130A - $ ; align
     include "funcs/func_draw_game_objects.asm"
 
-; --- gap 0x13AA..0x1477 (205 bytes) from original image ---
+; --- gap 0x13AA..0x1477 (205 bytes) from original image @reloc 0x13AA ---
     defs 0x13AA - $ ; align
     DEFB 06h, 02h, 0CDh, 021h, 01h, 03Ah, 01h, 09h
     DEFB 0D6h, 02h, 032h, 0Eh, 09h, 03Ah, 02h, 09h
@@ -588,7 +590,7 @@
     defs 0x1BE5 - $ ; align
     include "funcs/func_clear_textbuf.asm"
 
-; --- gap 0x1BFA..0x1C0E (20 bytes) from original image ---
+; --- gap 0x1BFA..0x1C0E (20 bytes) from original image @reloc 0x1BFA ---
     defs 0x1BFA - $ ; align
     DEFB 010h, 09h, 04h, 01h, 00h, 01h, 04h, 09h
     DEFB 010h, 019h, 024h, 031h, 040h, 051h, 064h, 079h
@@ -609,601 +611,88 @@
     defs 0x2706 - $ ; align
     include "data/data_tile_graphics.asm"
 
-; --- gap 0x2761..0x2F61 (2048 bytes) from original image ---
+; --- emit data_sprites_2F61 @0x2F61 (224 bytes) @reloc 0x2761 ---
     defs 0x2761 - $ ; align
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-; --- emit data_sprites_2F61 @0x2F61 (224 bytes) ---
-    defs 0x2F61 - $ ; align
     include "data/data_sprites_2F61.asm"
 
-; --- gap 0x3041..0x3858 (2071 bytes) from original image ---
-    defs 0x3041 - $ ; align
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 04h, 028h, 028h, 028h, 020h
-    DW 03E29h   ; reloc-указатель (orig 0x383F -> 0x3E29)
-    DW 03EC9h   ; reloc-указатель (orig 0x3841 -> 0x3EC9)
-    DW 03F69h   ; reloc-указатель (orig 0x3843 -> 0x3F69)
+; --- gap 0x383A..0x3858 (30 bytes) from original image @reloc 0x2841 ---
+    defs 0x2841 - $ ; align
+    DEFB 04h, 028h, 028h, 028h, 020h
+    DW 02E30h   ; reloc-указатель (orig 0x383F -> 0x3E29)
+    DW 02ED0h   ; reloc-указатель (orig 0x3841 -> 0x3EC9)
+    DW 02F70h   ; reloc-указатель (orig 0x3843 -> 0x3F69)
     DEFB 07Fh, 00h, 0FDh, 00h, 0C3h, 01h, 01Fh, 069h
     DEFB 0Fh, 00h, 00h, 00h, 03h, 02h, 038h
-    DW 03E1Ah   ; reloc-указатель (orig 0x3854 -> 0x3E1A)
-    DW 03E29h   ; reloc-указатель (orig 0x3856 -> 0x3E29)
-; --- emit func_music_tick @0x3858 (52 bytes) ---
-    defs 0x3858 - $ ; align
+    DW 02E21h   ; reloc-указатель (orig 0x3854 -> 0x3E1A)
+    DW 02E30h   ; reloc-указатель (orig 0x3856 -> 0x3E29)
+; --- emit func_music_tick @0x3858 (52 bytes) @reloc 0x285F ---
+    defs 0x285F - $ ; align
     include "funcs/func_music_tick.asm"
 
-; --- gap 0x388C..0x3890 (4 bytes) from original image ---
-    defs 0x388C - $ ; align
+; --- gap 0x388C..0x3890 (4 bytes) from original image @reloc 0x2893 ---
+    defs 0x2893 - $ ; align
     DEFB 0CDh, 0CDh, 03Dh, 0C9h
-; --- emit func_music_sub_3890 @0x3890 (114 bytes) ---
-    defs 0x3890 - $ ; align
+; --- emit func_music_sub_3890 @0x3890 (114 bytes) @reloc 0x2897 ---
+    defs 0x2897 - $ ; align
     include "funcs/func_music_sub_3890.asm"
 
-; --- emit func_music_load_voice_params @0x3902 (62 bytes) ---
-    defs 0x3902 - $ ; align
+; --- emit func_music_load_voice_params @0x3902 (62 bytes) @reloc 0x2909 ---
+    defs 0x2909 - $ ; align
     include "funcs/func_music_load_voice_params.asm"
 
-; --- emit func_snd_op_keep_a @0x3940 (6 bytes) ---
-    defs 0x3940 - $ ; align
+; --- emit func_snd_op_keep_a @0x3940 (6 bytes) @reloc 0x2947 ---
+    defs 0x2947 - $ ; align
     include "funcs/func_snd_op_keep_a.asm"
 
-; --- emit func_music_process_voice @0x3946 (457 bytes) ---
-    defs 0x3946 - $ ; align
+; --- emit func_music_process_voice @0x3946 (457 bytes) @reloc 0x294D ---
+    defs 0x294D - $ ; align
     include "funcs/func_music_process_voice.asm"
 
-; --- emit func_music_set_note_params @0x3B0F (185 bytes) ---
-    defs 0x3B0F - $ ; align
+; --- emit func_music_set_note_params @0x3B0F (185 bytes) @reloc 0x2B16 ---
+    defs 0x2B16 - $ ; align
     include "funcs/func_music_set_note_params.asm"
 
-; --- gap 0x3BC8..0x3BCA (2 bytes) from original image ---
-    defs 0x3BC8 - $ ; align
+; --- gap 0x3BC8..0x3BCA (2 bytes) from original image @reloc 0x2BCF ---
+    defs 0x2BCF - $ ; align
     DEFB 035h, 029h
-; --- emit func_music_play_note_ch0 @0x3BCA (173 bytes) ---
-    defs 0x3BCA - $ ; align
+; --- emit func_music_play_note_ch0 @0x3BCA (173 bytes) @reloc 0x2BD1 ---
+    defs 0x2BD1 - $ ; align
     include "funcs/func_music_play_note_ch0.asm"
 
-; --- emit func_snd_op_keep_a2 @0x3C77 (6 bytes) ---
-    defs 0x3C77 - $ ; align
+; --- emit func_snd_op_keep_a2 @0x3C77 (6 bytes) @reloc 0x2C7E ---
+    defs 0x2C7E - $ ; align
     include "funcs/func_snd_op_keep_a2.asm"
 
-; --- emit func_music_play_note_ch1 @0x3C7D (203 bytes) ---
-    defs 0x3C7D - $ ; align
+; --- emit func_music_play_note_ch1 @0x3C7D (203 bytes) @reloc 0x2C84 ---
+    defs 0x2C84 - $ ; align
     include "funcs/func_music_play_note_ch1.asm"
 
-; --- emit func_snd_op_keep_a3 @0x3D48 (6 bytes) ---
-    defs 0x3D48 - $ ; align
+; --- emit func_snd_op_keep_a3 @0x3D48 (6 bytes) @reloc 0x2D4F ---
+    defs 0x2D4F - $ ; align
     include "funcs/func_snd_op_keep_a3.asm"
 
-; --- emit func_music_init @0x3D4E (106 bytes) ---
-    defs 0x3D4E - $ ; align
+; --- emit func_music_init @0x3D4E (106 bytes) @reloc 0x2D55 ---
+    defs 0x2D55 - $ ; align
     include "funcs/func_music_init.asm"
 
-; --- emit func_memcpy_keep_psw @0x3DB8 (13 bytes) ---
-    defs 0x3DB8 - $ ; align
+; --- emit func_memcpy_keep_psw @0x3DB8 (13 bytes) @reloc 0x2DBF ---
+    defs 0x2DBF - $ ; align
     include "funcs/func_memcpy_keep_psw.asm"
 
-; --- emit func_music_trampoline @0x3DC5 (8 bytes) ---
-    defs 0x3DC5 - $ ; align
+; --- emit func_music_trampoline @0x3DC5 (8 bytes) @reloc 0x2DCC ---
+    defs 0x2DCC - $ ; align
     include "funcs/func_music_trampoline.asm"
 
-; --- emit func_music_start_track @0x3DCD (27 bytes) ---
-    defs 0x3DCD - $ ; align
+; --- emit func_music_start_track @0x3DCD (27 bytes) @reloc 0x2DD4 ---
+    defs 0x2DD4 - $ ; align
     include "funcs/func_music_start_track.asm"
 
-; --- emit data_music_track_setup @0x3DE8 (3 bytes) ---
-    defs 0x3DE8 - $ ; align
+; --- emit data_music_track_setup @0x3DE8 (3 bytes) @reloc 0x2DEF ---
+    defs 0x2DEF - $ ; align
     include "data/data_music_track_setup.asm"
 
-; --- gap 0x3DEB..0x421A (1071 bytes) from original image ---
-    defs 0x3DEB - $ ; align
+; --- gap 0x3DEB..0x421A (1071 bytes) from original image @reloc 0x2DF2 ---
+    defs 0x2DF2 - $ ; align
     DEFB 03Eh, 01h, 021h, 01Ah, 03Eh, 0A7h, 0FEh, 00h
     DEFB 0C8h, 0FEh, 06h, 0D0h, 03Dh, 0FEh, 00h, 0CAh
     DEFB 0Ch, 03Eh, 047h, 011h, 0Fh, 03h, 019h, 0F5h
@@ -1338,32 +827,35 @@
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h
-; --- emit data_music_period_table @0x421A (192 bytes) ---
-    defs 0x421A - $ ; align
+; --- emit data_music_period_table @0x421A (192 bytes) @reloc 0x3221 ---
+    defs 0x3221 - $ ; align
     include "data/data_music_period_table.asm"
 
-; --- gap 0x42DA..0x42F9 (31 bytes) from original image ---
-    defs 0x42DA - $ ; align
+; --- gap 0x42DA..0x42F9 (31 bytes) from original image @reloc 0x32E1 ---
+    defs 0x32E1 - $ ; align
     DEFB 064h, 069h, 073h, 06Bh, 020h, 077h, 069h, 074h
     DEFB 068h, 020h, 062h, 02Dh, 043h, 063h, 044h, 064h
     DEFB 045h, 046h, 066h, 047h, 067h, 041h, 061h, 042h
     DEFB 043h, 062h, 020h, 03Dh, 05Bh, 016h, 0C3h
-; --- emit data_note_table_ch1 @0x42F9 (256 bytes) ---
-    defs 0x42F9 - $ ; align
+; --- emit data_note_table_ch1 @0x42F9 (256 bytes) @reloc 0x3300 ---
+    defs 0x3300 - $ ; align
     include "data/data_note_table_ch1.asm"
 
-; --- emit data_note_param_table_43F9 @0x43F9 (99 bytes) ---
-    defs 0x43F9 - $ ; align
+; --- emit data_note_param_table_43F9 @0x43F9 (99 bytes) @reloc 0x3400 ---
+    defs 0x3400 - $ ; align
     include "data/data_note_param_table_43F9.asm"
 
-; --- gap 0x445C..0x445D (1 bytes) from original image ---
-    defs 0x445C - $ ; align
+; --- gap 0x445C..0x445D (1 bytes) from original image @reloc 0x3463 ---
+    defs 0x3463 - $ ; align
     DEFB 0Ah
-; --- emit data_note_freq_table_ch0 @0x445D (419 bytes) ---
-    defs 0x445D - $ ; align
+; --- emit data_note_freq_table_ch0 @0x445D (419 bytes) @reloc 0x3464 ---
+    defs 0x3464 - $ ; align
     include "data/data_note_freq_table_ch0.asm"
 
-; --- unpacked glyph block @0x4600 (8192 bytes) ---
+; --- filler 0x3607..0x3607 (1 bytes) zeros (RAM в оригинале) ---
+    defs 0x3608 - $ ; align
+
+; --- unpacked glyph block @0x3608 (8192 bytes) ---
     include "data/data_glyph_block_unpacked.asm"
 
-; image end @0x6600
+; image end @0x5608
