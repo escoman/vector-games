@@ -2,11 +2,11 @@
 ; Адрес: 0x1BE5
 ; Размер: 21 байт
 ; Описание: Очистка текстового буфера. Устанавливает текстовый указатель на
-;           data_ram_buffer_5000 (func_set_text_ptr) и заполняет 0x0400 (1024)
+;           data_text_buffer (func_set_text_ptr) и заполняет 0x0400 (1024)
 ;           байт пробелами (0x20) через func_print_char_at_ptr в цикле loc_1BEE.
 
 func_clear_textbuf:
-    LXI H, data_ram_buffer_5000 ; 0x1BE5
+    LXI H, data_text_buffer ; 0x1BE5
     LXI B, 0400h                ; 0x1BE8
     CALL func_set_text_ptr      ; 0x1BEB
 loc_1BEE:

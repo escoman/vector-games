@@ -18,7 +18,7 @@ func_render_glyph:
     PUSH D                      ; 0x0805
     PUSH H                      ; 0x0806
     MOV D, A                    ; 0x0807
-    LXI B, 0B000h               ; 0x0808
+    LXI B, textbuf_to_vram               ; 0x0808
     DAD B                       ; 0x080B
     MOV A, L                    ; 0x080C
     ANI 1Fh                     ; 0x080D

@@ -81,10 +81,18 @@ var_music_track_base:   EQU 3856h   ; слово: базовый указате�
 var_music_voice2_flag:  EQU 3BC8h   ; байт: флаг голоса 2
 
 ; --- Крупные рантайм-буферы (вне ROM-образa, ОЗУ) ---------------------------
-data_ram_buffer_5000:   EQU 5000h   ; 1024 байта: текстовый/символьный back-буфер
-data_ram_buffer_5000_end: EQU 5400h
+; Текстовый back-буфер 32x32 кодов символов. Исторически лежал на 0x5000
+; (имя data_ram_buffer_5000). Фаза 1: перенесён на 0x6600 — окно выше
+; глиф-блока (0x4600..0x65FF), чтобы read-only блок не наезжал на write-RAM
+; и дыра 0x4600..0x55FF схлопнулась. База — единственная константа
+; переноса: все позиции курсора в коде — как data_text_buffer+смещение, а
+; func_render_glyph использует textbuf_to_vram (= 0 - база, перевод в VRAM).
+data_text_buffer:       EQU 6600h   ; 1024 байта: текстовый/символьный back-буфер
+data_text_buffer_end:   EQU 6A00h
+textbuf_to_vram:        EQU 0 - data_text_buffer   ; 9A00h: HL(буфер)+константа = смещение клетки
 ; data_glyph_block — МЕТКА на распакованном блоке, определена в
 ; data_glyph_block_unpacked.asm (этап B: адрес задаёт компоновщик GLYPH_BASE).
 data_glyph_block_end:   EQU 8000h   ; конец read-only окна (нижние 32КБ RAM)
-; data_ram_sprites_7418 убран (этап B, deadB7): копир спрайтов в func_main_init
-; выведен из исполнения, reader у адреса 0x7418 в ROM нет (capture_A/stage_b_lint).
+; data_ram_sprites_7418 (0x7418) не определён: копир спрайтов в func_main_init
+; выведен из исполнения (вестигиальный остаток распаковщика) — reader у 0x7418
+; отсутствует (grep + capture_A), а его источник (хвост data_gfx_2761) обнулён.

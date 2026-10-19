@@ -19,7 +19,7 @@ func_draw_level_hud:
 loc_1201:
     STA 091Dh                   ; 0x1201
 loc_1204:
-    LXI H, 52F9h                ; 0x1204
+    LXI H, data_text_buffer+02F9h                ; 0x1204
     CALL func_set_text_ptr      ; 0x1207
     LDA 091Dh                   ; 0x120A
     MOV B, A                    ; 0x120D

@@ -7,10 +7,12 @@
 #   * к образ додаётся data_glyph_block_unpacked (8192 Б, снимок пост-иниц RAM
 #     0x6000..0x7FFF, снят вербатим через MCP) — на этапе A по историческому
 #     адресу распаковки GLYPH_BASE=0x6000;
-#   * адрес блока — единственная константа макета; итог этапа B — 0x5600:
-#     кандидат 0x4600 отбракован поведением (окно наехало на текстовый
-#     back-буфер data_ram_buffer_5000 0x5000..0x53FF, capture B/B2);
-#   * дыра CODE_END..GLYPH_BASE заполняется нулями (в оригинале это RAM=0).
+#   * адрес блока — единственная константа макета; итог Фазы 1 — 0x4600:
+#     текстовый back-буфер перенесён с 0x5000 на 0x6600 (EQU data_text_buffer
+#     в var_ram_symbols.asm), поэтому дыра 0x4600..0x55FF схлопнута и блок
+#     встаёт вплотную к концу кода (CODE_END);
+#   * filler CODE_END..GLYPH_BASE (нули) остаётся только при GLYPH_BASE>CODE_END;
+#     в Фазе 1 GLYPH_BASE==CODE_END, дыры нет — блок идёт вплотную за кодом.
 #
 # Gap-байты кодовой зоны берутся ВЛОБ из оригинала (это данные, не дизассемблер).
 # MCP-выводы не обрабатываются.
@@ -24,7 +26,7 @@ RDB  = os.path.join(REF, "putup.rdb")
 ORG  = 0x0100
 SIZE = 17664
 CODE_END = ORG + SIZE          # 0x4600 — конец оригинального образа
-GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x5600"), 0)   # переносится константой
+GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x4600"), 0)   # переносится константой (Фаза 1)
 GLYPH_SIZE = 8192                                          # 256 глифов x 32 Б
 GLYPH_ASM  = "data_glyph_block_unpacked.asm"   # снимок — побайтовые DEFB в asm
 IMG_END = GLYPH_BASE + GLYPH_SIZE

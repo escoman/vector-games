@@ -129,7 +129,7 @@ loc_0D9E:
     LXI H, data_tile_table_26DE ; 0x0DAF
     CALL func_hl_add_a          ; 0x0DB2
     CALL func_render_tile_vram  ; 0x0DB5
-    LXI H, data_ram_buffer_5000 ; 0x0DB8
+    LXI H, data_text_buffer ; 0x0DB8
     LXI B, 0300h                ; 0x0DBB
 loc_0DBE:
     MOV A, M                    ; 0x0DBE

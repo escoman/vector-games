@@ -2,8 +2,9 @@
 #
 # PUTUP_NEW.ROM (в корне проекта) = адресно-точная реконструкция оригинала
 # (0x0100..0x45FF, asm-ветка Stage 12 redesign/putup) + распакованный блок глифов
-# data_glyph_block_unpacked (8192 Б) по адресу GLYPH_BASE (итог этапа B:
-# 0x5600 — минует текстовый back-буфер 0x5000..0x53FF; исторический A — 0x6000).
+# data_glyph_block_unpacked (8192 Б) по адресу GLYPH_BASE (итог Фазы 1:
+# 0x4600 — вплотную к концу кода; текстовый back-буфер перенесён на 0x6600,
+# дыра 0x4600..0x55FF схлопнута; копир спрайтов возвращён).
 #
 # Компоновка: tools/gen_layout.py -> asm/putup_unpacked.asm (гэпы — inline DEFB).
 # Все данные — побайтовыми DEFB в asm-файлах, bin-артефактов нет.
@@ -19,7 +20,7 @@ FULLBIN   = build_full.bin
 MASTER    = putup_unpacked.asm
 GEN       = tools/gen_layout.py
 IMGADDR   = 0x100
-GLYPH_BASE ?= 0x5600         # одна константа переноса: make GLYPH_BASE=0x6000 (A)
+GLYPH_BASE ?= 0x4600         # одна константа переноса: make GLYPH_BASE=0x6000 (A)
 GLYPH_SIZE = 8192
 KEEP_DEAD  ?= 0              # 1 = Stage A: мёртвые распаковщики остаются в сборке
 

@@ -10,11 +10,11 @@
 ;           CALL func_play_sfx, var_bonus_threshold += 07D0h (следующий порог).
 
 func_draw_score_hud:
-    LXI H, 52E1h                ; 0x1197
+    LXI H, data_text_buffer+02E1h                ; 0x1197
     CALL func_set_text_ptr      ; 0x119A
     LXI H, str_score            ; 0x119D
     CALL func_print_string      ; 0x11A0
-    LXI H, 52E7h                ; 0x11A3
+    LXI H, data_text_buffer+02E7h                ; 0x11A3
     CALL func_set_text_ptr      ; 0x11A6
     LXI H, var_score            ; 0x11A9
     CALL func_print_uint16      ; 0x11AC

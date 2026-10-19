@@ -38,7 +38,25 @@ from analyze import export_asm, symbolic_operand_lint as sol  # noqa: E402
 ASM = os.path.join(PROJ, "asm")
 REF = os.path.join(ROOT, "roms", "redesign", "putup", "src")  # оригиналы putup.rom/rdb
 MASTER = "putup_unpacked.asm"
-GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x6000"), 0)
+
+
+def _resolve_glyph_base():
+    """GLYPH_BASE из окружения -> dead_ranges.json (источник истины компоновки,
+    пишет gen_layout.py) -> резерв Фазы 1 (0x4600). Хардкод-резерв важен: пока
+    default был 0x6000, перенос блока на 0x4600 ломал линт (окно блока 0x6000..,
+    а переехавший на 0x6600 текстовый буфер ложно считался 'внутри блока')."""
+    if "GLYPH_BASE" in os.environ:
+        return int(os.environ["GLYPH_BASE"], 0)
+    path = os.path.join(PROJ, "tools", "dead_ranges.json")
+    if os.path.exists(path):
+        info = json.load(open(path, encoding="utf-8"))
+        if isinstance(info, dict) and "glyph_base" in info:
+            gb = info["glyph_base"]
+            return gb if isinstance(gb, int) else int(gb, 0)
+    return 0x4600
+
+
+GLYPH_BASE = _resolve_glyph_base()
 GLYPH_SIZE = 8192
 NUM_RE = re.compile(r"^[0-9][0-9A-Fa-f]*[hH]$")
 

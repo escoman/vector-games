@@ -22,7 +22,7 @@ loc_0C68:
     MOV A, C                    ; 0x0C73
     ORA B                       ; 0x0C74
     JNZ loc_0C68                ; 0x0C75
-    LXI H, 5180h                ; 0x0C78
+    LXI H, data_text_buffer+0180h                ; 0x0C78
     MVI B, 20h                  ; 0x0C7B
 loc_0C7D:
     MOV A, M                    ; 0x0C7D

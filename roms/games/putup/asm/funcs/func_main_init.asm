@@ -3,12 +3,12 @@
 ; Размер: 270 байт (0x0B57-0x0C64), fall-through в lbl_title_key_poll
 ; Описание: Инициализация программы и вывод заставки. DI; LXI SP,0100h;
 ;           очистка VRAM 0x8000-0xFFFF=0; CALL func_hw_init; var_palette_ptr=08B2h;
-;           var_palette_timer=09h; заполнение data_ram_buffer_5000 (0x400 байт)=0FFh;
-;           CALL func_load_glyph_block (в PUTUP_NEW запатчен в 3xNOP: глифы уже в ROM на 0x6000);
+;           var_palette_timer=09h; заполнение data_text_buffer (0x400 байт)=0FFh;
+;           CALL func_load_glyph_block (в PUTUP_NEW запатчен в 3xNOP: глифы уже в ROM на GLYPH_BASE=0x4600);
 ;           копирование спрайтов data_sprites_2F61 ->
-;           data_ram_sprites_7418 (1Ch блоков по 8 байт, источник убывает) —
-;           в PUTUP_NEW выведено (этап B/deadB7): одноразовый init-write,
-;           читателя адресу 0x7418 в ROM нет, спрайты уже в снимке блока;
+;           data_ram_sprites_7418 (1Ch блоков по 8 байт, источник убывает вниз) —
+;           в PUTUP_NEW выведено: одноразовый init-write, читателя адресу 0x7418
+;           в ROM нет, а источник (хвост data_gfx_2761) обнулён как мёртвый пакет;
 ;           инициализация игровых переменных 0x08EB-0x08FB; CALL func_music_init;
 ;           var_score=0, var_level=0, var_page_flip=1, var_bonus_counter,
 ;           var_bonus_threshold=07D0h; CALL func_clear_textbuf; рисунок заставки
@@ -31,7 +31,7 @@ loc_0B5E:
     SHLD var_palette_ptr        ; 0x0B6C
     MVI A, 09h                  ; 0x0B6F
     STA var_palette_timer       ; 0x0B71
-    LXI H, data_ram_buffer_5000 ; 0x0B74
+    LXI H, data_text_buffer ; 0x0B74
     LXI B, 0400h                ; 0x0B77
 loc_0B7A:
     MVI M, 0FFh                 ; 0x0B7A
@@ -43,12 +43,13 @@ loc_0B7A:
     NOP                         ; 0x0B83  (PUTUP_NEW: был CALL func_load_glyph_block — распакованный блок лежит в ROM)
     NOP                         ; 0x0B84
     NOP                         ; 0x0B85
-    ; 0x0B86..0x0BA7: копир спрайтов data_sprites_2F61 -> 0x7418 (LXI H/LXI D/MVI B
-    ; и цикл loc_0B8E/loc_0B91, 34 Б) выведен из исполнения (этап B, deadB7):
-    ; writes в окно блока идут только в init, побайтово сверены со снимком,
-    ; по access-карте reader у 0x7418 отсутствует (capture_A). DEFS даёт 34x00h
-    ; = NOP на 8080; адреса последующего кода func_main_init сохранены.
-    DEFS 0x0BA8 - $             ; 0x0B86..0x0BA7 (34 байта)
+    ; Вестигиальный копир спрайтов (0x0B86..0x0BA7, 34 Б) ВЫВЕДЕН из исполнения.
+    ; Он писал data_sprites_2F61 -> 0x7418, но: (а) reader у адреса 0x7418 в ROM
+    ; отсутствует (grep + capture_A), (б) источник читается ВНИЗ от 0x2F61
+    ; (DCX D), т.е. в хвост data_gfx_2761, который обнулён как мёртвый пакет.
+    ; Копир — остаток распаковщика; VRAM побайтово совпадает с оригиналом и без
+    ; него. DEFS даёт 34x00h = NOP на 8080; адреса последующего кода сохранены.
+    DEFS 0x0BA8 - $             ; 0x0B86..0x0BA7 (34 байта) = NOP
     LXI H, 07D0h                ; 0x0BA8
     SHLD 08EBh                  ; 0x0BAB
     MVI A, 01h                  ; 0x0BAE
@@ -105,29 +106,29 @@ loc_0C0F:
     MOV A, B                    ; 0x0C13
     ORA C                       ; 0x0C14
     JNZ loc_0BF3                ; 0x0C15
-    LXI H, 50A0h                ; 0x0C18
+    LXI H, data_text_buffer+00A0h                ; 0x0C18
     CALL func_set_text_ptr      ; 0x0C1B
     LXI H, str_title_logo       ; 0x0C1E
     CALL func_print_string      ; 0x0C21
-    LXI H, 5229h                ; 0x0C24
+    LXI H, data_text_buffer+0229h                ; 0x0C24
     CALL func_set_text_ptr      ; 0x0C27
     LXI H, str_push_space       ; 0x0C2A
     CALL func_print_string      ; 0x0C2D
-    LXI H, 5287h                ; 0x0C30
+    LXI H, data_text_buffer+0287h                ; 0x0C30
     CALL func_set_text_ptr      ; 0x0C33
     LXI H, str_msx_magazine     ; 0x0C36
     CALL func_print_string      ; 0x0C39
-    LXI H, 506Bh                ; 0x0C3C
+    LXI H, data_text_buffer+006Bh                ; 0x0C3C
     CALL func_set_text_ptr      ; 0x0C3F
     LXI H, str_hi               ; 0x0C42
     CALL func_print_string      ; 0x0C45
-    LXI H, 506Eh                ; 0x0C48
+    LXI H, data_text_buffer+006Eh                ; 0x0C48
     CALL func_set_text_ptr      ; 0x0C4B
     LXI H, 08EBh                ; 0x0C4E
     CALL func_print_uint16      ; 0x0C51
     MVI A, 30h                  ; 0x0C54
     CALL func_print_char_at_ptr ; 0x0C56
-    LXI H, 52E0h                ; 0x0C59
+    LXI H, data_text_buffer+02E0h                ; 0x0C59
     CALL func_set_text_ptr      ; 0x0C5C
     LXI H, str_credits_koi8     ; 0x0C5F
     CALL func_print_string      ; 0x0C62

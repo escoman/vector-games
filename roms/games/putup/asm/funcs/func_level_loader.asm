@@ -110,7 +110,7 @@ loc_19DA:
 loc_1A3B:
     CALL func_draw_game_objects ; 0x1A3B
     CALL func_clear_textbuf     ; 0x1A3E
-    LXI H, 5100h                ; 0x1A41
+    LXI H, data_text_buffer+0100h                ; 0x1A41
     CALL func_set_text_ptr      ; 0x1A44
     LXI B, 0180h                ; 0x1A47
 loc_1A4A:
@@ -138,11 +138,11 @@ loc_1A55:
     CALL func_draw_score_hud    ; 0x1A6D
     CALL func_draw_level_hud    ; 0x1A70
     CALL func_draw_status_hud   ; 0x1A73
-    LXI H, 5250h                ; 0x1A76
+    LXI H, data_text_buffer+0250h                ; 0x1A76
     CALL func_set_text_ptr      ; 0x1A79
     MVI A, 9Dh                  ; 0x1A7C
     CALL func_print_char_at_ptr ; 0x1A7E
-    LXI H, 5270h                ; 0x1A81
+    LXI H, data_text_buffer+0270h                ; 0x1A81
     CALL func_set_text_ptr      ; 0x1A84
     MVI A, 9Eh                  ; 0x1A87
     CALL func_print_char_at_ptr ; 0x1A89
@@ -237,15 +237,15 @@ loc_1B37:
     LXI H, data_tile_table_26DE ; 0x1B48
     CALL func_hl_add_a          ; 0x1B4B
     CALL func_render_tile_vram  ; 0x1B4E
-    LXI H, 5250h                ; 0x1B51
+    LXI H, data_text_buffer+0250h                ; 0x1B51
     CALL func_set_text_ptr      ; 0x1B54
     MVI A, 9Ch                  ; 0x1B57
     CALL func_print_char_at_ptr ; 0x1B59
-    LXI H, 5087h                ; 0x1B5C
+    LXI H, data_text_buffer+0087h                ; 0x1B5C
     CALL func_set_text_ptr      ; 0x1B5F
     LXI H, str_congratulation   ; 0x1B62
     CALL func_print_string      ; 0x1B65
-    LXI H, 50C6h                ; 0x1B68
+    LXI H, data_text_buffer+00C6h                ; 0x1B68
     CALL func_set_text_ptr      ; 0x1B6B
     LXI H, str_bonus            ; 0x1B6E
     CALL func_print_string      ; 0x1B71

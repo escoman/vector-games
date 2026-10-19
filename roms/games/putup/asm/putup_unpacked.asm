@@ -1,8 +1,8 @@
 ; PUTUP_NEW.ROM (games/putup) — putup с РАСПАКОВАННЫМИ данными
 ; ГЕНЕРАТОР tools/gen_layout.py — не править руками.
 ; 0x0100..0x45FF: все объекты на ИСХОДНЫХ адресах, гэпы — вербатим из putup.rom;
-; 0x4600..0x55FF: нули (в оригинале — RAM);
-; 0x5600..0x75FF: data_glyph_block_unpacked (8192 Б, снимок пост-иниц 0x6000..0x7FFF).
+; 0x4600..0x45FF: нули (в оригинале — RAM);
+; 0x4600..0x65FF: data_glyph_block_unpacked (8192 Б, снимок пост-иниц 0x6000..0x7FFF).
 
     org 0h
     include "var_ram_symbols.asm"
@@ -1410,10 +1410,7 @@
     defs 0x445D - $ ; align
     include "data/data_note_freq_table_ch0.asm"
 
-; --- filler 0x4600..0x55FF (4096 bytes) zeros (RAM в оригинале) ---
-    defs 0x5600 - $ ; align
-
-; --- unpacked glyph block @0x5600 (8192 bytes) ---
+; --- unpacked glyph block @0x4600 (8192 bytes) ---
     include "data/data_glyph_block_unpacked.asm"
 
-; image end @0x7600
+; image end @0x6600
