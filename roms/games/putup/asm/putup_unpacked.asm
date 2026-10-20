@@ -1,9 +1,7 @@
 ; PUTUP_NEW.ROM (games/putup) — putup с РАСПАКОВАННЫМИ данными
 ; ГЕНЕРАТОР tools/gen_layout.py — не править руками.
-; РЕЖИМ COMPACT (Фаза 2): мёртвые дыры [0x2761,0x2F61)+[0x3041,0x383A) вырезаны;
-; объекты >=0x2761 сдвинуты вверх (new_addr, суммарный сдвиг -4089 Б);
-; byte-exact сохранён только для [0x0100,0x2761); выше — поведенческая сверка.
-; 0x3608..0x49BF: data_glyph_block_unpacked (5048 Б, снимок пост-иниц 0x6000..0x7FFF).
+; РЕЖИМ VERBATIM (Фаза 1): все объекты на ИСХОДНЫХ адресах, гэпы — вербатим из putup.rom;
+; 0x4600..0x59B7: data_glyph_block_unpacked (5048 Б, снимок пост-иниц 0x6000..0x7FFF).
 
     org 0h
     include "var_ram_symbols.asm"
@@ -197,7 +195,7 @@
     defs 0x04A8 - $ ; align
     include "funcs/func_blit_plane_mask10.asm"
 
-; --- gap 0x04CD..0x051B (78 bytes) from original image @reloc 0x04CD ---
+; --- gap 0x04CD..0x051B (78 bytes) from original image ---
     defs 0x04CD - $ ; align
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
@@ -213,33 +211,14 @@
     defs 0x051B - $ ; align
     include "data/data_vram_col_table.asm"
 
-; --- gap 0x053B..0x0600 (197 bytes) from original image @reloc 0x053B ---
+; --- emit func_call_vector_053B @0x053B (7 bytes) ---
     defs 0x053B - $ ; align
-    DEFB 0CDh, 015h, 00h, 0CDh, 015h, 00h, 0C9h, 021h
-    DEFB 00h, 00h, 039h, 022h, 013h, 00h, 03Ah, 010h
-    DEFB 00h, 0B7h, 0CAh, 064h, 03h, 021h, 0FFh, 0FFh
-    DEFB 022h, 0Eh, 00h, 03Ch, 0C2h, 064h, 03h, 03Ch
-    DEFB 032h, 010h, 00h, 02Ah, 0Ch, 00h, 0C3h, 08Ah
-    DEFB 03h, 0CDh, 091h, 06h, 0C2h, 033h, 05h, 021h
-    DEFB 010h, 00h, 07Eh, 0B7h, 0CAh, 076h, 03h, 035h
-    DEFB 0CAh, 033h, 05h, 02Ah, 0Ch, 00h, 0CDh, 094h
-    DEFB 06h, 0CDh, 02Eh, 00h, 0Eh, 020h, 0CDh, 015h
-    DEFB 00h, 0CDh, 015h, 00h, 0CDh, 02Eh, 03h, 0CDh
-    DEFB 096h, 02h, 057h, 021h, 038h, 05h, 01h, 011h
-    DEFB 00h, 0BEh, 0CAh, 0F0h, 04h, 023h, 0Dh, 0C2h
-    DEFB 094h, 03h, 0Eh, 0Ah, 0BEh, 0CAh, 0DCh, 04h
-    DEFB 023h, 0Dh, 0C2h, 09Fh, 03h, 0Eh, 06h, 0BEh
-    DEFB 0CAh, 0C1h, 04h, 023h, 0Dh, 0C2h, 0AAh, 03h
-    DEFB 0E6h, 0C0h, 0FEh, 040h, 0CAh, 0A7h, 04h, 0FEh
-    DEFB 080h, 0CAh, 098h, 04h, 07Ah, 0E6h, 0C7h, 0D6h
-    DEFB 04h, 0CAh, 089h, 04h, 03Dh, 0CAh, 083h, 04h
-    DEFB 03Dh, 0CAh, 06Fh, 04h, 07Ah, 0E6h, 0C0h, 0CAh
-    DEFB 03Dh, 04h, 07Ah, 0E6h, 07h, 0CAh, 032h, 04h
-    DEFB 0D6h, 02h, 0CAh, 027h, 04h, 0D6h, 02h, 0CAh
-    DEFB 01Ch, 04h, 0D6h, 03h, 0CAh, 0Dh, 04h, 07Ah
-    DEFB 0E6h, 08h, 0C2h, 0FEh, 04h, 07Ah, 0E6h, 07h
-    DEFB 04Fh, 03Dh, 021h, 02Ch, 06h, 09h, 0CDh, 0E6h
-    DEFB 02h, 0CDh, 0F6h, 02h, 0FEh
+    include "funcs/func_call_vector_053B.asm"
+
+; --- emit func_blit_object_tile @0x0542 (190 bytes) ---
+    defs 0x0542 - $ ; align
+    include "funcs/func_blit_object_tile.asm"
+
 ; --- emit data_glyph_ptr_table @0x0600 (512 bytes) ---
     defs 0x0600 - $ ; align
     include "data/data_glyph_ptr_table.asm"
@@ -472,140 +451,650 @@
     defs 0x2706 - $ ; align
     include "data/data_tile_graphics.asm"
 
-; --- emit data_sprites_2F61 @0x2F61 (224 bytes) @reloc 0x2761 ---
+; --- gap 0x2761..0x2F61 (2048 bytes) from original image ---
     defs 0x2761 - $ ; align
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+; --- emit data_sprites_2F61 @0x2F61 (224 bytes) ---
+    defs 0x2F61 - $ ; align
     include "data/data_sprites_2F61.asm"
 
-; --- gap 0x383A..0x3858 (30 bytes) from original image @reloc 0x2841 ---
-    defs 0x2841 - $ ; align
-    DEFB 04h, 028h, 028h, 028h, 020h
-    DW 02E30h   ; reloc-указатель (orig 0x383F -> 0x3E29)
-    DW 02ED0h   ; reloc-указатель (orig 0x3841 -> 0x3EC9)
-    DW 02F70h   ; reloc-указатель (orig 0x3843 -> 0x3F69)
+; --- gap 0x3041..0x3858 (2071 bytes) from original image ---
+    defs 0x3041 - $ ; align
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 04h, 028h, 028h, 028h, 020h
+    DW 03E29h   ; reloc-указатель (orig 0x383F -> 0x3E29)
+    DW 03EC9h   ; reloc-указатель (orig 0x3841 -> 0x3EC9)
+    DW 03F69h   ; reloc-указатель (orig 0x3843 -> 0x3F69)
     DEFB 07Fh, 00h, 0FDh, 00h, 0C3h, 01h, 01Fh, 069h
     DEFB 0Fh, 00h, 00h, 00h, 03h, 02h, 038h
-    DW 02E21h   ; reloc-указатель (orig 0x3854 -> 0x3E1A)
-    DW 02E30h   ; reloc-указатель (orig 0x3856 -> 0x3E29)
-; --- emit func_music_tick @0x3858 (52 bytes) @reloc 0x285F ---
-    defs 0x285F - $ ; align
+    DW 03E1Ah   ; reloc-указатель (orig 0x3854 -> 0x3E1A)
+    DW 03E29h   ; reloc-указатель (orig 0x3856 -> 0x3E29)
+; --- emit func_music_tick @0x3858 (52 bytes) ---
+    defs 0x3858 - $ ; align
     include "funcs/func_music_tick.asm"
 
-; --- emit data_music_tick_pad_388C @0x388C (4 bytes) @reloc 0x2893 ---
-    defs 0x2893 - $ ; align
+; --- emit data_music_tick_pad_388C @0x388C (4 bytes) ---
+    defs 0x388C - $ ; align
     include "data/data_music_tick_pad_388C.asm"
 
-; --- emit func_music_sub_3890 @0x3890 (114 bytes) @reloc 0x2897 ---
-    defs 0x2897 - $ ; align
+; --- emit func_music_sub_3890 @0x3890 (114 bytes) ---
+    defs 0x3890 - $ ; align
     include "funcs/func_music_sub_3890.asm"
 
-; --- emit func_music_load_voice_params @0x3902 (62 bytes) @reloc 0x2909 ---
-    defs 0x2909 - $ ; align
+; --- emit func_music_load_voice_params @0x3902 (62 bytes) ---
+    defs 0x3902 - $ ; align
     include "funcs/func_music_load_voice_params.asm"
 
-; --- emit func_snd_op_keep_a @0x3940 (6 bytes) @reloc 0x2947 ---
-    defs 0x2947 - $ ; align
+; --- emit func_snd_op_keep_a @0x3940 (6 bytes) ---
+    defs 0x3940 - $ ; align
     include "funcs/func_snd_op_keep_a.asm"
 
-; --- emit func_music_process_voice @0x3946 (457 bytes) @reloc 0x294D ---
-    defs 0x294D - $ ; align
+; --- emit func_music_process_voice @0x3946 (457 bytes) ---
+    defs 0x3946 - $ ; align
     include "funcs/func_music_process_voice.asm"
 
-; --- emit func_music_set_note_params @0x3B0F (185 bytes) @reloc 0x2B16 ---
-    defs 0x2B16 - $ ; align
+; --- emit func_music_set_note_params @0x3B0F (185 bytes) ---
+    defs 0x3B0F - $ ; align
     include "funcs/func_music_set_note_params.asm"
 
-; --- emit var_music_voice2_flag_init @0x3BC8 (2 bytes) @reloc 0x2BCF ---
-    defs 0x2BCF - $ ; align
+; --- emit var_music_voice2_flag_init @0x3BC8 (2 bytes) ---
+    defs 0x3BC8 - $ ; align
     include "data/var_music_voice2_flag_init.asm"
 
-; --- emit func_music_play_note_ch0 @0x3BCA (173 bytes) @reloc 0x2BD1 ---
-    defs 0x2BD1 - $ ; align
+; --- emit func_music_play_note_ch0 @0x3BCA (173 bytes) ---
+    defs 0x3BCA - $ ; align
     include "funcs/func_music_play_note_ch0.asm"
 
-; --- emit func_snd_op_keep_a2 @0x3C77 (6 bytes) @reloc 0x2C7E ---
-    defs 0x2C7E - $ ; align
+; --- emit func_snd_op_keep_a2 @0x3C77 (6 bytes) ---
+    defs 0x3C77 - $ ; align
     include "funcs/func_snd_op_keep_a2.asm"
 
-; --- emit func_music_play_note_ch1 @0x3C7D (203 bytes) @reloc 0x2C84 ---
-    defs 0x2C84 - $ ; align
+; --- emit func_music_play_note_ch1 @0x3C7D (203 bytes) ---
+    defs 0x3C7D - $ ; align
     include "funcs/func_music_play_note_ch1.asm"
 
-; --- emit func_snd_op_keep_a3 @0x3D48 (6 bytes) @reloc 0x2D4F ---
-    defs 0x2D4F - $ ; align
+; --- emit func_snd_op_keep_a3 @0x3D48 (6 bytes) ---
+    defs 0x3D48 - $ ; align
     include "funcs/func_snd_op_keep_a3.asm"
 
-; --- emit func_music_init @0x3D4E (106 bytes) @reloc 0x2D55 ---
-    defs 0x2D55 - $ ; align
+; --- emit func_music_init @0x3D4E (106 bytes) ---
+    defs 0x3D4E - $ ; align
     include "funcs/func_music_init.asm"
 
-; --- emit func_memcpy_keep_psw @0x3DB8 (13 bytes) @reloc 0x2DBF ---
-    defs 0x2DBF - $ ; align
+; --- emit func_memcpy_keep_psw @0x3DB8 (13 bytes) ---
+    defs 0x3DB8 - $ ; align
     include "funcs/func_memcpy_keep_psw.asm"
 
-; --- emit func_music_trampoline @0x3DC5 (8 bytes) @reloc 0x2DCC ---
-    defs 0x2DCC - $ ; align
+; --- emit func_music_trampoline @0x3DC5 (8 bytes) ---
+    defs 0x3DC5 - $ ; align
     include "funcs/func_music_trampoline.asm"
 
-; --- emit func_music_start_track @0x3DCD (27 bytes) @reloc 0x2DD4 ---
-    defs 0x2DD4 - $ ; align
+; --- emit func_music_start_track @0x3DCD (27 bytes) ---
+    defs 0x3DCD - $ ; align
     include "funcs/func_music_start_track.asm"
 
-; --- emit data_music_track_setup @0x3DE8 (3 bytes) @reloc 0x2DEF ---
-    defs 0x2DEF - $ ; align
+; --- emit data_music_track_setup @0x3DE8 (3 bytes) ---
+    defs 0x3DE8 - $ ; align
     include "data/data_music_track_setup.asm"
 
-; --- emit func_music_load_score @0x3DEB (47 bytes) @reloc 0x2DF2 ---
-    defs 0x2DF2 - $ ; align
+; --- emit func_music_load_score @0x3DEB (47 bytes) ---
+    defs 0x3DEB - $ ; align
     include "funcs/func_music_load_score.asm"
 
-; --- emit data_music_scores @0x3E1A (15 bytes) @reloc 0x2E21 ---
-    defs 0x2E21 - $ ; align
+; --- emit data_music_scores @0x3E1A (15 bytes) ---
+    defs 0x3E1A - $ ; align
     include "data/data_music_scores.asm"
 
-; --- emit data_music_track_01 @0x3E29 (256 bytes) @reloc 0x2E30 ---
-    defs 0x2E30 - $ ; align
+; --- emit data_music_track_01 @0x3E29 (256 bytes) ---
+    defs 0x3E29 - $ ; align
     include "data/data_music_track_01.asm"
 
-; --- emit data_music_track_02 @0x3F29 (256 bytes) @reloc 0x2F30 ---
-    defs 0x2F30 - $ ; align
+; --- emit data_music_track_02 @0x3F29 (256 bytes) ---
+    defs 0x3F29 - $ ; align
     include "data/data_music_track_02.asm"
 
-; --- emit data_music_track_03 @0x4029 (256 bytes) @reloc 0x3030 ---
-    defs 0x3030 - $ ; align
+; --- emit data_music_track_03 @0x4029 (256 bytes) ---
+    defs 0x4029 - $ ; align
     include "data/data_music_track_03.asm"
 
-; --- emit data_music_score_02 @0x4129 (241 bytes) @reloc 0x3130 ---
-    defs 0x3130 - $ ; align
+; --- emit data_music_score_02 @0x4129 (241 bytes) ---
+    defs 0x4129 - $ ; align
     include "data/data_music_score_02.asm"
 
-; --- emit data_music_period_table @0x421A (192 bytes) @reloc 0x3221 ---
-    defs 0x3221 - $ ; align
+; --- emit data_music_period_table @0x421A (192 bytes) ---
+    defs 0x421A - $ ; align
     include "data/data_music_period_table.asm"
 
-; --- emit data_note_names_42DA @0x42DA (31 bytes) @reloc 0x32E1 ---
-    defs 0x32E1 - $ ; align
+; --- emit data_note_names_42DA @0x42DA (31 bytes) ---
+    defs 0x42DA - $ ; align
     include "data/data_note_names_42DA.asm"
 
-; --- emit data_note_table_ch1 @0x42F9 (256 bytes) @reloc 0x3300 ---
-    defs 0x3300 - $ ; align
+; --- emit data_note_table_ch1 @0x42F9 (256 bytes) ---
+    defs 0x42F9 - $ ; align
     include "data/data_note_table_ch1.asm"
 
-; --- emit data_note_param_table_43F9 @0x43F9 (99 bytes) @reloc 0x3400 ---
-    defs 0x3400 - $ ; align
+; --- emit data_note_param_table_43F9 @0x43F9 (99 bytes) ---
+    defs 0x43F9 - $ ; align
     include "data/data_note_param_table_43F9.asm"
 
-; --- emit data_music_vibrato_pre_445C @0x445C (1 bytes) @reloc 0x3463 ---
-    defs 0x3463 - $ ; align
+; --- emit data_music_vibrato_pre_445C @0x445C (1 bytes) ---
+    defs 0x445C - $ ; align
     include "data/data_music_vibrato_pre_445C.asm"
 
-; --- emit data_note_freq_table_ch0 @0x445D (419 bytes) @reloc 0x3464 ---
-    defs 0x3464 - $ ; align
+; --- emit data_note_freq_table_ch0 @0x445D (419 bytes) ---
+    defs 0x445D - $ ; align
     include "data/data_note_freq_table_ch0.asm"
 
-; --- filler 0x3607..0x3607 (1 bytes) zeros (RAM в оригинале) ---
-    defs 0x3608 - $ ; align
-
-; --- unpacked glyph block @0x3608 (5048 bytes) ---
+; --- unpacked glyph block @0x4600 (5048 bytes) ---
     include "data/data_glyph_block_unpacked.asm"
 
-; image end @0x49C0
+; image end @0x59B8

@@ -438,3 +438,111 @@ data_file('data_game_object_init.asm', 0x0B3C, 27, 'data_game_object_init',
           'Иниц. таблица игровых объектов (экран-буфер); читается func_draw_game_objects.')
 data_file('data_snd_init.asm', 0x031A, 7, 'data_snd_init',
           'Иниц. значения состояния звука (var_snd_period_ch0..state).')
+
+# ---------------- BLIT-ДИСПЕТЧЕР (последний живой гэп 0x053B..0x0600) ---------
+# Разобран от истинной точки входа func_blit_object_tile @0x0542 (линейный decode
+# от 0x053B давал рассинхрон — та был трамплин func_call_vector_053B).
+# Надёжные ссылки — символьно; двусмысленные цели ветвлений (0x0364/0x038A/0x0376 —
+# ROM print_tail/scan+0x26/0x12 ИЛИ рантайм RAM-обработчик) и цели-в-таблицах
+# (0x0533 col_table, 0x0691/0x0694 ptr_table) и векторы RAM (0x0015/0x002E) —
+# raw-hex: безопасно для byte-exact и не конфликтует с метками чужих файлов.
+_BLIT_REG = {'DAD SP','INR A','JNZ 0533','PUSH PSW','POP PSW','POP B','POP D',
+             'POP H','INX H','DCR C','ANI 80h','ANI C0h','ANI C7h','ANI 08h',
+             'ANI 07h'}
+_BLIT_OPER = {
+    # 'LXI <reg>, <imm>' -> операнд без мнемоники (символьные ссылки на таблицы)
+    'H, 0000': 'H, 0000h', 'H, FFFF': 'H, 0FFFFh', 'H, 0010': 'H, 0010h',
+    'H, 0538': 'H, data_vram_col_table+001Dh',
+    'H, 062C': 'H, data_glyph_ptr_table+002Ch',
+    'B, 0011': 'B, 0011h', 'B, 0020': 'B, 0020h',
+}
+
+def _w(v):
+    """16-бит литерал: 4 цифры, ведущий 0 только если старший ниббл — буква."""
+    s = f'{v:04X}'
+    return ('0' if s[0].isalpha() else '') + s + 'h'
+
+def _b(v):
+    """8-бит литерал: 2 цифры, ведущий 0 только если старший ниббл — буква."""
+    s = f'{v:02X}'
+    return ('0' if s[0].isalpha() else '') + s + 'h'
+
+def _blit_instr(a, mn, op):
+    if mn in ('JZ', 'JNZ', 'JMP', 'CALL'):
+        return f'    {mn:<5} {_w(int(op, 16))}'
+    if mn in ('LDA', 'STA', 'SHLD', 'LHLD'):
+        return f'    {mn:<5} {_w(int(op, 16))}'
+    if mn == 'MVI':
+        r, v = op.split(', ')
+        return f'    MVI   {r}, {_b(int(v, 16))}'
+    if mn == 'LXI':
+        return f'    LXI   {_BLIT_OPER.get(op, op)}'
+    if mn == 'MOV':
+        r0, r1 = op.split(', '); return f'    MOV   {r0}, {r1}'
+    if mn == 'DAD':
+        return f'    DAD   {op.strip()}'
+    if mn in ('ORA', 'CMP', 'ADD', 'SUB', 'DCR', 'INR', 'SUI', 'ANI', 'CPI'):
+        if op.strip() in ('A', 'B', 'C', 'D', 'E', 'H', 'L', 'M'):
+            return f'    {mn:<5} {op.strip()}'
+        return f'    {mn:<5} {_b(int(op, 16))}'
+    if mn in ('INX', 'DCX'):
+        return f'    {mn:<5} {op.strip()}'
+    return f'    {mn}' if not op else f'    {mn:<5} {op}'
+
+# addr -> пред-обработанный operand (из authoritative decode). ('',mnem) = рег/без opnd.
+VECTOR_053B = [
+    (0x053B, 'CALL', '0015'), (0x053E, 'CALL', '0015'), (0x0541, 'RET', ''),
+]
+BLIT = [
+    (0x0542,'LXI','H, 0000'),(0x0545,'DAD','SP'),(0x0546,'SHLD','0013'),
+    (0x0549,'LDA','0010'),(0x054C,'ORA','A'),(0x054D,'JZ','0364'),
+    (0x0550,'LXI','H, FFFF'),(0x0553,'SHLD','000E'),(0x0556,'INR','A'),
+    (0x0557,'JNZ','0364'),(0x055A,'INR','A'),(0x055B,'STA','0010'),
+    (0x055E,'LHLD','000C'),(0x0561,'JMP','038A'),(0x0564,'CALL','0691'),
+    (0x0567,'JNZ','0533'),(0x056A,'LXI','H, 0010'),(0x056D,'MOV','A, M'),
+    (0x056E,'ORA','A'),(0x056F,'JZ','0376'),(0x0572,'DCR','M'),
+    (0x0573,'JZ','0533'),(0x0576,'LHLD','000C'),(0x0579,'CALL','0694'),
+    (0x057C,'CALL','002E'),(0x057F,'MVI','C, 20'),(0x0581,'CALL','0015'),
+    (0x0584,'CALL','0015'),(0x0587,'CALL','032E'),(0x058A,'CALL','0296'),
+    (0x058D,'MOV','D, A'),(0x058E,'LXI','H, 0538'),(0x0591,'LXI','B, 0011'),
+    (0x0594,'CMP','M'),(0x0595,'JZ','04F0'),(0x0598,'INX','H'),(0x0599,'DCR','C'),
+    (0x059A,'JNZ','0394'),(0x059D,'MVI','C, 0A'),(0x059F,'CMP','M'),
+    (0x05A0,'JZ','04DC'),(0x05A3,'INX','H'),(0x05A4,'DCR','C'),(0x05A5,'JNZ','039F'),
+    (0x05A8,'MVI','C, 06'),(0x05AA,'CMP','M'),(0x05AB,'JZ','04C1'),
+    (0x05AE,'INX','H'),(0x05AF,'DCR','C'),(0x05B0,'JNZ','03AA'),
+    (0x05B3,'ANI','C0'),(0x05B5,'CPI','40'),(0x05B7,'JZ','04A7'),
+    (0x05BA,'CPI','80'),(0x05BC,'JZ','0498'),(0x05BF,'MOV','A, D'),
+    (0x05C0,'ANI','C7'),(0x05C2,'SUI','04'),(0x05C4,'JZ','0489'),(0x05C7,'DCR','A'),
+    (0x05C8,'JZ','0483'),(0x05CB,'DCR','A'),(0x05CC,'JZ','046F'),(0x05CF,'MOV','A, D'),
+    (0x05D0,'ANI','C0'),(0x05D2,'JZ','043D'),(0x05D5,'MOV','A, D'),(0x05D6,'ANI','07'),
+    (0x05D8,'JZ','0432'),(0x05DB,'SUI','02'),(0x05DD,'JZ','0427'),(0x05E0,'SUI','02'),
+    (0x05E2,'JZ','041C'),(0x05E5,'SUI','03'),(0x05E7,'JZ','040D'),(0x05EA,'MOV','A, D'),
+    (0x05EB,'ANI','08'),(0x05ED,'JNZ','04FE'),(0x05F0,'MOV','A, D'),(0x05F1,'ANI','07'),
+    (0x05F3,'MOV','C, A'),(0x05F4,'DCR','A'),(0x05F5,'LXI','H, 062C'),
+    (0x05F8,'DAD','B'),(0x05F9,'CALL','02E6'),(0x05FC,'CALL','02F6'),
+]
+
+def _emit_blit(prog, name, addr, size, desc, tail_bytes=0):
+    lines = [f'; Функция: {name}', f'; Адрес: 0x{addr:04X}',
+             f'; Размер: {size} байт', f'; Описание: {desc}', '', f'{name}:']
+    for a, mn, op in prog:
+        lines.append(_blit_instr(a, mn, op) + f'          ; 0x{a:04X}')
+    if tail_bytes:
+        tb = rom[addr - 0x100 + size - tail_bytes: addr - 0x100 + size]
+        lines.append(f'    ; --- хвост 0x{addr+size-tail_bytes:04X}..0x{addr+size-1:04X} '
+                     f'(не размечен как код) ---')
+        lines.append('    DEFB ' + ', '.join(fmt_byte(x) for x in tb))
+    p = os.path.join(OUT, 'funcs', name + '.asm')
+    open(p, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+    print(f'wrote funcs/{name}.asm ({len(prog)} instrs, {size}B)')
+
+_emit_blit(VECTOR_053B, 'func_call_vector_053B', 0x053B, 7,
+           'Трамплин RAM-вектора: два CALL на обработчик в low-RAM (вектор 0x0015) '
+           'и RET. Вход в отрисовку объекта через PCHL/RAM-вектор, прямых CALL нет.')
+_emit_blit(BLIT, 'func_blit_object_tile', 0x0542, 190,
+           'Диспетчер отрисовки объекта-тайла: SP->0x0013, счётчик анимации 0x0010,\n'
+           ';   адрес VRAM из 0x000C; цикл CMP по data_vram_col_table (+0x18/+0x1B),\n'
+           ';   выбор растра по коду объекта -> func_blit_plane_mask{80/40/20/10}\n'
+           ';   (+4/+4/+3/+4) и общий выход; указатель глифа из data_glyph_ptr_table+0x2C.\n'
+           ';   Двусмысленные цели (0x0364/0x038A/0x0376) и RAM-векторы (0x0015/0x002E) — raw.',
+           tail_bytes=1)

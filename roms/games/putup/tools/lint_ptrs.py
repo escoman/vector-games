@@ -86,6 +86,16 @@ ALLOW_GLYPH_FILES = {"data_glyph_ptr_table.asm", "data_glyph_block_unpacked.asm"
 PENDING_DEAD_FILES = {"func_load_glyph_block.asm", "func_load_gfx_2761.asm",
                       "data_packed_font_3041.asm", "data_gfx_2761.asm"}
 
+# Пендинг-ССЫЛКИ живого кода в пендинг-мёртвый блок (не блокер). Единственный
+# случай: func_blit_object_tile байт-в-байт переплетён с хвостом распаковщика
+# func_load_gfx_2761 (общие байты 0x04DC/0x04F0/0x04FE -> многовходовый вход),
+# поэтому эти 3 ветки нельзя ни перевести в символьные live-метки (хвост мёртв),
+# ни оставить литералом (блокер). Рантайм-трассировка живого геймплея (start по
+# SPACE, 0x0104 draw_tile активен) показал: blit в достижимых состояниях НЕ
+# вызывается -> trio {blit + unpacker + packed} — кандидат на удаление в Stage-4.
+# До тех пор ссылка = задокументированный пендинг. Формат: (file, dead_reason).
+PENDING_REF_ALLOW = {("funcs/func_blit_object_tile.asm", "func_load_gfx_2761")}
+
 
 def dead_ranges():
     path = os.path.join(PROJ, "tools", "dead_ranges.json")
@@ -161,6 +171,14 @@ def scan(files, equ, glyph_win, dead_wins):
                                     "detail": "%s = адрес RAM-переменной внутри %s"
                                               % (token, why),
                                     "blocking": False, "pending": None})
+                            elif (name, why) in PENDING_REF_ALLOW:
+                                findings.append({
+                                    "rule": "ref_to_removed_block", "file": name,
+                                    "line": number,
+                                    "detail": "%s -> 0x%04X внутрь пендинг-мёртвого %s"
+                                              % (token, literal, why),
+                                    "blocking": False,
+                                    "pending": "blit↔unpacker, Stage-4 (см. PENDING_REF_ALLOW)"})
                             else:
                                 findings.append({
                                     "rule": "ref_to_removed_block", "file": name,

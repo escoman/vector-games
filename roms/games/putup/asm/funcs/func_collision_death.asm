@@ -80,7 +80,7 @@ loc_1438:
     CALL  func_clear_textbuf  ; 0x1438
     LXI   H, data_text_buffer+016Ah; 0x143B
     CALL  func_set_text_ptr   ; 0x143E
-    LXI   H, 0B0Eh            ; 0x1441
+    LXI   H, str_game_over      ; 0x1441
     CALL  func_print_string   ; 0x1444
     LHLD  var_score           ; 0x1447
     XCHG                      ; 0x144A

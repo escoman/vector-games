@@ -39,7 +39,7 @@ func_egg_caught:
     STA   data_entity_ycoords+1; 0x1293
     LXI   H, data_text_buffer+000Ah; 0x1296
     CALL  func_set_text_ptr   ; 0x1299
-    LXI   H, 0B01h            ; 0x129C
+    LXI   H, str_hurry_up      ; 0x129C
     CALL  func_print_string   ; 0x129F
     MVI   B, 0008h            ; 0x12A2
     CALL  func_sound_init     ; 0x12A4
