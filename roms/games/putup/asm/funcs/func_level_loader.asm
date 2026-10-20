@@ -21,7 +21,7 @@ func_level_loader:
     CPI 10h                     ; 0x1981
     JNC loc_1A3B                ; 0x1983
     XRA A                       ; 0x1986
-    STA 090Fh                   ; 0x1987
+    STA var_egg_counter                    ; 0x1987
     LXI H, data_level_params    ; 0x198A
     LDA var_level               ; 0x198D
     RLC                         ; 0x1990
@@ -86,25 +86,25 @@ loc_19DA:
     STA var_player_col          ; 0x19F7
     XRA A                       ; 0x19FA
     STA var_game_state          ; 0x19FB
-    LDA 0913h                   ; 0x19FE
+    LDA data_level_param_buf+02h                    ; 0x19FE
     STA var_entity1_state       ; 0x1A01
-    LDA 0916h                   ; 0x1A04
+    LDA data_level_param_buf+05h                    ; 0x1A04
     STA var_entity2_state       ; 0x1A07
-    LDA 0914h                   ; 0x1A0A
-    STA 0920h                   ; 0x1A0D
-    LDA 0915h                   ; 0x1A10
-    STA 0923h                   ; 0x1A13
-    LDA 0917h                   ; 0x1A16
-    STA 0921h                   ; 0x1A19
-    LDA 0918h                   ; 0x1A1C
-    STA 0924h                   ; 0x1A1F
+    LDA data_level_param_buf+03h                    ; 0x1A0A
+    STA data_entity_xcoords+01h                    ; 0x1A0D
+    LDA data_level_param_buf+04h                    ; 0x1A10
+    STA data_entity_ycoords+01h                    ; 0x1A13
+    LDA data_level_param_buf+06h                    ; 0x1A16
+    STA data_entity_xcoords+02h                    ; 0x1A19
+    LDA data_level_param_buf+07h                    ; 0x1A1C
+    STA data_entity_ycoords+02h                    ; 0x1A1F
     XRA A                       ; 0x1A22
-    STA 0910h                   ; 0x1A23
+    STA var_egg_seq                    ; 0x1A23
     LXI H, 0000h                ; 0x1A26
-    SHLD 08E9h                  ; 0x1A29
+    SHLD var_blink_cell                   ; 0x1A29
     CALL func_draw_game_objects ; 0x1A2C
     XRA A                       ; 0x1A2F
-    STA 090Dh                   ; 0x1A30
+    STA var_move_dir                    ; 0x1A30
     MVI A, 03h                  ; 0x1A33
     STA var_work_const          ; 0x1A35
     JMP lbl_main_game_loop      ; 0x1A38
@@ -127,7 +127,7 @@ loc_1A55:
     ADD A                       ; 0x1A57
     MOV D, A                    ; 0x1A58
     MVI E, 14h                  ; 0x1A59
-    LXI H, 270Eh                ; 0x1A5B
+    LXI H, data_tile_graphics+08h                 ; 0x1A5B
     CALL func_draw_tile_to_buf  ; 0x1A5E
     POP B                       ; 0x1A61
     INR B                       ; 0x1A62
@@ -148,23 +148,23 @@ loc_1A55:
     MVI A, 9Eh                  ; 0x1A87
     CALL func_print_char_at_ptr ; 0x1A89
 loc_1A8C:
-    LDA 08F7h                   ; 0x1A8C
+    LDA var_egg_hist_prev                    ; 0x1A8C
     MOV B, A                    ; 0x1A8F
-    LDA 08F8h                   ; 0x1A90
-    STA 08F7h                   ; 0x1A93
+    LDA var_egg_hist_cur                    ; 0x1A90
+    STA var_egg_hist_prev                    ; 0x1A93
     MOV A, B                    ; 0x1A96
-    STA 08F8h                   ; 0x1A97
+    STA var_egg_hist_cur                    ; 0x1A97
     LXI H, var_player_col       ; 0x1A9A
     INR M                       ; 0x1A9D
-    LDA 08F7h                   ; 0x1A9E
+    LDA var_egg_hist_prev                    ; 0x1A9E
     CPI 01h                     ; 0x1AA1
     JZ loc_1ABD                 ; 0x1AA3
     LDA var_page_flip           ; 0x1AA6
     MOV B, A                    ; 0x1AA9
-    LDA 08FAh                   ; 0x1AAA
+    LDA var_page_flip_hi                    ; 0x1AAA
     STA var_page_flip           ; 0x1AAD
     MOV A, B                    ; 0x1AB0
-    STA 08FAh                   ; 0x1AB1
+    STA var_page_flip_hi                    ; 0x1AB1
     LDA var_page_flip           ; 0x1AB4
     STA var_collision_flag      ; 0x1AB7
     JMP loc_1AC2                ; 0x1ABA
@@ -173,31 +173,31 @@ loc_1ABD:
     STA var_collision_flag      ; 0x1ABF
 loc_1AC2:
     MVI A, 12h                  ; 0x1AC2
-    STA 090Ah                   ; 0x1AC4
+    STA var_scr_090A                    ; 0x1AC4
     LDA var_player_col          ; 0x1AC7
-    STA 0909h                   ; 0x1ACA
+    STA var_scr_0909                    ; 0x1ACA
     LDA var_collision_flag      ; 0x1ACD
     DCR A                       ; 0x1AD0
-    STA 090Ch                   ; 0x1AD1
-    LXI H, 08E3h                ; 0x1AD4
-    LDA 090Ah                   ; 0x1AD7
+    STA var_obj_type_idx                    ; 0x1AD1
+    LXI H, var_enemy_rc                 ; 0x1AD4
+    LDA var_scr_090A                    ; 0x1AD7
     CMP M                       ; 0x1ADA
     JNZ loc_1AE7                ; 0x1ADB
     INX H                       ; 0x1ADE
-    LDA 0909h                   ; 0x1ADF
+    LDA var_scr_0909                    ; 0x1ADF
     CMP M                       ; 0x1AE2
     DCX H                       ; 0x1AE3
     JZ loc_1AEA                 ; 0x1AE4
 loc_1AE7:
     CALL func_draw_tile_at_ptr  ; 0x1AE7
 loc_1AEA:
-    LDA 090Ah                   ; 0x1AEA
+    LDA var_scr_090A                    ; 0x1AEA
     MOV L, A                    ; 0x1AED
-    LDA 0909h                   ; 0x1AEE
+    LDA var_scr_0909                    ; 0x1AEE
     MOV H, A                    ; 0x1AF1
-    SHLD 08E3h                  ; 0x1AF2
+    SHLD var_enemy_rc                   ; 0x1AF2
     XCHG                        ; 0x1AF5
-    LDA 090Ch                   ; 0x1AF6
+    LDA var_obj_type_idx                    ; 0x1AF6
     ADD A                       ; 0x1AF9
     ADD A                       ; 0x1AFA
     LXI H, data_tile_table_26DE ; 0x1AFB
@@ -209,30 +209,30 @@ loc_1AEA:
     CPI 1Ch                     ; 0x1B0C
     JC loc_1A8C                 ; 0x1B0E
     LDA var_player_col          ; 0x1B11
-    STA 0909h                   ; 0x1B14
+    STA var_scr_0909                    ; 0x1B14
     MVI A, 12h                  ; 0x1B17
-    STA 090Ah                   ; 0x1B19
+    STA var_scr_090A                    ; 0x1B19
     MVI A, 06h                  ; 0x1B1C
-    STA 090Ch                   ; 0x1B1E
-    LXI H, 08E3h                ; 0x1B21
-    LDA 090Ah                   ; 0x1B24
+    STA var_obj_type_idx                    ; 0x1B1E
+    LXI H, var_enemy_rc                 ; 0x1B21
+    LDA var_scr_090A                    ; 0x1B24
     CMP M                       ; 0x1B27
     JNZ loc_1B34                ; 0x1B28
     INX H                       ; 0x1B2B
-    LDA 0909h                   ; 0x1B2C
+    LDA var_scr_0909                    ; 0x1B2C
     CMP M                       ; 0x1B2F
     DCX H                       ; 0x1B30
     JZ loc_1B37                 ; 0x1B31
 loc_1B34:
     CALL func_draw_tile_at_ptr  ; 0x1B34
 loc_1B37:
-    LDA 090Ah                   ; 0x1B37
+    LDA var_scr_090A                    ; 0x1B37
     MOV L, A                    ; 0x1B3A
-    LDA 0909h                   ; 0x1B3B
+    LDA var_scr_0909                    ; 0x1B3B
     MOV H, A                    ; 0x1B3E
-    SHLD 08E3h                  ; 0x1B3F
+    SHLD var_enemy_rc                   ; 0x1B3F
     XCHG                        ; 0x1B42
-    LDA 090Ch                   ; 0x1B43
+    LDA var_obj_type_idx                    ; 0x1B43
     ADD A                       ; 0x1B46
     ADD A                       ; 0x1B47
     LXI H, data_tile_table_26DE ; 0x1B48
@@ -256,4 +256,4 @@ loc_1B37:
     SHLD var_score              ; 0x1B7B
     CALL func_draw_score_hud    ; 0x1B7E
     CALL func_draw_game_objects ; 0x1B81
-    JMP 1447h                   ; 0x1B84
+    JMP loc_1447                    ; 0x1B84

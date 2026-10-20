@@ -8,7 +8,7 @@
 ;           если row >= y -> y++, иначе y--.
 
 func_entity_state9:
-    LXI H, 0920h                ; 0x18FE
+    LXI H, data_entity_xcoords+01h                 ; 0x18FE
     LDA var_player_col          ; 0x1901
     CMP M                       ; 0x1904
     JNC loc_190C                ; 0x1905
@@ -17,7 +17,7 @@ func_entity_state9:
 loc_190C:
     INR M                       ; 0x190C
 loc_190D:
-    LXI H, 0923h                ; 0x190D
+    LXI H, data_entity_ycoords+01h                 ; 0x190D
     LDA var_player_row          ; 0x1910
     CMP M                       ; 0x1913
     JNC loc_1919                ; 0x1914

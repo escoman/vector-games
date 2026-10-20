@@ -10,7 +10,7 @@ func_collision_death:
     CALL  func_sound_init     ; 0x13AC
     LDA   var_player_row      ; 0x13AF
     SUI   02h                 ; 0x13B2
-    STA   090Eh               ; 0x13B4
+    STA   var_entity_index                ; 0x13B4
     LDA   var_player_col      ; 0x13B7
     STA   var_collision_flag  ; 0x13BA
     LXI   B, 0000h            ; 0x13BD
@@ -25,32 +25,32 @@ loc_13C0:
     RRC                       ; 0x13CC
     ANI   01Fh                ; 0x13CD
     MOV   E, A                ; 0x13CF
-    LDA   090Eh               ; 0x13D0
+    LDA   var_entity_index                ; 0x13D0
     ADD   E                   ; 0x13D3
     CPI   018h                ; 0x13D4
     JNC   loc_1424            ; 0x13D6
-    STA   090Ah               ; 0x13D9
+    STA   var_scr_090A                ; 0x13D9
     LDA   var_collision_flag  ; 0x13DC
-    STA   0909h               ; 0x13DF
+    STA   var_scr_0909                ; 0x13DF
     MVI   A, 06h              ; 0x13E2
     STA   var_obj_type_idx    ; 0x13E4
     PUSH  H                   ; 0x13E7
     PUSH  B                   ; 0x13E8
     LXI   H, var_enemy_rc     ; 0x13E9
-    LDA   090Ah               ; 0x13EC
+    LDA   var_scr_090A                ; 0x13EC
     CMP   M                   ; 0x13EF
     JNZ   loc_13FC            ; 0x13F0
     INX   H                   ; 0x13F3
-    LDA   0909h               ; 0x13F4
+    LDA   var_scr_0909                ; 0x13F4
     CMP   M                   ; 0x13F7
     DCX   H                   ; 0x13F8
     JZ    loc_13FF            ; 0x13F9
 loc_13FC:
     CALL  func_draw_tile_at_ptr; 0x13FC
 loc_13FF:
-    LDA   090Ah               ; 0x13FF
+    LDA   var_scr_090A                ; 0x13FF
     MOV   L, A                ; 0x1402
-    LDA   0909h               ; 0x1403
+    LDA   var_scr_0909                ; 0x1403
     MOV   H, A                ; 0x1406
     SHLD  var_enemy_rc        ; 0x1407
     XCHG                      ; 0x140A
@@ -82,6 +82,7 @@ loc_1438:
     CALL  func_set_text_ptr   ; 0x143E
     LXI   H, str_game_over      ; 0x1441
     CALL  func_print_string   ; 0x1444
+loc_1447:                    ; сюда влетает func_level_loader (JMP) — общий эпилог начисления очков
     LHLD  var_score           ; 0x1447
     XCHG                      ; 0x144A
     LHLD  var_score_delta     ; 0x144B

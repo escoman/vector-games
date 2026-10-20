@@ -71,6 +71,20 @@ var_egg_slot:           EQU 091Ch   ; байт: выбранный слот яй
 var_score_delta:        EQU 08EBh   ; слово: дельта счёта (scratch collision-death)
 var_score_scratch:      EQU 0B3Dh   ; байт: перенос/scratch (collision-death)
 var_prng_seed:          EQU 1155h   ; слово: сид PRNG (иниц. в ROM, правится in-place)
+
+; --- Scratch-байты островка data_ram_init_image_08C3 (0x08C3..0x0924). -------
+; Роль точно не установлена — именованы нейтрально по адресу, чтобы emit-код
+; не содержал абсолютных литералов в кодовую зону (требование свободной
+; конкатенации, Stage-4). На Stage-3B их значения перепривяжутся к
+; data_ram_init_image_08C3+смещение, чтобы ехать вместе с островком.
+var_scr_08EE:           EQU 08EEh   ; иниц. =01h в func_main_init
+var_scr_08EF:           EQU 08EFh   ; иниц. =03h в func_main_init
+var_scr_08F0:           EQU 08F0h   ; иниц. =05h в func_main_init
+var_scr_08F1:           EQU 08F1h   ; иниц. =08h в func_main_init
+var_scr_0906:           EQU 0906h   ; обнуляется в func_game_update/func_gamestate_handlers
+var_scr_0909:           EQU 0909h   ; scratch-пара (в game_update <- var_player_col)
+var_scr_090A:           EQU 090Ah   ; scratch-пара (в game_update <- var_player_row)
+var_scr_091D:           EQU 091Dh   ; HUD-счётчик (обрезка бонуса до 6 в func_draw_level_hud)
 ; --- ROM-тайлы глифов (byte-exact зона <0x2761) ------------------------------
 data_tile_2706:         EQU 2706h   ; глиф-тайл (spawn fallback)
 data_tile_empty:        EQU 270Ah   ; глиф пустой клетки

@@ -16,7 +16,7 @@ loc_0E88:
     PUSH B                      ; 0x0E88
     MOV A, C                    ; 0x0E89
     STA var_entity_index        ; 0x0E8A
-    LXI H, 0919h                ; 0x0E8D
+    LXI H, data_level_param_buf_end                 ; 0x0E8D
     DAD B                       ; 0x0E90
     MOV A, M                    ; 0x0E91
     CPI 01h                     ; 0x0E92
@@ -67,8 +67,8 @@ loc_0E88:
     JC loc_0E88                 ; 0x0EE3
     LDA var_page_flip           ; 0x0EE6
     MOV B, A                    ; 0x0EE9
-    LDA 08FAh                   ; 0x0EEA
+    LDA var_page_flip_hi                    ; 0x0EEA
     STA var_page_flip           ; 0x0EED
     MOV A, B                    ; 0x0EF0
-    STA 08FAh                   ; 0x0EF1
+    STA var_page_flip_hi                    ; 0x0EF1
     JMP lbl_main_game_loop      ; 0x0EF4

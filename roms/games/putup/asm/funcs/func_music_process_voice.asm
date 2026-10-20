@@ -267,9 +267,9 @@ loc_3A95:
     POP H                       ; 0x3ABC
     JMP loc_3B0B                ; 0x3ABD
 loc_3AC0:
-    STA 0B3Dh                   ; 0x3AC0
+    STA var_score_scratch                    ; 0x3AC0
     ANI 80h                     ; 0x3AC3
-    LDA 0B3Dh                   ; 0x3AC5
+    LDA var_score_scratch                    ; 0x3AC5
     JZ loc_3AD1                 ; 0x3AC8
     CALL func_music_set_note_params ; 0x3ACB
     JMP loc_3B0B                ; 0x3ACE

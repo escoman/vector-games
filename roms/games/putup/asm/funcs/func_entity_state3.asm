@@ -35,7 +35,7 @@ loc_158C:
     CALL func_hl_add_a          ; 0x1593
     INR M                       ; 0x1596
     POP PSW                     ; 0x1597
-    LXI H, 0919h                ; 0x1598
+    LXI H, data_level_param_buf_end                 ; 0x1598
     CALL func_hl_add_a          ; 0x159B
     MVI M, 04h                  ; 0x159E
     RET                         ; 0x15A0
@@ -51,7 +51,7 @@ loc_15A1:
     CALL func_hl_add_a          ; 0x15B1
     MOV E, M                    ; 0x15B4
     INR E                       ; 0x15B5
-    LXI H, 270Ah                ; 0x15B6
+    LXI H, data_tile_empty                 ; 0x15B6
     CALL func_draw_tile_to_buf  ; 0x15B9
     POP PSW                     ; 0x15BC
     LXI H, data_entity_xcoords  ; 0x15BD

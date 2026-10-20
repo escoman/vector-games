@@ -14,78 +14,78 @@
 
 func_draw_game_objects:
     MVI A, 09h                  ; 0x130A
-    STA 090Ch                   ; 0x130C
+    STA var_obj_type_idx                    ; 0x130C
     MVI A, 00h                  ; 0x130F
-    STA 0909h                   ; 0x1311
+    STA var_scr_0909                    ; 0x1311
     MVI A, 19h                  ; 0x1314
-    STA 090Ah                   ; 0x1316
-    LXI H, 08E3h                ; 0x1319
-    LDA 090Ah                   ; 0x131C
+    STA var_scr_090A                    ; 0x1316
+    LXI H, var_enemy_rc                 ; 0x1319
+    LDA var_scr_090A                    ; 0x131C
     CMP M                       ; 0x131F
     JNZ loc_132C                ; 0x1320
     INX H                       ; 0x1323
-    LDA 0909h                   ; 0x1324
+    LDA var_scr_0909                    ; 0x1324
     CMP M                       ; 0x1327
     DCX H                       ; 0x1328
     JZ loc_132F                 ; 0x1329
 loc_132C:
     CALL sync_draw_tile_at_ptr  ; 0x132C
 loc_132F:
-    LDA 090Ah                   ; 0x132F
+    LDA var_scr_090A                    ; 0x132F
     MOV L, A                    ; 0x1332
-    LDA 0909h                   ; 0x1333
+    LDA var_scr_0909                    ; 0x1333
     MOV H, A                    ; 0x1336
-    SHLD 08E3h                  ; 0x1337
+    SHLD var_enemy_rc                   ; 0x1337
     XCHG                        ; 0x133A
-    LDA 090Ch                   ; 0x133B
+    LDA var_obj_type_idx                    ; 0x133B
     ADD A                       ; 0x133E
     ADD A                       ; 0x133F
     LXI H, data_tile_table_26DE ; 0x1340
     CALL func_hl_add_a          ; 0x1343
     CALL func_render_tile_vram  ; 0x1346
-    LXI H, 08E5h                ; 0x1349
-    LDA 090Ah                   ; 0x134C
+    LXI H, var_bonus_rc                 ; 0x1349
+    LDA var_scr_090A                    ; 0x134C
     CMP M                       ; 0x134F
     JNZ loc_135C                ; 0x1350
     INX H                       ; 0x1353
-    LDA 0909h                   ; 0x1354
+    LDA var_scr_0909                    ; 0x1354
     CMP M                       ; 0x1357
     DCX H                       ; 0x1358
     JZ loc_135F                 ; 0x1359
 loc_135C:
     CALL sync_draw_tile_at_ptr  ; 0x135C
 loc_135F:
-    LDA 090Ah                   ; 0x135F
+    LDA var_scr_090A                    ; 0x135F
     MOV L, A                    ; 0x1362
-    LDA 0909h                   ; 0x1363
+    LDA var_scr_0909                    ; 0x1363
     MOV H, A                    ; 0x1366
-    SHLD 08E5h                  ; 0x1367
+    SHLD var_bonus_rc                   ; 0x1367
     XCHG                        ; 0x136A
-    LDA 090Ch                   ; 0x136B
+    LDA var_obj_type_idx                    ; 0x136B
     ADD A                       ; 0x136E
     ADD A                       ; 0x136F
     LXI H, data_tile_table_26DE ; 0x1370
     CALL func_hl_add_a          ; 0x1373
     CALL func_render_tile_vram  ; 0x1376
-    LXI H, 08E7h                ; 0x1379
-    LDA 090Ah                   ; 0x137C
+    LXI H, var_egg_rc                 ; 0x1379
+    LDA var_scr_090A                    ; 0x137C
     CMP M                       ; 0x137F
     JNZ loc_138C                ; 0x1380
     INX H                       ; 0x1383
-    LDA 0909h                   ; 0x1384
+    LDA var_scr_0909                    ; 0x1384
     CMP M                       ; 0x1387
     DCX H                       ; 0x1388
     JZ loc_138F                 ; 0x1389
 loc_138C:
     CALL sync_draw_tile_at_ptr  ; 0x138C
 loc_138F:
-    LDA 090Ah                   ; 0x138F
+    LDA var_scr_090A                    ; 0x138F
     MOV L, A                    ; 0x1392
-    LDA 0909h                   ; 0x1393
+    LDA var_scr_0909                    ; 0x1393
     MOV H, A                    ; 0x1396
-    SHLD 08E7h                  ; 0x1397
+    SHLD var_egg_rc                   ; 0x1397
     XCHG                        ; 0x139A
-    LDA 090Ch                   ; 0x139B
+    LDA var_obj_type_idx                    ; 0x139B
     ADD A                       ; 0x139E
     ADD A                       ; 0x139F
     LXI H, data_tile_table_26DE ; 0x13A0

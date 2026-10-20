@@ -24,7 +24,7 @@ func_draw_score_hud:
     XCHG                        ; 0x11B7
     LHLD var_bonus_threshold    ; 0x11B8
     DCX H                       ; 0x11BB
-    STA 0B3Dh                   ; 0x11BC
+    STA var_score_scratch                    ; 0x11BC
     MOV A, L                    ; 0x11BF
     SBB E                       ; 0x11C0
     MOV L, A                    ; 0x11C1
@@ -43,7 +43,7 @@ func_draw_score_hud:
 loc_11D1:
     POP PSW                     ; 0x11D1
     POP H                       ; 0x11D2
-    LDA 0B3Dh                   ; 0x11D3
+    LDA var_score_scratch                    ; 0x11D3
     RNC                         ; 0x11D6
     LXI H, var_bonus_counter    ; 0x11D7
     INR M                       ; 0x11DA

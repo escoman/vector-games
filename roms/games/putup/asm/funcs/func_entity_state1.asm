@@ -37,7 +37,7 @@ loc_14B1:
     CALL func_hl_add_a          ; 0x14B8
     DCR M                       ; 0x14BB
     POP PSW                     ; 0x14BC
-    LXI H, 0919h                ; 0x14BD
+    LXI H, data_level_param_buf_end                 ; 0x14BD
     CALL func_hl_add_a          ; 0x14C0
     MVI M, 02h                  ; 0x14C3
     RET                         ; 0x14C5
@@ -53,7 +53,7 @@ loc_14C6:
     PUSH PSW                    ; 0x14D6
     CALL func_hl_add_a          ; 0x14D7
     MOV E, M                    ; 0x14DA
-    LXI H, 270Ah                ; 0x14DB
+    LXI H, data_tile_empty                 ; 0x14DB
     CALL func_draw_tile_to_buf  ; 0x14DE
     POP PSW                     ; 0x14E1
     LXI H, data_entity_xcoords  ; 0x14E2
@@ -64,6 +64,6 @@ loc_14C6:
     LXI H, data_entity_ycoords  ; 0x14EB
     CALL func_hl_add_a          ; 0x14EE
     MOV E, M                    ; 0x14F1
-    LXI H, 2756h                ; 0x14F2
+    LXI H, data_tile_graphics+050h                 ; 0x14F2
     CALL func_draw_tile_to_buf  ; 0x14F5
     RET                         ; 0x14F8

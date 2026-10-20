@@ -14,14 +14,14 @@ func_draw_level_hud:
     JC loc_1201                 ; 0x11F3
     JZ loc_1201                 ; 0x11F6
     MVI A, 06h                  ; 0x11F9
-    STA 091Dh                   ; 0x11FB
+    STA var_scr_091D                    ; 0x11FB
     JMP loc_1204                ; 0x11FE
 loc_1201:
-    STA 091Dh                   ; 0x1201
+    STA var_scr_091D                    ; 0x1201
 loc_1204:
     LXI H, data_text_buffer+02F9h                ; 0x1204
     CALL func_set_text_ptr      ; 0x1207
-    LDA 091Dh                   ; 0x120A
+    LDA var_scr_091D                    ; 0x120A
     MOV B, A                    ; 0x120D
     ORA A                       ; 0x120E
     RZ                          ; 0x120F

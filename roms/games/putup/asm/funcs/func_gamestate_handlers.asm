@@ -66,31 +66,31 @@ func_gamestate_catch:
     JC    loc_12E0            ; 0x12CF
 loc_12D2:
     XRA   A                   ; 0x12D2
-    STA   0900h               ; 0x12D3
-    STA   0906h               ; 0x12D6
+    STA   var_game_state                ; 0x12D3
+    STA   var_scr_0906                ; 0x12D6
     LXI   H, var_player_row   ; 0x12D9
     INR   M                   ; 0x12DC
     JMP   loc_0D41            ; 0x12DD
 loc_12E0:
-    LXI   H, 0906h            ; 0x12E0
+    LXI   H, var_scr_0906             ; 0x12E0
     INR   M                   ; 0x12E3
     MOV   A, M                ; 0x12E4
     CPI   04h                 ; 0x12E5
     JC    loc_12F3            ; 0x12E7
     XRA   A                   ; 0x12EA
-    STA   0906h               ; 0x12EB
+    STA   var_scr_0906                ; 0x12EB
     MVI   A, 02h              ; 0x12EE
-    STA   0900h               ; 0x12F0
+    STA   var_game_state                ; 0x12F0
 loc_12F3:
     JMP   loc_0D41            ; 0x12F3
 func_gamestate_evade:
-    LXI   H, 0906h            ; 0x12F6
+    LXI   H, var_scr_0906             ; 0x12F6
     INR   M                   ; 0x12F9
     MOV   A, M                ; 0x12FA
     CPI   03h                 ; 0x12FB
     JC    loc_1307            ; 0x12FD
     XRA   A                   ; 0x1300
-    STA   0906h               ; 0x1301
-    STA   0900h               ; 0x1304
+    STA   var_scr_0906                ; 0x1301
+    STA   var_game_state                ; 0x1304
 loc_1307:
     JMP   loc_0D41            ; 0x1307

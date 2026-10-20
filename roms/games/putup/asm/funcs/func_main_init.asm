@@ -27,7 +27,7 @@ loc_0B5E:
     ORA L                       ; 0x0B62
     JNZ loc_0B5E                ; 0x0B63
     CALL func_hw_init           ; 0x0B66
-    LXI H, 08B2h                ; 0x0B69
+    LXI H, data_palette+00Fh                 ; 0x0B69
     SHLD var_palette_ptr        ; 0x0B6C
     MVI A, 09h                  ; 0x0B6F
     STA var_palette_timer       ; 0x0B71
@@ -51,33 +51,33 @@ loc_0B7A:
     ; него. DEFS даёт 34x00h = NOP на 8080; адреса последующего кода сохранены.
     DEFS 0x0BA8 - $             ; 0x0B86..0x0BA7 (34 байта) = NOP
     LXI H, 07D0h                ; 0x0BA8
-    SHLD 08EBh                  ; 0x0BAB
+    SHLD var_score_delta                   ; 0x0BAB
     MVI A, 01h                  ; 0x0BAE
-    STA 08EEh                   ; 0x0BB0
+    STA var_scr_08EE                    ; 0x0BB0
     MVI A, 03h                  ; 0x0BB3
-    STA 08EFh                   ; 0x0BB5
+    STA var_scr_08EF                    ; 0x0BB5
     MVI A, 05h                  ; 0x0BB8
-    STA 08F0h                   ; 0x0BBA
+    STA var_scr_08F0                    ; 0x0BBA
     MVI A, 08h                  ; 0x0BBD
-    STA 08F1h                   ; 0x0BBF
+    STA var_scr_08F1                    ; 0x0BBF
 loc_0BC2:
     CALL func_music_init        ; 0x0BC2
     XRA A                       ; 0x0BC5
     LXI H, 0000h                ; 0x0BC6
     SHLD var_score              ; 0x0BC9
     STA var_level               ; 0x0BCC
-    STA 08F7h                   ; 0x0BCF
+    STA var_egg_hist_prev                    ; 0x0BCF
     INR A                       ; 0x0BD2
-    STA 08F8h                   ; 0x0BD3
+    STA var_egg_hist_cur                    ; 0x0BD3
     STA var_page_flip           ; 0x0BD6
     INR A                       ; 0x0BD9
-    STA 08FAh                   ; 0x0BDA
+    STA var_page_flip_hi                    ; 0x0BDA
     INR A                       ; 0x0BDD
     STA var_bonus_counter       ; 0x0BDE
     LXI H, 07D0h                ; 0x0BE1
     SHLD var_bonus_threshold    ; 0x0BE4
     CALL func_clear_textbuf     ; 0x0BE7
-    LXI H, 0986h                ; 0x0BEA
+    LXI H, str_credits_koi8+061h                 ; 0x0BEA
     LXI D, 0000h                ; 0x0BED
     LXI B, 0080h                ; 0x0BF0
 loc_0BF3:
@@ -125,7 +125,7 @@ loc_0C0F:
     CALL func_print_string      ; 0x0C45
     LXI H, data_text_buffer+006Eh                ; 0x0C48
     CALL func_set_text_ptr      ; 0x0C4B
-    LXI H, 08EBh                ; 0x0C4E
+    LXI H, var_score_delta                 ; 0x0C4E
     CALL func_print_uint16      ; 0x0C51
     MVI A, 30h                  ; 0x0C54
     CALL func_print_char_at_ptr ; 0x0C56

@@ -60,7 +60,7 @@ loc_17CC:
     CMP B                       ; 0x17FE
     PUSH PSW                    ; 0x17FF
     LDA var_entity_index        ; 0x1800
-    LXI H, 0919h                ; 0x1803
+    LXI H, data_level_param_buf_end                 ; 0x1803
     CALL func_hl_add_a          ; 0x1806
     POP PSW                     ; 0x1809
     JC loc_1810                 ; 0x180A
@@ -81,7 +81,7 @@ loc_1813:
     CALL func_hl_add_a          ; 0x1823
     MOV E, M                    ; 0x1826
     INR E                       ; 0x1827
-    LXI H, 270Ah                ; 0x1828
+    LXI H, data_tile_empty                 ; 0x1828
     CALL func_draw_tile_to_buf  ; 0x182B
     POP PSW                     ; 0x182E
     LXI H, data_entity_xcoords  ; 0x182F

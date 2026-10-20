@@ -12,43 +12,43 @@
 ;           жизни, вне RDB). Вспомогательная loc_1979: A = -A (CMA/INR A).
 
 func_entity_state10:
-    LDA 0923h                   ; 0x191B
+    LDA data_entity_ycoords+01h                    ; 0x191B
     CPI 17h                     ; 0x191E
     JNC loc_1958                ; 0x1920
     MVI A, 08h                  ; 0x1923
-    STA 090Ch                   ; 0x1925
-    LXI H, 08E7h                ; 0x1928
-    LDA 0923h                   ; 0x192B
+    STA var_obj_type_idx                    ; 0x1925
+    LXI H, var_egg_rc                 ; 0x1928
+    LDA data_entity_ycoords+01h                    ; 0x192B
     CMP M                       ; 0x192E
     JNZ loc_193B                ; 0x192F
     INX H                       ; 0x1932
-    LDA 0920h                   ; 0x1933
+    LDA data_entity_xcoords+01h                    ; 0x1933
     CMP M                       ; 0x1936
     DCX H                       ; 0x1937
     JZ loc_193E                 ; 0x1938
 loc_193B:
     CALL sync_draw_tile_at_ptr  ; 0x193B
 loc_193E:
-    LDA 0923h                   ; 0x193E
+    LDA data_entity_ycoords+01h                    ; 0x193E
     MOV L, A                    ; 0x1941
-    LDA 0920h                   ; 0x1942
+    LDA data_entity_xcoords+01h                    ; 0x1942
     MOV H, A                    ; 0x1945
-    SHLD 08E7h                  ; 0x1946
+    SHLD var_egg_rc                   ; 0x1946
     XCHG                        ; 0x1949
-    LDA 090Ch                   ; 0x194A
+    LDA var_obj_type_idx                    ; 0x194A
     ADD A                       ; 0x194D
     ADD A                       ; 0x194E
     LXI H, data_tile_table_26DE ; 0x194F
     CALL func_hl_add_a          ; 0x1952
     CALL func_render_tile_vram  ; 0x1955
 loc_1958:
-    LDA 0920h                   ; 0x1958
+    LDA data_entity_xcoords+01h                    ; 0x1958
     MOV B, A                    ; 0x195B
     LDA var_player_col          ; 0x195C
     SUB B                       ; 0x195F
     CC loc_1979                 ; 0x1960
     MOV D, A                    ; 0x1963
-    LDA 0923h                   ; 0x1964
+    LDA data_entity_ycoords+01h                    ; 0x1964
     MOV B, A                    ; 0x1967
     LDA var_player_row          ; 0x1968
     SUB B                       ; 0x196B
@@ -58,7 +58,7 @@ loc_1958:
     MOV A, D                    ; 0x1972
     CPI 02h                     ; 0x1973
     RNC                         ; 0x1975
-    JMP 13AAh                   ; 0x1976
+    JMP func_collision_death                    ; 0x1976
 loc_1979:
     CMA                         ; 0x1979
     INR A                       ; 0x197A

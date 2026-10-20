@@ -68,7 +68,7 @@ loc_0D27:
     MVI A, 01h                  ; 0x0D32
     STA var_game_state          ; 0x0D34
     XRA A                       ; 0x0D37
-    STA 0906h                   ; 0x0D38
+    STA var_scr_0906                    ; 0x0D38
     JMP loc_0D41                ; 0x0D3B
 loc_0D3E:
     STA var_game_state          ; 0x0D3E
@@ -94,10 +94,10 @@ loc_0D68:
     STA var_work_const          ; 0x0D6A
 loc_0D6D:
     LDA var_player_col          ; 0x0D6D
-    STA 0909h                   ; 0x0D70
+    STA var_scr_0909                    ; 0x0D70
     LDA var_player_row          ; 0x0D73
-    STA 090Ah                   ; 0x0D76
-    LDA 090Dh                   ; 0x0D79
+    STA var_scr_090A                    ; 0x0D76
+    LDA var_move_dir                    ; 0x0D79
     MOV B, A                    ; 0x0D7C
     RLC                         ; 0x0D7D
     ADD B                       ; 0x0D7E
@@ -105,26 +105,26 @@ loc_0D6D:
     LDA var_work_const          ; 0x0D80
     ADD B                       ; 0x0D83
     DCR A                       ; 0x0D84
-    STA 090Ch                   ; 0x0D85
-    LXI H, 08E3h                ; 0x0D88
-    LDA 090Ah                   ; 0x0D8B
+    STA var_obj_type_idx                    ; 0x0D85
+    LXI H, var_enemy_rc                 ; 0x0D88
+    LDA var_scr_090A                    ; 0x0D8B
     CMP M                       ; 0x0D8E
     JNZ loc_0D9B                ; 0x0D8F
     INX H                       ; 0x0D92
-    LDA 0909h                   ; 0x0D93
+    LDA var_scr_0909                    ; 0x0D93
     CMP M                       ; 0x0D96
     DCX H                       ; 0x0D97
     JZ loc_0D9E                 ; 0x0D98
 loc_0D9B:
     CALL sync_draw_tile_at_ptr  ; 0x0D9B  (стереть prev — синк к VBlank)
 loc_0D9E:
-    LDA 090Ah                   ; 0x0D9E
+    LDA var_scr_090A                    ; 0x0D9E
     MOV L, A                    ; 0x0DA1
-    LDA 0909h                   ; 0x0DA2
+    LDA var_scr_0909                    ; 0x0DA2
     MOV H, A                    ; 0x0DA5
-    SHLD 08E3h                  ; 0x0DA6
+    SHLD var_enemy_rc                   ; 0x0DA6
     XCHG                        ; 0x0DA9
-    LDA 090Ch                   ; 0x0DAA
+    LDA var_obj_type_idx                    ; 0x0DAA
     ADD A                       ; 0x0DAD
     ADD A                       ; 0x0DAE
     LXI H, data_tile_table_26DE ; 0x0DAF
@@ -193,14 +193,14 @@ loc_0E29:
     LDA var_collision_flag      ; 0x0E29
     ORA A                       ; 0x0E2C
     JNZ func_collision_death        ; 0x0E2D
-    LHLD 08E9h                  ; 0x0E30
+    LHLD var_blink_cell                   ; 0x0E30
     INX H                       ; 0x0E33
-    SHLD 08E9h                  ; 0x0E34
-    LDA 08E9h                   ; 0x0E37
+    SHLD var_blink_cell                   ; 0x0E34
+    LDA var_blink_cell                    ; 0x0E37
     ANI 1Fh                     ; 0x0E3A
     JNZ loc_0E4A                ; 0x0E3C
     CALL func_erase_char_08E9   ; 0x0E3F
-    LDA 08EAh                   ; 0x0E42
+    LDA var_blink_type                    ; 0x0E42
     CPI 02h                     ; 0x0E45
     JZ func_egg_caught              ; 0x0E47
 loc_0E4A:
