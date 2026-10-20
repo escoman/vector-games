@@ -178,15 +178,10 @@
     defs 0x03A4 - $ ; align
     include "funcs/func_vblank_isr.asm"
 
-; --- gap 0x0401..0x0439 (56 bytes) from original image @reloc 0x0401 ---
+; --- emit func_load_glyph_block @0x0401 (56 bytes) ---
     defs 0x0401 - $ ; align
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    include "funcs/func_load_glyph_block.asm"
+
 ; --- emit func_blit_plane_mask80 @0x0439 (37 bytes) ---
     defs 0x0439 - $ ; align
     include "funcs/func_blit_plane_mask80.asm"
@@ -475,7 +470,7 @@
     DEFB 09h, 0E5h, 0CDh, 087h, 01Bh, 0E1h, 03Ah, 021h
     DEFB 09h, 057h, 03Ah, 024h, 09h, 05Fh, 0CDh, 087h
     DEFB 01Bh, 03Ah, 02h, 09h, 032h, 020h, 09h, 03Eh
-    DEFB 023h, 032h, 023h, 09h, 021h, 0Ah, 050h, 0CDh
+    DEFB 023h, 032h, 023h, 09h, 021h, 0Ah, 066h, 0CDh
     DEFB 04Fh, 01h, 021h, 01h, 0Bh, 0CDh, 021h, 03h
     DEFB 06h, 08h, 0CDh, 021h, 01h, 03Eh, 09h, 032h
     DEFB 01Ah, 09h, 03Ch, 032h, 01Bh, 09h, 0C3h, 04Ah
@@ -514,7 +509,7 @@
     DEFB 0C0h, 013h, 0CDh, 0Ah, 013h, 0AFh, 032h, 0Fh
     DEFB 09h, 021h, 0FBh, 08h, 035h, 07Eh, 0FEh, 0FFh
     DEFB 0CAh, 038h, 014h, 0C3h, 0A0h, 019h, 0CDh, 0E5h
-    DEFB 01Bh, 021h, 06Ah, 051h, 0CDh, 04Fh, 01h, 021h
+    DEFB 01Bh, 021h, 06Ah, 067h, 0CDh, 04Fh, 01h, 021h
     DEFB 0Eh, 0Bh, 0CDh, 021h, 03h, 02Ah, 0F3h, 08h
     DEFB 0EBh, 02Ah, 0EBh, 08h, 032h, 03Dh, 0Bh, 07Dh
     DEFB 09Bh, 06Fh, 07Ch, 09Ah, 067h, 0E5h, 0F5h, 0B5h

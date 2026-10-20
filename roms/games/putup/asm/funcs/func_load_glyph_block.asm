@@ -1,48 +1,28 @@
-; Функция: func_load_glyph_block
+; Функция: func_load_glyph_block  (переиспользована под VBlank-sync трамплины)
 ; Адрес: 0x0401
-; Размер: 56 байт
-; Описание: Распаковка блока глифов. Сохраняет H/D/B/PSW; CALL func_load_gfx_2761
-;           (копирует графику в data_glyph_block@0x6000). HL=data_glyph_block,
-;           DE=data_packed_font_3041, B=00h (256 итераций). Цикл loc_0410: для
-;           каждого байта шрифта вызывает 4 blit-функции по битовым плоскостям
-;           (mask80/40/20/10), сохраняя DE. DCR B; JNZ loc_042F (переход к
-;           следующему байту: DE += 0008h); иначе выход и восстановление регистров.
+; Размер: 56 байт (слот прежнего распаковщика глифов; занят стабами, хвост — нули)
+; Описание: Прежний распаковщик блока глифов мёртв (вызывается заглушенным
+;           func_main_init). Слот использован под два трамплина вертикальной
+;           синхронизации отрисовки движущихся объектов (герой/враги):
+;
+;             EI ; HLT ; JMP <оригинал>
+;
+;           EI разрешает прерывания, HLT останавливает ЦП до ближайшего кадрового
+;           прерывания RST7 (func_vblank_isr @0x03A4, начало вертикального гашения).
+;           Проснувшись внутри blanking, трамплин исполняет оригинал — так всплеск
+;           из 4 глифов (~11К T) пишется в VRAM, когда луч не сканирует экран →
+;           нет мерцания. Вызывается ТОЛЬКО из геймплейных redraw-точек
+;           (func_game_update — герой; func_draw_game_objects / func_entity_state10
+;           — враги). func_level_loader зовёт оригиналы напрямую (без синка),
+;           поэтому статичная сборка уровня не замедляется.
+;           Слот фиксирован (0x0401); следующий emit func_blit_plane_mask80 @0x0439
+;           задаёт границу, хвост байтов заполняется нулями через defs.
 
-func_load_glyph_block:
-    PUSH H                      ; 0x0401
-    PUSH D                      ; 0x0402
-    PUSH B                      ; 0x0403
-    PUSH PSW                    ; 0x0404
-    CALL func_load_gfx_2761     ; 0x0405
-    LXI H, data_glyph_block     ; 0x0408
-    LXI D, data_packed_font_3041 ; 0x040B
-    MVI B, 00h                  ; 0x040E
-loc_0410:
-    PUSH B                      ; 0x0410
-    PUSH D                      ; 0x0411
-    CALL func_blit_plane_mask80 ; 0x0412
-    POP D                       ; 0x0415
-    PUSH D                      ; 0x0416
-    CALL func_blit_plane_mask40 ; 0x0417
-    POP D                       ; 0x041A
-    PUSH D                      ; 0x041B
-    CALL func_blit_plane_mask20 ; 0x041C
-    POP D                       ; 0x041F
-    PUSH D                      ; 0x0420
-    CALL func_blit_plane_mask10 ; 0x0421
-    POP D                       ; 0x0424
-    POP B                       ; 0x0425
-    DCR B                       ; 0x0426
-    JNZ loc_042F                ; 0x0427
-    POP PSW                     ; 0x042A
-    POP B                       ; 0x042B
-    POP D                       ; 0x042C
-    POP H                       ; 0x042D
-    RET                         ; 0x042E
-loc_042F:
-    PUSH H                      ; 0x042F
-    LXI H, 0008h                ; 0x0430
-    DAD D                       ; 0x0433
-    XCHG                        ; 0x0434
-    POP H                       ; 0x0435
-    JMP loc_0410                ; 0x0436
+sync_draw_tile_at_ptr:
+    EI                          ; 0x0401
+    HLT                         ; 0x0402
+    JMP func_draw_tile_at_ptr   ; 0x0403
+sync_render_tile_vram:
+    EI                          ; 0x0406
+    HLT                         ; 0x0407
+    JMP func_render_tile_vram   ; 0x0408

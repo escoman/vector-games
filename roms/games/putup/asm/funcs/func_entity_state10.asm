@@ -27,7 +27,7 @@ func_entity_state10:
     DCX H                       ; 0x1937
     JZ loc_193E                 ; 0x1938
 loc_193B:
-    CALL func_draw_tile_at_ptr  ; 0x193B
+    CALL sync_draw_tile_at_ptr  ; 0x193B
 loc_193E:
     LDA 0923h                   ; 0x193E
     MOV L, A                    ; 0x1941

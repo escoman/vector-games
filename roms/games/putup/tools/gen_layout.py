@@ -76,6 +76,17 @@ ANCHORS = {
 # (периоды), НЕ патчится (иначе испортим музыку).
 POINTER_SITES = (0x383F, 0x3841, 0x3843, 0x3854, 0x3856)
 
+# Релокация СТАРЫХ абсолютных курсоров текста в verbatim gap-коде. redesign перенёс
+# базу текстового back-буфера 0x5000 -> data_text_buffer(0x6600) (+0x1600). Именованные
+# функции обновились через метку `data_text_buffer+ofs`, но gap-байты (verbatim
+# оригинала) остались со старыми 0x5xxx -> строки печатались не в своей клетке
+# («HURRY UP» сползла вниз; game-over-текст — тоже). Ключ — адрес инструкции LXI H
+# (op 21); 16-бит операнд лежит в site+1 (lo) / site+2 (hi) — правим их в chunk.
+# verify_image разрешает дельт высшим байтом +0x16 (RELOC_HIGH 0x50..0x53).
+TEXTBUF_BASE_RELOC = {0x1296: 0x660A,   # ' HURRY UP ! '  (old курсор 0x500A)
+                      0x143B: 0x676A}   # game-over строка (old курсор 0x516A)
+RELOC_PATCHED: set = set()             # контроль: все ли курсоры найдены в gap-зоне
+
 # compact: перемещённый код кончается на new_addr(0x4600)=0x3607 -> блок от 0x3608.
 GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x3608" if COMPACT else "0x4600"), 0)
 GLYPH_ASM  = "data_glyph_block_unpacked.asm"   # снимок — побайтовые DEFB в asm
@@ -94,8 +105,10 @@ IMG_END = GLYPH_BASE + GLYPH_SIZE
 # этап B: мёртвые распаковщики/пакеты выводятся из сборки (их диапазоны — нули).
 # KEEP_DEAD=1 возвращает Stage-A раскладку (всё на исторических адресах).
 KEEP_DEAD = os.environ.get("KEEP_DEAD", "0") != "0"
-DEAD = {"func_load_glyph_block", "func_load_gfx_2761",
+DEAD = {"func_load_gfx_2761",
         "data_packed_font_3041", "data_gfx_2761"}
+# func_load_glyph_block (0x0401..0x0439) выведен из DEAD: слот занят живыми
+# VBlank-sync трамплинами (см. funcs/func_load_glyph_block.asm) — эмитится как код.
 
 rom = open(ROM, "rb").read()
 assert len(rom) == SIZE
@@ -233,6 +246,12 @@ def emit_gap(s, e, out):
         lo, hi = max(s, ds), min(e, de)
         if lo < hi:
             chunk[lo - s: hi - s] = b"\x00" * (hi - lo)
+    for site, new_imm in TEXTBUF_BASE_RELOC.items():
+        if s <= site and site + 2 < e:        # op(LXI H) в site, операнд в site+1/+2
+            assert chunk[site - s] == 0x21, "TEXTBUF_BASE_RELOC 0x%04X: ожидали op 21" % site
+            chunk[site - s + 1] = new_imm & 0xFF
+            chunk[site - s + 2] = new_imm >> 8
+            RELOC_PATCHED.add(site)
     na = new_addr(s)
     tag = (" @reloc 0x%04X" % na) if COMPACT else ""
     out.append("; --- gap 0x%04X..0x%04X (%d bytes) from original image%s ---" % (s, e, e - s, tag))
@@ -294,6 +313,10 @@ for seg in segs:
         _, a, sz = seg
         for cs, ce in clip_holes(a, a + sz):
             emit_gap(cs, ce, lines)
+
+assert RELOC_PATCHED == set(TEXTBUF_BASE_RELOC), \
+    "не все курсоры TEXTBUF_BASE_RELOC найдены в gap-зоне: %s" % \
+    (set(TEXTBUF_BASE_RELOC) - RELOC_PATCHED)
 
 # дыра между концом кода и блоком — нули (эмулятор при старте держит её чистой RAM)
 if GLYPH_BASE > CODE_END_EFF:

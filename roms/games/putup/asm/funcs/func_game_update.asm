@@ -115,7 +115,7 @@ loc_0D68:
     DCX H                       ; 0x0D97
     JZ loc_0D9E                 ; 0x0D98
 loc_0D9B:
-    CALL func_draw_tile_at_ptr  ; 0x0D9B
+    CALL sync_draw_tile_at_ptr  ; 0x0D9B  (стереть prev — синк к VBlank)
 loc_0D9E:
     LDA 090Ah                   ; 0x0D9E
     MOV L, A                    ; 0x0DA1
@@ -128,7 +128,7 @@ loc_0D9E:
     ADD A                       ; 0x0DAE
     LXI H, data_tile_table_26DE ; 0x0DAF
     CALL func_hl_add_a          ; 0x0DB2
-    CALL func_render_tile_vram  ; 0x0DB5
+    CALL func_render_tile_vram  ; 0x0DB5  (стер+рисун в одном окне гашения после erase-синка)
     LXI H, data_text_buffer ; 0x0DB8
     LXI B, 0300h                ; 0x0DBB
 loc_0DBE:

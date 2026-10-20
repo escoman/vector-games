@@ -47,6 +47,22 @@ PALETTE_DIVERGENCE = {a - ORG for a in range(0x08A3, 0x08B3)}
 # byte-exact зоне; корректность доказывает поведенческий гейт compare_color.py
 # (гоняет реальный код) + замер тактов. Побайтовая сверка здесь осознанно снята.
 RENDER_CODE_DIVERGENCE = {a - ORG for a in range(0x0803, 0x08A3)}
+# Фикс мерцания: вертикальная синхронизация отрисовки движущихся объектов.
+#   * слот 0x0401..0x0439 (бывший мёртвый распаковщик) занят VBlank-sync
+#     трамплинами EI;HLT;JMP (см. funcs/func_load_glyph_block.asm) — осознанная
+#     правка live-кода в byte-exact зоне;
+#   * геймплейные CALL стирания тайла (func_draw_tile_at_ptr) перенацелены на
+#     erase-трамплин; рисуующий CALL (func_render_tile_vram) остаётся на оригинале
+#     — стирание+рисование идут подряд от одного ретрейса в одном окне гашения
+#     (иначе объект пропал бы на кадр). Меняется ровно 16-бит операнд (2 байта)
+#     на каждом erase call-site (герой/3 объекта/сущность-10).
+# Корректность доказывает поведенческий гейт compare_color.py (картинка кадра в
+# итоге та же; меняется лишь момент записи в VRAM — на гашение). Побайтовая
+# сверка в этих позициях осознанно снята.
+SYNC_STUB_DIVERGENCE = {a - ORG for a in range(0x0401, 0x0439)}
+SYNC_CALL_SITES = {a - ORG for a in (0x0D9C, 0x0D9D, 0x132D, 0x132E, 0x135D, 0x135E,
+                                    0x138D, 0x138E, 0x193C, 0x193D)}
+FLICKER_DIVERGENCE = SYNC_STUB_DIVERGENCE | SYNC_CALL_SITES
 # сигнатура релокации базы буфера (0x5000 -> 0x6600): высший байт операнда
 # меняется на +0x16 (позиции курсора в 0x50..0x53) либо B0->9A (константа render).
 RELOC_HIGH = {0x50, 0x51, 0x52, 0x53}   # исходные высшие байты страниц 0x50xx..0x53xx
@@ -86,7 +102,7 @@ def ptr_diff_positions(info, b):
 
 def verify_verbatim(a, b, info):
     keep_dead = os.environ.get("KEEP_DEAD", "0") != "0"
-    allow = set(NOP) | PALETTE_DIVERGENCE | RENDER_CODE_DIVERGENCE
+    allow = set(NOP) | PALETTE_DIVERGENCE | RENDER_CODE_DIVERGENCE | FLICKER_DIVERGENCE
     dead = []
     if info and not keep_dead:
         dead = info["dead_ranges"]
@@ -147,7 +163,7 @@ def verify_compact(a, b, info):
         return 1
 
     # нижние dead-диапазоны (< byte_exact_end) и NOP-заглушки — легальны в нижней зоне
-    allow_low = set(NOP) | PALETTE_DIVERGENCE | RENDER_CODE_DIVERGENCE
+    allow_low = set(NOP) | PALETTE_DIVERGENCE | RENDER_CODE_DIVERGENCE | FLICKER_DIVERGENCE
     allow_low |= {i for s, e, _ in info["dead_ranges"]
                   for i in range(s - ORG, min(e, byte_exact_end) - ORG)}
     ptrd = ptr_diff_positions(info, b)
