@@ -1,4 +1,4 @@
-; PUTUP_NEW.ROM (games/putup) — СВОБОДНАЯ КОНКАТАЕНАЦИЯ (Stage-4)
+; putup_new.rom (games/putup) — СВОБОДНАЯ КОНКАТАЕНАЦИЯ (Stage-4)
 ; ГЕНЕТОР tools/gen_layout.py — не править руками.
 ; Порядок: tools/order.json. Закреплён только вход (0x0100). Гэпов нет.
 ; Блок глифов — вплотную за кодом; адрес меток — из .sym (tools/layout.json).

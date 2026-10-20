@@ -181,7 +181,7 @@ def compare(cap_main, cap_ref, label, diffs_out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--new", default=os.path.join(PROJ, "PUTUP_NEW.ROM"))
+    ap.add_argument("--new", default=os.path.join(PROJ, "putup_new.rom"))
     ap.add_argument("--label", default="A")
     ap.add_argument("--glyph-base", default=None,
                     help="адрес блока глифов в NEW (по умолчанию — из tools/layout.json)")

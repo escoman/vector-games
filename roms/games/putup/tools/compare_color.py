@@ -107,7 +107,7 @@ def decode_colors(vram, palette):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--new", default=os.path.join(PROJ, "PUTUP_NEW.ROM"))
+    ap.add_argument("--new", default=os.path.join(PROJ, "putup_new.rom"))
     ap.add_argument("--label", default="C")
     args = ap.parse_args()
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Компоновщик PUTUP_NEW.ROM (проект roms/games/putup) — СВОБОДНАЯ КОНКАТАЕНАЦИЯ.
+# Компоновщик putup_new.rom (проект roms/games/putup) — СВОБОДНАЯ КОНКАТАЕНАЦИЯ.
 #
 # Stage-4: отказ от адресной модели фиксированного оригинала. Файлы идут ПОДРЯД
 # в порядке tools/order.json; единственный закреплённый адрес — точка входа
@@ -81,7 +81,7 @@ order = [nm for nm in order if not re.match(r"data_level_\d+$", nm)]
 
 # --- мастер asm --------------------------------------------------------------
 lines = []
-lines.append("; PUTUP_NEW.ROM (games/putup) — СВОБОДНАЯ КОНКАТАЕНАЦИЯ (Stage-4)")
+lines.append("; putup_new.rom (games/putup) — СВОБОДНАЯ КОНКАТАЕНАЦИЯ (Stage-4)")
 lines.append("; ГЕНЕТОР tools/gen_layout.py — не править руками.")
 lines.append("; Порядок: tools/order.json. Закреплён только вход (0x0100). Гэпов нет.")
 lines.append("; Блок глифов — вплотную за кодом; адрес меток — из .sym (tools/layout.json).")

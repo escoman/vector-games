@@ -1,6 +1,6 @@
 # Makefile — roms/games/putup: Putup со свободной компоновкой ROM (Stage-4).
 #
-# PUTUP_NEW.ROM (в корне проекта) = реконструкция Putup (asm-ветка redesign/putup)
+# putup_new.rom (в корне проекта) = реконструкция Putup (asm-ветка redesign/putup)
 # с запечённым блоком глифов data_glyph_block_unpacked и СВОБОДНОЙ КОНКАТАЕНАЦИЕЙ:
 # emit-файлы идут подряд в порядке tools/order.json, закреплён только вход (0x0100).
 # Мёртвый шлак (распаковщики/пакеты/legacy-blit) физически удалён; гэпов нет.
@@ -14,7 +14,7 @@
 include ../../../config.mk
 
 ASMFLAGS  = -b -m=8080_strict -s
-TARGET    = PUTUP_NEW.ROM
+TARGET    = putup_new.rom
 FULLBIN   = build_full.bin
 MASTER    = putup_new.asm
 GEN       = tools/gen_layout.py

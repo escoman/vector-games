@@ -1,4 +1,4 @@
-# putup — реконструкция ROM `PUTUP_NEW.ROM` (games/putup)
+# putup — реконструкция ROM `putup_new.rom` (games/putup)
 
 Реконструкция оригинала `src/putup.rom` (asm-ветка Stage 12
 [`redesign/putup`](../../redesign/putup)) со **свободной раскладкой**: мёртвый
@@ -23,17 +23,17 @@ diff.
 `tools/order.json`; гэпов нет.
 
 ```bash
-make                        # PUTUP_NEW.ROM: gen_layout → assemble → mk_manifest → срез векторной страницы
+make                        # putup_new.rom: gen_layout → assemble → mk_manifest → срез векторной страницы
 make layout                 # перегенерировать компоновку (asm/putup_new.asm + tools/order.json)
 make deploy / make full     # стандарт проекта (finally.mk)
-python3 tools/compare_color.py --new PUTUP_NEW.ROM     # первичный гейт: раскрашенный экран title/play1/play2
-python3 tools/compare_behavior.py --new PUTUP_NEW.ROM  # поведенческий: VRAM/глифы/порты orig→new→orig
+python3 tools/compare_color.py --new putup_new.rom     # первичный гейт: раскрашенный экран title/play1/play2
+python3 tools/compare_behavior.py --new putup_new.rom  # поведенческий: VRAM/глифы/порты orig→new→orig
 python3 tools/lint_ptrs.py                             # линт relocation-враждебных ссылок
 ```
 
 Конвейер (Makefile): `gen_layout.py` → `cd asm && z80asm -b -m=8080_strict -s
 putup_new.asm` → `mk_manifest.py` (`.sym` → `tools/layout.json`) → срез
-`d[256:]` (отбрасывается векторная страница 0x0000..0x00FF) → `PUTUP_NEW.ROM`;
+`d[256:]` (отбрасывается векторная страница 0x0000..0x00FF) → `putup_new.rom`;
 промежуточные артефакты очищаются. Оригиналы `putup.rom`/`putup.rdb` не
 дублируются — читаются из [`redesign/putup/src`](../../redesign/putup/src).
 
