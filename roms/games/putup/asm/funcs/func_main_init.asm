@@ -1,7 +1,8 @@
 ; Функция: func_main_init
 ; Адрес: 0x0B57
-; Размер: 262 байт (оригинал 0x0B57-0x0C64 = 270 Б; −11 Б inline-петли +3 Б
-;         CALL func_clear_vram), fall-through в lbl_title_key_poll
+; Размер: 262 байт кода (оригинал 0x0B57-0x0C64 = 270 Б; −11 Б inline-петли +3 Б
+;         CALL func_clear_vram), fall-through в lbl_title_key_poll. Перед меткой
+;         layout'ится 16-байтовый блок data_palette (не код).
 ; Описание: Инициализация программы и вывод заставки. DI; LXI SP,0100h;
 ;           CALL func_clear_vram (выделена из inline-петли 0x0B5B..0x0B65;
 ;           очистка VRAM 0x8000-0xFFFF=0); CALL func_hw_init; var_palette_ptr=data_palette+00Fh (метка);
@@ -18,6 +19,23 @@
 ;           тайлами data_tile_graphics; строки str_title_logo, str_push_space,
 ;           str_msx_magazine, str_hi + счёт, str_credits_koi8. Далее без возврата
 ;           переходит в lbl_title_key_poll (ожидание пробела).
+;
+; data_palette (16 слотов BBGGGRRR) перенесена из хвоста func_render_glyph —
+;   это стартовые данные HR-инициализации, они логически принадлежат main_init
+;   (LXI H, data_palette+00Fh; SHLD var_palette_ptr), а не рендереру глифов.
+;   В Execution flow безопасно ставить перед меткой func_main_init: сюда входят
+;   только через JMP func_main_init (func_entry) и LXI H,func_main_init; SHLD 0001h
+;   (reset vector в func_hw_init) — flow-through никогда не доходит до данных.
+;   func_vblank_isr читает палитру через var_palette_ptr (де-факто адрес метки).
+;   ОСОЗНАННОЕ отхождение от оригинала (2 стадии):
+;     Фаза 3: чанк E000 (вес бита 1) инвертирован во всех глифах -> индекс I->I^1;
+;       компенсация — перестановка соседних пар слотов PAL'[j]=PAL[j^1].
+;     Стадия 1: цвет текста перемаркирован 15<->8 (текст пишется только в
+;       плоскость 0x8000); компенсация — свап слотов 8 и 15.
+;   Итоговая РАСКРАШЕННАЯ картинка побайтово та же (гейт tools/compare_color.py).
+data_palette:
+    DEFB 00h, 00h, 7Bh, 30h, 0DAh, 0C9h, 0F2h, 0Dh   ; slot0..7 = old 1,0,3,2,5,4,7,6
+    DEFB 0ADh, 0Fh, 3Fh, 37h, 0DEh, 21h, 0FFh, 0A7h   ; slot8..15; свап 8<->15: slot8=серый текста
 
 func_main_init:
     DI                          ; 0x0B57
