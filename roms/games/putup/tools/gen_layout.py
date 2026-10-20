@@ -78,8 +78,18 @@ POINTER_SITES = (0x383F, 0x3841, 0x3843, 0x3854, 0x3856)
 
 # compact: перемещённый код кончается на new_addr(0x4600)=0x3607 -> блок от 0x3608.
 GLYPH_BASE = int(os.environ.get("GLYPH_BASE", "0x3608" if COMPACT else "0x4600"), 0)
-GLYPH_SIZE = 8192                                          # 256 глифов x 32 Б
 GLYPH_ASM  = "data_glyph_block_unpacked.asm"   # снимок — побайтовые DEFB в asm
+# Tier 2: размер компактного блока = фактическое число DEFB-байт снимка (буквы
+# сжаты 32->8 Б). Не хардкод: блок читается ниже (glyph_txt) и там же сверяется.
+def _glyph_defb_count():
+    _t = open(os.path.join(ASM, "data", GLYPH_ASM), encoding="utf-8").read()
+    n = 0
+    for _ln in _t.splitlines():
+        _m = re.match(r"\s*DEFB\s+(.+)", _ln, re.I)
+        if _m:
+            n += len([x for x in _m.group(1).split(";")[0].split(",") if x.strip()])
+    return n
+GLYPH_SIZE = _glyph_defb_count()               # 8192 verbatim / 5048 Tier-2
 IMG_END = GLYPH_BASE + GLYPH_SIZE
 # этап B: мёртвые распаковщики/пакеты выводятся из сборки (их диапазоны — нули).
 # KEEP_DEAD=1 возвращает Stage-A раскладку (всё на исторических адресах).
@@ -306,6 +316,7 @@ ptr = emit.get("data_glyph_ptr_table")
 with open(os.path.join(rep, "dead_ranges.json"), "w", encoding="utf-8") as f:
     _json.dump({"dead_ranges": [[s, e, n] for s, e, n in dead_ranges],
                 "glyph_base": GLYPH_BASE,
+                "glyph_size": GLYPH_SIZE,          # Tier 2: компактный блок < 8192
                 "ptr_table": [ptr[0], ptr[0] + 512] if ptr else None,
                 # Фаза 2: relocate-метаданные для verify/lint (compact-режим).
                 "compact": COMPACT,

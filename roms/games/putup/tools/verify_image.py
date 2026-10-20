@@ -42,6 +42,11 @@ NOP = {a for s, e in NOP_PATCHES for a in range(s - ORG, e - ORG)}
 # PAL'[j]=PAL[j^1], из-за чего эти 16 байтов отличаются от оригинала, а картинка
 # остаётся побайтово той же. Это легальный diff (ниже byte_exact_end в обоих режимах).
 PALETTE_DIVERGENCE = {a - ORG for a in range(0x08A3, 0x08B3)}
+# Tier 2: код func_render_glyph (0x0803..0x08A2) переписан на единый цикл-копир
+# с веткой по тегу compact/raw. Это ОСОЗНАННАЯ правка исполняемого кода в
+# byte-exact зоне; корректность доказывает поведенческий гейт compare_color.py
+# (гоняет реальный код) + замер тактов. Побайтовая сверка здесь осознанно снята.
+RENDER_CODE_DIVERGENCE = {a - ORG for a in range(0x0803, 0x08A3)}
 # сигнатура релокации базы буфера (0x5000 -> 0x6600): высший байт операнда
 # меняется на +0x16 (позиции курсора в 0x50..0x53) либо B0->9A (константа render).
 RELOC_HIGH = {0x50, 0x51, 0x52, 0x53}   # исходные высшие байты страниц 0x50xx..0x53xx
@@ -62,22 +67,26 @@ def load_info():
 
 
 def ptr_diff_positions(info, b):
-    """Позиции (в new-образе) таблицы указателей, чьё слово = glyph_base + n*32."""
+    """Tier 2: слово ptr_table = адрес записи глифа (compact — 8Б маска, raw — 32Б),
+    бит0 = тег компактности. Валидируем: (слово & ~1) — чётный указатель ВНУТРИ
+    компактного блока [gb, gb+glyph_size). Позиции корректных слов — легальный diff
+    (побайтовая карта смещений здесь не восстанавливается; её держат compare_color)."""
     gb, pt = info["glyph_base"], info["ptr_table"]
+    size = info.get("glyph_size", 8192)
     allowed = set()
     if pt:
         for n in range(256):
             off = pt[0] - ORG + 2 * n
-            want = (gb + n * 32) & 0xFFFF
             got = b[off] | (b[off + 1] << 8)
-            if got == want:
+            base = got & 0xFFFE          # снять тег bit0
+            if gb <= base < gb + size and (base - gb) % 2 == 0:
                 allowed |= {off, off + 1}
     return allowed
 
 
 def verify_verbatim(a, b, info):
     keep_dead = os.environ.get("KEEP_DEAD", "0") != "0"
-    allow = set(NOP) | PALETTE_DIVERGENCE
+    allow = set(NOP) | PALETTE_DIVERGENCE | RENDER_CODE_DIVERGENCE
     dead = []
     if info and not keep_dead:
         dead = info["dead_ranges"]
@@ -131,14 +140,14 @@ def verify_compact(a, b, info):
     glyph_base = info["glyph_base"]
     psites = set(info.get("pointer_sites", []))
 
-    # --- длина: [0x100 .. glyph_base+8192) ---
-    want_len = glyph_base + 8192 - ORG
+    # --- длина: [0x100 .. glyph_base+glyph_size) ---
+    want_len = glyph_base + info.get("glyph_size", 8192) - ORG
     if len(b) != want_len:
         print("ошибка: длина образа %d != %d (ожидание компакта)" % (len(b), want_len))
         return 1
 
     # нижние dead-диапазоны (< byte_exact_end) и NOP-заглушки — легальны в нижней зоне
-    allow_low = set(NOP) | PALETTE_DIVERGENCE
+    allow_low = set(NOP) | PALETTE_DIVERGENCE | RENDER_CODE_DIVERGENCE
     allow_low |= {i for s, e, _ in info["dead_ranges"]
                   for i in range(s - ORG, min(e, byte_exact_end) - ORG)}
     ptrd = ptr_diff_positions(info, b)

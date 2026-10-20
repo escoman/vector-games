@@ -47,7 +47,7 @@ layout:
 $(TARGET): $(GEN) $(ORIG) $(wildcard asm/*.asm)
 	@COMPACT=$(COMPACT) GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
 	@cd asm && $(Z80ASM) $(ASMFLAGS) -o=../$(FULLBIN) $(MASTER)
-	@python3 -c "import json;d=open('$(FULLBIN)','rb').read();gb=json.load(open('tools/dead_ranges.json'))['glyph_base'];gs=$(GLYPH_SIZE);open('$(TARGET)','wb').write(d[256:gb+gs])"
+	@python3 -c "import json;J=json.load(open('tools/dead_ranges.json'));d=open('$(FULLBIN)','rb').read();gb=J['glyph_base'];gs=J['glyph_size'];open('$(TARGET)','wb').write(d[256:gb+gs])"
 	@rm -f $(FULLBIN) asm/*.o asm/*.sym
 	@echo "=== Done: $@ ($$(stat -c%s $@) bytes, COMPACT=$(strip $(COMPACT))) ==="
 

@@ -47,9 +47,7 @@ SKIP_SCAN = {MASTER, "var_reloc_anchors.asm"}
 
 def _resolve_glyph_base():
     """GLYPH_BASE из окружения -> dead_ranges.json (источник истины компоновки,
-    пишет gen_layout.py) -> резерв Фазы 1 (0x4600). Хардкод-резерв важен: пока
-    default был 0x6000, перенос блока на 0x4600 ломал линт (окно блока 0x6000..,
-    а переехавший на 0x6600 текстовый буфер ложно считался 'внутри блока')."""
+    пишет gen_layout.py) -> резерв Фазы 1 (0x4600)."""
     if "GLYPH_BASE" in os.environ:
         return int(os.environ["GLYPH_BASE"], 0)
     path = os.path.join(PROJ, "tools", "dead_ranges.json")
@@ -61,8 +59,19 @@ def _resolve_glyph_base():
     return 0x4600
 
 
+def _resolve_glyph_size():
+    """Tier 2: размер компактного блока из dead_ranges.json (генерит gen_layout),
+    резерв 8192 (verbatim)."""
+    path = os.path.join(PROJ, "tools", "dead_ranges.json")
+    if os.path.exists(path):
+        info = json.load(open(path, encoding="utf-8"))
+        if isinstance(info, dict) and "glyph_size" in info:
+            return info["glyph_size"]
+    return 8192
+
+
 GLYPH_BASE = _resolve_glyph_base()
-GLYPH_SIZE = 8192
+GLYPH_SIZE = _resolve_glyph_size()
 NUM_RE = re.compile(r"^[0-9][0-9A-Fa-f]*[hH]$")
 
 # Единственные места, где ссылка в окно блока глифов осмысленна и легальна:

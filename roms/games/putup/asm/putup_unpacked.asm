@@ -3,7 +3,7 @@
 ; РЕЖИМ COMPACT (Фаза 2): мёртвые дыры [0x2761,0x2F61)+[0x3041,0x383A) вырезаны;
 ; объекты >=0x2761 сдвинуты вверх (new_addr, суммарный сдвиг -4089 Б);
 ; byte-exact сохранён только для [0x0100,0x2761); выше — поведенческая сверка.
-; 0x3608..0x5607: data_glyph_block_unpacked (8192 Б, снимок пост-иниц 0x6000..0x7FFF).
+; 0x3608..0x49BF: data_glyph_block_unpacked (5048 Б, снимок пост-иниц 0x6000..0x7FFF).
 
     org 0h
     include "var_ram_symbols.asm"
@@ -855,7 +855,7 @@
 ; --- filler 0x3607..0x3607 (1 bytes) zeros (RAM в оригинале) ---
     defs 0x3608 - $ ; align
 
-; --- unpacked glyph block @0x3608 (8192 bytes) ---
+; --- unpacked glyph block @0x3608 (5048 bytes) ---
     include "data/data_glyph_block_unpacked.asm"
 
-; image end @0x5608
+; image end @0x49C0
