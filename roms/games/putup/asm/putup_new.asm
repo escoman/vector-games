@@ -7,7 +7,6 @@
 
     org 0h
     include "var_ram_symbols.asm"
-    include "var_reloc_anchors.asm"
 
 ; --- emit func_entry @0x0100 (4 bytes) ---
     defs 0x0100 - $ ; align

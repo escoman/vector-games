@@ -51,24 +51,10 @@ def new_addr(a):
         return a                       # внутри дыры 2 — не эмится
     return a - TOTAL_DELTA             # весь код/данные после дыры 2 — сдвиг −4089
 
-# relocate-якоря: RAM-символы, чьи инициализированные значения лежат в
-# перемещаемой зоне (>=0x2761). Имена больше не EQU-литералы в var_ram_symbols;
-# компоновщик пишет asm/var_reloc_anchors.asm со значением new_addr(оригинал).
-ANCHORS = {
-    "var_music_tick":          0x383A,
-    "var_music_ptr_01":        0x383B,
-    "var_music_ptr_02":        0x383C,
-    "var_music_ptr_03":        0x383D,
-    "var_music_stream_base_01": 0x383F,
-    "var_music_stream_base_02": 0x3841,
-    "var_music_stream_base_03": 0x3843,
-    "data_voice_param_buf":    0x3845,
-    "data_voice_param_buf_end": 0x3853,
-    "var_music_track_ptr":     0x3854,
-    "var_music_track_base":    0x3856,
-    "var_music_voice2_flag":   0x3BC8,
-    "var_music_voice2_flag_hi": 0x3BC9,
-}
+# relocate-якоря var_music_* / data_voice_param_buf переведены (Stage-4) в РЕАЛЬНЫЕ
+# метки на байтах emit-файлов данных (data_music_init.asm / var_music_voice2_flag_init.asm),
+# поэтому отдельный словарь ANCHORS и генерируемый var_reloc_anchors.asm больше не нужны:
+# метки едут за блоком автоматически в любом режиме компоновки.
 # Встроенные 16-бит УКАЗАТЕЛИ в инициализированных RAM-значениях (var-init блок
 # 0x383A..0x3857): содержат базы потоков нот, указывающие в перемещаемые data-
 # таблицы. Их содержимое надо переписать через new_addr. Это ЕДИНСТВЕННЫЕ
@@ -129,16 +115,18 @@ def has_instructions(txt):
 
 def defb_bytes(txt):
     """Суммарное число байт побайтовых данных: DEFB-аргументы (×1) +
-    DEFW/DW-аргументы (×2). data_music_init — смешанный DEFB/DEFW блоб."""
+    DEFW/DW-аргументы (×2). Допускает метку перед директивой (`label: DEFB ...`)
+    — data_music_init/voice2_flag несут пометки на байтах как reloc-метки."""
     n = 0
     for ln in txt.splitlines():
-        m = re.match(r"\s*DEFB\s+(.+)", ln, re.I)
+        code = ln.split(";")[0]
+        m = re.search(r"\bDEFB\s+(.+)", code, re.I)
         if m:
-            n += len([t for t in m.group(1).split(";")[0].split(",") if t.strip()])
+            n += len([t for t in m.group(1).split(",") if t.strip()])
             continue
-        m = re.match(r"\s*(?:DEFW|DW)\s+(.+)", ln, re.I)
+        m = re.search(r"\b(?:DEFW|DW)\s+(.+)", code, re.I)
         if m:
-            n += 2 * len([t for t in m.group(1).split(";")[0].split(",") if t.strip()])
+            n += 2 * len([t for t in m.group(1).split(",") if t.strip()])
     return n
 
 
@@ -216,11 +204,6 @@ CODE_END_EFF = new_addr(CODE_END)   # compact: 0x35FF; verbatim: 0x4600
 assert GLYPH_BASE + GLYPH_SIZE <= 0x8000, "не влезает в нижние 32КБ"
 assert GLYPH_BASE >= CODE_END_EFF, "блок не должен наезжать на (перемещённый) код"
 if COMPACT:
-    # перемещённые RAM-скретч-якоря не должны попасть в read-only глиф-окно.
-    for _nm, _oa in ANCHORS.items():
-        _na = new_addr(_oa)
-        assert _na < GLYPH_BASE or _na >= GLYPH_BASE + GLYPH_SIZE, \
-            "RAM-якорь %s после reloc 0x%04X попал в глиф-окно" % (_nm, _na)
     # текстовый back-буфер (Фаза 1, 0x6600) — выше компактного блока, вне коллизии.
     assert not (GLYPH_BASE <= 0x6600 < GLYPH_BASE + GLYPH_SIZE), "data_text_buffer в глиф-окне"
 
@@ -283,12 +266,7 @@ def emit_gap(s, e, out):
             body = ", ".join("0%Xh" % b for b in octet)
             out.append("    DEFB %s" % body)
 
-# relocate-якоря — генерируемый include (значение = new_addr(оригинал)).
-anch_lines = ["; var_reloc_anchors.asm — ГЕНЕРИРУЕТСЯ tools/gen_layout.py, не править руками.",
-              "; RAM-символы перемещаемой зоны: verbatim = исходный адрес, compact = new_addr.", ""]
-for nm in sorted(ANCHORS, key=lambda k: ANCHORS[k]):
-    anch_lines.append("%-24s EQU 0%04Xh" % (nm + ":", new_addr(ANCHORS[nm])))
-open(os.path.join(ASM, "var_reloc_anchors.asm"), "w", encoding="utf-8").write("\n".join(anch_lines) + "\n")
+# (var_reloc_anchors.asm не генерируется: relocate-якоря — теперь метки в emit-данных.)
 
 lines = []
 lines.append("; PUTUP_NEW.ROM (games/putup) — putup с РАСПАКОВАННЫМИ данными")
@@ -304,7 +282,6 @@ lines.append("; 0x%X..0x%X: data_glyph_block_unpacked (%d Б, снимок по�
 lines.append("")
 lines.append("    org 0h")
 lines.append('    include "var_ram_symbols.asm"')
-lines.append('    include "var_reloc_anchors.asm"')
 lines.append("")
 gapcount = gapbytes = 0
 for seg in segs:
