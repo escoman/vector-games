@@ -29,7 +29,9 @@ func_draw_game_objects:
     DCX H                       ; 0x1328
     JZ loc_132F                 ; 0x1329
 loc_132C:
-    CALL sync_draw_tile_at_ptr  ; 0x132C
+    EI                          ; синк к VBlank
+    HLT
+    CALL func_draw_tile_at_ptr  ; было CALL sync_draw_tile_at_ptr
 loc_132F:
     LDA var_scr_090A                    ; 0x132F
     MOV L, A                    ; 0x1332
@@ -53,7 +55,9 @@ loc_132F:
     DCX H                       ; 0x1358
     JZ loc_135F                 ; 0x1359
 loc_135C:
-    CALL sync_draw_tile_at_ptr  ; 0x135C
+    EI                          ; синк к VBlank
+    HLT
+    CALL func_draw_tile_at_ptr  ; было CALL sync_draw_tile_at_ptr
 loc_135F:
     LDA var_scr_090A                    ; 0x135F
     MOV L, A                    ; 0x1362
@@ -77,7 +81,9 @@ loc_135F:
     DCX H                       ; 0x1388
     JZ loc_138F                 ; 0x1389
 loc_138C:
-    CALL sync_draw_tile_at_ptr  ; 0x138C
+    EI                          ; синк к VBlank
+    HLT
+    CALL func_draw_tile_at_ptr  ; было CALL sync_draw_tile_at_ptr
 loc_138F:
     LDA var_scr_090A                    ; 0x138F
     MOV L, A                    ; 0x1392

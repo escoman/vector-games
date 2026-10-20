@@ -32,6 +32,16 @@ from mcp_session import McpSession, bytes_of, to_addr  # noqa: E402
 
 ORIG = os.path.join(ROOT, "roms", "redesign", "putup", "src", "putup.rom")
 ORIG_GLYPH_BASE = 0x6000          # RAM-окно распаковки у оригинала
+
+
+def new_glyph_base():
+    """Адрес блока глифов в NEW из манифеста (свободная конкатенация: запечён
+    в ROM по data_glyph_block, а не в RAM 0x6000 как у оригинала)."""
+    p = os.path.join(HERE, "layout.json")
+    if not os.path.exists(p):
+        raise SystemExit("нет tools/layout.json — сначала `make` (пишет манифест)")
+    return json.load(open(p, encoding="utf-8"))["glyph_base"]
+
 REPORTS = os.path.join(PROJ, "tools")      # артефакты поведенческой сверки
 MUSIC_PORTS = (0x09, 0x0A, 0x0B)
 F_TITLE, F_PLAY1, F_PLAY2 = 200, 100, 100  # ОТНОСИТЕЛЬНЫЕ интервалы кадров CPU
@@ -173,11 +183,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--new", default=os.path.join(PROJ, "PUTUP_NEW.ROM"))
     ap.add_argument("--label", default="A")
-    ap.add_argument("--glyph-base", default="0x6000",
-                    help="адрес блока глифов в NEW (этап B: 0x4600/0x5600)")
+    ap.add_argument("--glyph-base", default=None,
+                    help="адрес блока глифов в NEW (по умолчанию — из tools/layout.json)")
     args = ap.parse_args()
     os.makedirs(REPORTS, exist_ok=True)
-    gb_new = int(args.glyph_base, 0)
+    gb_new = int(args.glyph_base, 0) if args.glyph_base else new_glyph_base()
 
     with McpSession() as s:
         cap_o1 = run_phase(s, ORIG)

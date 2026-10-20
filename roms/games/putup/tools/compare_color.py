@@ -41,10 +41,19 @@ sys.path.insert(0, os.path.join(ROOT, "utils", "analyze"))
 from mcp_session import McpSession, bytes_of, to_addr  # noqa: E402
 
 ORIG = os.path.join(ROOT, "roms", "redesign", "putup", "src", "putup.rom")
-ISR = 0x03A4                 # func_vblank_isr: 1 хит = 1 игровой кадр
+# Адреса ОРИГИНАЛА (фикс.): func_vblank_isr / палитра в putup.rom. Для нового ROM
+# (свободная конкатенация) адреса читаются из tools/layout.json (пишет mk_manifest.py).
+ORIG_ISR = 0x03A4
+ORIG_PALETTE = 0x08A3
 PLANES = (0x8000, 0xA000, 0xC000, 0xE000)   # веса 8,4,2,1 (порядок = бит3..бит0)
-PALETTE_ADDR = 0x08A3
 PALETTE_LEN = 16
+
+
+def load_layout():
+    p = os.path.join(HERE, "layout.json")
+    if not os.path.exists(p):
+        raise SystemExit("нет tools/layout.json — сначала `make` (он пишет манифест адресов)")
+    return json.load(open(p, encoding="utf-8"))
 # номера хитов ISR от загрузки ROM: окна чекпоинтов (как былую схему WARMUP+F_*)
 H_TITLE = 220 + 200          # заставка/attract
 H_PLAY1 = H_TITLE + 100      # игра после SPACE
@@ -76,8 +85,8 @@ def capture_vram(s):
     return bytes_of(s.call("debug_get_vram_bytes", {"address": 0x8000, "length": 32768}))
 
 
-def capture_palette(s):
-    return bytes_of(s.call("debug_read_memory_range", {"address": PALETTE_ADDR, "length": PALETTE_LEN}))
+def capture_palette(s, palette_addr):
+    return bytes_of(s.call("debug_read_memory_range", {"address": palette_addr, "length": PALETTE_LEN}))
 
 
 def decode_colors(vram, palette):
@@ -109,10 +118,10 @@ def main():
         "play2": (H_PLAY2, {K_LEFT: "LEFT", K_RIGHT: "RIGHT"}),
     }
 
-    def phase_windows(s, rom_path):
+    def phase_windows(s, rom_path, isr, palette_addr):
         s.load_rom(rom_path, org=0x0100)
-        s.call("debug_set_breakpoint", {"address": ISR})
-        palette = capture_palette(s)
+        s.call("debug_set_breakpoint", {"address": isr})
+        palette = capture_palette(s, palette_addr)
         out = {}
         hit = 0
         for name in ("title", "play1", "play2"):
@@ -121,7 +130,7 @@ def main():
             while hit < start:
                 s.call("debug_run")
                 p = wait_pause(s)
-                if p != ISR:
+                if p != isr:
                     raise RuntimeError("останов не на ISR: pc=%s" % p)
                 hit += 1
                 if hit in events:
@@ -131,7 +140,7 @@ def main():
                 if k:
                     s.call("debug_run")
                     p = wait_pause(s)
-                    if p != ISR:
+                    if p != isr:
                         raise RuntimeError("останов не на ISR: pc=%s" % p)
                     hit += 1
                     if hit in events:
@@ -144,9 +153,10 @@ def main():
         return out
 
     lines, worst = [], 0
+    L = load_layout()
     with McpSession(timeout=120) as s:
-        w_orig = phase_windows(s, ORIG)
-        w_new = phase_windows(s, args.new)
+        w_orig = phase_windows(s, ORIG, ORIG_ISR, ORIG_PALETTE)
+        w_new = phase_windows(s, args.new, L["func_vblank_isr"], L["data_palette"])
 
     for name in ("title", "play1", "play2"):
         best, used = None, None

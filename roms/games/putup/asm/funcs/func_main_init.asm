@@ -2,9 +2,10 @@
 ; Адрес: 0x0B57
 ; Размер: 270 байт (0x0B57-0x0C64), fall-through в lbl_title_key_poll
 ; Описание: Инициализация программы и вывод заставки. DI; LXI SP,0100h;
-;           очистка VRAM 0x8000-0xFFFF=0; CALL func_hw_init; var_palette_ptr=08B2h;
+;           очистка VRAM 0x8000-0xFFFF=0; CALL func_hw_init; var_palette_ptr=data_palette+00Fh (метка);
 ;           var_palette_timer=09h; заполнение data_text_buffer (0x400 байт)=0FFh;
-;           CALL func_load_glyph_block (в PUTUP_NEW запатчен в 3xNOP: глифы уже в ROM на GLYPH_BASE=0x4600);
+;           CALL func_load_glyph_block УДАЛЁН (Stage-3/4A): глифы запечены в ROM,
+;           адрес блока задаёт компоновщик (data_glyph_block, свободная конкатенация);
 ;           копирование спрайтов data_sprites_2F61 ->
 ;           data_ram_sprites_7418 (1Ch блоков по 8 байт, источник убывает вниз) —
 ;           в PUTUP_NEW выведено: одноразовый init-write, читателя адресу 0x7418
@@ -40,17 +41,10 @@ loc_0B7A:
     MOV A, B                    ; 0x0B7E
     ORA C                       ; 0x0B7F
     JNZ loc_0B7A                ; 0x0B80
-    NOP                         ; 0x0B83  (PUTUP_NEW: был CALL func_load_glyph_block — распакованный блок лежит в ROM)
-    NOP                         ; 0x0B84
-    NOP                         ; 0x0B85
-    ; Вестигиальный копир спрайтов (0x0B86..0x0BA7, 34 Б) ВЫВЕДЕН из исполнения.
-    ; Он писал data_sprites_2F61 -> 0x7418, но: (а) reader у адреса 0x7418 в ROM
-    ; отсутствует (grep + capture_A), (б) источник читается ВНИЗ от 0x2F61
-    ; (DCX D), т.е. в хвост data_gfx_2761, который обнулён как мёртвый пакет.
-    ; Копир — остаток распаковщика; VRAM побайтово совпадает с оригиналом и без
-    ; него. DEFS даёт 34x00h = NOP на 8080; адреса последующего кода сохранены.
-    DEFS 0x0BA8 - $             ; 0x0B86..0x0BA7 (34 байта) = NOP
-    LXI H, 07D0h                ; 0x0BA8
+    ; Stage-4A (шлак удалён): были 3 NOP (заглушка CALL func_load_glyph_block —
+    ; глифы запечены в ROM) и мёртвый спрайт-копир (0x0B86..0x0BA7, 34 Б): reader
+    ; адреса 0x7418 в ROM отсутствует, источник (хвост data_gfx_2761) обнулён.
+    LXI H, 07D0h
     SHLD var_score_delta                   ; 0x0BAB
     MVI A, 01h                  ; 0x0BAE
     STA var_scr_08EE                    ; 0x0BB0

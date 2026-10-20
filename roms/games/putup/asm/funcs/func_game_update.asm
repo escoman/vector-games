@@ -116,7 +116,9 @@ loc_0D6D:
     DCX H                       ; 0x0D97
     JZ loc_0D9E                 ; 0x0D98
 loc_0D9B:
-    CALL sync_draw_tile_at_ptr  ; 0x0D9B  (стереть prev — синк к VBlank)
+    EI                          ; синк к VBlank: луч не сканирует экран
+    HLT                         ; ждать кадрового RST7 (func_vblank_isr)
+    CALL func_draw_tile_at_ptr  ; стереть prev (было CALL sync_draw_tile_at_ptr)
 loc_0D9E:
     LDA var_scr_090A                    ; 0x0D9E
     MOV L, A                    ; 0x0DA1

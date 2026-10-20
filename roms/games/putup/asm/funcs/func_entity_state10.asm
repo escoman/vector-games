@@ -27,7 +27,9 @@ func_entity_state10:
     DCX H                       ; 0x1937
     JZ loc_193E                 ; 0x1938
 loc_193B:
-    CALL sync_draw_tile_at_ptr  ; 0x193B
+    EI                          ; синк к VBlank
+    HLT
+    CALL func_draw_tile_at_ptr  ; было CALL sync_draw_tile_at_ptr
 loc_193E:
     LDA data_entity_ycoords+01h                    ; 0x193E
     MOV L, A                    ; 0x1941
