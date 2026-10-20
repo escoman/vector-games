@@ -94,7 +94,18 @@ IMG_END = GLYPH_BASE + GLYPH_SIZE
 # KEEP_DEAD=1 возвращает Stage-A раскладку (всё на исторических адресах).
 KEEP_DEAD = os.environ.get("KEEP_DEAD", "0") != "0"
 DEAD = {"func_load_gfx_2761",
-        "data_packed_font_3041", "data_gfx_2761"}
+        "data_packed_font_3041", "data_gfx_2761",
+        # Stage-4 2b: legacy-движок блита — замкнутый мёртвый остров.
+        # Функции удалены из анализа/эмиссии (диапазоны занулены по месту;
+        # физическое удаление байтов — на 3B свободной конкатенации).
+        # доказательства мёртвости: 0 прямых CALL (debug_get_xrefs), адрес blit
+        # (0x0542) не встречается в ROM как значение (0x42 0x05 — 0 совпадений,
+        # PCHL/таблица не достроит), unreachable в CFG от reset (uncovered
+        # 0x051B..0x07FF), ни один живой emit не пишет вектор 0x0015. Живой
+        # рендер: func_draw_game_objects -> sync_/func_render_tile_vram.
+        "func_blit_object_tile", "func_call_vector_053B",
+        "func_blit_plane_mask10", "func_blit_plane_mask20",
+        "func_blit_plane_mask40", "func_blit_plane_mask80"}
 # func_load_glyph_block (0x0401..0x0439) выведен из DEAD: слот занят живыми
 # VBlank-sync трамплинами (см. funcs/func_load_glyph_block.asm) — эмитится как код.
 

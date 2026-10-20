@@ -180,24 +180,8 @@
     defs 0x0401 - $ ; align
     include "funcs/func_load_glyph_block.asm"
 
-; --- emit func_blit_plane_mask80 @0x0439 (37 bytes) ---
+; --- gap 0x0439..0x051B (226 bytes) from original image @reloc 0x0439 ---
     defs 0x0439 - $ ; align
-    include "funcs/func_blit_plane_mask80.asm"
-
-; --- emit func_blit_plane_mask40 @0x045E (37 bytes) ---
-    defs 0x045E - $ ; align
-    include "funcs/func_blit_plane_mask40.asm"
-
-; --- emit func_blit_plane_mask20 @0x0483 (37 bytes) ---
-    defs 0x0483 - $ ; align
-    include "funcs/func_blit_plane_mask20.asm"
-
-; --- emit func_blit_plane_mask10 @0x04A8 (37 bytes) ---
-    defs 0x04A8 - $ ; align
-    include "funcs/func_blit_plane_mask10.asm"
-
-; --- gap 0x04CD..0x051B (78 bytes) from original image @reloc 0x04CD ---
-    defs 0x04CD - $ ; align
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
@@ -207,19 +191,57 @@
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
     DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h
 ; --- emit data_vram_col_table @0x051B (32 bytes) ---
     defs 0x051B - $ ; align
     include "data/data_vram_col_table.asm"
 
-; --- emit func_call_vector_053B @0x053B (7 bytes) ---
+; --- gap 0x053B..0x0600 (197 bytes) from original image @reloc 0x053B ---
     defs 0x053B - $ ; align
-    include "funcs/func_call_vector_053B.asm"
-
-; --- emit func_blit_object_tile @0x0542 (190 bytes) ---
-    defs 0x0542 - $ ; align
-    include "funcs/func_blit_object_tile.asm"
-
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    DEFB 00h, 00h, 00h, 00h, 00h
 ; --- emit data_glyph_ptr_table @0x0600 (512 bytes) ---
     defs 0x0600 - $ ; align
     include "data/data_glyph_ptr_table.asm"
