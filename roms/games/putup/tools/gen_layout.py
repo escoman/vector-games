@@ -128,12 +128,17 @@ def has_instructions(txt):
 
 
 def defb_bytes(txt):
-    """Суммарное число аргументов DEFB/DEFW-строк побайтовых данных."""
+    """Суммарное число байт побайтовых данных: DEFB-аргументы (×1) +
+    DEFW/DW-аргументы (×2). data_music_init — смешанный DEFB/DEFW блоб."""
     n = 0
     for ln in txt.splitlines():
         m = re.match(r"\s*DEFB\s+(.+)", ln, re.I)
         if m:
             n += len([t for t in m.group(1).split(";")[0].split(",") if t.strip()])
+            continue
+        m = re.match(r"\s*(?:DEFW|DW)\s+(.+)", ln, re.I)
+        if m:
+            n += 2 * len([t for t in m.group(1).split(";")[0].split(",") if t.strip()])
     return n
 
 
@@ -331,7 +336,7 @@ lines.append("; --- unpacked glyph block @0x%04X (%d bytes) ---" % (GLYPH_BASE, 
 lines.append('    include "data/%s"' % GLYPH_ASM)
 lines.append("")
 lines.append("; image end @0x%04X" % IMG_END)
-open(os.path.join(ASM, "putup_unpacked.asm"), "w", encoding="utf-8").write("\n".join(lines) + "\n")
+open(os.path.join(ASM, "putup_new.asm"), "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
 # список разрешённых расхождений с оригиналом для make verify
 import json as _json
@@ -353,47 +358,9 @@ with open(os.path.join(rep, "dead_ranges.json"), "w", encoding="utf-8") as f:
                 "pointer_sites": list(POINTER_SITES)},   # var-init embedded-указатели
               f)
 
-# --- compact: RDB перемещённого образа (не мутируем исходный redesign/putup.rdb) ---
-# Адреса объектов/ссылок >=0x2761 проходят через new_addr; объекты, целиком
-# лежащие в вырезанной дыре, удаляются (их нет в компактном образе). Используется
-# для disassembly/линтов компактного PUTUP_NEW.ROM. Компактный режим только.
-if COMPACT:
-    def _in_hole(x):
-        return any(hs <= x < he for hs, he in HOLES)
-    # Артефакты рантайм-RAM на/выше конца кодового образа (>= CODE_END) НЕ едут
-    # по new_addr — компакция кода их не двигает; их компактная позиция задаётся
-    # явно: глиф-блок печётся на GLYPH_BASE, текстовый back-буфер (Фаза 1) на 0x6600.
-    RAM_REMAP = {0x6000: GLYPH_BASE, 0x5000: 0x6600}
-
-    def _map(x):
-        if x >= CODE_END:
-            return RAM_REMAP.get(x, x)
-        return new_addr(x)
-    cobjs = []
-    for o in rdb["objects"]:
-        a = int(o["address"], 16)
-        if _in_hole(a):
-            continue
-        no = dict(o)
-        no["address"] = "0x%04X" % _map(a)
-        if "links" in o and isinstance(o["links"], list):
-            no["links"] = ["0x%04X" % _map(int(L, 16))
-                           for L in o["links"]
-                           if not _in_hole(int(L, 16))]
-        cobjs.append(no)
-    compact_rdb = dict(rdb)
-    compact_rdb["objects"] = cobjs
-    compact_rdb["rom"] = dict(rdb.get("rom", {}))
-    compact_rdb["rom"]["comment"] = (
-        "COMPACT (Фаза 2): дыры %s вырезаны; объекты >=0x%04X сдвинуты new_addr (-%d); "
-        "byte-exact только [0x0100,0x%04X)." % (
-            [list(h) for h in HOLES], HOLES[0][0], TOTAL_DELTA, HOLES[0][0]))
-    compact_rdb["rom"]["size"] = IMG_END - ORG
-    with open(os.path.join(ROOT, "putup_compact.rdb"), "w", encoding="utf-8") as f:
-        _json.dump(compact_rdb, f, ensure_ascii=False, indent=1)
-    dropped = len(rdb["objects"]) - len(cobjs)
-    print("putup_compact.rdb: %d объектов (%d в дырах -> удалено), reloc >=0x%04X"
-          % (len(cobjs), dropped, HOLES[0][0]))
+# putup_compact.rdb больше не генерируется: потребителей не было (только lint/
+# disassembly по оригинальному putup.rdb), а flat-delta-модель new_addr/HOLES
+# уходит вместе со свободной конкатенацией (Stage-4).
 
 emitbytes = sum(k[2] for k in kept)
 imgsize = IMG_END - ORG

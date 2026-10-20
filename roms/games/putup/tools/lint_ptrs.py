@@ -7,7 +7,7 @@ func_load_glyph_block, func_load_gfx_2761 + их данные). Всё оста�
 стоять на оригинальных адресах — числовые литералы на закреплённые адреса
 допустимы (это обходится `should_be_symbolic`-справкой общего lint, не блокер).
 
-Проверки по всем файлам реальной сборки (entry = putup_unpacked.asm):
+Проверки по всем файлам реальной сборки (entry = putup_new.asm):
 1. число/символ (через EQU-резолвинг), попадающий в окно блока глифов, —
    ошибка, если источник не в списке allow (см. ALLOW ниже);
 2. числовой ЛИТЕРАЛ внутрь удаляемого ROM-блока — блокер (код читал бы
@@ -37,7 +37,7 @@ from analyze import export_asm, symbolic_operand_lint as sol  # noqa: E402
 
 ASM = os.path.join(PROJ, "asm")
 REF = os.path.join(ROOT, "roms", "redesign", "putup", "src")  # оригиналы putup.rom/rdb
-MASTER = "putup_unpacked.asm"
+MASTER = "putup_new.asm"
 #skip_scan = файлы, где числовые значения — ОПРЕДЕЛЕНИЯ (EQU/incbin по константе),
 #а не ссылки кода: мастер-макет и генерируемая таблица relocate-якорей
 #var_reloc_anchors.asm (ее EQU-литералы = перемещённые RAM-адреса, численно

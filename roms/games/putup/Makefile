@@ -11,7 +11,7 @@
 # и поведения, а не побайтовый diff. Побайтовый A/B-режим — `make COMPACT=0`
 # (25856 Б, byte-exact [0x0100,0x45FF), GLYPH_BASE=0x4600).
 #
-# Компоновка: tools/gen_layout.py -> asm/putup_unpacked.asm (гэпы — inline DEFB).
+# Компоновка: tools/gen_layout.py -> asm/putup_new.asm (гэпы — inline DEFB).
 # Все данные — побайтовыми DEFB в asm-файлах, bin-артефактов нет.
 # Режим 8080: -m=8080_strict. make verify — сверка с оригиналом: в COMPACT=0
 # побайтовая по кодовой зоне; в COMPACT=1 инвариант перемещения (каждый diff
@@ -23,7 +23,7 @@ ASMFLAGS  = -b -m=8080_strict -s
 TARGET    = PUTUP_NEW.ROM
 ORIG      = ../../redesign/putup/src/putup.rom
 FULLBIN   = build_full.bin
-MASTER    = putup_unpacked.asm
+MASTER    = putup_new.asm
 GEN       = tools/gen_layout.py
 IMGADDR   = 0x100
 COMPACT  ?= 1               # по умолчанию Фаза 2 (вырез дыр + relocation); COMPACT=0 — побайтовый A/B

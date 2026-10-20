@@ -124,7 +124,7 @@ C. **Коррекция тактов:** если burst чуть длиннее b
   (режимы 256×256 / 512×256, §5.1 «Верхняя строка и вертикальный сдвиг», порт `02h`
   режима, `var_scroll`/порт `03h`).
 - Кодовая карта putup: `roms/games/putup/asm/` (функции выше), компоновка —
-  `roms/games/putup/tools/gen_layout.py` (мастер `asm/putup_unpacked.asm`
+  `roms/games/putup/tools/gen_layout.py` (мастер `asm/putup_new.asm`
   генерируется, руками не править).
 - Related (закрыто): сдвиг «HURRY UP!»/game-over — релокация устаревших
   абсолютных HUD-курсоров в gap-коде (`TEXTBUF_BASE_RELOC` в `gen_layout.py`).

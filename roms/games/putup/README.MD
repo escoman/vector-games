@@ -36,7 +36,7 @@ python3 tools/compare_color.py --new PUTUP_NEW.ROM
 make COMPACT=0              # 25856 Б, GLYPH_BASE=0x4600
 make COMPACT=0 verify        # побайтовая сверка 0x0100..0x45FF
 make COMPACT=0 GLYPH_BASE=0x6000 KEEP_DEAD=1   # регрессия этапа A
-make layout                 # перегенерировать компоновку (asm/putup_unpacked.asm + gap-бины)
+make layout                 # перегенерировать компоновку (asm/putup_new.asm + gap-бины)
 ```
 
 Перенос блока = одна константа `GLYPH_BASE`. Изначально кандидат 0x4600 был
@@ -116,10 +116,9 @@ new_addr(a) = a          для a < 0x2761            (нижняя зона —
 - **Assert-ловушки** в компоновщике: перемещённые RAM-якоря и `data_text_buffer`
   (0x6600, Фаза 1 — выше компактного блока) не пересекают read-only окно
   `[GLYPH_BASE,GLYPH_BASE+8192)`; `GLYPH_BASE >= code_end_new`.
-- **RDB**: исходный `redesign/putup/src/putup.rdb` НЕ мутируется; компакт-режим
-  эмитирует `putup_compact.rdb` (адреса/ссылки `>=0x2761` через `new_addr`, объекты
-  внутри дыр удалены; RAM-артефакты `data_glyph_block`→`GLYPH_BASE`,
-  текстовый буфер→0x6600 — не сдвигаются `new_addr`).
+- **RDB**: исходный `redesign/putup/src/putup.rdb` НЕ мутируется. Отдельный
+  компакт-RDB (`putup_compact.rdb`) больше не генерируется — потребителей не было;
+  анализ компактного образа идёт по оригинальному `putup.rdb` + map-файлу сборки.
 
 Инвариант `verify` (компакт): длина == 21768; нижняя зона byte-exact; выше
 `0x2761` — каждый байт обязан быть равен оригиналу на `new_addr⁻¹`, кроме
@@ -235,7 +234,7 @@ CALL запатчен в 3×NOP, а распакованный блок — по
 
 | | |
 |---|---|
-| `tools/gen_layout.py` | компоновщик: мастер-asm с inline DEFB для гэпов + `tools/dead_ranges.json`; `COMPACT=1` — relocation + `putup_compact.rdb` |
+| `tools/gen_layout.py` | компоновщик: мастер-asm с inline DEFB для гэпов + `tools/dead_ranges.json`; `COMPACT=1` — relocation |
 | `tools/get_glyph_block.py` | снятие блока 0x6000..0x7FFF через MCP (вербатим → DEFB в asm) |
 | `tools/verify_image.py` | `make verify`: verbatim (байт-точность) / compact (byte-exact низ + инвариант чистого сдвига) |
 | `tools/lint_ptrs.py` | этап B: абсолютные ссылки на удаляемые/смещаемые адреса (+ RDB-сверка) |
@@ -256,5 +255,5 @@ bin-артефактов); карты уровней — отдельные фа
 - `asm/funcs/` — код: `func_*` и точки входа `lbl_*`;
 - `asm/data/` — данные: `data_*` (в т.ч. `data_level_*.asm`, `data_glyph_block_unpacked.asm`)
   и строковые константы `str_*` (в RDB тип `string` — категория данных);
-- `asm/var_ram_symbols.asm` — EQU-алиасы RAM-переменных; `asm/putup_unpacked.asm` —
+- `asm/var_ram_symbols.asm` — EQU-алиасы RAM-переменных; `asm/putup_new.asm` —
   мастер-компоновка (генерируется, include-и с префиксами `funcs/` и `data/`).
