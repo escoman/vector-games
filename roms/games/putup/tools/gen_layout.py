@@ -83,8 +83,10 @@ POINTER_SITES = (0x383F, 0x3841, 0x3843, 0x3854, 0x3856)
 # («HURRY UP» сползла вниз; game-over-текст — тоже). Ключ — адрес инструкции LXI H
 # (op 21); 16-бит операнд лежит в site+1 (lo) / site+2 (hi) — правим их в chunk.
 # verify_image разрешает дельт высшим байтом +0x16 (RELOC_HIGH 0x50..0x53).
-TEXTBUF_BASE_RELOC = {0x1296: 0x660A,   # ' HURRY UP ! '  (old курсор 0x500A)
-                      0x143B: 0x676A}   # game-over строка (old курсор 0x516A)
+# Курсоры текстового буфера теперь СИМВОЛИЧНЫ в исходниках cluster B
+# (func_gamestate_handlers 0x1296, func_collision_death 0x143B): LXI H,
+# data_text_buffer+смещение. Побайтовая релокация gap-байтов больше не нужна.
+TEXTBUF_BASE_RELOC = {}
 RELOC_PATCHED: set = set()             # контроль: все ли курсоры найдены в gap-зоне
 
 # compact: перемещённый код кончается на new_addr(0x4600)=0x3607 -> блок от 0x3608.

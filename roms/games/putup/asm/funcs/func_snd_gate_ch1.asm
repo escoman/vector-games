@@ -9,7 +9,7 @@
 func_snd_gate_ch1:
     MOV A, E                    ; 0x02EA
     ANI 10h                     ; 0x02EB
-    JNZ 026Ah                   ; 0x02ED — эпилог диспетчера
+    JNZ func_snd_op_epilogue     ; 0x02ED — эпилог диспетчера
     MOV A, E                    ; 0x02F0
     ANI 0Fh                     ; 0x02F1
     CPI 03h                     ; 0x02F3
@@ -17,5 +17,5 @@ func_snd_gate_ch1:
     JC loc_02FC                 ; 0x02F7
     MVI A, 00h                  ; 0x02FA
 loc_02FC:
-    CALL 02A2h                  ; 0x02FC — вход в середину func_snd_enable_ch1
-    JMP 026Ah                   ; 0x02FF — эпилог диспетчера
+    CALL func_snd_enable_ch1_gate ; 0x02FC — mid-function вход func_snd_enable_ch1
+    JMP func_snd_op_epilogue      ; 0x02FF — эпилог диспетчера

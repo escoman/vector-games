@@ -12,7 +12,7 @@
 func_score_and_redraw:
     LDA var_collision_flag      ; 0x0F09
     SUI 6Dh                     ; 0x0F0C
-    LXI H, 08EDh                ; 0x0F0E
+    LXI H, var_item_cost_table   ; 0x0F0E
     CALL func_hl_add_a          ; 0x0F11
     MOV L, M                    ; 0x0F14
     MVI H, 00h                  ; 0x0F15
@@ -26,11 +26,13 @@ func_score_and_redraw:
     LHLD var_score              ; 0x0F1E
     DAD D                       ; 0x0F21
     SHLD var_score              ; 0x0F22
+loc_0F25:
     CALL func_draw_score_hud    ; 0x0F25
+loc_0F28:
     LDA var_player_col          ; 0x0F28
     MOV D, A                    ; 0x0F2B
     LDA var_player_row          ; 0x0F2C
     MOV E, A                    ; 0x0F2F
-    LXI H, 270Ah                ; 0x0F30
+    LXI H, data_tile_empty      ; 0x0F30
     CALL func_draw_tile_to_buf  ; 0x0F33
     JMP func_game_update        ; 0x0F36

@@ -24,4 +24,4 @@ func_print_uint16:
     LXI D, 0FFF6h               ; 0x034B
     CALL func_divmod_u16        ; 0x034E
     MOV A, L                    ; 0x0351
-    JMP 0364h                   ; 0x0352 — хвост печати цифры (вне RDB)
+    JMP func_print_digit_tail   ; 0x0352 — хвост печати цифры

@@ -60,6 +60,7 @@ loc_0B7A:
     STA 08F0h                   ; 0x0BBA
     MVI A, 08h                  ; 0x0BBD
     STA 08F1h                   ; 0x0BBF
+loc_0BC2:
     CALL func_music_init        ; 0x0BC2
     XRA A                       ; 0x0BC5
     LXI H, 0000h                ; 0x0BC6

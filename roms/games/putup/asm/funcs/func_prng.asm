@@ -14,7 +14,7 @@ func_prng:
     PUSH D                      ; 0x1124
     PUSH B                      ; 0x1125
     PUSH PSW                    ; 0x1126
-    LHLD 1155h                  ; 0x1127
+    LHLD var_prng_seed          ; 0x1127
     LXI B, 0383h                ; 0x112A
     LXI D, 0000h                ; 0x112D
     MVI A, 10h                  ; 0x1130
@@ -39,7 +39,7 @@ loc_113F:
     MOV A, H                    ; 0x1146
     ANI 7Fh                     ; 0x1147
     MOV H, A                    ; 0x1149
-    SHLD 1155h                  ; 0x114A
+    SHLD var_prng_seed          ; 0x114A
     ADD L                       ; 0x114D
     MOV L, A                    ; 0x114E
     POP PSW                     ; 0x114F

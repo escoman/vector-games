@@ -49,6 +49,34 @@ var_collision_flag:     EQU 0905h   ; байт: флаг коллизии
 var_work_const:         EQU 0907h   ; байт: рабочая константа
 var_entity_index:       EQU 090Eh   ; байт: индекс сущности
 
+; --- Временные движка (кэш позиций объектов/яиц, 0x08E3..0x091C) -------------
+; Именование по роли в func_game_update/func_score_and_redraw/func_draw_game_objects.
+; Слово rc: lo=строка, hi=колонка.
+var_enemy_rc:           EQU 08E3h   ; слово: позиция врага (prev cache)
+var_bonus_rc:           EQU 08E5h   ; слово: позиция бонуса
+var_egg_rc:             EQU 08E7h   ; слово: позиция яйца
+var_blink_cell:         EQU 08E9h   ; слово: текущая мигающая клетка (erase)
+var_blink_type:         EQU 08EAh   ; байт: тип символа в мигающей клетке
+var_item_cost_table:    EQU 08EDh   ; таблица стоимости предмета (base+type)
+var_egg_hist_prev:      EQU 08F7h   ; байт: пред. позиция яйца (история)
+var_egg_hist_cur:       EQU 08F8h   ; байт: текущая позиция яйца
+var_page_flip_hi:       EQU 08FAh   ; байт: старш. байт var_page_flip
+var_draw_row:           EQU 08FEh   ; байт: строка курсора вывода (restore)
+var_draw_col:           EQU 08FFh   ; байт: колонка курсора вывода
+var_obj_type_idx:       EQU 090Ch   ; байт: индекс типа объекта (×4 → тайл)
+var_move_dir:           EQU 090Dh   ; байт: флаг/направление движения
+var_egg_counter:        EQU 090Fh   ; байт: счётчик яиц
+var_egg_seq:            EQU 0910h   ; байт: порядковый счётчик спавна
+var_egg_slot:           EQU 091Ch   ; байт: выбранный слот яйца (spawn)
+var_score_delta:        EQU 08EBh   ; слово: дельта счёта (scratch collision-death)
+var_score_scratch:      EQU 0B3Dh   ; байт: перенос/scratch (collision-death)
+var_prng_seed:          EQU 1155h   ; слово: сид PRNG (иниц. в ROM, правится in-place)
+; --- ROM-тайлы глифов (byte-exact зона <0x2761) ------------------------------
+data_tile_2706:         EQU 2706h   ; глиф-тайл (spawn fallback)
+data_tile_empty:        EQU 270Ah   ; глиф пустой клетки
+data_tile_2716:         EQU 2716h   ; глиф-тайл (spawn variant B)
+data_tile_272A:         EQU 272Ah   ; глиф-тайл (bonus draw)
+
 ; --- Буфер параметров текущего уровня (копия записи data_level_params) --------
 data_level_param_buf:   EQU 0911h   ; 8 байт: 0x0911..0x0918
 data_level_param_buf_end: EQU 0919h

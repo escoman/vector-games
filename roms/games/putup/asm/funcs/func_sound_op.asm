@@ -15,6 +15,7 @@ func_sound_op:
     PUSH D                      ; 0x01BD
     PUSH PSW                    ; 0x01BE
     LXI H, data_snd_dispatch_table ; 0x01BF
+func_sound_op_reenter:          ; 0x01C2 — точка повторного входа (target JMP из func_snd_toggle)
     ANI 0Fh                     ; 0x01C2 — точка повторного входа диспетчера
     ADD A                       ; 0x01C4
     CALL func_hl_add_a          ; 0x01C5

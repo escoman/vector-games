@@ -8,6 +8,7 @@
 func_snd_enable_ch1:
     MOV A, E                    ; 0x029E
     STA var_snd_state           ; 0x029F
+func_snd_enable_ch1_gate:       ; 0x02A2 — mid-function вход (target CALL из func_snd_gate_ch1)
     ANI 02h                     ; 0x02A2
     JZ func_snd_out_ch1         ; 0x02A4
     MVI A, 76h                  ; 0x02A7

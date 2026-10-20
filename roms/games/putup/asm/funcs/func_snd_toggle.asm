@@ -18,4 +18,4 @@ func_snd_toggle:
     XRA E                       ; 0x0277
     LXI H, data_snd_toggle_table ; 0x0278
     ANI 07h                     ; 0x027B
-    JMP 01C2h                   ; 0x027D — повторный вход в func_sound_op
+    JMP func_sound_op_reenter   ; 0x027D — повторный вход в func_sound_op

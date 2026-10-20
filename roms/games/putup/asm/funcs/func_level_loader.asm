@@ -33,6 +33,7 @@ func_level_loader:
     LXI D, data_level_param_buf ; 0x1997
     LXI B, 0008h                ; 0x199A
     CALL func_memcpy            ; 0x199D
+loc_19A0:
     LXI SP, 0100h               ; 0x19A0
     CALL func_clear_textbuf     ; 0x19A3
     LDA var_level               ; 0x19A6

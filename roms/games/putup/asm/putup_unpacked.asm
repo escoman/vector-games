@@ -61,11 +61,10 @@
     defs 0x01CD - $ ; align
     include "data/data_snd_dispatch_table.asm"
 
-; --- gap 0x01ED..0x0201 (20 bytes) from original image @reloc 0x01ED ---
+; --- emit func_snd_set_period_ch0 @0x01ED (20 bytes) ---
     defs 0x01ED - $ ; align
-    DEFB 07Bh, 032h, 01Ah, 03h, 0CDh, 01h, 02h, 0C3h
-    DEFB 06Ah, 02h, 07Bh, 032h, 01Bh, 03h, 0CDh, 01h
-    DEFB 02h, 0C3h, 06Ah, 02h
+    include "funcs/func_snd_set_period_ch0.asm"
+
 ; --- emit func_snd_out_ch0 @0x0201 (13 bytes) ---
     defs 0x0201 - $ ; align
     include "funcs/func_snd_out_ch0.asm"
@@ -74,29 +73,30 @@
     defs 0x020E - $ ; align
     include "funcs/func_snd_calc_period.asm"
 
-; --- gap 0x0219..0x022D (20 bytes) from original image @reloc 0x0219 ---
+; --- emit func_snd_set_period_ch1 @0x0219 (20 bytes) ---
     defs 0x0219 - $ ; align
-    DEFB 07Bh, 032h, 01Ch, 03h, 0CDh, 02Dh, 02h, 0C3h
-    DEFB 06Ah, 02h, 07Bh, 032h, 01Dh, 03h, 0CDh, 02Dh
-    DEFB 02h, 0C3h, 06Ah, 02h
+    include "funcs/func_snd_set_period_ch1.asm"
+
 ; --- emit func_snd_out_ch1 @0x022D (13 bytes) ---
     defs 0x022D - $ ; align
     include "funcs/func_snd_out_ch1.asm"
 
-; --- gap 0x023A..0x024E (20 bytes) from original image @reloc 0x023A ---
+; --- emit func_snd_set_period_ch2 @0x023A (20 bytes) ---
     defs 0x023A - $ ; align
-    DEFB 07Bh, 032h, 01Eh, 03h, 0CDh, 04Eh, 02h, 0C3h
-    DEFB 06Ah, 02h, 07Bh, 032h, 01Fh, 03h, 0CDh, 04Eh
-    DEFB 02h, 0C3h, 06Ah, 02h
+    include "funcs/func_snd_set_period_ch2.asm"
+
 ; --- emit func_snd_out_ch2 @0x024E (13 bytes) ---
     defs 0x024E - $ ; align
     include "funcs/func_snd_out_ch2.asm"
 
-; --- gap 0x025B..0x026E (19 bytes) from original image @reloc 0x025B ---
+; --- emit func_snd_dispatch_nops @0x025B (15 bytes) ---
     defs 0x025B - $ ; align
-    DEFB 0C3h, 06Ah, 02h, 0C3h, 06Ah, 02h, 0C3h, 06Ah
-    DEFB 02h, 0C3h, 06Ah, 02h, 0CDh, 06Eh, 02h, 0F1h
-    DEFB 0D1h, 0E1h, 0C9h
+    include "funcs/func_snd_dispatch_nops.asm"
+
+; --- emit func_snd_op_epilogue @0x026A (4 bytes) ---
+    defs 0x026A - $ ; align
+    include "funcs/func_snd_op_epilogue.asm"
+
 ; --- emit func_snd_toggle @0x026E (18 bytes) ---
     defs 0x026E - $ ; align
     include "funcs/func_snd_toggle.asm"
@@ -145,9 +145,10 @@
     defs 0x0302 - $ ; align
     include "funcs/func_snd_gate_ch2.asm"
 
-; --- gap 0x031A..0x0321 (7 bytes) from original image @reloc 0x031A ---
+; --- emit data_snd_init @0x031A (7 bytes) ---
     defs 0x031A - $ ; align
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 0FFh
+    include "data/data_snd_init.asm"
+
 ; --- emit func_print_string @0x0321 (11 bytes) ---
     defs 0x0321 - $ ; align
     include "funcs/func_print_string.asm"
@@ -164,12 +165,10 @@
     defs 0x0355 - $ ; align
     include "funcs/func_divmod_u16.asm"
 
-; --- gap 0x0364..0x0383 (31 bytes) from original image @reloc 0x0364 ---
+; --- emit func_print_digit_tail @0x0364 (31 bytes) ---
     defs 0x0364 - $ ; align
-    DEFB 0F6h, 030h, 0F5h, 0FEh, 030h, 0CAh, 071h, 03h
-    DEFB 03Eh, 01h, 032h, 0E2h, 08h, 03Ah, 0E2h, 08h
-    DEFB 0B7h, 0C2h, 07Fh, 03h, 03Eh, 020h, 0CDh, 0A1h
-    DEFB 01h, 0F1h, 0C9h, 0F1h, 0C3h, 0A1h, 01h
+    include "funcs/func_print_digit_tail.asm"
+
 ; --- emit func_hw_init @0x0383 (33 bytes) ---
     defs 0x0383 - $ ; align
     include "funcs/func_hw_init.asm"
@@ -253,40 +252,18 @@
     defs 0x0803 - $ ; align
     include "funcs/func_render_glyph.asm"
 
-; --- gap 0x08C3..0x0925 (98 bytes) from original image @reloc 0x08C3 ---
+; --- emit data_ram_init_image_08C3 @0x08C3 (98 bytes) ---
     defs 0x08C3 - $ ; align
-    DEFB 03h, 00h, 0Ch, 00h, 022h, 05Eh, 019h, 022h
-    DEFB 020h, 01Ah, 022h, 0EEh, 019h, 021h, 00h, 01h
-    DEFB 031h, 01Eh, 01Ah, 0E5h, 021h, 02h, 00h, 0E5h
-    DEFB 02Bh, 02Bh, 022h, 01Eh, 01h, 0E5h, 00h, 022h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 021h
-    DEFB 079h, 06h, 022h, 029h, 00h, 03Ah, 05Dh, 00h
-    DEFB 0FEh, 020h, 00h, 00h, 06h, 021h, 00h, 00h
-    DEFB 0C3h, 0E5h, 0Dh, 031h, 016h, 01Ah, 0CDh, 04Eh
-    DEFB 012h, 0Eh, 01h, 0C4h, 097h, 06h, 0CDh, 044h
-    DEFB 012h, 03Eh, 023h, 0CDh, 0EFh, 011h, 0CDh, 0DEh
-    DEFB 011h, 0CDh, 06h, 012h, 0FEh, 0Dh, 0CAh, 0FEh
-    DEFB 06h, 021h, 045h, 019h, 036h, 00h, 0FEh, 02Dh
-    DEFB 0C2h, 02Ah
+    include "data/data_ram_init_image_08C3.asm"
+
 ; --- emit str_credits_koi8 @0x0925 (126 bytes) ---
     defs 0x0925 - $ ; align
     include "data/str_credits_koi8.asm"
 
-; --- gap 0x09A3..0x0A06 (99 bytes) from original image @reloc 0x09A3 ---
+; --- emit data_title_attr_tail_09A3 @0x09A3 (99 bytes) ---
     defs 0x09A3 - $ ; align
-    DEFB 01h, 01h, 02h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 01h, 01h, 01h, 01h, 01h
-    DEFB 01h, 01h, 01h, 02h, 02h, 06h, 06h, 06h
-    DEFB 06h, 02h, 08h, 08h, 02h, 06h, 06h, 06h
-    DEFB 06h, 02h, 02h, 02h, 02h, 02h, 02h, 02h
-    DEFB 02h, 02h, 02h, 02h, 02h, 02h, 02h, 02h
-    DEFB 02h, 02h, 02h
+    include "data/data_title_attr_tail_09A3.asm"
+
 ; --- emit str_title_logo @0x0A06 (193 bytes) ---
     defs 0x0A06 - $ ; align
     include "data/str_title_logo.asm"
@@ -331,12 +308,10 @@
     defs 0x0B29 - $ ; align
     include "data/str_bonus.asm"
 
-; --- gap 0x0B3C..0x0B57 (27 bytes) from original image @reloc 0x0B3C ---
+; --- emit data_game_object_init @0x0B3C (27 bytes) ---
     defs 0x0B3C - $ ; align
-    DEFB 08h, 0DAh, 0FEh, 06h, 07Dh, 02h, 03h, 0C3h
-    DEFB 03Ah, 09h, 0AFh, 032h, 03Fh, 019h, 0CDh, 044h
-    DEFB 012h, 0CDh, 04Ah, 014h, 032h, 040h, 019h, 0CDh
-    DEFB 0E1h, 012h, 0E5h
+    include "data/data_game_object_init.asm"
+
 ; --- emit func_main_init @0x0B57 (270 bytes) ---
     defs 0x0B57 - $ ; align
     include "funcs/func_main_init.asm"
@@ -365,85 +340,22 @@
     defs 0x0F09 - $ ; align
     include "funcs/func_score_and_redraw.asm"
 
-; --- gap 0x0F39..0x1123 (490 bytes) from original image @reloc 0x0F39 ---
+; --- emit func_game_update_handlers @0x0F39 (490 bytes) ---
     defs 0x0F39 - $ ; align
-    DEFB 02Ah, 0F3h, 08h, 01h, 064h, 00h, 09h, 022h
-    DEFB 0F3h, 08h, 021h, 0Fh, 09h, 034h, 07Eh, 07h
-    DEFB 0C6h, 017h, 032h, 0FEh, 08h, 03Eh, 018h, 032h
-    DEFB 0FFh, 08h, 0CDh, 0AEh, 01h, 03Eh, 072h, 0CDh
-    DEFB 0A1h, 01h, 03Eh, 06Dh, 0CDh, 0A1h, 01h, 0C3h
-    DEFB 025h, 0Fh, 021h, 0FBh, 08h, 034h, 0CDh, 0E9h
-    DEFB 011h, 0C3h, 028h, 0Fh, 03Eh, 06h, 032h, 0Ch
-    DEFB 09h, 021h, 0E3h, 08h, 03Ah, 01h, 09h, 0BEh
-    DEFB 0C2h, 085h, 0Fh, 023h, 03Ah, 02h, 09h, 0BEh
-    DEFB 02Bh, 0CAh, 088h, 0Fh, 0CDh, 04h, 01h, 03Ah
-    DEFB 01h, 09h, 06Fh, 03Ah, 02h, 09h, 067h, 022h
-    DEFB 0E3h, 08h, 0EBh, 03Ah, 0Ch, 09h, 087h, 087h
-    DEFB 021h, 0DEh, 026h, 0CDh, 02Ch, 03h, 0CDh, 0A8h
-    DEFB 01Bh, 02Ah, 0E9h, 08h, 023h, 07Dh, 0E6h, 01Fh
-    DEFB 022h, 0E9h, 08h, 0C2h, 0D1h, 0Fh, 06h, 02h
-    DEFB 0CDh, 021h, 01h, 0CDh, 0A3h, 0Ch, 06h, 01h
-    DEFB 0CDh, 0F7h, 0Eh, 02Ah, 0F3h, 08h, 01h, 0Ah
-    DEFB 00h, 09h, 022h, 0F3h, 08h, 0CDh, 097h, 011h
-    DEFB 03Ah, 0EAh, 08h, 0FEh, 02h, 0CAh, 07Ch, 019h
-    DEFB 0C3h, 0A2h, 0Fh, 021h, 02h, 09h, 034h, 0AFh
-    DEFB 032h, 0Dh, 09h, 056h, 03Ah, 01h, 09h, 05Fh
-    DEFB 0CDh, 0D4h, 01Bh, 022h, 03h, 09h, 023h, 07Eh
-    DEFB 0FEh, 077h, 0D2h, 0F8h, 0Fh, 01h, 020h, 00h
-    DEFB 09h, 07Eh, 0FEh, 077h, 0DAh, 0FCh, 0Fh, 021h
-    DEFB 02h, 09h, 035h, 03Ah, 0F8h, 08h, 047h, 03Ah
-    DEFB 0F7h, 08h, 032h, 0F8h, 08h, 078h, 032h, 0F7h
-    DEFB 08h, 0B7h, 0C2h, 068h, 0Dh, 03Ah, 0F9h, 08h
-    DEFB 032h, 07h, 09h, 0C3h, 06Dh, 0Dh, 021h, 02h
-    DEFB 09h, 035h, 03Eh, 01h, 032h, 0Dh, 09h, 056h
-    DEFB 03Ah, 01h, 09h, 05Fh, 0CDh, 0D4h, 01Bh, 022h
-    DEFB 03h, 09h, 07Eh, 0FEh, 077h, 0D2h, 03Bh, 010h
-    DEFB 01h, 020h, 00h, 09h, 07Eh, 0FEh, 077h, 0DAh
-    DEFB 03Fh, 010h, 021h, 02h, 09h, 034h, 0C3h, 0FCh
-    DEFB 0Fh, 02Ah, 01h, 09h, 0EBh, 0CDh, 0D4h, 01Bh
-    DEFB 022h, 03h, 09h, 01h, 040h, 00h, 09h, 07Eh
-    DEFB 0FEh, 07Eh, 0CAh, 01Ah, 011h, 0FEh, 07Dh, 0CAh
-    DEFB 088h, 011h, 03Ah, 0Fh, 09h, 0FEh, 01h, 0CAh
-    DEFB 06Bh, 010h, 0FEh, 02h, 0CAh, 06Bh, 010h, 0C3h
-    DEFB 068h, 0Dh, 02Ah, 03h, 09h, 01h, 040h, 00h
-    DEFB 09h, 07Eh, 0FEh, 079h, 0C2h, 068h, 0Dh, 06h
-    DEFB 05h, 0CDh, 021h, 01h, 03Ah, 02h, 09h, 032h
-    DEFB 0FEh, 08h, 03Ah, 01h, 09h, 0C6h, 02h, 032h
-    DEFB 0FFh, 08h, 0CDh, 0AEh, 01h, 03Eh, 07Bh, 0CDh
-    DEFB 0A1h, 01h, 03Eh, 07Ch, 0CDh, 0A1h, 01h, 03Ah
-    DEFB 0Fh, 09h, 03Dh, 032h, 0Fh, 09h, 07h, 0C6h
-    DEFB 019h, 032h, 0FEh, 08h, 03Eh, 018h, 032h, 0FFh
-    DEFB 08h, 0CDh, 0AEh, 01h, 03Eh, 020h, 0CDh, 0A1h
-    DEFB 01h, 0CDh, 0A1h, 01h, 03Ah, 010h, 09h, 03Ch
-    DEFB 032h, 010h, 09h, 03Ah, 0F5h, 08h, 0FEh, 0Ah
-    DEFB 06h, 01h, 0DAh, 0C8h, 010h, 06h, 02h, 03Ah
-    DEFB 010h, 09h, 0B8h, 0C2h, 068h, 0Dh, 03Ah, 011h
-    DEFB 09h, 057h, 03Ah, 012h, 09h, 05Fh, 021h, 02Ah
-    DEFB 027h, 0CDh, 087h, 01Bh, 06h, 05h, 0CDh, 021h
-    DEFB 01h, 03Eh, 07h, 032h, 0Ch, 09h, 021h, 0E5h
-    DEFB 08h, 03Ah, 012h, 09h, 0BEh, 0C2h, 0FAh, 010h
-    DEFB 023h, 03Ah, 011h, 09h, 0BEh, 02Bh, 0CAh, 0FDh
-    DEFB 010h, 0CDh, 04h, 01h, 03Ah, 012h, 09h, 06Fh
-    DEFB 03Ah, 011h, 09h, 067h, 022h, 0E5h, 08h, 0EBh
-    DEFB 03Ah, 0Ch, 09h, 087h, 087h, 021h, 0DEh, 026h
-    DEFB 0CDh, 02Ch, 03h, 0CDh, 0A8h, 01Bh, 0C3h, 068h
-    DEFB 0Dh, 02Ah, 01h, 09h, 0EBh, 01Ch, 01Ch, 0C3h
-    DEFB 057h, 011h
+    include "funcs/func_game_update_handlers.asm"
+
 ; --- emit func_prng @0x1123 (50 bytes) ---
     defs 0x1123 - $ ; align
     include "funcs/func_prng.asm"
 
-; --- gap 0x1155..0x1197 (66 bytes) from original image @reloc 0x1155 ---
+; --- emit var_prng_seed_init @0x1155 (2 bytes) ---
     defs 0x1155 - $ ; align
-    DEFB 01h, 00h, 0CDh, 023h, 011h, 0E6h, 07h, 0FEh
-    DEFB 05h, 0D2h, 020h, 011h, 032h, 01Ch, 09h, 03Ah
-    DEFB 01Ch, 09h, 0FEh, 04h, 0C2h, 074h, 011h, 0CDh
-    DEFB 023h, 011h, 0E6h, 01h, 0C2h, 01Ah, 011h, 03Ah
-    DEFB 01Ch, 09h, 0C6h, 0Ah, 06Fh, 026h, 00h, 029h
-    DEFB 029h, 01h, 06h, 027h, 09h, 0CDh, 087h, 01Bh
-    DEFB 0C3h, 068h, 0Dh, 02Ah, 01h, 09h, 0EBh, 01Ch
-    DEFB 01Ch, 021h, 016h, 027h, 0CDh, 087h, 01Bh, 0C3h
-    DEFB 068h, 0Dh
+    include "data/var_prng_seed_init.asm"
+
+; --- emit func_spawn_egg @0x1157 (64 bytes) ---
+    defs 0x1157 - $ ; align
+    include "funcs/func_spawn_egg.asm"
+
 ; --- emit func_draw_score_hud @0x1197 (82 bytes) ---
     defs 0x1197 - $ ; align
     include "funcs/func_draw_score_hud.asm"
@@ -460,63 +372,18 @@
     defs 0x121A - $ ; align
     include "funcs/func_draw_status_hud.asm"
 
-; --- gap 0x1252..0x130A (184 bytes) from original image @reloc 0x1252 ---
+; --- emit func_gamestate_handlers @0x1252 (184 bytes) ---
     defs 0x1252 - $ ; align
-    DEFB 021h, 0E0h, 00h, 022h, 0E9h, 08h, 03Eh, 07h
-    DEFB 032h, 01Eh, 09h, 0CDh, 01Ah, 012h, 0CDh, 023h
-    DEFB 011h, 0E6h, 03h, 0C6h, 0Ah, 032h, 01Ch, 09h
-    DEFB 06Fh, 026h, 00h, 029h, 029h, 03Ah, 020h, 09h
-    DEFB 057h, 03Ah, 023h, 09h, 05Fh, 01h, 06h, 027h
-    DEFB 09h, 0E5h, 0CDh, 087h, 01Bh, 0E1h, 03Ah, 021h
-    DEFB 09h, 057h, 03Ah, 024h, 09h, 05Fh, 0CDh, 087h
-    DEFB 01Bh, 03Ah, 02h, 09h, 032h, 020h, 09h, 03Eh
-    DEFB 023h, 032h, 023h, 09h, 021h, 0Ah, 066h, 0CDh
-    DEFB 04Fh, 01h, 021h, 01h, 0Bh, 0CDh, 021h, 03h
-    DEFB 06h, 08h, 0CDh, 021h, 01h, 03Eh, 09h, 032h
-    DEFB 01Ah, 09h, 03Ch, 032h, 01Bh, 09h, 0C3h, 04Ah
-    DEFB 0Eh, 021h, 01h, 09h, 035h, 05Eh, 03Ah, 02h
-    DEFB 09h, 057h, 0CDh, 0D4h, 01Bh, 022h, 03h, 09h
-    DEFB 02Ah, 03h, 09h, 07Eh, 0FEh, 077h, 0D2h, 0D2h
-    DEFB 012h, 023h, 07Eh, 0FEh, 077h, 0DAh, 0E0h, 012h
-    DEFB 0AFh, 032h, 00h, 09h, 032h, 06h, 09h, 021h
-    DEFB 01h, 09h, 034h, 0C3h, 041h, 0Dh, 021h, 06h
-    DEFB 09h, 034h, 07Eh, 0FEh, 04h, 0DAh, 0F3h, 012h
-    DEFB 0AFh, 032h, 06h, 09h, 03Eh, 02h, 032h, 00h
-    DEFB 09h, 0C3h, 041h, 0Dh, 021h, 06h, 09h, 034h
-    DEFB 07Eh, 0FEh, 03h, 0DAh, 07h, 013h, 0AFh, 032h
-    DEFB 06h, 09h, 032h, 00h, 09h, 0C3h, 041h, 0Dh
+    include "funcs/func_gamestate_handlers.asm"
+
 ; --- emit func_draw_game_objects @0x130A (160 bytes) ---
     defs 0x130A - $ ; align
     include "funcs/func_draw_game_objects.asm"
 
-; --- gap 0x13AA..0x1477 (205 bytes) from original image @reloc 0x13AA ---
+; --- emit func_collision_death @0x13AA (205 bytes) ---
     defs 0x13AA - $ ; align
-    DEFB 06h, 02h, 0CDh, 021h, 01h, 03Ah, 01h, 09h
-    DEFB 0D6h, 02h, 032h, 0Eh, 09h, 03Ah, 02h, 09h
-    DEFB 032h, 05h, 09h, 01h, 00h, 00h, 021h, 0FAh
-    DEFB 01Bh, 09h, 07Eh, 0FEh, 0FFh, 0CAh, 024h, 014h
-    DEFB 0Fh, 0Fh, 0Fh, 0E6h, 01Fh, 05Fh, 03Ah, 0Eh
-    DEFB 09h, 083h, 0FEh, 018h, 0D2h, 024h, 014h, 032h
-    DEFB 0Ah, 09h, 03Ah, 05h, 09h, 032h, 09h, 09h
-    DEFB 03Eh, 06h, 032h, 0Ch, 09h, 0E5h, 0C5h, 021h
-    DEFB 0E3h, 08h, 03Ah, 0Ah, 09h, 0BEh, 0C2h, 0FCh
-    DEFB 013h, 023h, 03Ah, 09h, 09h, 0BEh, 02Bh, 0CAh
-    DEFB 0FFh, 013h, 0CDh, 04h, 01h, 03Ah, 0Ah, 09h
-    DEFB 06Fh, 03Ah, 09h, 09h, 067h, 022h, 0E3h, 08h
-    DEFB 0EBh, 03Ah, 0Ch, 09h, 087h, 087h, 021h, 0DEh
-    DEFB 026h, 0CDh, 02Ch, 03h, 0CDh, 0A8h, 01Bh, 06h
-    DEFB 01h, 0CDh, 0F7h, 0Eh, 0C1h, 0E1h, 0Ch, 0C3h
-    DEFB 0C0h, 013h, 0CDh, 0Ah, 013h, 0AFh, 032h, 0Fh
-    DEFB 09h, 021h, 0FBh, 08h, 035h, 07Eh, 0FEh, 0FFh
-    DEFB 0CAh, 038h, 014h, 0C3h, 0A0h, 019h, 0CDh, 0E5h
-    DEFB 01Bh, 021h, 06Ah, 067h, 0CDh, 04Fh, 01h, 021h
-    DEFB 0Eh, 0Bh, 0CDh, 021h, 03h, 02Ah, 0F3h, 08h
-    DEFB 0EBh, 02Ah, 0EBh, 08h, 032h, 03Dh, 0Bh, 07Dh
-    DEFB 09Bh, 06Fh, 07Ch, 09Ah, 067h, 0E5h, 0F5h, 0B5h
-    DEFB 0CAh, 063h, 014h, 0E1h, 03Eh, 0BFh, 0A5h, 06Fh
-    DEFB 0E5h, 0F1h, 0E1h, 03Ah, 03Dh, 0Bh, 0D2h, 06Fh
-    DEFB 014h, 0EBh, 022h, 0EBh, 08h, 06h, 05h, 0CDh
-    DEFB 077h, 014h, 0C3h, 0C2h, 0Bh
+    include "funcs/func_collision_death.asm"
+
 ; --- emit func_delay_long @0x1477 (18 bytes) ---
     defs 0x1477 - $ ; align
     include "funcs/func_delay_long.asm"
@@ -585,11 +452,10 @@
     defs 0x1BE5 - $ ; align
     include "funcs/func_clear_textbuf.asm"
 
-; --- gap 0x1BFA..0x1C0E (20 bytes) from original image @reloc 0x1BFA ---
+; --- emit data_egg_speed_table @0x1BFA (20 bytes) ---
     defs 0x1BFA - $ ; align
-    DEFB 010h, 09h, 04h, 01h, 00h, 01h, 04h, 09h
-    DEFB 010h, 019h, 024h, 031h, 040h, 051h, 064h, 079h
-    DEFB 090h, 0A9h, 0C4h, 0FFh
+    include "data/data_egg_speed_table.asm"
+
 ; --- emit data_level_params @0x1C0E (128 bytes) ---
     defs 0x1C0E - $ ; align
     include "data/data_level_params.asm"
@@ -624,9 +490,10 @@
     defs 0x285F - $ ; align
     include "funcs/func_music_tick.asm"
 
-; --- gap 0x388C..0x3890 (4 bytes) from original image @reloc 0x2893 ---
+; --- emit data_music_tick_pad_388C @0x388C (4 bytes) @reloc 0x2893 ---
     defs 0x2893 - $ ; align
-    DEFB 0CDh, 0CDh, 03Dh, 0C9h
+    include "data/data_music_tick_pad_388C.asm"
+
 ; --- emit func_music_sub_3890 @0x3890 (114 bytes) @reloc 0x2897 ---
     defs 0x2897 - $ ; align
     include "funcs/func_music_sub_3890.asm"
@@ -647,9 +514,10 @@
     defs 0x2B16 - $ ; align
     include "funcs/func_music_set_note_params.asm"
 
-; --- gap 0x3BC8..0x3BCA (2 bytes) from original image @reloc 0x2BCF ---
+; --- emit var_music_voice2_flag_init @0x3BC8 (2 bytes) @reloc 0x2BCF ---
     defs 0x2BCF - $ ; align
-    DEFB 035h, 029h
+    include "data/var_music_voice2_flag_init.asm"
+
 ; --- emit func_music_play_note_ch0 @0x3BCA (173 bytes) @reloc 0x2BD1 ---
     defs 0x2BD1 - $ ; align
     include "funcs/func_music_play_note_ch0.asm"
@@ -686,152 +554,38 @@
     defs 0x2DEF - $ ; align
     include "data/data_music_track_setup.asm"
 
-; --- gap 0x3DEB..0x421A (1071 bytes) from original image @reloc 0x2DF2 ---
+; --- emit func_music_load_score @0x3DEB (47 bytes) @reloc 0x2DF2 ---
     defs 0x2DF2 - $ ; align
-    DEFB 03Eh, 01h, 021h, 01Ah, 03Eh, 0A7h, 0FEh, 00h
-    DEFB 0C8h, 0FEh, 06h, 0D0h, 03Dh, 0FEh, 00h, 0CAh
-    DEFB 0Ch, 03Eh, 047h, 011h, 0Fh, 03h, 019h, 0F5h
-    DEFB 05h, 0CAh, 0Bh, 03Eh, 0F1h, 0C3h, 01h, 03Eh
-    DEFB 0F1h, 022h, 054h, 038h, 01h, 0Fh, 00h, 09h
-    DEFB 022h, 056h, 038h, 0CDh, 088h, 038h, 0C9h, 038h
-    DEFB 06h, 06h, 0Fh, 00h, 0Eh, 060h, 060h, 060h
-    DEFB 01Fh, 00h, 03h, 02h, 05h, 00h, 030h, 00h
-    DEFB 02Bh, 00h, 00h, 030h, 02Fh, 030h, 032h, 00h
-    DEFB 02Bh, 00h, 00h, 032h, 030h, 032h, 034h, 032h
-    DEFB 034h, 035h, 037h, 00h, 035h, 034h, 032h, 00h
-    DEFB 02Bh, 00h, 00h, 032h, 034h, 037h, 039h, 039h
-    DEFB 039h, 039h, 032h, 032h, 034h, 035h, 037h, 037h
-    DEFB 037h, 037h, 030h, 030h, 032h, 034h, 035h, 035h
-    DEFB 035h, 035h, 02Fh, 02Fh, 030h, 032h, 034h, 032h
-    DEFB 034h, 035h, 037h, 037h, 037h, 037h, 039h, 039h
-    DEFB 039h, 039h, 032h, 032h, 034h, 035h, 037h, 037h
-    DEFB 037h, 037h, 030h, 030h, 032h, 034h, 035h, 034h
-    DEFB 032h, 030h, 030h, 02Dh, 02Fh, 02Fh, 030h, 02Bh
-    DEFB 028h, 02Bh, 024h, 024h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 024h, 028h
-    DEFB 02Bh, 029h, 028h, 026h, 024h, 00h, 01Fh, 023h
-    DEFB 026h, 024h, 023h, 021h, 01Fh, 00h, 024h, 023h
-    DEFB 024h, 026h, 028h, 029h, 02Bh, 028h, 026h, 00h
-    DEFB 01Fh, 00h, 02Bh, 02Ah, 02Bh, 00h, 029h, 02Bh
-    DEFB 02Dh, 030h, 02Fh, 02Dh, 02Bh, 029h, 028h, 029h
-    DEFB 02Bh, 02Fh, 02Dh, 02Bh, 029h, 028h, 026h, 028h
-    DEFB 029h, 02Dh, 02Bh, 029h, 028h, 026h, 028h, 024h
-    DEFB 028h, 02Bh, 030h, 02Fh, 030h, 00h, 029h, 02Bh
-    DEFB 02Dh, 030h, 02Fh, 02Dh, 02Bh, 029h, 028h, 029h
-    DEFB 02Bh, 02Fh, 02Dh, 02Bh, 029h, 028h, 026h, 028h
-    DEFB 029h, 02Dh, 02Bh, 02Dh, 02Fh, 02Bh, 030h, 00h
-    DEFB 02Bh, 00h, 024h, 00h, 030h, 02Fh, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 0Ch, 00h
-    DEFB 013h, 00h, 018h, 00h, 00h, 00h, 013h, 00h
-    DEFB 01Ah, 00h, 01Fh, 00h, 00h, 00h, 018h, 00h
-    DEFB 013h, 00h, 01Ch, 00h, 018h, 00h, 017h, 015h
-    DEFB 013h, 00h, 00h, 00h, 01Fh, 00h, 011h, 00h
-    DEFB 015h, 00h, 013h, 00h, 01Fh, 00h, 013h, 00h
-    DEFB 010h, 00h, 015h, 00h, 021h, 00h, 011h, 00h
-    DEFB 0Eh, 00h, 013h, 00h, 01Fh, 00h, 024h, 00h
-    DEFB 018h, 00h, 01Ch, 01Fh, 018h, 00h, 011h, 00h
-    DEFB 015h, 00h, 013h, 00h, 01Fh, 00h, 010h, 00h
-    DEFB 013h, 00h, 011h, 00h, 021h, 00h, 011h, 00h
-    DEFB 015h, 00h, 013h, 00h, 017h, 00h, 018h, 00h
-    DEFB 013h, 00h, 0Ch, 00h, 0Ch, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 038h, 06h
-    DEFB 06h, 0Fh, 0Dh, 0Dh, 060h, 060h, 060h, 01h
-    DEFB 00h, 00h, 019h, 05h, 03h, 024h, 00h, 027h
-    DEFB 00h, 026h, 00h, 024h, 00h, 02Bh, 02Ah, 02Bh
-    DEFB 00h, 00h, 026h, 029h, 027h, 024h, 00h, 027h
-    DEFB 00h, 026h, 00h, 024h, 00h, 01Fh, 01Eh, 01Fh
-    DEFB 00h, 00h, 01Fh, 021h, 023h, 024h, 00h, 027h
-    DEFB 00h, 026h, 00h, 024h, 00h, 02Ch, 02Ch, 02Ch
-    DEFB 02Ch, 02Ch, 027h, 026h, 024h, 026h, 00h, 029h
-    DEFB 00h, 027h, 00h, 026h, 00h, 02Bh, 02Bh, 02Bh
-    DEFB 02Bh, 02Bh, 027h, 026h, 024h, 024h, 00h, 027h
-    DEFB 00h, 026h, 00h, 024h, 00h, 030h, 030h, 030h
-    DEFB 030h, 030h, 02Bh, 027h, 024h, 026h, 00h, 029h
-    DEFB 00h, 027h, 00h, 026h, 00h, 027h, 026h, 024h
-    DEFB 024h, 024h, 024h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h
-    DEFB 00h, 00h, 00h, 00h, 00h, 00h, 00h
+    include "funcs/func_music_load_score.asm"
+
+; --- emit data_music_scores @0x3E1A (15 bytes) @reloc 0x2E21 ---
+    defs 0x2E21 - $ ; align
+    include "data/data_music_scores.asm"
+
+; --- emit data_music_track_01 @0x3E29 (256 bytes) @reloc 0x2E30 ---
+    defs 0x2E30 - $ ; align
+    include "data/data_music_track_01.asm"
+
+; --- emit data_music_track_02 @0x3F29 (256 bytes) @reloc 0x2F30 ---
+    defs 0x2F30 - $ ; align
+    include "data/data_music_track_02.asm"
+
+; --- emit data_music_track_03 @0x4029 (256 bytes) @reloc 0x3030 ---
+    defs 0x3030 - $ ; align
+    include "data/data_music_track_03.asm"
+
+; --- emit data_music_score_02 @0x4129 (241 bytes) @reloc 0x3130 ---
+    defs 0x3130 - $ ; align
+    include "data/data_music_score_02.asm"
+
 ; --- emit data_music_period_table @0x421A (192 bytes) @reloc 0x3221 ---
     defs 0x3221 - $ ; align
     include "data/data_music_period_table.asm"
 
-; --- gap 0x42DA..0x42F9 (31 bytes) from original image @reloc 0x32E1 ---
+; --- emit data_note_names_42DA @0x42DA (31 bytes) @reloc 0x32E1 ---
     defs 0x32E1 - $ ; align
-    DEFB 064h, 069h, 073h, 06Bh, 020h, 077h, 069h, 074h
-    DEFB 068h, 020h, 062h, 02Dh, 043h, 063h, 044h, 064h
-    DEFB 045h, 046h, 066h, 047h, 067h, 041h, 061h, 042h
-    DEFB 043h, 062h, 020h, 03Dh, 05Bh, 016h, 0C3h
+    include "data/data_note_names_42DA.asm"
+
 ; --- emit data_note_table_ch1 @0x42F9 (256 bytes) @reloc 0x3300 ---
     defs 0x3300 - $ ; align
     include "data/data_note_table_ch1.asm"
@@ -840,9 +594,10 @@
     defs 0x3400 - $ ; align
     include "data/data_note_param_table_43F9.asm"
 
-; --- gap 0x445C..0x445D (1 bytes) from original image @reloc 0x3463 ---
+; --- emit data_music_vibrato_pre_445C @0x445C (1 bytes) @reloc 0x3463 ---
     defs 0x3463 - $ ; align
-    DEFB 0Ah
+    include "data/data_music_vibrato_pre_445C.asm"
+
 ; --- emit data_note_freq_table_ch0 @0x445D (419 bytes) @reloc 0x3464 ---
     defs 0x3464 - $ ; align
     include "data/data_note_freq_table_ch0.asm"

@@ -44,7 +44,10 @@ all: $(TARGET)
 layout:
 	@COMPACT=$(COMPACT) GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
 
-$(TARGET): $(GEN) $(ORIG) $(wildcard asm/*.asm)
+# ВНИМАНИЕ: мастер include-ит asm/funcs/*.asm и asm/data/*.asm — предок должен
+# покрывать и подкаталоги, иначе добавление emit-файла в подкаталог не триггерит
+# пересборку и verify молчит на устаревшем ROM (тихий false-pass).
+$(TARGET): $(GEN) $(ORIG) $(wildcard asm/*.asm) $(wildcard asm/funcs/*.asm) $(wildcard asm/data/*.asm)
 	@COMPACT=$(COMPACT) GLYPH_BASE=$(GLYPH_BASE) KEEP_DEAD=$(KEEP_DEAD) python3 $(GEN)
 	@cd asm && $(Z80ASM) $(ASMFLAGS) -o=../$(FULLBIN) $(MASTER)
 	@python3 -c "import json;J=json.load(open('tools/dead_ranges.json'));d=open('$(FULLBIN)','rb').read();gb=J['glyph_base'];gs=J['glyph_size'];open('$(TARGET)','wb').write(d[256:gb+gs])"

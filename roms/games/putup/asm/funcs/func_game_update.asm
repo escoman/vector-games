@@ -30,9 +30,9 @@ func_game_update:
     JZ loc_0CF5                 ; 0x0CE5
     LDA var_game_state          ; 0x0CE8
     CPI 01h                     ; 0x0CEB
-    JZ 12B3h                    ; 0x0CED
+    JZ func_gamestate_catch         ; 0x0CED
     CPI 02h                     ; 0x0CF0
-    JZ 12F6h                    ; 0x0CF2
+    JZ func_gamestate_evade         ; 0x0CF2
 loc_0CF5:
     LXI H, var_player_row       ; 0x0CF5
     INR M                       ; 0x0CF8
@@ -80,18 +80,19 @@ loc_0D41:
     CPI 02h                     ; 0x0D4A
     JZ loc_0D68                 ; 0x0D4C
     CPI 03h                     ; 0x0D4F
-    JZ 0FD4h                    ; 0x0D51
+    JZ func_player_move_b        ; 0x0D51
     CPI 04h                     ; 0x0D54
-    JZ 0FD4h                    ; 0x0D56
+    JZ func_player_move_b        ; 0x0D56
     CPI 05h                     ; 0x0D59
-    JZ 1042h                    ; 0x0D5B
+    JZ func_player_move_d        ; 0x0D5B
     CPI 06h                     ; 0x0D5E
-    JZ 1017h                    ; 0x0D60
+    JZ func_player_move_c        ; 0x0D60
     CPI 07h                     ; 0x0D63
-    JZ 1017h                    ; 0x0D65
+    JZ func_player_move_c        ; 0x0D65
 loc_0D68:
     MVI A, 03h                  ; 0x0D68
     STA var_work_const          ; 0x0D6A
+loc_0D6D:
     LDA var_player_col          ; 0x0D6D
     STA 0909h                   ; 0x0D70
     LDA var_player_row          ; 0x0D73
@@ -191,7 +192,7 @@ loc_0E1B:
 loc_0E29:
     LDA var_collision_flag      ; 0x0E29
     ORA A                       ; 0x0E2C
-    JNZ 13AAh                   ; 0x0E2D
+    JNZ func_collision_death        ; 0x0E2D
     LHLD 08E9h                  ; 0x0E30
     INX H                       ; 0x0E33
     SHLD 08E9h                  ; 0x0E34
@@ -201,7 +202,7 @@ loc_0E29:
     CALL func_erase_char_08E9   ; 0x0E3F
     LDA 08EAh                   ; 0x0E42
     CPI 02h                     ; 0x0E45
-    JZ 1252h                    ; 0x0E47
+    JZ func_egg_caught              ; 0x0E47
 loc_0E4A:
     LHLD var_player_bufaddr     ; 0x0E4A
     LXI B, 0020h                ; 0x0E4D
@@ -223,9 +224,9 @@ loc_0E4A:
     CPI 04h                     ; 0x0E71
     JZ func_score_and_redraw    ; 0x0E73
     CPI 05h                     ; 0x0E76
-    JZ 0F39h                    ; 0x0E78
+    JZ func_item_bonus_collect   ; 0x0E78
     CPI 06h                     ; 0x0E7B
-    JZ 0F63h                    ; 0x0E7D
+    JZ func_item_bonus_timer     ; 0x0E7D
     CPI 07h                     ; 0x0E80
-    JZ 0F6Dh                    ; 0x0E82
+    JZ func_player_move_a        ; 0x0E82
     ; fall-through в lbl_main_game_loop (0x0E85)
