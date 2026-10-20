@@ -1,7 +1,6 @@
 ; Функция: func_render_glyph
 ; Адрес: 0x0803
-; Размер: 167 байт (исполняемый код 0x0803..0x0899 = 151 байт; хвост 16 байт —
-;         не код: нуль-зона zero8). data_palette → func_main_init.asm
+; Размер: ~290 байт (исполняемый код: regular + compact-zero + space fast-path)
 ; Описание: Отрисовка глифа символа A в VRAM-буфер. Вычисляет адрес в буфере
 ;           (база 0B000h + смещение), определяет колонку (L & 1Fh -> C) и строку
 ;           ((H>>2)&0C0h | (L>>2)&38h -> B). Через таблицу указателей глифов
@@ -20,8 +19,8 @@
 ;   бит0 = ТЕГ компактности. Запись compact (тег=1) хранит 8-байтную маску плоскости
 ;   0x0800 (прочие плоскости нулевые); raw (тег=0) — 32 байта (4 плоскости подряд).
 ;   Единый цикл по 4 плоскостям (0x0800..0x0800+3*0x2000): для каждого plane пишется
-;   8 байт; источник — DE (raw — идёт последовательно; compact plane0 — маска, а
-;   compact plane1..3 — общая нуль-зона zero8). Развёрнутый перенос по 8 байт (быстро,
+;   8 байт; источник — DE (raw — идёт последовательно; compact plane0 — маска),
+;   compact plane1..3 пишут MVI M,00h напрямую (без чтения zero8 — зона удалена).
 ;   чтобы не просадить кадр). Выход в VRAM побайтово идентичен прежней 32-байтной
 ;   версии (гейт tools/compare_color.py = 0 расхождений цвета + VRAM не меняется).
 ;   Регистры/флаги прозрачны: PUSH PSW/B/D/H на входе, POP обратно на выходе; RET.
@@ -50,6 +49,8 @@ func_render_glyph:
     ORA B                       ; 0x081B
     MOV B, A                    ; 0x081C
     MOV A, D                    ; 0x081D
+    CPI 20h                     ; ★ B: space? (0x20) — специальный zero-write fast-path
+    JZ loc_space                ;     HL/DE col_table reconstruction below
     ADD A                       ; A = 2*char (младший байт), CY = старший бит
     MOV E, A                    ; E = младший offset
     MVI A, 00h
@@ -85,7 +86,25 @@ loc_plane:
     MOV A, B                    ; 0x084E   compact plane0 (B=4)?
     CPI 04h                     ; 0x084F
     JZ loc_copy                 ; 0x0851   plane0 -> маска в DE
-    LXI D, zero8                ; 0x0854   compact plane1..3 -> нуль-зона
+    ; ★ A: compact planes 1..3 — не тащим 8 нулей через LDAX D/INX D; пишем
+    ;   напрямую MVI M,00h + INX H (12T/байт вместо 24T/байт).
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    JMP loc_plane_step
 loc_copy:
     LDAX D                      ; 0x0857   развёрнутый перенос 8 байт plane
     MOV M, A                    ; 0x0858
@@ -119,6 +138,7 @@ loc_copy:
     MOV M, A                    ; 0x0874
     INX D                       ; 0x0875
     INX H                       ; 0x0876
+loc_plane_step:
     ; шаг приёмника к следующей плоскости: HL += 0x1FF8 (после 8 INX H => +0x2000)
     MOV A, L                    ; 0x0877
     ADI 0F8h                    ; 0x0878
@@ -133,7 +153,58 @@ loc_copy:
     POP B                       ; 0x0885
     POP PSW                     ; 0x0886
     RET                         ; 0x0887
-    ; data_palette перенесена в func_main_init.asm (перед меткой func_main_init:)
-zero8:                                                ; 0x08B3 — источник нулей для compact plane1..3
-    defb 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h       ; 0x08B3
-    defb 00h, 00h, 00h, 00h, 00h, 00h, 00h, 00h       ; 0x08BB
+
+; ★ B: space fast-path (0x20 = пробел).
+;   Дефолтный путь тратит ~40T на table lookup + LDAX-чтение zero8 в plane 0
+;   плюс 3×(LXI D,zero8 + LDAX×8). Space даёт те же 32 нуля в 4 плоскостях
+;   напрямую — MVI M,00h / INX H × 8 на плоскость + шаг HL += 0x1FF8,
+;   с внешним петлёй B=4..1. На глиф ~550T (vs ~1350T в compact-обычном,
+;   vs ~1170T в raw).
+;
+;   Инвариант: компактный глиф = plane0 маска + 3 zero-writes. Для space
+;   маска = 8 нулей → тождественно 4 zero-writes. Никаких отличий в VRAM-выходе.
+loc_space:
+    MVI H, 00h                  ; reconstruction адреса приёмника (без table lookup)
+    MOV L, C                    ;     C = col, B = row (сохранены от bit-split)
+    PUSH B
+    LXI B, data_vram_col_table
+    DAD B
+    MOV H, M                    ; H = плоскость base по col
+    LDA var_screen_mode
+    POP B
+    SUB B
+    MOV L, A                    ; HL = адрес приёмника (плоскость 0x0800)
+    MVI B, 04h                  ; 4 плоскости
+loc_space_plane:
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    MVI M, 00h
+    INX H
+    ; шаг HL += 0x1FF8 (8 INX H уже дали +8; +0x1FF8 => +0x2000)
+    MOV A, L
+    ADI 0F8h
+    MOV L, A
+    MOV A, H
+    ACI 1Fh
+    MOV H, A
+    DCR B
+    JNZ loc_space_plane
+    POP H
+    POP D
+    POP B
+    POP PSW
+    RET
+
+

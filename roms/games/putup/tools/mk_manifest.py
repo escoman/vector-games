@@ -35,7 +35,7 @@ def glyph_defb_count():
 
 
 # ключевые метки, нужные гейтам/линту
-KEYS = ["func_entry", "func_vblank_isr", "data_palette", "zero8",
+KEYS = ["func_entry", "func_vblank_isr", "data_palette",
         "data_glyph_ptr_table", "data_glyph_block", "data_text_buffer"]
 layout = {k: labels.get(k) for k in KEYS}
 missing = [k for k in KEYS if layout.get(k) is None]
