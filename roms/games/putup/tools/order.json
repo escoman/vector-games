@@ -62,6 +62,7 @@
  "data_game_object_init",
  "func_main_init",
  "lbl_title_key_poll",
+ "func_clear_vram",
  "func_erase_char_08E9",
  "func_game_update",
  "lbl_main_game_loop",

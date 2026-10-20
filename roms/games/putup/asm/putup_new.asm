@@ -70,6 +70,7 @@
     include "data/data_game_object_init.asm"
     include "funcs/func_main_init.asm"
     include "funcs/lbl_title_key_poll.asm"
+    include "funcs/func_clear_vram.asm"
     include "funcs/func_erase_char_08E9.asm"
     include "funcs/func_game_update.asm"
     include "funcs/lbl_main_game_loop.asm"

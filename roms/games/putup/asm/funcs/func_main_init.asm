@@ -1,8 +1,10 @@
 ; Функция: func_main_init
 ; Адрес: 0x0B57
-; Размер: 270 байт (0x0B57-0x0C64), fall-through в lbl_title_key_poll
+; Размер: 262 байт (оригинал 0x0B57-0x0C64 = 270 Б; −11 Б inline-петли +3 Б
+;         CALL func_clear_vram), fall-through в lbl_title_key_poll
 ; Описание: Инициализация программы и вывод заставки. DI; LXI SP,0100h;
-;           очистка VRAM 0x8000-0xFFFF=0; CALL func_hw_init; var_palette_ptr=data_palette+00Fh (метка);
+;           CALL func_clear_vram (выделена из inline-петли 0x0B5B..0x0B65;
+;           очистка VRAM 0x8000-0xFFFF=0); CALL func_hw_init; var_palette_ptr=data_palette+00Fh (метка);
 ;           var_palette_timer=09h; заполнение data_text_buffer (0x400 байт)=0FFh;
 ;           CALL func_load_glyph_block УДАЛЁН (Stage-3/4A): глифы запечены в ROM,
 ;           адрес блока задаёт компоновщик (data_glyph_block, свободная конкатенация);
@@ -20,13 +22,7 @@
 func_main_init:
     DI                          ; 0x0B57
     LXI SP, 0100h               ; 0x0B58
-    LXI H, 8000h                ; 0x0B5B
-loc_0B5E:
-    MVI M, 00h                  ; 0x0B5E
-    INX H                       ; 0x0B60
-    MOV A, H                    ; 0x0B61
-    ORA L                       ; 0x0B62
-    JNZ loc_0B5E                ; 0x0B63
+    CALL func_clear_vram        ; 0x0B5B..0x0B65  (была inline-петля очистки VRAM)
     CALL func_hw_init           ; 0x0B66
     LXI H, data_palette+00Fh                 ; 0x0B69
     SHLD var_palette_ptr        ; 0x0B6C
