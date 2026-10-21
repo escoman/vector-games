@@ -121,6 +121,7 @@ loc_0D6D:
 loc_0D9B:
     EI                          ; синк к VBlank: луч не сканирует экран
     HLT                         ; ждать кадрового RST7 (func_vblank_isr)
+    CALL func_raster_guard_hero ; raster-sync: дождаться прохода луча мимо полосы героя
     CALL func_draw_tile_at_ptr  ; стереть prev (было CALL sync_draw_tile_at_ptr)
 loc_0D9E:
     LDA var_scr_090A                    ; 0x0D9E
@@ -179,6 +180,7 @@ loc_exit_hero:
     ; Мигание (выше) могло накрыть героя тайлом выхода; дорисовываем героя снова.
     ; Это идемпотентно: вне пересечения пишет те же пиксели (без фликера), а в
     ; местах наложения 2x2 кладёт героя поверх выхода.
+    CALL func_raster_guard_hero ; raster-sync: повторная дорисовка тоже вне прохода луча
     LDA var_player_row          ; строка героя (= var_scr_090A, не трогается сканом)
     MOV L, A
     LDA var_player_col          ; колонка героя (= var_scr_0909)

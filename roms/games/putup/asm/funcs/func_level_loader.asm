@@ -111,6 +111,7 @@ loc_19DA:
     STA var_move_dir                    ; 0x1A30
     MVI A, 03h                  ; 0x1A33
     STA var_work_const          ; 0x1A35
+    CALL func_raster_timer_init ; включить секундомер растра (ch1) — растр-safe рисование героя
     JMP lbl_main_game_loop      ; 0x1A38
 loc_1A3B:
     CALL func_draw_game_objects ; 0x1A3B

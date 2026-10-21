@@ -21,6 +21,19 @@ var_snd_period_ch1:     EQU data_snd_init+02h   ; слово: период ка�
 var_snd_period_ch2:     EQU data_snd_init+04h   ; слово: период канала 2
 var_snd_state:          EQU data_snd_init+06h   ; байт: состояние звукового генератора
 
+; --- Raster-sync: КР580ВИ53 (клон i8253) как «секундомер растра» --------------
+; Счётчик 1 (порт 0Ah) на уровне переключается с музыки (на уровне мелодии нет,
+; SFX сидят на ch2/09h) на режим 0 и перезагружается длиной кадра в конце VBlank
+; ISR -> count убывает от 0x7500 (кадр) к 0, давая положение луча в отсчётах.
+; Такт счётчика 1.5МГц = 768 v_cycle(12МГц)/8 -> 96 отсчётов/строку, 312 строк =
+; 29952 = 0x7500 отсчётов/кадр. elapsed = 0x7500 - count = строка_луча * 96.
+raster_ctrl_port:   EQU 08h   ; порт управляющего слова ВИ53
+raster_cnt1_port:   EQU 0Ah   ; порт счётчика 1 (ch1) — наш секундомер
+raster_w_latch1:    EQU 40h   ; SC=cnt1(01),RL=latch(00): заморозить для чтения
+raster_w_load1:     EQU 70h   ; SC=cnt1(01),RL=load lo+hi(11),M=mode0(000): старт
+raster_frame_hi:    EQU 75h   ; 0x7500 = 29952 отсчётов (выс. байт)
+raster_frame_lo:    EQU 00h   ; низ. байт длины кадра
+
 ; --- Видео / палитра / экран -------------------------------------------------
 var_palette_timer:      EQU data_ram_init_image_08C3   ; байт: таймер палитры (обновление по кадру)
 var_portb_mode:         EQU data_ram_init_image_08C3+01h   ; байт: тень режима порта B (ВВ55)
@@ -139,6 +152,11 @@ var_exit_rc:            EQU 6A01h   ; слово: lo=строка, hi=колон
 ; независимо по 4 плоскостям. Реентрансно: scratch живёт только внутри одного
 ; вызова glyph_or (стек сохранён PUSH H). Зона 0x6A03.. свободна (см. выше).
 var_or_mask_scratch:    EQU 6A03h   ; 8 байт: маска P0 для masked-blit оверлея героя
+; --- Raster-sync героя (func_raster_guard_hero). Зона 0x6A0B.. свободна --------
+var_raster_flag:        EQU 6A0Bh   ; байт: 1 = секундомер активен (на уровне); 0 = заставка (ch1 отдан музыке)
+var_raster_top:         EQU 6A0Ch   ; слово: порог elapsed для ВЕРХА полосы героя (в отсчётах)
+var_raster_bot:         EQU 6A0Eh   ; слово: порог elapsed ДЛЯ НИЗА полосы героя (в отсчётах)
+var_raster_cap:         EQU 6A10h   ; байт: антизацикливатель ожидания прохода луча
 ; data_glyph_block — МЕТКА на распакованном блоке, определена в
 ; data_glyph_block_unpacked.asm (этап B: адрес задаёт компоновщик GLYPH_BASE).
 data_glyph_block_end:   EQU 8000h   ; конец read-only окна (нижние 32КБ RAM)

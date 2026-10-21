@@ -48,6 +48,8 @@ func_main_init:
     STA var_palette_timer       ; 0x0B71
     MVI A, 0FFh                 ; (Фаза 4) мигание выхода выключено до появления
     STA var_exit_phase
+    XRA A                       ; raster-sync выключен на заставке (ch1 остаётся за музыкой)
+    STA var_raster_flag
     LXI H, data_text_buffer ; 0x0B74
     LXI B, 0400h                ; 0x0B77
 loc_0B7A:

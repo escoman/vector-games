@@ -65,6 +65,20 @@ loc_03DA:
     NOP                         ; 0x03F8  (ROM placeholder 00; runtime func_music_start_track installs CALL func_music_tick 0x3858 ->0x03F8)
     NOP                         ; 0x03F9
     NOP                         ; 0x03FA
+    ; --- Raster-sync: в конце VBlank перезагрузить cnt1 = длина кадра (только на
+    ;     уровне; на заставке flag=0 -> ch1 остаётся за музыкой). Идёт ПОСЛЕ слота
+    ;     тика, поэтому перетирает возможную запись ch1 от func_music_tick -> наш
+    ;     секундомер выигрывает кадр. Слот 0x03F8 не сдвигается (вставка после него).
+    LDA var_raster_flag
+    ORA A
+    JZ loc_vbl_no_reload
+    MVI A, raster_w_load1       ; 70h: cnt1, load lo+hi, mode0
+    OUT raster_ctrl_port        ; 08h
+    MVI A, raster_frame_lo      ; 00h
+    OUT raster_cnt1_port        ; 0Ah низ
+    MVI A, raster_frame_hi      ; 75h (=0x7500=29952 отсчётов=312 строк)
+    OUT raster_cnt1_port        ; 0Ah верх
+loc_vbl_no_reload:
     POP PSW                     ; 0x03FB
     POP B                       ; 0x03FC
     POP D                       ; 0x03FD

@@ -11,6 +11,10 @@ func_music_start_track:
     LXI H, data_music_track_setup   ; 0x3DCD
     LXI D, 03F8h                    ; 0x3DD0
     LXI B, 0003h                    ; 0x3DD3
+    PUSH PSW
+    XRA A
+    STA var_raster_flag         ; трек заставки играет -> отдать ch1 музыке (растр-секундомер выкл)
+    POP PSW
     DI                              ; 0x3DD6
     CALL func_memcpy_keep_psw       ; 0x3DD7
     EI                              ; 0x3DDA
