@@ -15,8 +15,9 @@
 ;           090Ah=row; 090Ch=tile; erase пред.позиции 08E3h через
 ;           func_draw_tile_at_ptr (EI;HLT синк) + СРАЗУ draw героя func_render_tile_vram_or (OR-композит: пустые пиксели героя не затирают фрукт/фон под ним)
 ;           (пара в одном окне гашения — инвариант flicker-free, как у врагов);
-;           SHLD 08E3h=новая поз.; скан буфера 0300h (loc_0DBE; огонь 75h<->0FEh);
-;           затем мигание выхода (var_exit_phase 0<->1, безусловная перерисовка
+;           SHLD 08E3h=новая поз.; ШАГ 0: скан буфера 0300h (огонь 75h<->0FEh)
+;           ВЫНЕСЕН в func_render_all (по 128 ячеек каждый кадр); здесь остаются
+;           мигание выхода (var_exit_phase 0<->1, безусловная перерисовка
 ;           [7]/[10]) и ПОВТОРНАЯ дорисовка героя (loc_exit_hero) — поверх выхода.
 ;           Затем второй проход коллизий по 't'(74h); при nonzero -> JNZ 13Ah (gap).
 ;           Обновление 08E9h, CALL func_erase_char_08E9, проверка 08EAh==2 -> 1252h.
@@ -109,53 +110,14 @@ loc_0D6D:
     ADD B                       ; 0x0D83
     DCR A                       ; 0x0D84
     STA var_obj_type_idx                    ; 0x0D85
-    LXI H, var_enemy_rc                 ; 0x0D88
-    LDA var_scr_090A                    ; 0x0D8B
-    CMP M                       ; 0x0D8E
-    JNZ loc_0D9B                ; 0x0D8F
-    INX H                       ; 0x0D92
-    LDA var_scr_0909                    ; 0x0D93
-    CMP M                       ; 0x0D96
-    DCX H                       ; 0x0D97
-    JZ loc_0D9E                 ; 0x0D98
-loc_0D9B:
-    EI                          ; синк к VBlank: луч не сканирует экран
-    HLT                         ; ждать кадрового RST7 (func_vblank_isr)
-    CALL func_raster_guard_hero ; raster-sync: дождаться прохода луча мимо полосы героя
-    CALL func_draw_tile_at_ptr  ; стереть prev (было CALL sync_draw_tile_at_ptr)
-loc_0D9E:
-    LDA var_scr_090A                    ; 0x0D9E
-    MOV L, A                    ; 0x0DA1
-    LDA var_scr_0909                    ; 0x0DA2
-    MOV H, A                    ; 0x0DA5
-    SHLD var_enemy_rc                   ; 0x0DA6
-    XCHG                        ; 0x0DA9
-    LDA var_obj_type_idx                    ; 0x0DAA
-    ADD A                       ; 0x0DAD
-    ADD A                       ; 0x0DAE
-    LXI H, data_tile_table_26DE ; 0x0DAF
-    CALL func_hl_add_a          ; 0x0DB2
-    CALL func_render_tile_vram_or  ; 0x0DB5  герой OR-композитом: пустые биты не затирают фрукт под героем (prev стерта выше func_draw_tile_at_ptr)
-    LXI H, data_text_buffer ; 0x0DB8
-    LXI B, 0300h                ; 0x0DBB
-loc_0DBE:
-    MOV A, M                    ; 0x0DBE
-    CPI 75h                     ; 0x0DBF
-    JZ loc_0DD1                 ; 0x0DC1
-    CPI 0FEh                    ; 0x0DC4
-    JNZ loc_0DD6                ; 0x0DC6
-    MVI A, 75h                  ; 0x0DC9
-    CALL func_draw_char_at_hl   ; 0x0DCB
-    JMP loc_0DD6                ; 0x0DCE
-loc_0DD1:
-    MVI A, 0FEh                 ; 0x0DD1
-    CALL func_draw_char_at_hl   ; 0x0DD3
-loc_0DD6:
-    INX H                       ; 0x0DD6
-    DCX B                       ; 0x0DD7
-    MOV A, B                    ; 0x0DD8
-    ORA C                       ; 0x0DD9
-    JNZ loc_0DBE                ; 0x0DDA
+    ; --- Step 2a (Вариант A): erase+snap+draw героя ВЫНЕСЕН из game_update -----
+    ;     сюда больше не лезут var_enemy_rc (кэш отображения) и var_glyph_voff:
+    ;     плавный твин и сама отрисовка героя — в func_hero_render (главный цикл,
+    ;     каждый кадр). Здесь только выставлен ЦЕЛЬ var_scr_090A/0909 (выше) и
+    ;     вычислен var_obj_type_idx — их читает func_hero_render и loc_exit_hero.
+    ; --- Step 0: скан огня (loc_0DBE..loc_0DD6) вынесен в func_render_all,
+    ;     теперь он идёт по 128 ячеек каждый кадр из главного цикла. Здесь
+    ;     остаётся только мигание выхода и повторная дорисовка героя. ------
     ; --- Фаза 4: мигание выхода 6<->5 в том же темпе, что огонь выше ----------
     ; Появляется вместе с выходом (ветка 0x10C8 handlers), гаснет в func_level_loader.
     LDA var_exit_phase          ; 0FFh = выход не активен
@@ -176,14 +138,14 @@ loc_exit_draw:
     CALL func_render_tile_vram
 loc_exit_hero:
     ; --- герой поверх огня и мигания выхода: ПОВТОРНАЯ дорисовка --------------
-    ; Первая пара erase+draw героя уже легла в окно гашения (loc_0DB5) — без фликера.
-    ; Мигание (выше) могло накрыть героя тайлом выхода; дорисовываем героя снова.
-    ; Это идемпотентно: вне пересечения пишет те же пиксели (без фликера), а в
-    ; местах наложения 2x2 кладёт героя поверх выхода.
+    ; Step 2a (Вариант A): рисуем героя в его ТЕКУЩЕЙ отображаемой позиции
+    ; (var_enemy_rc + var_glyph_voff), а не в целевой var_player_row/col — иначе
+    ; мигание выхода сорвало бы твин. func_render_tile_vram_or сам применит
+    ; var_glyph_voff (суб-сдвиг). Идемпотентно: кладёт героя поверх тайла выхода.
     CALL func_raster_guard_hero ; raster-sync: повторная дорисовка тоже вне прохода луча
-    LDA var_player_row          ; строка героя (= var_scr_090A, не трогается сканом)
+    LDA var_enemy_rc            ; ОТОБРАЖАЕМая строка героя (твин-cr, lo слова)
     MOV L, A
-    LDA var_player_col          ; колонка героя (= var_scr_0909)
+    LDA var_enemy_rc+1          ; ОТОБРАЖАЕМая колонка героя (hi слова)
     MOV H, A
     XCHG                        ; DE = (D=col, E=row) — позиция для render
     LDA var_obj_type_idx        ; тайл героя (из loc_0D85; скан/мигание его не меняют)

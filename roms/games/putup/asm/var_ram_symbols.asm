@@ -157,6 +157,30 @@ var_raster_flag:        EQU 6A0Bh   ; байт: 1 = секундомер акт�
 var_raster_top:         EQU 6A0Ch   ; слово: порог elapsed для ВЕРХА полосы героя (в отсчётах)
 var_raster_bot:         EQU 6A0Eh   ; слово: порог elapsed ДЛЯ НИЗА полосы героя (в отсчётах)
 var_raster_cap:         EQU 6A10h   ; байт: антизацикливатель ожидания прохода луча
+; --- Step 0: кад-синхрон + чанк-скан огня (func_render_all + lbl_main_game_loop).
+; Зона 0x6A11.. свободна (or_mask 8Б кончается на 6A0A, raster-структура на 6A10).
+var_frame_sub:          EQU 6A11h   ; байт: досчётчик кадра в 12-окне (1..12; проход на 6 и 12)
+var_scan_ptr:           EQU 6A12h   ; слово: курсор чанка скана огня в data_text_buffer
+; --- Step 2a: суб-пиксельный твин отрисовки героя (только вертикаль). ----------
+; var_glyph_voff — вертикальный суб-сдвиг masked-blit героя в func_render_glyph_or,
+; в пикселях (0..7). Младший байт адреса VRAM = позиция по вертикали в столбце
+; (ст. байт = колонка+плоскость), но адрес растёт ВВЕРХ (L = screen_mode - rowbits),
+; поэтому сдвиг ВНИЗ применяется как L -= voff (H не тронут).
+; 0 = спрайт выровнен по клетке (канон). Меняется ТОЛЬКО вокруг отрисовки героя;
+; скан огня/erase/фон идут при voff=0 (горячий func_render_glyph не затронут).
+var_glyph_voff:         EQU 6A14h   ; байт: вертикальный суб-сдвиг OR-глифа героя (пиксели)
+; --- Step 2a (Вариант A): scratch easing-машины func_hero_render. -------------
+; Отображаемая позиция героя живёт в var_enemy_rc(lo=row,hi=col)+var_glyph_voff.
+; Func_hero_render каждый кадр сравнивает её с целью (var_player_row/col) и делает
+; шаг 4px. Здесь — снимок СТАРОГО отображения (для erase-прямоугольника), пара
+; координат для func_draw_tile_at_ptr и цель после решения. Зона 0x6A15.. свободна.
+var_hero_orow:          EQU 6A15h   ; байт: старая отображаемая строка (var_enemy_rc.lo до обновления)
+var_hero_ocv:           EQU 6A16h   ; байт: старый суб-сдвиг (var_glyph_voff до обновления; >0 => footprint 3 строки)
+var_hero_ocow:          EQU 6A17h   ; байт: старая отображаемая колонка (var_enemy_rc.hi до обновления)
+var_hero_erow:          EQU 6A18h   ; байт: координата erase (row) — func_draw_tile_at_ptr читает (HL)=row
+var_hero_ecol:          EQU 6A19h   ; байт: координата erase (col) — (HL+1)=col (смежно с erow)
+var_hero_newr:          EQU 6A1Ah   ; байт: новая отображаемая строка (после easing-решения)
+var_hero_newc:          EQU 6A1Bh   ; байт: новая отображаемая колонка
 ; data_glyph_block — МЕТКА на распакованном блоке, определена в
 ; data_glyph_block_unpacked.asm (этап B: адрес задаёт компоновщик GLYPH_BASE).
 data_glyph_block_end:   EQU 8000h   ; конец read-only окна (нижние 32КБ RAM)

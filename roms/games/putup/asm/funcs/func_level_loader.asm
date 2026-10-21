@@ -112,6 +112,12 @@ loc_19DA:
     MVI A, 03h                  ; 0x1A33
     STA var_work_const          ; 0x1A35
     CALL func_raster_timer_init ; включить секундомер растра (ch1) — растр-safe рисование героя
+    ; --- Step 0: сброс кадрового каркеса перед входом в игровой цикл ---------
+    XRA A
+    STA var_frame_sub           ; sub=0: до первого тика = 12 hw-кадров
+    STA var_glyph_voff          ; Step 2a: герой выровнен по клетке (твин-сдвиг=0)
+    LXI H, data_text_buffer
+    SHLD var_scan_ptr           ; курсор чанка скана огня = 0-я клетка буфера
     JMP lbl_main_game_loop      ; 0x1A38
 loc_1A3B:
     CALL func_draw_game_objects ; 0x1A3B

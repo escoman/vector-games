@@ -1,18 +1,61 @@
 ; Метка: lbl_main_game_loop
 ; Адрес: 0x0E85
-; Размер: 114 байт (0x0E85-0x0EF6)
-; Описание: Главный игровой цикл. Проход по сущностям 1..3 (BC=1..3):
-;           var_entity_index=C; HL=0919h+index -> A=состояние сущности;
-;           диспетчер CZ по состоянию 1..10 -> func_entity_state1..10.
-;           После обхода: CALL func_game_update (кадровое обновление);
-;           MVI B,02h; CALL func_delay (пауза); INX B; пока C<3 (JC loc_0E88).
-;           Затем обмен var_page_flip <-> 08FAh (переключение экранной страницы)
-;           и JMP lbl_main_game_loop (бесконечный цикл). Fall-through сюда из
-;           func_game_update (0x0E84).
+; Описание: Главный игровой цикл, ШАГ 1 — плавное распределение логики по кадрам.
+;
+;   Структура кадра (каждый hw-кадр):
+;     EI; HLT                         ; один wait-VBlank на кадр (INT RST7 ->
+;                                      func_vblank_isr). Эмулятор фиксирует
+;                                      was_halt:true каждый кадр.
+;     CALL func_render_all            ; единый рендер: чанк скана огня 128 ячеек
+;     INR var_frame_sub               ; досчётчик кадра в 12-кадровом окне (1..12)
+;
+;   Шаг 1 (полукадры): раньше оба entity-прохода (BC=1,2) с двумя вызовами
+;   func_game_update шли СПИНА К СПИНЕ в одном кадре тика (Step 0) — герой
+;   прыгал на 2 строки за раз и замирал на 12 кадров («отрывисто»). Теперь
+;   два прохода разнесены по кадрам того же 12-кадрового окна:
+;     sub==6  -> проход 1: entity1 + func_game_update (шаг героя №1)
+;     sub==12 -> проход 2: entity2 + func_game_update (шаг №2) + обмен страницей
+;   Герой/враги идут «шаг раз в ~6 кадров» — плавность как в оригинале (где
+;   проходы разносили внутренний EI;HLT + func_delay), темп тот же. Каждый
+;   проходный кадр делает вдвое меньше работы, чем тик-тело Step 0, поэтому
+;   перестает переползать границу кадра -> период тика ровно 12 (не 13).
+;
+;   Особые пути: func_game_update в конце может не вернуть RC (перезапуск
+;   при A=(HL) below >= 6Eh и ни один item-dispatch не сработал) — fall-
+;   through в lbl_main_game_loop (физически идёт сразу за телом game_update в
+;   layout). После fall-through CPU идёт в EI; HLT, т.е. ждёт следующий VBlank;
+;   PUSH B/CALL-адрес этой же итерации осиротеют — ровно как в оригинале
+;   (глубина стека game_update не увеличена: тело прохода инлайн, не CALL).
+;
+;   Сброс var_frame_sub / var_scan_ptr выполняется в func_level_loader перед
+;   JMP сюда; инициализация до первого прохода = 6 hw-кадров после входа.
 
 lbl_main_game_loop:
-    LXI B, 0001h                ; 0x0E85
-loc_0E88:
+    ; --- Шаг 1: кадровый синхрон + единый рендер ---------------------------
+    EI                          ; разрешить INT; следующий VBlank вернёт управление
+    HLT                         ; спать до RST7 (was_halt=true каждый кадр)
+    CALL func_render_all        ; чанк скана огня (128 ячеек из data_text_buffer)
+    CALL func_hero_render       ; Step 2a (Вариант A): плавный твин+отрисовка героя
+    ;                             ;   (цель = var_player_row/col; каждый кадр шаг 4px
+    ;                             ;    по вертикали; на покое — без перерисовки)
+    ; --- гейт: два проходных кадра в 12-кадровом окне ----------------------
+    LXI H, var_frame_sub
+    INR M                       ; sub++ (кадр учтён), 1..12
+    MVI A, 6d
+    CMP M                       ; Z, если sub==6 (середина тика)
+    JZ  lbl_mgl_pass1           ; -> entity1 + game_update (шаг героя №1)
+    MVI A, 12d
+    CMP M                       ; Z, если sub==12 (конец тика)
+    JZ  lbl_mgl_pass2           ; -> entity2 + game_update (шаг №2) + флип
+    JMP lbl_main_game_loop      ; idle-кадр: только рендер огня
+lbl_mgl_pass1:
+    LXI B, 0001h
+    JMP lbl_mgl_body
+lbl_mgl_pass2:
+    MVI M, 00h                  ; reset sub (HL = &var_frame_sub, не менялся)
+    LXI B, 0002h
+    ; fall-through в тело одного прохода
+lbl_mgl_body:                   ; ОДИН проход: диспетчер сущности BC + game_update
     PUSH B                      ; 0x0E88
     MOV A, C                    ; 0x0E89
     STA var_entity_index        ; 0x0E8A
@@ -57,18 +100,16 @@ loc_0E88:
     POP PSW                     ; 0x0ED0
     CPI 0Ah                     ; 0x0ED1
     CZ func_entity_state10      ; 0x0ED3
-    CALL func_game_update       ; 0x0ED6
-    MVI B, 02h                  ; 0x0ED9
-    CALL func_delay             ; 0x0EDB
+    CALL func_game_update       ; 0x0ED6  ; RC -> след.; fall-through -> lbl_main_game_loop
     POP B                       ; 0x0EDE
-    INX B                       ; 0x0EDF
+    ; --- обмен страницей только после pass2 (C==2) -------------------------
     MOV A, C                    ; 0x0EE0
-    CPI 03h                     ; 0x0EE1
-    JC loc_0E88                 ; 0x0EE3
+    CPI 02h                     ; 0x0EE1
+    JNZ lbl_main_game_loop      ; pass1 — без флипа, следующий кадр
     LDA var_page_flip           ; 0x0EE6
     MOV B, A                    ; 0x0EE9
     LDA var_page_flip_hi                    ; 0x0EEA
     STA var_page_flip           ; 0x0EED
     MOV A, B                    ; 0x0EF0
     STA var_page_flip_hi                    ; 0x0EF1
-    JMP lbl_main_game_loop      ; 0x0EF4
+    JMP lbl_main_game_loop
