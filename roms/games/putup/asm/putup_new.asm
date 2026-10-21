@@ -140,6 +140,7 @@
     include "data/data_note_param_table_43F9.asm"
     include "data/data_music_vibrato_pre_445C.asm"
     include "data/data_note_freq_table_ch0.asm"
+    include "funcs/func_render_tile_vram_or.asm"
     defs $ & 1 ; выровнять блок глифов на чётный (бит0 = тег compactness)
     include "data/data_glyph_block_unpacked.asm"   ; блок глифов
 

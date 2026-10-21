@@ -133,6 +133,12 @@ textbuf_to_vram:        EQU 0 - data_text_buffer   ; 9A00h: HL(буфер)+ко�
 ; (var_exit_phase=0FFh) и сброс в func_level_loader на каждом уровне.
 var_exit_phase:         EQU 6A00h   ; байт: 0FFh=выкл; 0=светлый нарисован, 1=тёмный
 var_exit_rc:            EQU 6A01h   ; слово: lo=строка, hi=колонка выхода (как var_bonus_rc)
+; --- Масочный scratch OR-композита (func_render_glyph_or) --------------------
+; 8 байт плоскости 0 (маски) текущего глифа: копятся сюда один раз, чтобы
+; указатель приёмника (HL), указатель цвета (DE) и указатель маски (BC) шли
+; независимо по 4 плоскостям. Реентрансно: scratch живёт только внутри одного
+; вызова glyph_or (стек сохранён PUSH H). Зона 0x6A03.. свободна (см. выше).
+var_or_mask_scratch:    EQU 6A03h   ; 8 байт: маска P0 для masked-blit оверлея героя
 ; data_glyph_block — МЕТКА на распакованном блоке, определена в
 ; data_glyph_block_unpacked.asm (этап B: адрес задаёт компоновщик GLYPH_BASE).
 data_glyph_block_end:   EQU 8000h   ; конец read-only окна (нижние 32КБ RAM)

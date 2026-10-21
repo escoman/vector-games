@@ -13,7 +13,7 @@
 ;           диспетчер кода клавиши: 1,2->loc_0D68; 3,4->0FD4h; 5->1042h; 6,7->1017h
 ;           (внешние gap-обработчики). loc_0D68: var_work_const=3; 0909h=col;
 ;           090Ah=row; 090Ch=tile; erase пред.позиции 08E3h через
-;           func_draw_tile_at_ptr (EI;HLT синк) + СРАЗУ draw героя func_render_tile_vram
+;           func_draw_tile_at_ptr (EI;HLT синк) + СРАЗУ draw героя func_render_tile_vram_or (OR-композит: пустые пиксели героя не затирают фрукт/фон под ним)
 ;           (пара в одном окне гашения — инвариант flicker-free, как у врагов);
 ;           SHLD 08E3h=новая поз.; скан буфера 0300h (loc_0DBE; огонь 75h<->0FEh);
 ;           затем мигание выхода (var_exit_phase 0<->1, безусловная перерисовка
@@ -134,7 +134,7 @@ loc_0D9E:
     ADD A                       ; 0x0DAE
     LXI H, data_tile_table_26DE ; 0x0DAF
     CALL func_hl_add_a          ; 0x0DB2
-    CALL func_render_tile_vram  ; 0x0DB5  (erase+draw героя в ОДНОМ окне гашения после HLT — без фликера)
+    CALL func_render_tile_vram_or  ; 0x0DB5  герой OR-композитом: пустые биты не затирают фрукт под героем (prev стерта выше func_draw_tile_at_ptr)
     LXI H, data_text_buffer ; 0x0DB8
     LXI B, 0300h                ; 0x0DBB
 loc_0DBE:
@@ -189,7 +189,7 @@ loc_exit_hero:
     ADD A
     LXI H, data_tile_table_26DE
     CALL func_hl_add_a
-    CALL func_render_tile_vram  ; герой поверх всего
+    CALL func_render_tile_vram_or  ; герой OR-композитом поверх огня/мигания выхода (не затирает то, под чем стоит)
 loc_exit_done:
     LDA var_player_col          ; 0x0DDD
     MOV D, A                    ; 0x0DE0
