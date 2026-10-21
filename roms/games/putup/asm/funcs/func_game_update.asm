@@ -14,7 +14,9 @@
 ;           (внешние gap-обработчики). loc_0D68: var_work_const=3; 0909h=col;
 ;           090Ah=row; 090Ch=tile; перерисовка пред.позиции 08E3h через
 ;           func_draw_tile_at_ptr; SHLD 08E3h; рендер тайла из data_tile_table_26DE
-;           через func_render_tile_vram; скан текстового буфера 0300h байт (loc_0DBE).
+;           через func_render_tile_vram; скан текстового буфера 0300h байт (loc_0DBE)
+;           (огонь 75h<->0FEh каждый проход; сразу за сканом — мигание выхода
+;           var_exit_phase 0<->1, перерисовка тайла [7]/[10] — тот же темп).
 ;           Затем второй проход коллизий по 't'(74h); при nonzero -> JNZ 13Ah (gap).
 ;           Обновление 08E9h, CALL func_erase_char_08E9, проверка 08EAh==2 -> 1252h.
 ;           Финал: char ниже игрока; если <6Eh -> RC; иначе CALL func_sound_init и
@@ -152,6 +154,25 @@ loc_0DD6:
     MOV A, B                    ; 0x0DD8
     ORA C                       ; 0x0DD9
     JNZ loc_0DBE                ; 0x0DDA
+    ; --- Фаза 4: мигание выхода 6<->5 в том же темпе, что огонь выше ----------
+    ; Появляется вместе с выходом (ветка 0x10C8 handlers), гаснет в func_level_loader.
+    LDA var_exit_phase          ; 0FFh = выход не активен
+    CPI 0FFh
+    JZ loc_exit_skip
+    INR A
+    ANI 01h                     ; фаза: 0=светлый(нарисован), 1=тёмный
+    STA var_exit_phase
+    MOV B, A
+    LHLD var_exit_rc            ; lo=строка, hi=колонка (кэш из loc_10FD)
+    XCHG                        ; DE=позиция — как в вызовах отрисовки выхода
+    LXI H, data_tile_table_26DE+01Ch   ; [7] = светлый выход (глифы BC..BF)
+    MOV A, B
+    ORA A
+    JZ loc_exit_draw
+    LXI H, data_tile_table_26DE+028h   ; [10] = тёмный выход (глифы 12..15)
+loc_exit_draw:
+    CALL func_render_tile_vram
+loc_exit_skip:
     LDA var_player_col          ; 0x0DDD
     MOV D, A                    ; 0x0DE0
     LDA var_player_row          ; 0x0DE1

@@ -224,6 +224,10 @@ loc_10FD:
     LDA   data_level_param_buf; 0x1101
     MOV   H, A                ; 0x1104
     SHLD  var_bonus_rc        ; 0x1105
+    ; (Фаза 4) запомнить позицию выхода и включить мигание (скан в func_game_update)
+    SHLD  var_exit_rc         ; lo=строка, hi=колонка — тот же кэш
+    XRA   A
+    STA   var_exit_phase      ; светлый нарисован, следующий проход — тёмный
     XCHG                      ; 0x1108
     LDA   var_obj_type_idx    ; 0x1109
     ADD   A                   ; 0x110C

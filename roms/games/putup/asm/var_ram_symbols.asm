@@ -127,6 +127,12 @@ var_text_ptr:           EQU data_game_object_init+17h   ; слово: указа
 data_text_buffer:       EQU 6600h   ; 1024 байта: текстовый/символьный back-буфер
 data_text_buffer_end:   EQU 6A00h
 textbuf_to_vram:        EQU 0 - data_text_buffer   ; 9A00h: HL(буфер)+константа = смещение клетки
+; --- Мигание выхода (Фаза 4) — 3 байта сразу за текстовым буфером ------------
+; Зона 0x6A00.. свободна: буфер заполняется только 0x400 байтами от 0x6600,
+; координаты курсора не превышают 31*32+31=0x3FF. Иниц. в func_main_init
+; (var_exit_phase=0FFh) и сброс в func_level_loader на каждом уровне.
+var_exit_phase:         EQU 6A00h   ; байт: 0FFh=выкл; 0=светлый нарисован, 1=тёмный
+var_exit_rc:            EQU 6A01h   ; слово: lo=строка, hi=колонка выхода (как var_bonus_rc)
 ; data_glyph_block — МЕТКА на распакованном блоке, определена в
 ; data_glyph_block_unpacked.asm (этап B: адрес задаёт компоновщик GLYPH_BASE).
 data_glyph_block_end:   EQU 8000h   ; конец read-only окна (нижние 32КБ RAM)

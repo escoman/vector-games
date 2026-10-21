@@ -15,6 +15,8 @@
 ;           (обработчик вне RDB).
 
 func_level_loader:
+    MVI A, 0FFh                 ; (Фаза 4) выключить мигание выхода до появления
+    STA var_exit_phase
     LXI H, var_level            ; 0x197C
     INR M                       ; 0x197F
     MOV A, M                    ; 0x1980
