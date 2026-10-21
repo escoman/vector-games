@@ -1,27 +1,24 @@
 ; Функция: func_render_tile_vram_or
 ; Адрес: 0x1BC9
-; Размер: ~34 байта (тело) + func_render_glyph_or + хелперы loc_mov8 / loc_blit8 / loc_or_nextplane
+; Размер: ~34 байта (тело) + func_render_glyph_or + хелперы loc_mov8 / loc_and_de / loc_blit8 / loc_or_nextplane
 ; Описание: MASKED-BLIT тайла 2x2 поверх уже нарисованного в VRAM (оверлей героя).
 ;           Вход: HL = указатель графики тайла (4 байта-глифа), D = колонка,
 ;           E = строка — тот же контракт, что у func_render_tile_vram.
 ;
-;           СМЫСЛ (схема lib/gfx/plane.asm «плоскость сегментов»): у глифа героя
-;           плоскость 0 (P0) хранит СИЛУЭТ-маску: 1 = фон (за пределами героя),
-;           0 = сам герой. Наложение для каждой из 4 экраных плоскостей i:
-;                 Plane_i = (Plane_i AND mask) OR color_i
-;           где mask = P0 глифа, color_i = i-я плоскость глифа (КЛАДЁТСЯ ЦЕЛИКОМ,
-;           НЕ маскируется!). То есть:
-;             * где mask=1 (фон) — экранный пиксель СОХРАНЯЕТСЯ (фрукт/стена под
-;               «пустой» частью клетки героя не затираются), но цвет героя поверх
-;               всё равно OR-ится (color_i);
-;             * где mask=0 (герой) — фон ВЫТИРАЕТСЯ и заменяется цветом героя.
-;           ВАЖНО: цвет НЕ обнуляется инверсной маской. Прежний вариант
-;           (color AND ~mask) стирал биты цвета в области mask=1 -> герой почти
-;           полностью исчезал. Правильно: зачистка фона маской (AND), затем OR
-;           всего цвета глифа напрямую.
-;
-;           Плоскость 0: color_0 = mask, поэтому (Plane0 AND mask) OR mask = mask,
-;           т.е. Plane0 = P0 (то же, что писал оригинальный verbatim-рендер).
+;           СМЫСЛ: глиф героя = 4 плоскости по 8 байт, идут в порядке обхода
+;           (база 0x8000, шаг +0x2000), DE идёт последовательно entry+0,8,16,24:
+;             entry+0  -> 0x8000 (Plane 3, П3)    entry+8  -> 0xA000 (Plane 2, П2)
+;             entry+16 -> 0xC000 (Plane 1, П1)    entry+24 -> 0xE000 (Plane 0, П0)
+;           МАСКА зачистки ЕДИНАЯ для всех плоскостей = П0 (entry+24), буферится в
+;           var_or_mask_scratch. Композиция (Plane := ...):
+;             * 0x8000 (Plane 3, П3): (Plane AND П0) OR П3   (loc_blit8, color=entry+0);
+;             * 0xA000 (Plane 2, П2): (Plane AND П0) OR П2   (loc_blit8, color=entry+8);
+;             * 0xC000 (Plane 1, П1): (Plane AND П0) OR П1   (loc_blit8, color=entry+16);
+;             * 0xE000 (Plane 0, П0): Plane AND П0           (loc_and_de) — зачистка без
+;               наложения: П0 на свою плоскость НЕ OR-ится (по требованию).
+;           Где П0=1 (фон) — пиксель экрана сохраняется; П0=0 (герой) — вытирается, затем
+;           поверх OR-ится цвет плоскости. ВАЖНО: цвет НЕ инвертируется (color AND ~mask
+;           стирал героя); зачистка = AND, наложение = OR всего цвета напрямую.
 ;
 ;           КЛЮЧЕВОЕ (багфикс): порядок чтения 4 байт тайла обязан совпадать с
 ;          func_render_tile_vram байт-в-байт. Между верхним-правым глифом [1] и
@@ -62,14 +59,14 @@ func_render_tile_vram_or:
 ; Masked-blit одного глифа поверх VRAM. Вход: A = индекс глифа, HL = адрес
 ; клетки текстового буфера. Вычисление адреса приёмника (4 плоскости по +0x2000)
 ; и выбор слова глифа из data_glyph_ptr_table — один в один с func_render_glyph
-; (Tier-2: бит0 слова = тег compact; raw = 4 плоскости по 8 байт подряд, P0 идёт
-; первой => P0 = маска). Запись (см. шапку):
+; (Tier-2: бит0 слова = тег compact; raw = 4 плоскости по 8 байт подряд:
+; entry+0=П3, entry+8=П2, entry+16=П1, entry+24=П0). Запись (см. шапку):
 ;   * space (20h) -> no-op (пустая клетка оверлея ничего не трогает);
-;   * маска P0 (8 байт) грузится в var_or_mask_scratch, DE уходит на color P1;
-;   * плоскость 0: Plane0 = mask (loc_mov8 == (Plane0 AND mask) OR mask);
-;   * compact (тег=1): плоскостей 1..3 нет -> стоп после P0 (герой всегда raw);
-;   * raw плоскости 1..3: Plane_i = (Plane_i AND mask) OR color_i (loc_blit8),
-;     приёмник шагает на +0x2000 (loc_or_nextplane), цвет идёт последовательно.
+;   * маска = П0 (entry+24) буферится в var_or_mask_scratch, DE возвращается на entry+0;
+;   * 0x8000 (Plane 3), 0xA000 (Plane 2), 0xC000 (Plane 1): (Plane AND П0) OR color_i
+;     (loc_blit8), цвет идёт последовательно entry+0/8/16, приёмник шагает +0x2000;
+;   * 0xE000 (Plane 0): Plane = Plane AND П0 (loc_and_de; DE=entry+24), без OR;
+;   * compact (тег=1): короткая запись -> Plane3 = entry+0 verbatim (loc_mov8), стоп.
 func_render_glyph_or:
     PUSH PSW                    ; прозрачность для вызывающего
     PUSH B
@@ -120,67 +117,70 @@ func_render_glyph_or:
     MOV C, A                    ; C = тег (0 raw / 1 compact)
     MOV A, E
     SUB C
-    MOV E, A                    ; DE = база записи (P0 = маска, далее цвета)
-    ; --- загрузка маски (P0, 8 байт из (DE)) в scratch; DE уйдёт на color P1 ---
-    PUSH H                      ; сохранить базу приёмника (плоскость 0)
-    LXI H, var_or_mask_scratch
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    LDAX D
-    MOV M, A
-    INX D
-    INX H
-    ; DE = entry+8 (цвет P1); маска в var_or_mask_scratch; HL = scratch+8
-    POP H                       ; HL = база приёмника (плоскость 0)
-    ; --- Тег compact проверяем ДО LXI B: loc_mov8/loc_blit8 используют BC как
-    ;     указатель маски и затирают C (тег). Иначе после plane0 C=низ scratch,
-    ;     ORA A != 0 -> ложный уход, и плоскости 1..3 не рисуются (герой только
-    ;     на 0x8000). ---
-    MOV A, C                    ; C = тег (0 raw / 1 compact), ещё цел
+    MOV E, A                    ; DE = база записи (цвета с entry+0; маска П0 = entry+24)
+    ; --- Ветвление по тегу ДО всего, что трогает BC/C (тег в C должен выжить) ---
+    MOV A, C                    ; C = тег (0 raw / 1 compact)
     ORA A
-    JNZ loc_compact             ; compact: только плоскость 0
-    ; --- raw: плоскость 0 = mask, затем blit плоскостей 1..3 ---
+    JNZ loc_compact             ; compact: только плоскость 0 verbatim
+    ; --- RAW: буферим П0 = entry+24 в scratch (единая маска AND для всех плоскостей) ---
+    PUSH H                      ; HL = база приёмника (Plane 3 = 0x8000)
+    PUSH D                      ; DE = base entry (чтобы цвета начать с entry+0)
+    LXI H, 0018h                ; 24
+    DAD D                       ; HL = entry+24
+    XCHG                        ; DE = entry+24 (источник П0), HL = base entry
+    LXI H, var_or_mask_scratch  ; HL = scratch — приёмник маски
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    MOV M, A
+    INX D
+    INX H
+    POP D                       ; DE = base entry (цвета начнём с entry+0)
+    POP H                       ; HL = база приёмника (Plane 3 = 0x8000)
+    ; --- Plane 3 (0x8000): (dest AND П0) OR П3 ---
     LXI B, var_or_mask_scratch
-    CALL loc_mov8               ; dest0 = маска; HL = dest0+8, DE не тронут (=entry+8)
-    CALL loc_or_nextplane       ; HL -> база плоскости 1
+    CALL loc_blit8              ; mask=П0(scratch), color=П3(DE=entry+0); DE->entry+8
+    CALL loc_or_nextplane       ; HL -> 0xA000 (Plane 2)
     LXI B, var_or_mask_scratch
-    CALL loc_blit8              ; P1: (dest&mask)|color1; DE->entry+16
-    CALL loc_or_nextplane
+    CALL loc_blit8              ; (dest AND П0) OR П2(entry+8); DE->entry+16
+    CALL loc_or_nextplane       ; HL -> 0xC000 (Plane 1)
     LXI B, var_or_mask_scratch
-    CALL loc_blit8              ; P2; DE->entry+24
-    CALL loc_or_nextplane
-    LXI B, var_or_mask_scratch
-    CALL loc_blit8              ; P3; DE->entry+32
+    CALL loc_blit8              ; (dest AND П0) OR П1(entry+16); DE->entry+24
+    CALL loc_or_nextplane       ; HL -> 0xE000 (Plane 0)
+    CALL loc_and_de             ; 0xE000: dest &= П0 (DE=entry+24); П0 НЕ OR-ится
     JMP loc_or_done
 loc_compact:
-    LXI B, var_or_mask_scratch
-    CALL loc_mov8               ; compact: plane0 = mask, плоскостей 1..3 нет
+    ; compact: короткая 8-байтная запись -> НЕ читаем entry+24 (вне записи).
+    ; Plane 3 = (entry+0..7) verbatim: BC = DE = entry; loc_mov8 пишет (BC)->(HL).
+    PUSH D
+    POP B
+    CALL loc_mov8
 loc_or_done:
     POP H
     POP D
@@ -188,8 +188,8 @@ loc_or_done:
     POP PSW
     RET
 
-; Копия: 8 байт. Вход HL=приёмник, BC=источник. dest = (BC). Оба +8. Не трогает D/E.
-; (Для плоскости 0 источника-маски: Plane0 = mask.)
+; Копия verbatim: 8 байт. Вход HL=приёмник, BC=источник. dest = (BC). Оба +8. Не трогает D/E.
+; (Теперь используется только compact-ветвью: Plane3 = короткая запись 8 байт.)
 loc_mov8:
     LDAX B
     MOV M, A
@@ -222,6 +222,51 @@ loc_mov8:
     LDAX B
     MOV M, A
     INX B
+    INX H
+    RET
+
+; Зачистка Plane 0xE000 СОБСТВЕННЫМ П0: 8 байт. Вход HL=приёмник, DE=П0 (entry+24).
+;   dest = dest & (DE). Оба +8. Не трогает B/C. (П0 на 0xE000 НЕ OR-ится.)
+loc_and_de:
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
+    INX H
+    LDAX D
+    ANA M
+    MOV M, A
+    INX D
     INX H
     RET
 
