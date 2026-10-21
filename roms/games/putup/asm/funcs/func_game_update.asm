@@ -12,11 +12,12 @@
 ;           var_player_row--; var_game_state=1; 0906h=0. Далее CALL func_decode_key;
 ;           диспетчер кода клавиши: 1,2->loc_0D68; 3,4->0FD4h; 5->1042h; 6,7->1017h
 ;           (внешние gap-обработчики). loc_0D68: var_work_const=3; 0909h=col;
-;           090Ah=row; 090Ch=tile; перерисовка пред.позиции 08E3h через
-;           func_draw_tile_at_ptr; SHLD 08E3h; рендер тайла из data_tile_table_26DE
-;           через func_render_tile_vram; скан текстового буфера 0300h байт (loc_0DBE)
-;           (огонь 75h<->0FEh каждый проход; сразу за сканом — мигание выхода
-;           var_exit_phase 0<->1, перерисовка тайла [7]/[10] — тот же темп).
+;           090Ah=row; 090Ch=tile; erase пред.позиции 08E3h через
+;           func_draw_tile_at_ptr (EI;HLT синк) + СРАЗУ draw героя func_render_tile_vram
+;           (пара в одном окне гашения — инвариант flicker-free, как у врагов);
+;           SHLD 08E3h=новая поз.; скан буфера 0300h (loc_0DBE; огонь 75h<->0FEh);
+;           затем мигание выхода (var_exit_phase 0<->1, безусловная перерисовка
+;           [7]/[10]) и ПОВТОРНАЯ дорисовка героя (loc_exit_hero) — поверх выхода.
 ;           Затем второй проход коллизий по 't'(74h); при nonzero -> JNZ 13Ah (gap).
 ;           Обновление 08E9h, CALL func_erase_char_08E9, проверка 08EAh==2 -> 1252h.
 ;           Финал: char ниже игрока; если <6Eh -> RC; иначе CALL func_sound_init и
@@ -133,7 +134,7 @@ loc_0D9E:
     ADD A                       ; 0x0DAE
     LXI H, data_tile_table_26DE ; 0x0DAF
     CALL func_hl_add_a          ; 0x0DB2
-    CALL func_render_tile_vram  ; 0x0DB5  (стер+рисун в одном окне гашения после erase-синка)
+    CALL func_render_tile_vram  ; 0x0DB5  (erase+draw героя в ОДНОМ окне гашения после HLT — без фликера)
     LXI H, data_text_buffer ; 0x0DB8
     LXI B, 0300h                ; 0x0DBB
 loc_0DBE:
@@ -158,7 +159,7 @@ loc_0DD6:
     ; Появляется вместе с выходом (ветка 0x10C8 handlers), гаснет в func_level_loader.
     LDA var_exit_phase          ; 0FFh = выход не активен
     CPI 0FFh
-    JZ loc_exit_skip
+    JZ loc_exit_done            ; выхода нет: ни мигания, ни дорисовки героя
     INR A
     ANI 01h                     ; фаза: 0=светлый(нарисован), 1=тёмный
     STA var_exit_phase
@@ -172,7 +173,24 @@ loc_0DD6:
     LXI H, data_tile_table_26DE+028h   ; [10] = тёмный выход (глифы 12..15)
 loc_exit_draw:
     CALL func_render_tile_vram
-loc_exit_skip:
+loc_exit_hero:
+    ; --- герой поверх огня и мигания выхода: ПОВТОРНАЯ дорисовка --------------
+    ; Первая пара erase+draw героя уже легла в окно гашения (loc_0DB5) — без фликера.
+    ; Мигание (выше) могло накрыть героя тайлом выхода; дорисовываем героя снова.
+    ; Это идемпотентно: вне пересечения пишет те же пиксели (без фликера), а в
+    ; местах наложения 2x2 кладёт героя поверх выхода.
+    LDA var_player_row          ; строка героя (= var_scr_090A, не трогается сканом)
+    MOV L, A
+    LDA var_player_col          ; колонка героя (= var_scr_0909)
+    MOV H, A
+    XCHG                        ; DE = (D=col, E=row) — позиция для render
+    LDA var_obj_type_idx        ; тайл героя (из loc_0D85; скан/мигание его не меняют)
+    ADD A
+    ADD A
+    LXI H, data_tile_table_26DE
+    CALL func_hl_add_a
+    CALL func_render_tile_vram  ; герой поверх всего
+loc_exit_done:
     LDA var_player_col          ; 0x0DDD
     MOV D, A                    ; 0x0DE0
     LDA var_player_row          ; 0x0DE1

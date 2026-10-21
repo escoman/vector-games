@@ -36,6 +36,8 @@ func_level_loader:
     LXI B, 0008h                ; 0x199A
     CALL func_memcpy            ; 0x199D
 loc_19A0:
+    MVI A, 0FFh                 ; (Фаза 4) сброс мигания и на путях входа в середину
+    STA var_exit_phase          ; функции:death-restart(JMP 19A0), след. уровень(CALL)
     LXI SP, 0100h               ; 0x19A0
     CALL func_clear_textbuf     ; 0x19A3
     LDA var_level               ; 0x19A6
