@@ -43,13 +43,21 @@ full: clean assets all deploy
 # demand; эта цель — принудительная перегенерация всего: make assets.
 assets:
 	python3 tools/gen_assets.py
-	python3 tools/gen_bg.py
+	@if test -f ../mario-8cols/include/level.inc; then python3 tools/gen_bg.py; else echo "gen_bg.py пропущен: нет ../mario-8cols/include/level.inc (соберите mario-8cols); оставлен закоммиченный include/background.inc"; fi
 
 include/sprites.inc include/tiles.inc: assets/raccoon_mario.png tools/gen_assets.py
 	python3 tools/gen_assets.py
 
+# Фон собирается gen_bg.py из ВНЕШНИХ данных mario-8cols: тайлсет в level.inc и
+# prefabs.json. level.inc — артефакт сборки mario-8cols, в git не лежит, поэтому
+# в чистом checkout его нет и регенерация невозможна. Закоммиченный
+# include/background.inc обеспечивает сборку сам (принцип «сырьё можно удалить»).
+# Правило объявляем только когда источник есть — иначе make спотыкается о
+# несуществующую цель ../mario-8cols/include/level.inc ещё до компиляции.
+ifneq ($(wildcard ../mario-8cols/include/level.inc),)
 include/background.inc: tools/gen_bg.py ../mario-8cols/include/level.inc ../mario-8cols/assets/prefabs.json
 	python3 tools/gen_bg.py
+endif
 
 GEN_SRC = include/sprites.inc include/tiles.inc include/background.inc \
           main.c include/render.asm include/sfx_mario.c
