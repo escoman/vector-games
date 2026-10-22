@@ -138,22 +138,10 @@ loc_exit_draw:
     CALL func_render_tile_vram
 loc_exit_hero:
     ; --- герой поверх огня и мигания выхода: ПОВТОРНАЯ дорисовка --------------
-    ; Step 2a (Вариант A): рисуем героя в его ТЕКУЩЕЙ отображаемой позиции
-    ; (var_enemy_rc + var_glyph_voff), а не в целевой var_player_row/col — иначе
-    ; мигание выхода сорвало бы твин. func_render_tile_vram_or сам применит
-    ; var_glyph_voff (суб-сдвиг). Идемпотентно: кладёт героя поверх тайла выхода.
-    CALL func_raster_guard_hero ; raster-sync: повторная дорисовка тоже вне прохода луча
-    LDA var_enemy_rc            ; ОТОБРАЖАЕМая строка героя (твин-cr, lo слова)
-    MOV L, A
-    LDA var_enemy_rc+1          ; ОТОБРАЖАЕМая колонка героя (hi слова)
-    MOV H, A
-    XCHG                        ; DE = (D=col, E=row) — позиция для render
-    LDA var_obj_type_idx        ; тайл героя (из loc_0D85; скан/мигание его не меняют)
-    ADD A
-    ADD A
-    LXI H, data_tile_table_26DE
-    CALL func_hl_add_a
-    CALL func_render_tile_vram_or  ; герой OR-композитом поверх огня/мигания выхода (не затирает то, под чем стоит)
+    ; Вынесено в func_hero_repaint_over (raster-guard + OR-композит в ОТОБРАЖАЕМой
+    ; позиции var_enemy_rc, кадр из var_hero_idx). Идемпотентно: кладёт героя поверх
+    ; тайла выхода, не затирая то, под чем он стоит.
+    CALL func_hero_repaint_over
 loc_exit_done:
     LDA var_player_col          ; 0x0DDD
     MOV D, A                    ; 0x0DE0

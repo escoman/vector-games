@@ -102,6 +102,13 @@ lbl_mgl_body:                   ; ОДИН проход: диспетчер су
     CPI 0Ah                     ; 0x0ED1
     CZ func_entity_state10      ; 0x0ED3
     CALL func_game_update       ; 0x0ED6  ; RC -> след.; fall-through -> lbl_main_game_loop
+    ; --- починка мерцания: герой ПОСЛЕДНИМ экранным писателем в свою область ----
+    ; Любая запись экрана внутри прохода (скан огня, стирание собранного фрукта
+    ; func_score_and_redraw, mover объектов) идёт ВЫШЕ героя и затирает его OR-оверлей.
+    ; Идемпотентная beam-safe перекраска героя (guard + OR в var_enemy_rc, кадр из
+    ; var_hero_idx) восстанавливает оверлей. Поймано и на collect-пути: score_and_redraw
+    ; RET-ится ровно сюда (на POP B), поэтому CALL выполняется и после сбора.
+    CALL func_hero_repaint_over
     POP B                       ; 0x0EDE
     ; --- обмен страницей только после pass2 (C==2) -------------------------
     MOV A, C                    ; 0x0EE0
