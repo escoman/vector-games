@@ -2,7 +2,7 @@
 ; Адрес: 0x197C
 ; Размер: 523 байта
 ; Описание: Загрузка следующего уровня. var_level++; если var_level >= 10h
-;           (16) -> ветка победы/бонуса (loc_1A3B). Иначе: обнуление 090Fh,
+;           (16) -> ветка победы/бонуса (func_hall_of_fame). Иначе: обнуление 090Fh,
 ;           копирование 8 байт параметров уровня из data_level_params[level*8]
 ;           в data_level_param_buf (func_memcpy), сброс стека, очистка видео-ОЗУ
 ;           (func_clear_vram, шаг E3 — иначе пустые клетки хранят пиксели врага,
@@ -16,6 +16,11 @@
 ;           бонус (str_bonus), начисляет 5000 (1388h) очков, JMP 1447h
 ;           (обработчик вне RDB).
 
+; Стоп-колонка ходьбы героя в зале славы: награда (глифы 9Dh/9Eh) рисуется в
+; data_text_buffer+0250h = row18*32+col16, т.е. col 16h (центр экрана). Герой
+; (ширина 2 колонки) встаёт сразу СПРАВА от награды -> base col = 16h+1 = 11h.
+hof_walk_stop_col EQU 11h
+
 func_level_loader:
     MVI A, 0FFh                 ; (Фаза 4) выключить мигание выхода до появления
     STA var_exit_phase
@@ -23,7 +28,7 @@ func_level_loader:
     INR M                       ; 0x197F
     MOV A, M                    ; 0x1980
     CPI 10h                     ; 0x1981
-    JNC loc_1A3B                ; 0x1983
+    JNC func_hall_of_fame       ; 0x1983
     XRA A                       ; 0x1986
     STA var_egg_counter                    ; 0x1987
     LXI H, data_level_params    ; 0x198A
@@ -162,7 +167,15 @@ loc_19DA:
     ;     первый кадр func_enemy_render не рисует ничего — фантомов как у героя нет.
     CALL func_enemy_render_init
     JMP lbl_main_game_loop      ; 0x1A38
-loc_1A3B:
+func_hall_of_fame:
+    ; Зал славы (экран награждения): герой идёт по залу, надпись CONGRATULATION/BONUS,
+    ; начисление 1388h очков, уход на loc_1447 (общий эпилог -> заставка).
+    ; Суб-сдвиги твина композитинга маской+OR обнуляем — на этом пути
+    ; func_hero_render (пишущий их в обычной загрузке уровня) минуется, а
+    ; RAM-мусор дал бы кривой сдвиг OR-глифа.
+    XRA A                       ; var_glyph_voff = 0 (выровненно по клетке)
+    STA var_glyph_voff
+    STA var_glyph_hoff          ; var_glyph_hoff = 0
     CALL func_draw_game_objects ; 0x1A3B
     CALL func_clear_textbuf     ; 0x1A3E
     LXI H, data_text_buffer+0100h                ; 0x1A41
@@ -256,11 +269,44 @@ loc_1AEA:
     ADD A                       ; 0x1AFA
     LXI H, data_tile_table_26DE ; 0x1AFB
     CALL func_hl_add_a          ; 0x1AFE
-    CALL func_render_tile_vram  ; 0x1B01
-    MVI B, 05h                  ; 0x1B04
+    CALL func_render_tile_vram_or  ; 0x1B01  (было func_render_tile_vram)
+    MVI B, 02h                  ; 0x1B04  (выровненный кадр: средняя скорость)
     CALL func_delay             ; 0x1B06
+    ; --- полукадр: горизонтальный midpoint +4px вправо (func_render_tile_vram_or3) ---
+    ; Тот же примитив, что в основной игре (func_hero_render loc_hr_draw3): широкий
+    ; 3-колоночный OR-blit из precompute-кэша data_hero_shift_cache ( hoff=1 ). Стираем
+    ; выровненный кадр A(c) из буфера (клетка var_enemy_rc = cols c,c+1), затем
+    ; накладываем спрайт на полклетки правее (cols c..c+2). Следующий A(c+1) перекроет
+    ; хвост col c+2, поэтому расширять стирание не нужно. var_glyph_voff=0 (func_hall_of_fame).
+    LXI   H, var_enemy_rc
+    CALL  func_draw_tile_at_ptr ; стереть выровненный A(c)
+    LDA   var_obj_type_idx      ; idx (запись [0]/[1]/[2])
+    MOV   E, A
+    MVI   D, 00h
+    LXI   H, 0000h
+    ORA   A
+    JZ    vw_mid_done           ; idx==0 -> HL=0
+vw_mid_mul:
+    MOV   A, L
+    ADI   0C0h                  ; +192 (окно тайла = 6 фрагментов x 32)
+    MOV   L, A
+    MOV   A, H
+    ACI   00h
+    MOV   H, A
+    DCR   E
+    JNZ   vw_mid_mul
+vw_mid_done:
+    LXI   D, data_hero_shift_cache
+    DAD   D                     ; HL = база окна для idx
+    LDA   var_scr_0909          ; col c
+    MOV   D, A                  ; base col = c (hoff=1, сдвиг вправо)
+    LDA   var_scr_090A          ; row 12h
+    MOV   E, A
+    CALL  func_render_tile_vram_or3
+    MVI   B, 01h                ; (полукадр midpoint: чуть короче выровненного)
+    CALL  func_delay
     LDA var_player_col          ; 0x1B09
-    CPI 1Ch                     ; 0x1B0C
+    CPI hof_walk_stop_col       ; 0x1B0C  (стоп справа от награды, было 1Ch)
     JC loc_1A8C                 ; 0x1B0E
     LDA var_player_col          ; 0x1B11
     STA var_scr_0909                    ; 0x1B14
@@ -268,18 +314,24 @@ loc_1AEA:
     STA var_scr_090A                    ; 0x1B19
     MVI A, 06h                  ; 0x1B1C
     STA var_obj_type_idx                    ; 0x1B1E
-    LXI H, var_enemy_rc                 ; 0x1B21
-    LDA var_scr_090A                    ; 0x1B24
-    CMP M                       ; 0x1B27
-    JNZ loc_1B34                ; 0x1B28
-    INX H                       ; 0x1B2B
-    LDA var_scr_0909                    ; 0x1B2C
-    CMP M                       ; 0x1B2F
-    DCX H                       ; 0x1B30
-    JZ loc_1B37                 ; 0x1B31
-loc_1B34:
-    CALL func_draw_tile_at_ptr  ; 0x1B34
-loc_1B37:
+    ; --- перед финальным «стоит лицом вперёд»: перерисовать стену за героем ---
+    ; Последний midpoint ходьбы оставил в VRAM пиксели спрайта в колонках
+    ; stop..stop+2 (строки 12h/13h): OR-путь их не перекрывает, и под стоячим
+    ; кадром видны остатки фазы ходьбы, а хвост col stop+2 торчит справа от героя.
+    ; Восстанавливаем фон из текстового буфера двумя вызовами func_draw_tile_at_ptr
+    ; (каждый рисует блок 2x2): (12h,stop) -> stop/stop+1, (12h,stop+1) -> stop+1/+2.
+    ; Прежнее условное стирание (сравнение с var_enemy_rc) убрано — оно
+    ; пропускалось ровно в нашем случае: герой финиширует в своей же клетке.
+    MVI   A, 12h
+    STA   var_enemy_rc            ; пара (row, col) для func_draw_tile_at_ptr
+    MVI   A, hof_walk_stop_col
+    STA   var_enemy_rc+1
+    LXI   H, var_enemy_rc
+    CALL  func_draw_tile_at_ptr   ; стена за колонками stop/stop+1
+    MVI   A, hof_walk_stop_col+1
+    STA   var_enemy_rc+1
+    LXI   H, var_enemy_rc
+    CALL  func_draw_tile_at_ptr   ; стена за колонками stop+1/stop+2
     LDA var_scr_090A                    ; 0x1B37
     MOV L, A                    ; 0x1B3A
     LDA var_scr_0909                    ; 0x1B3B
@@ -291,7 +343,7 @@ loc_1B37:
     ADD A                       ; 0x1B47
     LXI H, data_tile_table_26DE ; 0x1B48
     CALL func_hl_add_a          ; 0x1B4B
-    CALL func_render_tile_vram  ; 0x1B4E
+    CALL func_render_tile_vram_or  ; 0x1B4E  (было func_render_tile_vram)
     LXI H, data_text_buffer+0250h                ; 0x1B51
     CALL func_set_text_ptr      ; 0x1B54
     MVI A, 9Ch                  ; 0x1B57
@@ -310,4 +362,19 @@ loc_1B37:
     SHLD var_score              ; 0x1B7B
     CALL func_draw_score_hud    ; 0x1B7E
     CALL func_draw_game_objects ; 0x1B81
+    ; FIX (экран награждения): func_draw_game_objects первым блоком затирает клетку
+    ; var_enemy_rc — а в ней последняя позиция идущего персонажа (row 12h / col stop).
+    ; Оверлей персонажа лежит только в VRAM (рисовался стандартным путём
+    ; func_render_tile_vram, в текстовый буфер не писался), поэтому стирание из
+    ; буфера его убирает — персонаж «пропадает» сразу после вывода CONGRATULATION.
+    ; Перерисуем финальный кадр персонажа (запись [6] тайл-таблицы) поверх стёртой
+    ; клетки, чтобы он оставался видимым в удерживаемом кадре до возврата на заставку.
+    MVI   D, hof_walk_stop_col    ; col финальной позиции персонажа (было 1Ch)
+    MVI   E, 12h                  ; row финальной позиции персонажа
+    MVI   A, 06h                  ; obj_type финального (стоячего) кадра
+    ADD   A
+    ADD   A                       ; *4 = смещение записи в data_tile_table_26DE
+    LXI   H, data_tile_table_26DE
+    CALL  func_hl_add_a           ; HL = указатель графики тайла
+    CALL  func_render_tile_vram_or  ; персонаж поверх стёртой клетки
     JMP loc_1447                    ; 0x1B84
