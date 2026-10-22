@@ -1,26 +1,79 @@
 ; Функция: func_sound_init
-; Адрес: 0x0121
-; Размер: 36 байт
-; Описание: Инициализация звука / стартовый тон: CALL func_sound_op (A=0Ah,E=0Fh),
-;           (A=05h,E=00h), (A=04h,E=32h), CALL func_delay, (A=0Ah,E=00h).
-;           Сохраняет D и PSW. Настраивает канал 2 VI53 и издаёт beep.
+; Адрес: 0x0121 (оригинал; layout может сдвинуть)
+; Размер: был 36 байт (синхронный beep с CALL func_delay) — теперь короче.
+; Описание: ЗАПУСК короткого звукового эффекта на канале 2 VI53 — АСИНХРОННО.
+;           Настройка: CALL func_sound_op (A=0Ah,E=0Fh) — gate-touch/out период,
+;           (A=05h,E=00h) — период ch2 hi, (A=04h,E=32h) — период ch2 lo (тон
+;           free-run'ит, порт 09h). ДЛИТЕЛЬНОСТЬ: вместо блокирующего CALL
+;           func_delay (≈2.5 кадров VBlank на единицу B — пропуск кадров, рывки
+;           героя) постим задание прерыванию: var_sfx_len = 2*B + B/2 кадров.
+;           Финальный gate-off (прежний OP [10] E=00h) выполняется в func_sfx_tick
+;           по истечении счётчика в func_vblank_isr. Сохраняет D и PSW. B читается
+;           (длительность), но не сохраняется — как и раньше func_delay уничтожал B.
+;
+; Вызывающие не зависят от B после возврата (все перезаряжают B). B через три
+;   CALL func_sound_op НЕ уничтожается — проверено в эмуляторе (bp на MVI-операндах
+;   и на MOV A,B после них: B=2 и B=5 сохраняются).
+;   КАНАЛ 2 ОБЩИЙ С МУЗЫКОЙ: мелодия заставки трёхголосая, и третий (басовый)
+;   голос идёт в тот же ch2 (порт 09h) — проверено IO-трейсом на заставке: наряду
+;   с 0Bh/0Ah летят пары в 09h. Music делает это через op[7] (func_snd_toggle ->
+;   func_snd_enable_ch2 -> func_snd_out_ch2), т.е. ЗАГРУЗКОЙ ДЕЛИТЕЛЯ без слова
+;   0B6h. Поэтому наш gate-off (0B6h без загрузки) из ISR обязан закончиться ДО
+;   перезапуска музыки — на рестарте после GAME OVER var_sfx_len снимается и тон
+;   гасится синхронно в func_main_init (loc_0BC2), а не доезжает в ISR.
+;
+; ВАЖНО ПРО B/2: здесь нельзя использовать просто RRC — RRC это ЦИКЛИЧЕСКИЙ сдвиг,
+;   он переносит bit0 в bit7. Для нечётного B (ключ/бонус: B=05h) это даёт
+;   B/2 = 0x82 = 130 вместо 2, т.е. длительность 140 кадров (~2.8 с) вместо 12 —
+;   «звук вставки ключа стал значительно длиннее». Поэтому после RRC стоит
+;   ANI 7Fh, гасящий фантомный bit7. Для чётных B (2, 8) ошибки нет, из-за чего
+;   баг не проявлялся на звуке сбора фруктов.
 
 func_sound_init:
     PUSH D                      ; 0x0121
     PUSH PSW                    ; 0x0122
-    MVI E, 0Fh                  ; 0x0123
-    MVI A, 0Ah                  ; 0x0125
-    CALL func_sound_op          ; 0x0127
-    MVI A, 05h                  ; 0x012A
-    MVI E, 00h                  ; 0x012C
-    CALL func_sound_op          ; 0x012E
-    MVI E, 32h                  ; 0x0131
-    MVI A, 04h                  ; 0x0133
-    CALL func_sound_op          ; 0x0135
-    CALL func_delay             ; 0x0138
-    MVI A, 0Ah                  ; 0x013B
-    MVI E, 00h                  ; 0x013D
-    CALL func_sound_op          ; 0x013F
-    POP PSW                     ; 0x0142
-    POP D                       ; 0x0143
-    RET                         ; 0x0144
+    MVI E, 0Fh                  ; gate-touch / out периода (без записи в 08h)
+    MVI A, 0Ah
+    CALL func_sound_op
+    MVI A, 05h
+    MVI E, 00h
+    CALL func_sound_op          ; период ch2 hi
+    MVI E, 32h
+    MVI A, 04h
+    CALL func_sound_op          ; период ch2 lo=0x32 -> тон free-run
+    ; --- async: постить длительность вместо busy-wait. B -> кадры (≈2.5*B) ------
+    MOV A, B                    ; длительность из B (func_delay сюда же читал B)
+    RRC                         ; ЦИКЛИЧЕСКИЙ сдвиг: bit0 ушёл в bit7
+    ANI 7Fh                     ; -> B>>1 без фантома (без этого B=5 дало бы 130)
+    MOV E, A                    ; E = B/2
+    MOV A, B
+    ADD A                       ; A = 2*B
+    ADD E                       ; A = 2*B + B/2  (B=2->5, B=5->12, B=8->20 кадров)
+    STA var_sfx_len             ; задать отсчёт; ISR доведёт до gate-off
+    POP PSW
+    POP D
+    RET
+
+; Функция: func_sfx_tick
+; Вход: из func_vblank_isr (регистры H/D/B/PSW уже сохранены обработчиком).
+; Описание: тик async-SFX. Если var_sfx_len != 0: decrement. Когда счётчик дошёл
+;           до 0 — выдать gate-off канала 2 ровно той же операцией диспетчера,
+;           что делал оригинальный func_sound_init после func_delay: OP [10] E=00h
+;           (func_snd_gate_ch2 -> func_snd_enable_ch2_gate A=0Fh -> OUT 08h,0B6h).
+;           По docs/VECTOR.MD §5.5.7 управляющее слово канала БЕЗ загрузки делителя
+;           глушит канал — поэтому stop-op и есть выключение тона. func_sound_op
+;           сохраняет H/D/PSW, B/C тронуты — но в ISR они под PUSH. Повторно
+;           gate-off не выдаётся (var_sfx_len=0).
+func_sfx_tick:
+    LDA var_sfx_len             ; прочитать остаток
+    ORA A                       ; idle?
+    JZ loc_sfx_idle
+    DCR A                       ; кадр прошёл — минус один
+    STA var_sfx_len
+    JNZ loc_sfx_idle            ; ещё звучит
+    ; --- дошёл до 0: выключить тон (gate-off), как конец оригинального beep -----
+    MVI E, 00h
+    MVI A, 0Ah                  ; OP [10] = гейт канала 2
+    CALL func_sound_op          ; OUT 08h,0B6h без загрузки делителя -> тишина
+loc_sfx_idle:
+    RET

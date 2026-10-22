@@ -7,9 +7,9 @@
 ;           младший/старший байты базового указателя трека в три пары ячеек
 ;           области 383Fh (указатели голосов 383Fh/3841h/3843h) с шагом +0100h
 ;           для каждого следующего голоса. Затем готовит H=3DCAh (вектор
-;           "CALL func_music_tick"), D=03F8h, B=0003h и прыгает на 3DC5h —
+;           "CALL func_music_tick"), D=lbl_music_tick_slot, B=0003h и прыгает на 3DC5h —
 ;           обёртку (CALL func_memcpy_keep_psw; EI; RET), которая копирует 3 байта
-;           в RAM 03F8h (установка хука таймера/ISR) и разрешает прерывания.
+;           в слот тика ISR (адрес — по метке, не жёстким 03F8h) и разрешает прерывания.
 ;           Примечание: 383Bh/383Ch/383Dh/383Fh, 3DCAh и 3DC5h — gap-байты,
 ;           не объекты RDB, оставлены как hex.
 
@@ -80,6 +80,7 @@ func_music_init:
     POP H                       ; 0x3DAA
     XCHG                        ; 0x3DAB
     LXI H, data_pad_3DCA        ; 0x3DAC
-    LXI D, 03F8h                ; 0x3DAF
+    LXI D, lbl_music_tick_slot  ; 0x3DAF  (метка в func_vblank_isr; не жёсткий 03F8h,
+                                ;        иначе сдвиг компоновки разрывал ISR)
     LXI B, 0003h                ; 0x3DB2
     JMP func_memcpy_trampoline  ; 0x3DB5

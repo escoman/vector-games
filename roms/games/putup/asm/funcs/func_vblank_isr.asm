@@ -8,7 +8,9 @@
 ;           OUT 00h=8Ah; HL=data_kbd_matrix; A=0FEh; цикл loc_03DA: OUT 03h
 ;           (строка), IN 02h (столбцы), MOV M,A, INX H, RLC, JC loc_03DA (8 строк).
 ;           OUT 00h=88h; OUT 01h=02h; OUT 03h=var_scroll; OUT 02h=var_portb_mode;
-;           CALL func_music_tick; восстанавливает регистры; EI; RET.
+;           слот lbl_music_tick_slot (CALL func_music_tick, ставится в рантайме);
+;           raster-reload cnt1; CALL func_sfx_tick (async SFX gate-off — ПОСЛЕ
+;           reload, см. комментарий в теле); восстанавливает регистры; EI; RET.
 
 func_vblank_isr:
     PUSH H                      ; 0x03A4
@@ -62,13 +64,22 @@ loc_03DA:
     OUT 03h                     ; 0x03F1
     LDA var_portb_mode          ; 0x03F3
     OUT 02h                     ; 0x03F6
-    NOP                         ; 0x03F8  (ROM placeholder 00; runtime func_music_start_track installs CALL func_music_tick 0x3858 ->0x03F8)
+    ; --- Слот музыкального тика (self-modifying). ---------------------------
+    ; Runtime func_music_init / func_music_start_track копируют сюда 3 байта
+    ; `CALL func_music_tick`. Адрес берётся ТОЛЬКО по метке lbl_music_tick_slot:
+    ; жёсткий 03F8h в функциях-копировальщиках разрывал ISR при любом сдвиге компоновки
+    ; (запись попадала в цикл скана клавиатуры -> дрожание кадра + мёртвый
+    ; опрос клавиш). Метка переживает релокацию так же, как ссылка на func_music_tick.
+    lbl_music_tick_slot:
+    NOP                         ; 0x03F8  (ROM placeholder 00; runtime -> CALL func_music_tick)
     NOP                         ; 0x03F9
     NOP                         ; 0x03FA
+    ; --- Async SFX tick: см. НИЖЕ, после raster-reload (loc_vbl_sfx). ----------
     ; --- Raster-sync: в конце VBlank перезагрузить cnt1 = длина кадра (только на
     ;     уровне; на заставке flag=0 -> ch1 остаётся за музыкой). Идёт ПОСЛЕ слота
     ;     тика, поэтому перетирает возможную запись ch1 от func_music_tick -> наш
-    ;     секундомер выигрывает кадр. Слот 0x03F8 не сдвигается (вставка после него).
+    ;     секундомер выигрывает кадр. Слот lbl_music_tick_slot не сдвигается
+    ;     относительно вставки (вставка после него) и адресуется по метке.
     LDA var_raster_flag
     ORA A
     JZ loc_vbl_no_reload
@@ -79,6 +90,16 @@ loc_03DA:
     MVI A, raster_frame_hi      ; 75h (=0x7500=29952 отсчётов=312 строк)
     OUT raster_cnt1_port        ; 0Ah верх
 loc_vbl_no_reload:
+    ; --- Async SFX tick: decrement var_sfx_len, на 0 выдать gate-off канала 2. ---
+    ; Gate-off = OP[10] E=00h -> OUT 08h,0B6h БЕЗ загрузки делителя: по docs/VECTOR.MD
+    ; §5.5.7 такое управляющее слово глушит канал (в отличие от ON, где за 0B6h идут
+    ; два OUT 09h с периодом). Порядок относительно raster-reload (0x70 в тот же 08h)
+    ; на звук НЕ влияет — 0x70 это BSR-слово загрузки cnt1, в оригинале он писался
+    ; каждый кадр и бип его переживал. Тик оставлен ПОСЛЕ reload лишь для того,
+    ; чтобы выключение тона было последней записью в 08h за кадр.
+    ; Регистры ISR сохранены (PUSH H/D/B/PSW); func_sound_op внутри сохраняет
+    ; H/D/PSW, B/C тронуты — но они под PUSH.
+    CALL func_sfx_tick
     POP PSW                     ; 0x03FB
     POP B                       ; 0x03FC
     POP D                       ; 0x03FD

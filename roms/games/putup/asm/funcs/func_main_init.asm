@@ -13,9 +13,12 @@
 ;           data_ram_sprites_7418 (1Ch блоков по 8 байт, источник убывает вниз) —
 ;           в PUTUP_NEW выведено: одноразовый init-write, читателя адресу 0x7418
 ;           в ROM нет, а источник (хвост data_gfx_2761) обнулён как мёртвый пакет;
-;           инициализация игровых переменных 0x08EB-0x08FB; CALL func_music_init;
-;           var_score=0, var_level=0, var_page_flip=1, var_bonus_counter,
-;           var_bonus_threshold=07D0h; CALL func_clear_textbuf; рисунок заставки
+;           инициализация игровых переменных 0x08EB-0x08FB; loc_0BC2 — точка
+;           возврата после GAME OVER: сбрасывает наши заставочные состояния
+;           (var_raster_flag, pending async-SFX + синхронный gate-off ch2) и
+;           CALL func_music_init; var_score=0, var_level=0, var_page_flip=1,
+;           var_bonus_counter, var_bonus_threshold=07D0h; CALL func_clear_textbuf;
+;           рисунок заставки
 ;           тайлами data_tile_graphics; строки str_title_logo, str_push_space,
 ;           str_msx_magazine, str_hi + счёт, str_credits_koi8. Далее без возврата
 ;           переходит в lbl_title_key_poll (ожидание пробела).
@@ -50,6 +53,7 @@ func_main_init:
     STA var_exit_phase
     XRA A                       ; raster-sync выключен на заставке (ch1 остаётся за музыкой)
     STA var_raster_flag
+    STA var_sfx_len             ; async SFX: idle (0 кадров) до первого бипа; ISR уже крутится
     LXI H, data_text_buffer ; 0x0B74
     LXI B, 0400h                ; 0x0B77
 loc_0B7A:
@@ -73,6 +77,28 @@ loc_0B7A:
     MVI A, 08h                  ; 0x0BBD
     STA var_scr_08F1                    ; 0x0BBF
 loc_0BC2:
+    ; Точка возврата на заставку после GAME OVER: func_collision_death приходит
+    ; сюда ПРЯМЫМ JMP (0x1474), минуя верх func_main_init. Наши заставочные
+    ; состояния обязаны сбрасываться именно здесь, иначе они доезжают с уровня:
+    ;   var_raster_flag=1 (ставит func_raster_timer_init на старте уровня) —
+    ;     тогда ISR каждый кадр пишет 70h в 08h и грузит cnt1 в 0Ah, а 0Ah — это
+    ;     счётчик КАНАЛА 1 МУЗЫКИ: средний голос заставки глохнет и «играют
+    ;     только 2 канала». Проверено IO-трейсом: с flag=1 каждый кадр в 0Ah
+    ;     летят 00h/75h вместо нот мелодии. На обычном пути флаг снимает только
+    ;     func_music_start_track (по SPACE), которого на этом рестарте нет.
+    ;   var_sfx_len != 0 — незавершённый async-SFX: его отложенный gate-off
+    ;     (OUT 08h,0B6h без загрузки делителя) прилетел бы ПОСЛЕ перезапуска
+    ;     музыки и заглушил бас канала 2, который мелодия заставки запускает
+    ;     через op[7] func_snd_enable_ch2 только загрузкой делителя (без слова
+    ;     0B6h), т.е. сам бы уже не поднялся.
+    ; Поэтому: снять флаг растра и задание SFX и выключить тон канала 2
+    ; синхронно, ДО func_music_init.
+    XRA A
+    STA var_raster_flag
+    STA var_sfx_len
+    MVI E, 00h
+    MVI A, 0Ah
+    CALL func_sound_op          ; gate-off ch2 здесь, а не из ISR после рестарта
     CALL func_music_init        ; 0x0BC2
     XRA A                       ; 0x0BC5
     LXI H, 0000h                ; 0x0BC6
