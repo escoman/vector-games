@@ -101,6 +101,17 @@ def check_table(fails, tiles):
     print(f"A) записей построено: {n} (список тайлов: {tiles})")
     if n != len(tiles):
         fails.append(f"A) var_enemy_pre_n={n}, в data_enemy_pre_tiles {len(tiles)} записей")
+    # Ёмкость размечена ВРУЧНУЮ (OPTIMIZATION.MD §4.4): data_enemy_shift_pre =
+    # 0x7200..0x77FF — ровно 8 окон по 192 Б; var_enemy_pre_keys = 0x7E00, шаг 8 —
+    # 8 записей = 64 Б внутри одной страницы (у func_ed_find_pre старший байт
+    # курсора постояннен). Добавление 9-го тайла в data_enemy_pre_tiles молча
+    # ломает обе инвариантности — проверяем здесь.
+    if n > 8:
+        fails.append(f"A) записей {n} > 8: окна выйдут за 0x7200..0x77FF, а ключи — "
+                     "за страницу 0x7Eh (func_ed_find_pre держит H постоянным)")
+    if (KEYS % 0x100) + KEY_STRIDE * min(n, 8) > 0x100:
+        fails.append(f"A) разметка ключей: {KEYS:#04X} + {min(n, 8)}*{KEY_STRIDE} "
+                     "выходит за страницу")
     for i, t in enumerate(tiles):
         codes = tile_codes(t)
         rec = read(KEYS + i * KEY_STRIDE, 5)

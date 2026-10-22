@@ -26,6 +26,11 @@ RET-адрес берём из стека на входе (u16 по SP) и ст�
     Заодно считаем период тика: hw-кадры между вызовами func_game_update.
 
 Запуск: python3 roms/games/putup/tools/e3_budget.py [КАДРОВ]
+
+Регрессионный гейт (§4.2, дешёвая альтернатива растер-планировщику E3-5): после
+всех замеров проверяется вердикт — МАКСIMUM длины работы кадра < бюджета (312
+строк растра) и НИЛЬ пропущенных кадров. Нарушение -> RESULT: FAIL и ненулевой
+код возврата, гейт можно гонять перед коммитами, трогать ROM не нужно.
 """
 import json
 import os
@@ -375,8 +380,17 @@ def main():
              [(x[0], x[1], x[2]) for x in m.writes.get(name, [])[:w0]])
         print(f"  {name:13s} {stats(v)}")
         if m.overrun[name]:
+            # span пересёк границу VBlank (cnt1 перезагружен). Где он случился —
+            # в основном промере или в фазе синт. пика — по номеру луча: последние
+            # n_marks1 границ кадра знают свои beam-frame (артефакт §4.4: span,
+            # открытый ДО последнего ВBlank основного промера, — не пропуск игры).
+            hi_main = frame_marks[n_marks1 - 1][1] if n_marks1 else -1
+            det = ', '.join(
+                f"(span {d} отсч., кадры {f0}->{f1}, "
+                f"{'основной' if f0 <= hi_main else 'синт. пик'})"
+                for (d, f0, f1) in m.overrun[name][:6])
             print(f"  {'':13s} !! переполнение кадра (cnt1 перезагружен в span'е): "
-                  f"{len(m.overrun[name])} шт.")
+                  f"{len(m.overrun[name])} шт.: {det}")
 
     print("\n[2] кадры по классу работы enemy_render (без синтетического пика)")
     main_spans = spans[:n_phase1]
@@ -481,6 +495,21 @@ def main():
             print(f"    {name:13s} n={len(v)} max={mx:6d} отсчётов ({mx / LINE:.1f} строк)")
     for x in notes:
         print("ЗАМЕЧАНИЕ:", x)
+
+    # ---- [6] регрессионный гейт: бюджет кадра не превышен, пропусков нет ----
+    # Порог = FRAME_LEN (312 строк растра до следующего VBlank). Смысл: пока
+    # max(работа кадра) < порога и blown пуст, 12-кадровый темп игры держится.
+    max_work = fm[-1]
+    print("\n[6] ГЕЙТ: работа кадра < бюджета и ноль пропусков")
+    print(f"  max работы {max_work} ({max_work / LINE:.1f} строк) < "
+          f"{FRAME_LEN} ({FRAME_LEN / LINE:.0f} строк)? "
+          f"{'да' if max_work < FRAME_LEN else 'НЕТ'}; "
+          f"пропусков {len(over1)} == 0? {'да' if not over1 else 'НЕТ'}")
+    if max_work >= FRAME_LEN or over1:
+        print("RESULT: FAIL")
+        return 1
+    print(f"RESULT: PASS (запас {FRAME_LEN - max_work} отсчётов = "
+          f"{(FRAME_LEN - max_work) / LINE:.1f} строк)")
     return 0
 
 

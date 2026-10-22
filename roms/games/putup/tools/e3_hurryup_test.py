@@ -18,8 +18,10 @@ loc_ed_p_erase звала func_ed_erase_old без проверки строки
   4) инвариант ещё раз на синтетическом подъёме (bp на erase_old: учёт отклонённых
      вызовов + bp на erase_old+6, куда доходит только легитимный erase);
   5) снапы лестницы (правая стена, «телепорт» |dcol|>1, подъём, |drow|>1) и midpoint
-     у левого края: решение (disp/hoff/voff) и побайтовый VRAM против модели
-     func_render_glyph (raw/compact/space — см. record());
+     у левого/правого края: решение (disp/hoff/voff) и побайтовый VRAM против модели
+     func_render_glyph (raw/compact/space — см. record()); 5g/5h — открытая проверка
+     §4.4: правый край окна midpoint у стены (blit3 29..31 и «доезжаем»-erase) —
+     записи в «колонку 32» (алиас (row+1,0)) быть не должно;
   6) compact-глиф в окне композита: инъекция var_ed_gcodes на входе в билдер ->
      флаг var_ed_bc_compact=1, решение не изменилось (hoff=1), а нарисован ВЫРОВНЕННЫЙ
      2x2, третья колонка окна не тронута.
@@ -420,6 +422,133 @@ def main():
         check_snap("5e) прыжок |drow|>1 snap", (6, 10), (10, 10), fails, mode)
         check_snap("5f) шаг вправо midpoint", (6, 10), (6, 11), fails, mode,
                    want=(6, 10), want_h=1)
+
+        # ---- 5g/5h) ПРАВЫЙ КРАЙ midpoint (открытая проверка §4.4) --------------
+        # hoff=1 разрешён при dc <= 29 (guard dc >= 30 -> snap), поэтому правый
+        # край blit3-окна = dc+2 = 31, а частичный erase «доезжаем»-кадра идёт по
+        # [ob, ob+ow) = [29, 32) — ровно до колонки 31 включительно. Запись в
+        # «колонку 32» выглядела бы как алиас (row+1, col 0) — бьём маркерами
+        # (7,0)/(8,0) и сверяем окно побайтово.
+        def alias_mark():
+            for (rr, cc) in ((7, 0), (8, 0)):
+                for p in range(4):
+                    write((recv(rr, cc, mode) + p * 0x2000) & 0xFFFF, [0xAA] * 8)
+
+        def alias_clean(tag):
+            bad = 0
+            for (rr, cc) in ((7, 0), (8, 0)):
+                for p in range(4):
+                    a = (recv(rr, cc, mode) + p * 0x2000) & 0xFFFF
+                    if read_vram(a, 8) != [0xAA] * 8:
+                        bad += 1
+            if bad:
+                fails.append(f"{tag}: запись за правый край окна — алиас (r+1,0) "
+                             f"перезаписан в {bad} блоках")
+            return not bad
+
+        inj_idx = None
+        for i in range(read(PRE_N, 1)[0]):
+            if read(PRE_KEYS + i * 8, 1)[0]:
+                inj_idx = i
+                break
+        if inj_idx is None:
+            fails.append("5g): в var_enemy_pre_keys нет ни одной годной записи "
+                         "— нечего инжектировать")
+        else:
+            inj = read(PRE_KEYS + inj_idx * 8 + 1, 4)
+            win = read(PRE + inj_idx * 192, 192)
+            # 5g) midpoint hoff=1 у правой стены: disp=(6,29) -> цель (6,30).
+            # Коды цели — фон клетки (6,30), поиск по ним промахивается (окно не
+            # blit3), поэтому инжектируем годные коды на входе func_ed_find_pre —
+            # ровно приёмом из шага 6. Кадр повторяем, пока логика не двигала цель.
+            g_ok = False
+            for _ in range(4):
+                force_ladder(1, (6, 29), (6, 30))
+                alias_mark()
+                before_t = read(YC + 1, 1)[0], read(XC + 1, 1)[0]
+                s.call("debug_set_breakpoint", {"address": FIND})
+                injected = False
+                for _ in range(40):
+                    s.call("debug_run")
+                    if not wait_pause():
+                        break
+                    pc = regs()['pc']
+                    if pc == FIND and not injected and read(SCRATCH, 1)[0] == 1:
+                        write(GCODES, inj)
+                        injected = True
+                    elif pc == MAIN_LOOP:
+                        break
+                s.call("debug_remove_breakpoint", {"address": FIND})
+                d = read(DISP_RC + 2, 2)
+                hoff = read(DISP_HOFF + 1, 1)[0]
+                tgt = (read(YC + 1, 1)[0], read(XC + 1, 1)[0])
+                if injected and list(d) == [6, 29] and hoff == 1 and tgt == before_t:
+                    g_ok = True
+                    break
+            if not g_ok:
+                fails.append("5g): чистый midpoint-кадр у правой стены не получен")
+            else:
+                bad = 0
+                for r in range(2):
+                    for cpos in range(3):
+                        base = recv(6 + r, 29 + cpos, mode)
+                        frag = win[(r * 3 + cpos) * 32:(r * 3 + cpos) * 32 + 32]
+                        for p in range(4):
+                            a = (base + p * 0x2000) & 0xFFFF
+                            if read_vram(a, 8) != frag[p * 8: p * 8 + 8]:
+                                bad += 1
+                clean = alias_clean("5g)")
+                print(f"{'OK ' if not bad and clean else 'BAD'} 5g) midpoint hoff=1 "
+                      f"у правой стены (29->30): блоков окна сверено 24, расхождений "
+                      f"{bad}, алиас (r+1,0) чист={clean}")
+                if bad:
+                    fails.append(f"5g): blit3-окно 29..31 не совпало с таблицей в "
+                                 f"{bad} блоках")
+
+            # 5h) «доезжаем» после midpoint у стены: ho=1, disp=(6,29), цель (6,30).
+            # Решение — snap; частичный erase обязан восстановить ТОЛЬКО колонку 29
+            # (старое окно [29,32) вне нового [30,31]), draw — выровненный 2x2 на
+            # (6,30). Колонки 30/31 erase не трогает, «колонка 32» — тем более.
+            h_ok = False
+            for _ in range(4):
+                write(STATE1, [1])
+                write(DISP_RC + 2, [6, 29])
+                write(DISP_HOFF + 1, [1])          # активный midpoint из 5g
+                write(DISP_VOFF + 1, [0])
+                write(XC + 1, [30])
+                write(YC + 1, [6])
+                before_t = read(YC + 1, 1)[0], read(XC + 1, 1)[0]
+                alias_mark()
+                one_frame()
+                d = read(DISP_RC + 2, 2)
+                hoff = read(DISP_HOFF + 1, 1)[0]
+                tgt = (read(YC + 1, 1)[0], read(XC + 1, 1)[0])
+                if list(d) == [6, 30] and hoff == 0 and tgt == before_t:
+                    h_ok = True
+                    break
+            if not h_ok:
+                fails.append("5h): «доезжаем»-кадр у правой стены не получен "
+                             "(disp/hoff не сошлись или логика сдвинула цель)")
+            else:
+                exp = {}
+                for rr in (6, 7):                  # erase колонки 29: фон из буфера
+                    base = recv(rr, 29, mode)
+                    glyph = record(bufcell(rr, 29)[0])
+                    for p in range(4):
+                        exp[(base + p * 0x2000) & 0xFFFF] = glyph[p * 8: p * 8 + 8]
+                exp.update(expect_tile(6, 30, bufcell(6, 30), mode))   # draw 2x2
+                got = vram_of(exp)
+                bad = [a for a in exp if exp[a] != got[a]]
+                clean = alias_clean("5h)")
+                print(f"{'OK ' if not bad and clean else 'BAD'} 5h) «доезжаем» после "
+                      f"midpoint у стены: блоков сверено {len(exp)}, расхождений "
+                      f"{len(bad)}, алиас (r+1,0) чист={clean}")
+                if bad:
+                    fails.append("5h): erase+draw у правой стены не совпали с "
+                                 "моделью "
+                                 + " ".join('%04X %s!=%s' % (a, bytes(exp[a]).hex(),
+                                                             bytes(got[a]).hex())
+                                            for a in bad[:3]))
 
         # ---- 6) compact-глиф в окне: отказ от композита (E3) -------------------
         # Инъекция НА ВХОДЕ func_enemy_build_cache: var_ed_gcodes := compact-коды
