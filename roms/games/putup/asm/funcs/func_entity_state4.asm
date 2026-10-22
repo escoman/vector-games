@@ -8,6 +8,9 @@
 ;           (loc_161C): стереть старую позицию тайлом 270Ah, нарисовать сущность
 ;           тайлом 274Ah.
 
+; ШАГ E1 (плавная анимация врагов): оба вызова ниже — func_set_tile_buf вместо
+; func_draw_tile_to_buf: состояние пишет текстовый буфер (логика, коллизии и темп
+; шага те же), а вид врага в VRAM догоняет цель каждый кадр в func_enemy_render.
 func_entity_state4:
     LDA var_entity_index        ; 0x15DF
     PUSH PSW                    ; 0x15E2
@@ -53,7 +56,7 @@ loc_161C:
     MOV E, M                    ; 0x162F
     DCR E                       ; 0x1630
     LXI H, data_tile_empty                 ; 0x1631
-    CALL func_draw_tile_to_buf  ; 0x1634
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x1634 — без блита
     POP PSW                     ; 0x1637
     LXI H, data_entity_xcoords  ; 0x1638
     PUSH PSW                    ; 0x163B
@@ -64,5 +67,5 @@ loc_161C:
     CALL func_hl_add_a          ; 0x1644
     MOV E, M                    ; 0x1647
     LXI H, data_tile_graphics+044h                 ; 0x1648
-    CALL func_draw_tile_to_buf  ; 0x164B
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x164B — без блита
     RET                         ; 0x164E

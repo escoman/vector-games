@@ -35,6 +35,7 @@ lbl_main_game_loop:
     EI                          ; разрешить INT; следующий VBlank вернёт управление
     HLT                         ; спать до RST7 (was_halt=true каждый кадр)
     CALL func_render_all        ; чанк скана огня (128 ячеек из data_text_buffer)
+    CALL func_enemy_render      ; Step E1: плавный vertical easing врагов (обычный блит)
     CALL func_hero_render       ; Step 2a (Вариант A): плавный твин+отрисовка героя
     ;                             ;   (цель = var_player_row/col; каждый кадр шаг 4px
     ;                             ;    по вертикали; на покое — без перерисовки)

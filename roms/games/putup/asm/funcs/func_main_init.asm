@@ -45,6 +45,13 @@ func_main_init:
     LXI SP, 0100h               ; 0x0B58
     CALL func_clear_vram        ; 0x0B5B..0x0B65  (была inline-петля очистки VRAM)
     CALL func_hw_init           ; 0x0B66
+    ; Шаг E3-6a: все предсдвинутые окна врагов собираются ОДИН раз здесь (до
+    ; первого кадра), а не в кадровом пути: композит зависит только от тайла,
+    ; тайлов врагов конечное число (data_enemy_pre_tiles). Это сняло пересборку
+    ; окна на 114 строк растра в кадре смены анимации (см. шапку
+    ; asm/funcs/func_enemy_render.asm). VRAM здесь не трогается — только RAM
+    ; 0x7200..0x7E3F, так что порядок относительно остального init не важен.
+    CALL func_enemy_prebuild
     LXI H, data_palette+00Fh                 ; 0x0B69
     SHLD var_palette_ptr        ; 0x0B6C
     MVI A, 09h                  ; 0x0B6F

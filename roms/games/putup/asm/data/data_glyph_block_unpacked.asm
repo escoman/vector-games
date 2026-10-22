@@ -18,13 +18,13 @@
 data_glyph_block:
 data_glyph_block_unpacked:
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h   ; глиф 0 @+0 [compact]
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h
+    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h   ; глиф 2
     DEFB 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh
+    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh   ; глиф 3
     DEFB 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h
+    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h   ; глиф 4
     DEFB 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh
+    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh   ; глиф 5
     DEFB 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h
     DEFB 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h, 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h
@@ -240,7 +240,7 @@ data_glyph_block_unpacked:
     DEFB 00Eh, 00Dh, 00Bh, 007h, 03Fh, 03Fh, 007h, 03Fh, 000h, 000h, 000h, 001h, 001h, 031h, 000h, 00Fh   ; глиф 161 @+3520 [raw]
     DEFB 000h, 000h, 000h, 001h, 001h, 031h, 000h, 00Fh, 0F1h, 0F2h, 0F4h, 0F8h, 0C0h, 0C0h, 0F8h, 0C0h
     DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h   ; глиф 162 @+3552 [raw]
-    DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 049h, 049h, 049h, 04Bh, 003h, 007h, 00Fh, 03Fh
+    DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 001h, 001h, 001h, 003h, 003h, 007h, 00Fh, 03Fh
     DEFB 0F0h, 0F8h, 0FCh, 0FCh, 0F8h, 0FCh, 0FEh, 0FCh, 020h, 070h, 0D8h, 0ECh, 0F0h, 0F4h, 002h, 0FCh   ; глиф 163 @+3584 [raw]
     DEFB 020h, 070h, 0D8h, 0ECh, 0F0h, 0F4h, 002h, 0FCh, 00Fh, 007h, 003h, 003h, 007h, 003h, 001h, 003h
     DEFB 07Fh, 07Fh, 07Fh, 03Fh, 03Fh, 01Fh, 00Fh, 003h, 01Fh, 01Fh, 01Fh, 01Fh, 00Fh, 00Fh, 007h, 003h   ; глиф 164 @+3616 [raw]
@@ -248,7 +248,7 @@ data_glyph_block_unpacked:
     DEFB 01Fh, 03Eh, 03Fh, 00Fh, 01Fh, 01Fh, 00Fh, 03Fh, 007h, 00Eh, 000h, 006h, 00Eh, 00Dh, 000h, 00Fh   ; глиф 165 @+3648 [raw]
     DEFB 007h, 00Eh, 000h, 006h, 00Eh, 00Dh, 000h, 00Fh, 0E0h, 0C1h, 0C0h, 0F0h, 0E0h, 0E0h, 0F0h, 0C0h
     DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h   ; глиф 166 @+3680 [raw]
-    DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 049h, 049h, 049h, 04Bh, 003h, 007h, 00Fh, 03Fh
+    DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 001h, 001h, 001h, 003h, 003h, 007h, 00Fh, 03Fh
     DEFB 038h, 07Ch, 0FEh, 0F6h, 0F0h, 0F0h, 0F0h, 0FCh, 000h, 038h, 01Ch, 0E6h, 0F0h, 0F0h, 000h, 0FCh   ; глиф 167 @+3712 [raw]
     DEFB 000h, 038h, 01Ch, 0E6h, 0F0h, 0F0h, 000h, 0FCh, 0C7h, 083h, 001h, 009h, 00Fh, 00Fh, 00Fh, 003h
     DEFB 07Fh, 07Fh, 07Fh, 03Fh, 03Fh, 01Fh, 00Fh, 003h, 01Fh, 01Fh, 01Fh, 01Fh, 00Fh, 00Fh, 007h, 003h   ; глиф 168 @+3744 [raw]
@@ -256,11 +256,11 @@ data_glyph_block_unpacked:
     DEFB 00Fh, 00Fh, 007h, 01Fh, 01Fh, 01Fh, 00Fh, 03Fh, 003h, 003h, 001h, 00Bh, 00Bh, 007h, 000h, 00Fh   ; глиф 169 @+3776 [raw]
     DEFB 003h, 003h, 001h, 00Bh, 00Bh, 007h, 000h, 00Fh, 0F0h, 0F0h, 0F8h, 0E0h, 0E0h, 0E0h, 0F0h, 0C0h
     DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h   ; глиф 170 @+3808 [raw]
-    DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 049h, 049h, 049h, 04Bh, 003h, 007h, 00Fh, 03Fh
+    DEFB 0B6h, 0B6h, 0B6h, 0B4h, 0FCh, 0F8h, 0F0h, 0C0h, 001h, 001h, 001h, 003h, 003h, 007h, 00Fh, 03Fh
     DEFB 0FCh, 0F8h, 0F8h, 0FCh, 0FCh, 0FCh, 0F8h, 0FCh, 0ECh, 0D8h, 000h, 0E4h, 0F4h, 0F4h, 000h, 0FCh   ; глиф 171 @+3840 [raw]
     DEFB 0ECh, 0D8h, 000h, 0E4h, 0F4h, 0F4h, 000h, 0FCh, 003h, 007h, 007h, 003h, 003h, 003h, 007h, 003h
     DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h   ; глиф 172 @+3872 [raw]
-    DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 092h, 092h, 092h, 0D2h, 0C0h, 0E0h, 0F0h, 0FCh
+    DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 080h, 080h, 080h, 0C0h, 0C0h, 0E0h, 0F0h, 0FCh
     DEFB 00Fh, 01Fh, 03Fh, 03Fh, 01Fh, 03Fh, 07Fh, 03Fh, 004h, 00Eh, 01Bh, 037h, 00Fh, 02Fh, 040h, 03Fh   ; глиф 173 @+3904 [raw]
     DEFB 004h, 00Eh, 01Bh, 037h, 00Fh, 02Fh, 040h, 03Fh, 0F0h, 0E0h, 0C0h, 0C0h, 0E0h, 0C0h, 080h, 0C0h
     DEFB 0FEh, 0FEh, 0FEh, 0FCh, 0FCh, 0F8h, 0F0h, 0C0h, 0F8h, 0F8h, 0F8h, 0F8h, 0F0h, 0F0h, 0E0h, 0C0h   ; глиф 174 @+3936 [raw]
@@ -268,7 +268,7 @@ data_glyph_block_unpacked:
     DEFB 070h, 0F0h, 0F0h, 0FCh, 0FCh, 0F8h, 0F0h, 0FCh, 000h, 000h, 000h, 080h, 080h, 088h, 000h, 0F0h   ; глиф 175 @+3968 [raw]
     DEFB 000h, 000h, 000h, 080h, 080h, 088h, 000h, 0F0h, 08Fh, 00Fh, 00Fh, 003h, 003h, 007h, 00Fh, 003h
     DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h   ; глиф 176 @+4000 [raw]
-    DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 092h, 092h, 092h, 0D2h, 0C0h, 0E0h, 0F0h, 0FCh
+    DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 080h, 080h, 080h, 0C0h, 0C0h, 0E0h, 0F0h, 0FCh
     DEFB 01Ch, 03Eh, 07Fh, 06Fh, 00Fh, 00Fh, 00Fh, 03Fh, 000h, 01Ch, 038h, 067h, 00Fh, 00Fh, 000h, 03Fh   ; глиф 177 @+4032 [raw]
     DEFB 000h, 01Ch, 038h, 067h, 00Fh, 00Fh, 000h, 03Fh, 0E3h, 0C1h, 080h, 090h, 0F0h, 0F0h, 0F0h, 0C0h
     DEFB 0FEh, 0FEh, 0FEh, 0FCh, 0FCh, 0F8h, 0F0h, 0C0h, 0F8h, 0F8h, 0F8h, 0F8h, 0F0h, 0F0h, 0E0h, 0C0h   ; глиф 178 @+4064 [raw]
@@ -276,7 +276,7 @@ data_glyph_block_unpacked:
     DEFB 0F8h, 07Ch, 0FCh, 0F0h, 0F8h, 0F8h, 0F0h, 0FCh, 0E0h, 070h, 000h, 060h, 070h, 0B0h, 0B0h, 0F0h   ; глиф 179 @+4096 [raw]
     DEFB 0E0h, 070h, 000h, 060h, 070h, 0B0h, 0B0h, 0F0h, 007h, 083h, 003h, 00Fh, 007h, 007h, 00Fh, 003h
     DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h   ; глиф 180 @+4128 [raw]
-    DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 092h, 092h, 092h, 0D2h, 0C0h, 0E0h, 0F0h, 0FCh
+    DEFB 06Dh, 06Dh, 06Dh, 02Dh, 03Fh, 01Fh, 00Fh, 003h, 080h, 080h, 080h, 0C0h, 0C0h, 0E0h, 0F0h, 0FCh
     DEFB 03Fh, 01Fh, 00Fh, 03Fh, 03Fh, 03Fh, 01Fh, 03Fh, 037h, 01Bh, 000h, 027h, 02Fh, 02Fh, 000h, 03Fh   ; глиф 181 @+4160 [raw]
     DEFB 037h, 01Bh, 000h, 027h, 02Fh, 02Fh, 000h, 03Fh, 0C0h, 0E0h, 0F0h, 0C0h, 0C0h, 0C0h, 0E0h, 0C0h
     DEFB 0FEh, 0FEh, 0FEh, 0FCh, 0FCh, 0F8h, 0F0h, 0C0h, 0F8h, 0F8h, 0F8h, 0F8h, 0F0h, 0F0h, 0E0h, 0C0h   ; глиф 182 @+4192 [raw]

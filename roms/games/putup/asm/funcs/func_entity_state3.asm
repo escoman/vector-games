@@ -9,6 +9,9 @@
 ;           сущность тайлом из data_tile_graphics со смещением, зависящим от
 ;           var_page_flip (A=(var_page_flip+10h)*4; HL=2706h+BC).
 
+; ШАГ E1 (плавная анимация врагов): оба вызова ниже — func_set_tile_buf вместо
+; func_draw_tile_to_buf: состояние пишет текстовый буфер (логика, коллизии и темп
+; шага те же), а вид врага в VRAM догоняет цель каждый кадр в func_enemy_render.
 func_entity_state3:
     LDA var_entity_index        ; 0x1568
     PUSH PSW                    ; 0x156B
@@ -52,7 +55,7 @@ loc_15A1:
     MOV E, M                    ; 0x15B4
     INR E                       ; 0x15B5
     LXI H, data_tile_empty                 ; 0x15B6
-    CALL func_draw_tile_to_buf  ; 0x15B9
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x15B9 — без блита
     POP PSW                     ; 0x15BC
     LXI H, data_entity_xcoords  ; 0x15BD
     PUSH PSW                    ; 0x15C0
@@ -70,5 +73,5 @@ loc_15A1:
     MVI B, 00h                  ; 0x15D5
     LXI H, data_tile_graphics   ; 0x15D7
     DAD B                       ; 0x15DA
-    CALL func_draw_tile_to_buf  ; 0x15DB
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x15DB — без блита
     RET                         ; 0x15DE

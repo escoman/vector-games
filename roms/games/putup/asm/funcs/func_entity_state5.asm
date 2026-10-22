@@ -11,6 +11,9 @@
 ;           состояние=07h, иначе 08h. Если путь свободен (loc_16BE): стереть
 ;           старую позицию тайлом 270Ah и нарисовать новую.
 
+; ШАГ E1 (плавная анимация врагов): все три вызова ниже — func_set_tile_buf вместо
+; func_draw_tile_to_buf: состояние пишет текстовый буфер (логика, коллизии и темп
+; шага те же), а вид врага в VRAM догоняет цель каждый кадр в func_enemy_render.
 func_entity_state5:
     LDA var_entity_index        ; 0x164F
     PUSH PSW                    ; 0x1652
@@ -52,7 +55,7 @@ loc_1677:
     MVI B, 00h                  ; 0x1694
     LXI H, data_tile_graphics   ; 0x1696
     DAD B                       ; 0x1699
-    CALL func_draw_tile_to_buf  ; 0x169A
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x169A — без блита
     POP PSW                     ; 0x169D
     LXI H, data_entity_ycoords  ; 0x169E
     CALL func_hl_add_a          ; 0x16A1
@@ -84,7 +87,7 @@ loc_16BE:
     CALL func_hl_add_a          ; 0x16CF
     MOV E, M                    ; 0x16D2
     LXI H, data_tile_empty                 ; 0x16D3
-    CALL func_draw_tile_to_buf  ; 0x16D6
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x16D6 — без блита
     POP PSW                     ; 0x16D9
     LXI H, data_entity_xcoords  ; 0x16DA
     PUSH PSW                    ; 0x16DD
@@ -102,5 +105,5 @@ loc_16BE:
     MOV C, A                    ; 0x16F4
     MVI B, 00h                  ; 0x16F5
     DAD B                       ; 0x16F7
-    CALL func_draw_tile_to_buf  ; 0x16F8
+    CALL func_set_tile_buf       ; E1: был func_draw_tile_to_buf @0x16F8 — без блита
     RET                         ; 0x16FB
