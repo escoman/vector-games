@@ -22,7 +22,10 @@
 ;               рисуется широкй 3-колоночный OR-blit из кэша (func_render_tile_vram_or3).
 ;             * tc==cc, cv!=0 ................ доезжаем вертикальный midpoint:
 ;               new=(tr, cv=0, hoff=0).
-;             * tc==cc, cv==0, tr==cr ........ покой -> new==old -> НИЧЕГО (0 фликера).
+;             * tc==cc, cv==0, tr==cr ........ покой -> new==old. Перерисовка, только
+;               если СМЕНИЛСЯ кадр анимации (предлагаемый idx != var_hero_idx —
+;               последний нарисованный); иначе НИЧЕГО (0 фликера). Это ловит
+;               остановку после ходьбы: клетка та же, но work_const=стойка.
 ;             * tc==cc, cv==0, tr==cr+1 ...... падение: midpoint new=(cr, cv=4).
 ;             * tc==cc, cv==0, иначе ......... snap new=(tr, cv=0, hoff=0).
 ;
@@ -54,6 +57,19 @@ func_hero_render:
     STA var_hero_ocv
     LDA var_glyph_hoff                 ; old hoff
     STA var_hero_ohoff
+    ; --- предлагаемый индекс тайла-героя (кадр/направление) ----------------------
+    ;     idx = var_work_const + 3*var_move_dir - 1. Считается ДО решения, чтобы
+    ;     детектировать смену кадра даже при неизменной позиции (остановка после
+    ;     ходьбы: work_const=стойка при той же клетке). L — temp (свободен здесь).
+    LDA var_move_dir
+    MOV L, A
+    RLC
+    ADD L                              ; 3*move_dir
+    MOV L, A
+    LDA var_work_const
+    ADD L
+    DCR A
+    STA var_hero_newidx
     ; --- решение: proposed new = (E=row, C=cv, D=col, B=hoff) ----------------
     LDA var_player_col
     MOV D, A                           ; D = tc (заодно предположим snap-колонку)
@@ -139,7 +155,17 @@ loc_hr_decided:
     JNZ loc_hr_move
     LDA var_hero_ohoff
     CMP B
-    JZ loc_hr_done                     ; без изменений -> не перерисовываем
+    JNZ loc_hr_move                    ; hoff изменился -> перерисовать
+    ; Позиция/easing не изменились, но мог смениться КАДР анимации (остановка
+    ; после ходьбы: work_const=стойка при той же клетке). var_hero_idx хранит
+    ; ПОСЛЕДНИЙ НАРИСОВАННЫЙ индекс (обновляется только при реальном рисовании),
+    ; поэтому сверяем предлагаемый idx с ним, а не с самим собой.
+    LDA var_hero_newidx
+    MOV L, A                           ; L = proposed idx (L here свободна)
+    LDA var_hero_idx                   ; A = последний нарисованный idx
+    CMP L                              ; CMP r (8080): A - L
+    JZ loc_hr_done                     ; idx тот же -> истинный покой, 0 фликера
+    JMP loc_hr_move                    ; сменился кадр -> перерисовать стоячим
 loc_hr_move:
     ; --- заготовим new-состояние; cv/hoff пишем сейчас (erase читает оcv/оhoff) -
     MOV A, E
@@ -150,19 +176,12 @@ loc_hr_move:
     STA var_glyph_voff
     MOV A, B
     STA var_glyph_hoff
-    ; --- индекс тайла-героя (кадр/направление) = work_const + 3*move_dir - 1 ---
-    LDA var_move_dir
-    MOV B, A
-    RLC
-    ADD B                              ; 3*move_dir
-    MOV B, A
-    LDA var_work_const
-    ADD B
-    DCR A                              ; idx
+    ; --- фиксируем нарисованный индекс тайла-героя (уже посчитан в var_hero_newidx) --
+    LDA var_hero_newidx
     STA var_hero_idx
     ; --- raster guard: полоса = var_enemy_rc(old cr) ∪ var_scr_090A(новая) ----
     LDA var_hero_newr
-    MOV E, A                           ; (B был испорчен вычислением idx) восстановим E
+    MOV E, A                           ; E = new row
     MOV A, E
     ORA C                              ; C = new cv
     JZ loc_hr_band0

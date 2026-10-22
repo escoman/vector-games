@@ -189,7 +189,7 @@ var_hero_newr:          EQU 6A1Ah   ; байт: новая отображаем�
 var_hero_newc:          EQU 6A1Bh   ; байт: новая отображаемая колонка
 ; --- Step 2b: scratch горизонтального easing'а. Зона 0x6A1D.. свободна. --------
 var_hero_ohoff:         EQU 6A1Dh   ; байт: старый hoff (var_glyph_hoff до обновления; !=0 => footprint 3 колонки)
-var_hero_newh:          EQU 6A1Eh   ; байт: новый hoff (после easing-решения)
+var_hero_newidx:        EQU 6A1Eh   ; байт: предлагаемый индекс тайла-героя (кадр/направление); детект смены кадра в покое
 ; --- Step 2a temps: scratch func_build_hero_shift_cache (только при init). ------
 ; Зона 0x6A20..0x6BFF свободна (кэш начинается 0x6C00). Указатели хранятся
 ; младш.байт по низшему адресу (малый endian, как LHLD/SHLD).

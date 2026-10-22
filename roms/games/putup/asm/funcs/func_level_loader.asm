@@ -117,6 +117,19 @@ loc_19DA:
     STA var_frame_sub           ; sub=0: до первого тика = 12 hw-кадров
     STA var_glyph_voff          ; Step 2a: герой выровнен по клетке (твин-сдвиг=0)
     STA var_glyph_hoff          ; Step 2b: горизонтальный midpoint-режим=0 (выровненно)
+    ; --- Step 2b fix: засеять кэш отображения героя точкой спауна ---------------
+    ;     var_enemy_rc нигде в обычном пути загрузки не инициализируется (только в
+    ;     ветке победы/смерти). Первый func_hero_render брал СТАРЫЙ var_enemy_rc
+    ;     (со заставки) и анимировал из него -> фантомный полукадр внутри стены на
+    ;     самом первом кадре. Здесь cr/cc := row/col спауна, voff/hoff уже =0.
+    ;     var_hero_idx := sentinel (!= idx стойки 2) -> первый кадр ЧИСТО рисует
+    ;     стоящего героя в спауне (erase-footprint==новая клетка, без перехода). --
+    LDA var_player_row
+    STA var_enemy_rc            ; cr(отображ.) = row спауна (1)
+    LDA var_player_col
+    STA var_enemy_rc+1          ; cc(отображ.) = col спауна (2)
+    MVI A, 0FFh
+    STA var_hero_idx            ; sentinel -> форсируем первый draw стоящего героя
     LXI H, data_text_buffer
     SHLD var_scan_ptr           ; курсор чанка скана огня = 0-я клетка буфера
     JMP lbl_main_game_loop      ; 0x1A38
