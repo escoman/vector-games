@@ -141,6 +141,15 @@ RAM-вектор, ISR) `compare_behavior` не покрывает — финал
 | `tools/lint_ptrs.py` | линт relocation-враждебных числовых ссылок (+ RDB-сверка справочно) |
 | `tools/get_glyph_block.py` | снятие блока 0x6000..0x7FFF через MCP (вербатим → DEFB в asm) |
 
+### Тесты E-серии (плавная анимация врагов)
+
+Поведенческие гейты шагов E1…E3 (тоже через MCP, ROM берётся `putup_new.rom`):
+`e2_test.py`, `e3_pre_test.py`, `e3_erase_test.py`, `e3_hurryup_test.py`,
+`e3_cls_test.py` — корректность; `e3_budget.py` — растер-бюджет (пропуски
+hw-кадров, период тика, tearing); `e2_model.py` + `e2_expected.json` —
+автономная модель композита; `e3_probe_*.py` — пробы/диагностика. Как запускать,
+что покрывает и текущие замеры — [OPTIMIZATION.MD](OPTIMIZATION.MD) §3 и §5.
+
 ## Структура `asm/`
 
 - `asm/funcs/` — код: `func_*` и точки входа `lbl_*`;

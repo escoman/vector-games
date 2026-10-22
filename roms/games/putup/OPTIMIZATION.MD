@@ -106,7 +106,7 @@ Guard перенесён на старт (см. E3-6a): запись с compact-
 
 ## 3. Замеры растер-бюджета
 
-`.scratch/e3_budget.py 600` — секундомер КР580ВИ53 ch1 (тот же, что у ROM),
+`tools/e3_budget.py 600` — секундомер КР580ВИ53 ch1 (тот же, что у ROM),
 606 кадров, кадр = 312 строк растра. «Работа кадра» = от `EI;HLT` до обратного
 входа в `lbl_main_game_loop`. Пропущенный кадр = VBlank застал CPU за работой
 (`was_halt=false`) → игровой тик съезжает с 12 кадров на 13.
@@ -182,20 +182,31 @@ midpoint) — 127.4 строки.
 
 ## 5. Как прогонять проверки
 
-Тесты лежат в `roms/games/putup/.scratch/` (не в продакшн-коде), ROM берётся
+Скрипты лежат в `roms/games/putup/tools/` (префикс `e2_`/`e3_`) — там, где и
+гейты приёмки, чтобы они попадали в git и переживали переезд на другую машину.
+Путь к ROM/`layout.json`/`utils/analyze` вычисляется от `__file__`, поэтому
+запускать можно из любого каталога: `python3 roms/games/putup/tools/e2_test.py`.
+`roms/games/putup/.scratch/` — исторические локальные копии (каталог в
+`.gitignore`), источником истины считается `tools/`. ROM берётся
 `roms/games/putup/putup_new.rom`, сервер `vector-debugger` поднимается
-`McpSession`'ом. Собранная ROM в git не跟踪 (см. `.gitignore`) — перед прогоном
-обязательно `make` в `roms/games/putup/`.
+`McpSession`'ом. Собранная ROM в git не отслеживается (см. `.gitignore`) — перед
+прогоном обязательно `make` в `roms/games/putup/`.
 
 | скрипт | покрывает | ожидаемый финал |
 |---|---|---|
-| `e2_test.py` | композит midpoint по кадрам, кэш кодов, stale-вид, VRAM-побайтово | `ИТОГО: … кэш_сбоев=0 vram_сбоев=0 stale_сбоев=0` / `PASS` |
+| `e2_test.py [КАДРОВ]` | композит midpoint по кадрам, кэш кодов, stale-вид, VRAM-побайтово | `ИТОГО: … кэш_сбоев=0 vram_сбоев=0 stale_сбоев=0` / `PASS` |
+| `e2_model.py ROM КОДЫ BASE COL MODE` | автономная модель окна (считает ожидаемые VRAM-раны композита), пишет `tools/e2_expected.json` | — |
 | `e3_pre_test.py` | предсборка окон: 7 записей, годность по compact, побайтовое совпадение с моделью, 0 промахов поиска за 80 кадров | `RESULT: PASS` |
 | `e3_erase_test.py [КАДРОВ]` | частичный erase: множество восстанавливаемых клеток = геометрия, фон побайтово, «не трогать» не изменено | `сбоев фон-restore: 0, сбоев «не трогать»: 0` / `PASS` |
 | `e3_hurryup_test.py` | HURRY-UP guard'ы, snap у стен (5a..5f), compact-инъекция (6), смерть/рестарт (7, 7b) | `RESULT: PASS` |
 | `e3_cls_test.py` | рестарт уровня затирает VRAM целиком, побайтовая идентичность A/B | `RESULT: PASS` |
 | `e3_budget.py [КАДРОВ]` | растер-бюджет, пропуски VBlank, период тика, tearing | `ПРОПУЩЕННЫХ кадров: 0`, период `{6: …}` |
-| `e3_probe_compact.py`, `e3_probe_boot.py`, `probe_flags.py`, `probe_erase_col.py` | пробы/диагностика (не гейты) | — |
+| `e3_probe_compact.py`, `e3_probe_boot.py`, `e3_probe_flags.py`, `e3_probe_erase_col.py` | пробы/диагностика (не гейты) | — |
+
+Внимание по длине прогона: `e2_test.py` — гейт покрытия, ему нужны кадры, где
+враг идёт и влево (hoff=2); на 60 кадрах он честно выдаёт
+`FAIL/NEEDS-COVERAGE` с нулём сбоев — это не регрессия, дефолт 120 кадров
+покрывается. Остальные гейты стабильны на 60…120.
 
 Пройденный сейчас набор: **e2 / e3_pre / e3_erase / e3_hurryup / e3_cls — все
 PASS**, `e3_budget.py 600` — 0 пропусков.
@@ -207,9 +218,9 @@ PASS**, `e3_budget.py 600` — 0 пропусков.
 - `data_enemy_shift_pre = 0x7200` — окна по 192 Б (6 «глифов» × 32), максимум 8;
 - `var_enemy_pre_keys = 0x7E00` — ключи записей (8 Б на запись),
   `var_enemy_pre_n = 0x6A6E` — число построенных окон;
-- scratch слота рендерера `0x6A50..` — `var_ed_slot`, `var_ed_dr/dc/vo/ho`,
+- RAM-скретч слота рендерера `0x6A50..` — `var_ed_slot`, `var_ed_dr/dc/vo/ho`,
   `var_ed_newr/newc/newv/newh`, `var_ed_gcodes`, `var_ed_ebase`,
-  `var_ed_erase_rc` (в `.scratch/e3_erase_test.py` индекс 16 = `ho`, 17 = `newh`);
+  `var_ed_erase_rc` (в `tools/e3_erase_test.py` индекс 16 = `ho`, 17 = `newh`);
 - шаг строки текстового буфера — **0x20** (в `func_draw_tile_at_ptr` и
   `func_render_tile_vram` встречается `LXI B, 001Fh`, потому что перед ним уже
   был `INX H`).
