@@ -48,6 +48,20 @@ func_hero_render:
     PUSH B
     PUSH D
     PUSH H
+    ; --- HERO-IN-WALL фикс: отложить форс по sentinel'у до 1-го прохода гравит. -
+    ;     var_hero_idx=0xFF (засиднен в func_level_loader) форсит СТОЯЧУЮ
+    ;     отрисовку в воздушном спауне на самом 1-м кадре — герой «висит» так до
+    ;     первого func_game_update (sub==6) и только потом падает («голова на
+    ;     кирпиче над позицией», на любом уровне). Пока sentinel не снят И sub<6
+    ;     (гравитация ещё не действовала) — ничего не рисуем, sentinel НЕ трогаем.
+    ;     На sub>=6 форс сработает уже в упавшей/покоящейся клетке.
+    LDA var_hero_idx
+    CPI 0FFh
+    JNZ loc_hr_firstok
+    LDA var_frame_sub
+    CPI 06h
+    JC loc_hr_done                   ; ранний выход: POP H/D/B/PSW; RET
+loc_hr_firstok:
     ; --- снимок СТАРОГО отображения (для erase-прямоугольника) ---------------
     LDA var_enemy_rc                   ; old row (lo)
     STA var_hero_orow

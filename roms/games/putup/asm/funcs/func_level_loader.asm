@@ -130,6 +130,9 @@ loc_19DA:
     STA var_enemy_rc+1          ; cc(отображ.) = col спауна (2)
     MVI A, 0FFh
     STA var_hero_idx            ; sentinel -> форсируем первый draw стоящего героя
+    ;     ВНИМАНИЕ (HERO-IN-WALL): сам по себе этот sentinel рисовал стоячего героя
+    ;     в воздушном спауне на 1-м кадре (герой «висел» до 1-го game_update).
+    ;     Форс отложен в func_hero_render до sub>=6 (после 1-го прохода гравитации).
     LXI H, data_text_buffer
     SHLD var_scan_ptr           ; курсор чанка скана огня = 0-я клетка буфера
     JMP lbl_main_game_loop      ; 0x1A38
