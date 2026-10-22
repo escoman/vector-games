@@ -1,41 +1,44 @@
 ; Функция: func_hero_render
 ; Адрес: 0x1C60
-; Описание: Easing-машина суб-пиксельной отрисовки героя (ШАГ 2a, Вариант A).
+; Описание: Easing-машина суб-пиксельной отрисовки героя (ШАГ 2a/2b, Вариант A).
 ;           Вызывается ИЗ ГЛАВНОГО ЦИКЛА каждый hw-кадр (после func_render_all,
-;           до гейта полукадров). Теперь герой рисуется СЮДА, а не из
-;           func_game_update: игровая логика (var_player_row/col, коллизии,
-;           темп) не меняется — game_update лишь выставляет ЦЕЛЬ, а здесь цель
-;           плавно догоняется по 4px по ВЕРТИКАЛИ (горизонталь — мгновенно).
+;           до гейта полукадров). Герой рисуется СЮДА, а не из func_game_update:
+;           игровая логика (var_player_row/col, коллизии, темп) не меняется —
+;           game_update лишь выставляет ЦЕЛЬ, а здесь цель плавно догоняется по
+;           4px по ВЕРТИКАЛИ (var_glyph_voff) И ГОРИЗОНТАЛИ (var_glyph_hoff).
 ;
-;           СОСТОЯНИЕ отображения героя (единственные источники истины для
-;           отрисовки): var_enemy_rc(lo=строка cr, hi=колонка) + var_glyph_voff(cv,
-;           0..4; читает func_render_glyph_or -> L-=voff, сдвиг вниз). ЦЕЛЬ:
-;           var_player_row (tr), var_player_col (tc).
+;           СОСТОЯНИЕ отображения героя (единственные источники истины):
+;           var_enemy_rc(lo=строка cr, hi=колонка cc) + var_glyph_voff(cv, 0..4;
+;           func_blit_glyph_or -> L-=voff, сдвиг вниз) + var_glyph_hoff(ch, 0..2;
+;           midpoint-режим горизонтали: 1=сдвиг 4px в cc+1, 2=сдвиг 4px в cc-1).
+;           ЦЕЛЬ: var_player_row (tr), var_player_col (tc).
 ;
-;           РЕШЕНИЕ (на этот кадр), инкрементально, без деления:
-;             * col != tc .............................. горизонталь: мгновенно,
-;               new=(tr, cv=0) — шаг по колонке не твинимус (Step 2b отдельно).
-;             * col == tc, cv==0, tr==cr ............... покой -> new==old ->
-;               НИЧЕГО не перерисовываем (0 стоимости/фликера на idle-кадрах).
-;             * col == tc, cv==0, tr==cr+1 ............. падение на 1 клетку:
-;               вставляем midpoint new=(cr, cv=4) (сдвиг вниз на 4px).
-;             * col == tc, cv!=0 ....................... завершаем midpoint:
-;               new=(tr, cv=0) — дозаезд ровно в цель.
-;             * col == tc, иначе (rise/>1 клетки) ...... snap new=(tr, cv=0).
+;           РЕШЕНИЕ (на этот кадр), инкрементально, без деления (приоритет:
+;           сначала доехать любой активный midpoint, потом завести новый):
+;             * ohoff!=0 ..................... доезжаем горизонтальный midpoint:
+;               new=(tr, cv=0, col=tc, hoff=0). (hoff!=0 <=> cc!=tc по инварианту.)
+;             * ohoff==0, tc!=cc ............. СТАРТ горизонтального midpoint:
+;               col остаётся cc, hoff=1 (tc>cc, вправо) / 2 (tc<cc, влево), row=cr, cv=0.
+;               рисуется широкй 3-колоночный OR-blit из кэша (func_render_tile_vram_or3).
+;             * tc==cc, cv!=0 ................ доезжаем вертикальный midpoint:
+;               new=(tr, cv=0, hoff=0).
+;             * tc==cc, cv==0, tr==cr ........ покой -> new==old -> НИЧЕГО (0 фликера).
+;             * tc==cc, cv==0, tr==cr+1 ...... падение: midpoint new=(cr, cv=4).
+;             * tc==cc, cv==0, иначе ......... snap new=(tr, cv=0, hoff=0).
 ;
-;           ERASE-ПРЯМОУГОЛЬНИК старого отображения (restore фона из текстового
-;           буфера выровненным func_render_glyph, котopый voff НЕ читает):
-;             footprint cv==0 -> 2 строки [cr..cr+1]; cv!=0 -> 3 строки
-;             [cr..cr+2] (спил сдвинутого вниз спрайта в нижнюю клетку). Делаем
-;             2x2@(cr) + (если cv!=0) 2x2@(cr+1) через func_draw_tile_at_ptr.
+;           ERASE старого footprint (restore фона выровненным func_render_glyph,
+;           котopый voff/hoff НЕ читает): колонки = oldcol..oldcol+1, РАСШИРЯЮТСЯ
+;           до 3 колонок при ohoff!=0 (base=oldcol при hoff=1, oldcol-1 при hoff=2);
+;           строки = cr..cr+1, РАСШИРЯЮТСЯ до cr+2 при ocv!=0. Реализовано до
+;           4 вызовов func_draw_tile_at_ptr (2x2) по декартову произведению.
 ;
 ;           RASTER-GUARD: полоса гашения = union(старой cr в var_enemy_rc и новой
-;           строки в var_scr_090A). При cv!=0 добавляем к новой строке +1, чтобы
-;           нижняя границка полосы покрыла спил сдвинутого спрайта (без tearing).
+;           строки в var_scr_090A). При cv!=0 добавляем +1 строку (нижняя граница
+;           полосы покрыла спил сдвинутого вниз спрайта). hoff не меняет набор строк.
 ;
-;           Прозрачность для вызывающего: PUSH/POP PSW,B,D,H (внутренне трогает
-;           A,B,C,D,E,H,L; стека вызывающего не задевает). Порядок: guard ->
-;           erase(starое) -> коммит new в var_enemy_rc/var_glyph_voff -> OR-draw.
+;           Прозрачность для вызывающего: PUSH/POP PSW,B,D,H. Порядок: snapshot ->
+;           решение -> (idle? выход) -> коммит voff/hoff -> guard -> erase ->
+;           коммит new в var_enemy_rc -> OR-draw (or2 hoff=0 / or3 hoff!=0).
 
 func_hero_render:
     PUSH PSW
@@ -49,20 +52,60 @@ func_hero_render:
     STA var_hero_ocow
     LDA var_glyph_voff                 ; old cv
     STA var_hero_ocv
-    ; --- решение: proposed new = (E=row, C=cv, D=col) ------------------------
+    LDA var_glyph_hoff                 ; old hoff
+    STA var_hero_ohoff
+    ; --- решение: proposed new = (E=row, C=cv, D=col, B=hoff) ----------------
     LDA var_player_col
-    MOV D, A                           ; D = tc (новая колонка)
+    MOV D, A                           ; D = tc (заодно предположим snap-колонку)
+    MVI B, 00h                         ; new hoff = 0 (переопределяет только hstart)
+    ; --- доезжаем активный горизонтальный midpoint? (ohoff != 0) -------------
+    LDA var_hero_ohoff
+    ORA A
+    JZ loc_hr_hcheck                   ; hoff==0 -> разбираем старт горизонтали
+    LDA var_player_row                 ; доехать: col=tc(D), hoff=0(B), row=tr, cv=0
+    MOV E, A
+    MVI C, 00h
+    JMP loc_hr_decided
+loc_hr_hcheck:
+    ; --- старт горизонтального midpoint? (tc != oldcol) ----------------------
     LDA var_hero_ocow
-    MOV L, A                           ; L = oldcol (8080: SUB только через регистр)
-    MOV A, D
+    MOV L, A                           ; L = oldcol
+    MOV A, D                           ; A = tc
     SUB L                              ; tc - oldcol
-    JNZ loc_hr_hmove                   ; горизонталь -> мгновенно
-    ; col стабилен: разбираем вертикаль
+    JZ loc_hr_vert                     ; кол стабильна -> вертикаль
+    LDA var_player_col
+    SUB L                              ; A = tc - oldcol (CY=1 если едем ВЛЕВО)
+    JC loc_hr_hs_left
+    ; ВПРАВО (hoff=1): рисуем cols oldcol..oldcol+2 -> нужен oldcol <= 29
+    LDA var_hero_ocow
+    CPI 1Eh                            ; oldcol >= 30? (CY=0 -> JNC)
+    JNC loc_hr_snap                    ; у правой стены -> мгновенно (без spill-забора)
+    LDA var_hero_ocow
+    MOV D, A                           ; new col = oldcol (midpoint клеткой не едет)
+    LDA var_hero_orow
+    MOV E, A                           ; new row = cr
+    MVI C, 00h                         ; cv = 0
+    MVI B, 01h                         ; hoff=1: midpoint в col+1 (вправо)
+    JMP loc_hr_decided
+loc_hr_hs_left:
+    ; ВЛЕВО (hoff=2): рисуем cols oldcol-1..oldcol+1 -> нужен oldcol >= 1
+    LDA var_hero_ocow
+    CPI 01h                            ; oldcol == 0? (CY=1 -> JC)
+    JC loc_hr_snap                     ; у левой стены -> мгновенно
+    LDA var_hero_ocow
+    MOV D, A                           ; new col = oldcol
+    LDA var_hero_orow
+    MOV E, A                           ; new row = cr
+    MVI C, 00h                         ; cv = 0
+    MVI B, 02h                         ; hoff=2: midpoint в col-1 (влево)
+    JMP loc_hr_decided
+loc_hr_vert:
+    ; --- col стабильна: разбираем вертикаль -------------------------------
     LDA var_hero_ocv
     ORA A
-    JNZ loc_hr_finish                  ; cv!=0 -> доезжаем midpoint в цель
+    JNZ loc_hr_finish                  ; cv!=0 -> доезжаем vertical midpoint
     LDA var_hero_orow
-    MOV L, A                           ; L = cr (8080: SUB только через регистр)
+    MOV L, A                           ; L = cr
     LDA var_player_row                 ; A = tr
     SUB L                              ; tr - cr
     JZ loc_hr_rest                     ; aligned & та же строка -> покой
@@ -78,14 +121,13 @@ loc_hr_rest:
     LDA var_hero_ocv
     MOV C, A                           ; new = old (cv) -> decided пропустит
     JMP loc_hr_decided
-loc_hr_hmove:
 loc_hr_finish:
 loc_hr_snap:
     LDA var_player_row
     MOV E, A                           ; new row = tr (мгновенно)
-    MVI C, 00h                         ; cv = 0
+    MVI C, 00h                         ; cv = 0 (D=tc уже)
 loc_hr_decided:
-    ; --- if (E,C,D)==(orow,ocv,ocol) -> ничего не делаем (idle) --------------
+    ; --- if (E,C,D,B)==(orow,ocv,ocol,ohoff) -> ничего (idle) ----------------
     LDA var_hero_orow
     CMP E
     JNZ loc_hr_move
@@ -94,46 +136,21 @@ loc_hr_decided:
     JNZ loc_hr_move
     LDA var_hero_ocow
     CMP D
+    JNZ loc_hr_move
+    LDA var_hero_ohoff
+    CMP B
     JZ loc_hr_done                     ; без изменений -> не перерисовываем
 loc_hr_move:
-    ; --- заготовим new-состояние; cv пишем сейчас (erase его НЕ читает) ------
+    ; --- заготовим new-состояние; cv/hoff пишем сейчас (erase читает оcv/оhoff) -
     MOV A, E
     STA var_hero_newr
     MOV A, D
     STA var_hero_newc
     MOV A, C
     STA var_glyph_voff
-    ; --- raster guard: полоса = var_enemy_rc(old cr) ∪ var_scr_090A(новая) ----
-    MOV A, E
-    ORA C
-    JZ loc_hr_band0
-    INR A                              ; cv!=0 -> +1 строка (покрыть спил снизу)
-loc_hr_band0:
-    STA var_scr_090A
-    CALL func_raster_guard_hero
-    ; --- ERASE старого footprint (restore фона из текстового буфера) ----------
-    LDA var_hero_ocow
-    STA var_hero_ecol                  ; (HL+1)=col
-    LDA var_hero_orow
-    STA var_hero_erow                  ; (HL)=row
-    LXI H, var_hero_erow
-    CALL func_draw_tile_at_ptr         ; 2x2 @ (cr, col)
-    LDA var_hero_ocv
-    ORA A
-    JZ loc_hr_erased                   ; cv==0: 2 строки достаточно
-    LDA var_hero_erow
-    INR A                              ; row = cr+1 (третяя строка спила)
-    STA var_hero_erow
-    LXI H, var_hero_erow
-    CALL func_draw_tile_at_ptr         ; 2x2 @ (cr+1, col)
-loc_hr_erased:
-    ; --- коммит NEW отображения в кэш (после erase, котopый варит var_hero_*) -
-    LDA var_hero_newr
-    STA var_enemy_rc                   ; lo = new row
-    LDA var_hero_newc
-    STA var_enemy_rc+1                 ; hi = new col
-    ; --- указатель графики тайла героя = data_tile_table_26DE + idx*4 ----------
-    ;     idx = work_const + 3*move_dir - 1 (та же формула, что loc_0D6D).
+    MOV A, B
+    STA var_glyph_hoff
+    ; --- индекс тайла-героя (кадр/направление) = work_const + 3*move_dir - 1 ---
     LDA var_move_dir
     MOV B, A
     RLC
@@ -142,16 +159,119 @@ loc_hr_erased:
     LDA var_work_const
     ADD B
     DCR A                              ; idx
+    STA var_hero_idx
+    ; --- raster guard: полоса = var_enemy_rc(old cr) ∪ var_scr_090A(новая) ----
+    LDA var_hero_newr
+    MOV E, A                           ; (B был испорчен вычислением idx) восстановим E
+    MOV A, E
+    ORA C                              ; C = new cv
+    JZ loc_hr_band0
+    INR A                              ; cv!=0 -> +1 строка (покрыть спил снизу)
+loc_hr_band0:
+    STA var_scr_090A
+    CALL func_raster_guard_hero
+    ; --- ERASE старого footprint (restore фона из текстового буфера) ----------
+    ; base = oldcol; при hoff=2 base=oldcol-1; wide = (ohoff!=0) -> доп. колонка.
+    LDA var_hero_ocow
+    STA var_hero_ebase
+    LDA var_hero_ohoff
+    CPI 02h
+    JNZ loc_hr_eb1
+    LDA var_hero_ebase
+    SUI 01h
+    STA var_hero_ebase                 ; base = oldcol-1 (hoff влево)
+loc_hr_eb1:
+    ; строка cr: 2x2 @ (cr, base); если wide -> ещё 2x2 @ (cr, base+1)
+    LDA var_hero_ebase
+    STA var_hero_ecol
+    LDA var_hero_orow
+    STA var_hero_erow
+    LXI H, var_hero_erow
+    CALL func_draw_tile_at_ptr
+    LDA var_hero_ohoff
+    ORA A
+    JZ loc_hr_e_cv
+    LDA var_hero_ebase
+    INR A
+    STA var_hero_ecol
+    LXI H, var_hero_erow               ; erow всё ещё cr
+    CALL func_draw_tile_at_ptr
+loc_hr_e_cv:
+    LDA var_hero_ocv
+    ORA A
+    JZ loc_hr_erased                   ; cv==0: 2 строки (cr,cr+1) достаточно
+    ; строка cr+1 (спил вниз): те же колонки (base, и base+1 если wide)
+    LDA var_hero_ebase
+    STA var_hero_ecol
+    LDA var_hero_orow
+    INR A
+    STA var_hero_erow                  ; erow = cr+1
+    LXI H, var_hero_erow
+    CALL func_draw_tile_at_ptr
+    LDA var_hero_ohoff
+    ORA A
+    JZ loc_hr_erased
+    LDA var_hero_ebase
+    INR A
+    STA var_hero_ecol
+    LXI H, var_hero_erow               ; erow = cr+1
+    CALL func_draw_tile_at_ptr
+loc_hr_erased:
+    ; --- коммит NEW отображения в кэш (после erase, котopый варит var_hero_*) -
+    LDA var_hero_newr
+    STA var_enemy_rc                   ; lo = new row
+    LDA var_hero_newc
+    STA var_enemy_rc+1                 ; hi = new col
+    ; --- OR-draw: hoff==0 -> 2x2 из тайл-графики; hoff!=0 -> 3 колонки из кэша -
+    LDA var_glyph_hoff
+    ORA A
+    JNZ loc_hr_draw3
+    LDA var_hero_idx
     ADD A
     ADD A                              ; idx*4
     LXI H, data_tile_table_26DE
     CALL func_hl_add_a                 ; HL = указатель графики тайла
-    ; --- DE = (D=col, E=row) НОВОЙ позиции (erase clobbered D/E/B) ------------
     LDA var_enemy_rc+1
     MOV D, A
     LDA var_enemy_rc
     MOV E, A
-    CALL func_render_tile_vram_or      ; OR-композит; читает var_glyph_voff (сдвиг)
+    CALL func_render_tile_vram_or      ; OR-композит; читает var_glyph_voff
+    JMP loc_hr_done
+loc_hr_draw3:
+    ; --- широкий 3-колоночный OR-blit из кэша (func_render_tile_vram_or3) -----
+    ; HL = data_hero_shift_cache + idx*192 (6 фрагментов: 3 колонки x 2 строки)
+    LDA var_hero_idx
+    MOV E, A                           ; E = счётчик (idx)
+    MVI D, 00h
+    LXI H, 0000h
+    MOV A, E
+    ORA A
+    JZ loc_hr_cdone                    ; idx==0 -> HL=0
+loc_hr_cm192:
+    MOV A, L
+    ADI 0C0h                           ; +192 (блок тайла = 6*32)
+    MOV L, A
+    MOV A, H
+    ACI 00h
+    MOV H, A
+    DCR E
+    JNZ loc_hr_cm192
+loc_hr_cdone:
+    LXI D, data_hero_shift_cache
+    DAD D                              ; HL = база кэша для idx
+    ; D = base col = curcol - (hoff==2?1:0); E = row (curcol = var_enemy_rc.hi)
+    LDA var_enemy_rc+1
+    MOV D, A
+    LDA var_glyph_hoff
+    CPI 02h
+    JNZ loc_hr_d3ok
+    LDA var_enemy_rc+1
+    SUI 01h
+    MOV D, A                           ; hoff влево -> base = curcol-1
+loc_hr_d3ok:
+    LDA var_enemy_rc                   ; row
+    MOV E, A
+    CALL func_render_tile_vram_or3     ; 3 колонки из кэша; читает var_glyph_voff
 loc_hr_done:
     POP H
     POP D

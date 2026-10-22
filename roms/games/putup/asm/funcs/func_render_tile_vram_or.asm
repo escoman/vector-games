@@ -1,7 +1,13 @@
-; Функция: func_render_tile_vram_or
-; Адрес: 0x1BC9
-; Размер: ~34 байта (тело) + func_render_glyph_or + хелперы loc_mov8 / loc_and_de / loc_blit8 / loc_or_nextplane
+; Функции: func_render_tile_vram_or / func_render_tile_vram_or3 (Step 2b) /
+;          func_render_glyph_or (резолвинг) + func_blit_glyph_or (общий blit).
+; Адрес: 0x1BC9 (база файла)
+; Размер: ~34 байта (or) + or3 (3 колонки) + обёртка glyph_or + общий blit_glyph_or
+;          + хелперы loc_mov8 / loc_and_de / loc_blit8 / loc_or_nextplane
 ; Описание: MASKED-BLIT тайла 2x2 поверх уже нарисованного в VRAM (оверлей героя).
+;           func_render_tile_vram_or  — выровненный тайл 2x2 ( hoff=0; побайтно
+;           идентичен оригиналу — регрессия-безопасно).
+;           func_render_tile_vram_or3 — 3 колонки (6 готовых фрагментов) для
+;           горизонтального easing-кадра (hoff=1/2); читает data_hero_shift_cache.
 ;           Вход: HL = указатель графики тайла (4 байта-глифа), D = колонка,
 ;           E = строка — тот же контракт, что у func_render_tile_vram.
 ;
@@ -55,24 +61,110 @@ func_render_tile_vram_or:
     POP B
     RET
 
+; --- func_render_tile_vram_or3 (Step 2b: горизонтальный easing героя) ---------
+; Вход: HL = база 6 фрагментов кэша (data_hero_shift_cache, 6x32 байта; порядок
+;       TL, TR, правый-верх / BL, BR, правый-низ), D = базовая колонка, E = строка.
+; Рисует 3 колонки masked-blit'ом (6 готовых глифов-фрагментов). hoff=1 (в col+1):
+; caller даёт D=новая col (колонки col,col+1,col+2); hoff=2 (в col-1): D=старая
+; col-1 (колонки col-1,col,col+1). Выровненный hoff=0 — func_render_tile_vram_or.
+; func_blit_glyph_or сохраняет DE/HL: DE (фрагмент-база) шагает на +32 (XCHG-парой),
+; HL (клетка) обходит col,col+1 (по +1) и строку (+0x1E из col+2 в col след. ряда).
+; Прозрачность как у func_render_tile_vram_or: PUSH/POP PSW,B (D/H — свои входы).
+func_render_tile_vram_or3:
+    PUSH PSW                    ; прозрачность (blit-хелперы не берегут флаги)
+    PUSH B                      ; как в func_render_tile_vram_or
+    PUSH H                      ; сохранить базу 6 фрагментов кэша
+    CALL func_coords_to_textbuf ; (D=col,E=row) -> HL = адрес клетки-базы буфера
+    POP D                       ; DE = база фрагментов кэша
+    CALL func_blit_glyph_or     ; frag0 TL        (col,   row)
+    XCHG
+    LXI B, 0020h
+    DAD B
+    XCHG                        ; DE -> frag1
+    INX H                       ; HL -> (col+1, row)
+    CALL func_blit_glyph_or     ; frag1 TR        (col+1, row)
+    XCHG
+    LXI B, 0020h
+    DAD B
+    XCHG                        ; DE -> frag2
+    INX H                       ; HL -> (col+2, row)
+    CALL func_blit_glyph_or     ; frag2 right-top (col+2, row)
+    XCHG
+    LXI B, 0020h
+    DAD B
+    XCHG                        ; DE -> frag3
+    LXI B, 001Eh
+    DAD B                       ; HL -> (col, row+1)  (col+2 -> col след. ряда)
+    CALL func_blit_glyph_or     ; frag3 BL        (col,   row+1)
+    XCHG
+    LXI B, 0020h
+    DAD B
+    XCHG                        ; DE -> frag4
+    INX H                       ; HL -> (col+1, row+1)
+    CALL func_blit_glyph_or     ; frag4 BR        (col+1, row+1)
+    XCHG
+    LXI B, 0020h
+    DAD B
+    XCHG                        ; DE -> frag5
+    INX H                       ; HL -> (col+2, row+1)
+    CALL func_blit_glyph_or     ; frag5 right-bot (col+2, row+1)
+    POP B
+    POP PSW
+    RET
+
 ; --- func_render_glyph_or ---------------------------------------------------
-; Masked-blit одного глифа поверх VRAM. Вход: A = индекс глифа, HL = адрес
-; клетки текстового буфера. Вычисление адреса приёмника (4 плоскости по +0x2000)
-; и выбор слова глифа из data_glyph_ptr_table — один в один с func_render_glyph
-; (Tier-2: бит0 слова = тег compact; raw = 4 плоскости по 8 байт подряд:
-; entry+0=П3, entry+8=П2, entry+16=П1, entry+24=П0). Запись (см. шапку):
-;   * space (20h) -> no-op (пустая клетка оверлея ничего не трогает);
+; Masked-blit одного глифа поверх VRAM. Вход: A = индекс глифа, HL = адрес клетки
+; текстового буфера. Резолвит индекс в слово data_glyph_ptr_table (бит0 = тег
+; compact) и делегирует func_blit_glyph_or. Полностью прозрачен (PSW/B/D/H):
+; HL на выходе = клетка (для обхода источника func_render_tile_vram_or), DE
+; восстановлен = указатель графики тайла (INX D шагает 4 байта). space (20h) -> no-op.
+func_render_glyph_or:
+    PUSH PSW                    ; прозрачность для вызывающего
+    PUSH B
+    PUSH D                      ; original: указатель графики тайла (восстановить на exit)
+    PUSH H                      ; клетка (передать blit / не нужна на exit)
+    CPI 20h
+    JZ loc_or_space             ; пробел: no-op (unwind всех 4, ничего не накладываем)
+    ADD A                       ; A = low(2*code), CY = high bit (hero codes >=80h)
+    MOV E, A                    ; E = младший байт 2*code
+    MVI A, 00h
+    ADC A                       ; A = CY = старш. байт 2*code (0/1)
+    MOV D, A                    ; DE = 16-битное 2*code (смещение в ptr-таблице)
+    LXI H, data_glyph_ptr_table
+    DAD D
+    MOV E, M                    ; DE = слово указателя (бит0 = тег compact)
+    INX H
+    MOV D, M
+    POP H                       ; HL = клетка текстового буфера (для приёмника)
+    CALL func_blit_glyph_or     ; DE=слово (тег цел), HL=клетка; blit сохраняет их
+    POP D                       ; DE = исходный указатель графики тайла (для INX D)
+    POP B
+    POP PSW
+    RET
+loc_or_space:
+    POP H                       ; HL = клетка (netronuto)
+    POP D                       ; DE = указатель графики тайла (для INX D)
+    POP B
+    POP PSW
+    RET
+
+; --- func_blit_glyph_or -----------------------------------------------------
+; Masked-blit одного ГОТОВОГО глифа поверх VRAM. Вход: DE = слово data_glyph_ptr_table
+; (бит0 = тег compact intact; raw = 4 плоскости по 8 байт: entry+0=П3, entry+8=П2,
+; entry+16=П1, entry+24=П0), HL = адрес клетки текстового буфера. СОХРАНЯЕТ DE/HL
+; (вызывающий двигает их сам). Вычисление адреса приёмника (4 плоскости по +0x2000)
+; и вертикальный суб-сдвиг var_glyph_voff — один в один с бывшим func_render_glyph_or
+; (выход побайтно идентичен). Запись (см. шапку файла):
 ;   * маска = П0 (entry+24) буферится в var_or_mask_scratch, DE возвращается на entry+0;
 ;   * 0x8000 (Plane 3), 0xA000 (Plane 2), 0xC000 (Plane 1): (Plane AND П0) OR color_i
 ;     (loc_blit8), цвет идёт последовательно entry+0/8/16, приёмник шагает +0x2000;
 ;   * 0xE000 (Plane 0): Plane = Plane AND П0 (loc_and_de; DE=entry+24), без OR;
 ;   * compact (тег=1): короткая запись -> Plane3 = entry+0 verbatim (loc_mov8), стоп.
-func_render_glyph_or:
-    PUSH PSW                    ; прозрачность для вызывающего
-    PUSH B
-    PUSH D
-    PUSH H
-    MOV D, A                    ; D = глиф
+; CLOBBERS: A,B,C,flags (D/H восстановлены на RET). Резолвинг глифа/пропуск space —
+; на совести func_render_glyph_or; здесь DE уже готовое слово.
+func_blit_glyph_or:
+    PUSH D                      ; сохранить слово таблицы (preservation DE)
+    PUSH H                      ; сохранить клетку (preservation HL)
     LXI B, textbuf_to_vram      ; HL = смещение клетки (абс. адрес - база буфера)
     DAD B
     MOV A, L                    ; --- кол = (L & 1Fh) ---
@@ -89,19 +181,6 @@ func_render_glyph_or:
     ANI 38h
     ORA B
     MOV B, A                    ; B = rowbits
-    MOV A, D
-    CPI 20h
-    JZ loc_or_done              ; пробел: no-op (ничего не накладываем)
-    ADD A                       ; DE = 2*глиф (смещение в таблице указателей)
-    MOV E, A
-    MVI A, 00h
-    ADC A
-    MOV D, A
-    LXI H, data_glyph_ptr_table
-    DAD D
-    MOV E, M                    ; DE = слово указателя (бит0 = тег compact)
-    INX H
-    MOV D, M
     MVI H, 00h                  ; HL = кол
     MOV L, C
     PUSH B
@@ -197,10 +276,8 @@ loc_compact:
     POP B
     CALL loc_mov8
 loc_or_done:
-    POP H
-    POP D
-    POP B
-    POP PSW
+    POP H                       ; клетка (preservation HL)
+    POP D                       ; слово таблицы (preservation DE)
     RET
 
 ; Копия verbatim: 8 байт. Вход HL=приёмник, BC=источник. dest = (BC). Оба +8. Не трогает D/E.

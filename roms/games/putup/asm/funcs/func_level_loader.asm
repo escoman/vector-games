@@ -116,6 +116,7 @@ loc_19DA:
     XRA A
     STA var_frame_sub           ; sub=0: до первого тика = 12 hw-кадров
     STA var_glyph_voff          ; Step 2a: герой выровнен по клетке (твин-сдвиг=0)
+    STA var_glyph_hoff          ; Step 2b: горизонтальный midpoint-режим=0 (выровненно)
     LXI H, data_text_buffer
     SHLD var_scan_ptr           ; курсор чанка скана огня = 0-я клетка буфера
     JMP lbl_main_game_loop      ; 0x1A38

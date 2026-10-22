@@ -89,6 +89,7 @@ loc_0BC2:
     LXI H, 07D0h                ; 0x0BE1
     SHLD var_bonus_threshold    ; 0x0BE4
     CALL func_clear_textbuf     ; 0x0BE7
+    CALL func_build_hero_shift_cache ; Step 2a: одноразовый precompute RAM-кэша ±4px-сдвигов героя
     LXI H, str_credits_koi8+061h                 ; 0x0BEA
     LXI D, 0000h                ; 0x0BED
     LXI B, 0080h                ; 0x0BF0
