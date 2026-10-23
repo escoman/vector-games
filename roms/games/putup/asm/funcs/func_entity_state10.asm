@@ -1,48 +1,26 @@
 ; Функция: func_entity_state10
 ; Адрес: 0x191B
 ; Размер: 97 байт
-; Описание: Обработчик сущности в состоянии 10 (ожидание/цель). Если
-;           координата 0923h (data_entity_ycoords+1) >= 17h -> loc_1958.
-;           Иначе рисует тайл: 090Ch=08h, сравнение текущей позиции 08E7h с
-;           (0920h,0923h); если отличается -> стереть старую (func_draw_tile_at_ptr),
-;           сохранить новую в 08E7h и отрисовать тайл из data_tile_table_26DE
-;           (func_render_tile_vram). Затем вычисление |dx|,|dy| между
-;           var_player_col/var_player_row и сущностью (0920h/0923h); если обе
-;           разности >= 2 -> RNC (возврат), иначе JMP 13AAh (обработчик потери
-;           жизни, вне RDB). Вспомогательная loc_1979: A = -A (CMA/INR A).
+; Описание: Обработчик сущности в состоянии 10 — погонщик HURRY-UP (slot 1,
+;           state==09h). Вывод на экран перенесён в общий easing-лифтник
+;           func_enemy_render_slot (плавное догоняние + маска вместо немедленного
+;           блита с EI;HLT). Здесь остаётся ТОЛЬКО коллизия-чек: вычисление
+;           |dx|,|dy| между var_player_col/var_player_row и сущностью
+;           (0920h/0923h); если обе разности >= 2 -> RNC (возврат), иначе
+;           JMP func_collision_death. Рёбра CPI 17h / JNC loc_1958 сохранены: пока
+;           погонщик ещё не спавнился на поле (ycoords>=17h), коллизия сама не
+;           срабатывает по |dy|. Вспомогательная loc_1979: A = -A (CMA/INR A).
 
 func_entity_state10:
-    LDA data_entity_ycoords+01h                    ; 0x191B
-    CPI 17h                     ; 0x191E
-    JNC loc_1958                ; 0x1920
-    MVI A, 08h                  ; 0x1923
-    STA var_obj_type_idx                    ; 0x1925
-    LXI H, var_egg_rc                 ; 0x1928
-    LDA data_entity_ycoords+01h                    ; 0x192B
-    CMP M                       ; 0x192E
-    JNZ loc_193B                ; 0x192F
-    INX H                       ; 0x1932
-    LDA data_entity_xcoords+01h                    ; 0x1933
-    CMP M                       ; 0x1936
-    DCX H                       ; 0x1937
-    JZ loc_193E                 ; 0x1938
-loc_193B:
-    EI                          ; синк к VBlank
-    HLT
-    CALL func_draw_tile_at_ptr  ; было CALL sync_draw_tile_at_ptr
-loc_193E:
-    LDA data_entity_ycoords+01h                    ; 0x193E
-    MOV L, A                    ; 0x1941
-    LDA data_entity_xcoords+01h                    ; 0x1942
-    MOV H, A                    ; 0x1945
-    SHLD var_egg_rc                   ; 0x1946
-    XCHG                        ; 0x1949
-    LDA var_obj_type_idx                    ; 0x194A
-    ADD A                       ; 0x194D
-    ADD A                       ; 0x194E
-    LXI H, data_tile_table_26DE ; 0x194F
-    CALL func_hl_add_a          ; 0x1952
-    CALL func_render_tile_vram  ; 0x1955
+    ; Погонщик (state==09h, slot 1): ветки erase/немедленного блита УБРАНЫ — теперь
+    ; его рисует общий easing-лифтник func_enemy_render_slot (симметричный вертикаль-
+    ; ный midpoint + диагональ, hoff через 3-колоночное предсдвинутое окно).var_egg_rc
+    ; больше не пишется: потребитель переведён на var_enemy_disp_rc[1]. Остаётся
+    ; только коллизия-чек ниже. Инвариант newr<18h в renderer не выпустит спрайт за
+    ; поле, поэтому немедленная отрисовка не нужна и при ycoords[1]>=17h.
+    LDA data_entity_ycoords+01h
+    CPI 17h
+    JNC loc_1958                ; сущность ещё не спавнилась на поле -> только коллизия
 loc_1958:
     LDA data_entity_xcoords+01h                    ; 0x1958
     MOV B, A                    ; 0x195B

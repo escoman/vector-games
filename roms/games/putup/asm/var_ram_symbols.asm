@@ -67,7 +67,7 @@ var_entity_index:       EQU data_ram_init_image_08C3+4Bh   ; байт: инде�
 ; Слово rc: lo=строка, hi=колонка.
 var_enemy_rc:           EQU data_ram_init_image_08C3+20h   ; слово: позиция врага (prev cache)
 var_bonus_rc:           EQU data_ram_init_image_08C3+22h   ; слово: позиция бонуса
-var_egg_rc:             EQU data_ram_init_image_08C3+24h   ; слово: позиция яйца
+var_egg_rc:             EQU data_ram_init_image_08C3+24h   ; слово: (было) позиция погонщика. Больше не используется кодом (consumer переведён на var_enemy_disp_rc+2); константа сохранена, т.к. это смещение внутри data_ram_init_image_08C3 (layout инициализатора RAM трогать нельзя)
 var_blink_cell:         EQU data_ram_init_image_08C3+26h   ; слово: текущая мигающая клетка (erase)
 var_blink_type:         EQU data_ram_init_image_08C3+27h   ; байт: тип символа в мигающей клетке
 var_item_cost_table:    EQU data_ram_init_image_08C3+2Ah   ; таблица стоимости предмета (base+type)
@@ -272,6 +272,14 @@ var_ed_ebase:      EQU 6A6Ch      ; байт: базовая колонка eras
 ; в кадровом пути его заменил промах поиска func_ed_find_pre (draw выровненно).
 var_ed_bc_compact: EQU 6A6Dh      ; байт: в 2x2 цели был compact-глиф (тег бит0=1)
 var_enemy_pre_n:   EQU 6A6Eh      ; байт: сколько записей ключей построил func_enemy_prebuild
+var_ed_is_chaser:  EQU 6A6Fh      ; байт: 1 = слот в состоянии погонщика (09h) —
+                                  ; симметричный midpoint + диагональ; 0 = обычный
+                                  ; враг (только падение, подъём/диагональ -> snap)
+var_ed_bc_or:      EQU 6A70h      ; байт: 1 = предсобираемое окно — для погонщика
+                                  ; (func_enemy_prebuild): довести вакуум маски (П0)
+                                  ; до 1 для OR-композита; 0 = обычный враг (плоский блит)
+var_ed_voff_sv:    EQU 6A71h      ; байт: сохранённый var_glyph_voff на время
+                                  ; func_enemy_render (OR-путь погонщика обнуляет его)
 ; --- Step 2b: RAM-кэш сдвинутых ±4px композитных колонок героя (precompute). ----
 ; Генерируется ОДИН раз при инициализации (func_build_hero_shift_cache) до первого
 ; кадра; арт героя статична -> инвалидации нет. В горячем пути midpoint — обычный

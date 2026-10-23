@@ -109,12 +109,25 @@
 ; Прозрачность: func_enemy_render сохраняет PSW/B/D/H.
 
 func_enemy_render:
+    ; Погонщик рисуется OR-композитом (func_render_tile_vram_or/or3), который
+    ; применяет геройский вертикальный суб-сдвиг var_glyph_voff. Рендерер врагов
+    ; идёт В КАДРЕ РАНЬШЕ героя, поэтому var_glyph_voff здесь = остаток прошлого
+    ; кадра; его надо обнулить на время enemy-отрисовки (вертикаль погонщика уже
+    ; задаётся сдвигом var_screen_mode в loc_ed_draw/post), иначе твин героя
+    ; просочится в позицию погонщика. Сохраняем и возвращаем — repaint-героя и
+    ; func_hero_render читают var_glyph_voff позже в этом же кадре.
+    LDA var_glyph_voff
+    STA var_ed_voff_sv
+    XRA A
+    STA var_glyph_voff
     MVI A, 01h
     STA var_ed_slot
     CALL func_enemy_render_slot
     MVI A, 02h
     STA var_ed_slot
     CALL func_enemy_render_slot
+    LDA var_ed_voff_sv
+    STA var_glyph_voff
     RET
 
 ; --- инициализация отображения (func_level_loader, сразу после координат спауна)
@@ -186,19 +199,46 @@ func_enemy_render_slot:
     CALL func_ed_target_cell        ; var_ed_tr/tc = цель
     CALL func_ed_fetch_codes        ; var_ed_gcodes = коды цели (4 глифа)
     ; --- ПАССИВНЫЕ СОСТОЯНИЯ: VRAM слота принадлежит логике, рендерер отступает.
-    ; state==0 (врага нет) и state>=9 (09/0A — HURRY-UP-погонщик: func_entity_state9
-    ; двигает координаты, func_entity_state10 рисует тайл ИЗ ТАБЛИЦЫ немедленным
-    ; блитом и сам стирает старую клетку через func_draw_tile_at_ptr; текстовый
-    ; буфер по своей клетке он НЕ пишет). Если бы рендерер тут рисовал, он бы затёр
-    ; погонщика фоном.
+    ; state==0 (врага нет) и state>=0A (0Ah — пассивный маркер слота 2 при HURRY-UP).
+    ; state==09 (погонщик) БОЛЬШЕ НЕ пассивно: он участвует в easing-лифтнике,
+    ; коды берутся из data_tile_table_26DE[8] (погонщик не пишет текстовый буфер).
     LDA var_ed_slot
     LXI H, data_level_param_buf_end
     CALL func_hl_add_a
     MOV A, M
     ORA A
     JZ loc_ed_passive                 ; state == 0 — врага нет
+    CPI 0Ah
+    JNC loc_ed_passive                ; state >= 0A — пассивный маркер
+    ; --- chaser codes override: state==09 → коды из data_tile_table_26DE[8] ----
+    ; Погонщик не пишет текстовый буфер, его «вид» всегда берётся из табличного
+    ; тайла 8. Флаг var_ed_is_chaser включает симметричный midpoint + диагональ в
+    ; loc_ed_rowdiff (обычные враги остаются на старом «только падение» поведении).
     CPI 09h
-    JNC loc_ed_passive                ; state >= 9 — погонщик
+    JNZ loc_ed_not_chaser
+    MVI A, 01h
+    STA var_ed_is_chaser
+    LXI H, data_tile_table_26DE + 8 * 4
+    LXI D, var_ed_gcodes
+    MOV A, M
+    STAX D
+    INX H
+    INX D
+    MOV A, M
+    STAX D
+    INX H
+    INX D
+    MOV A, M
+    STAX D
+    INX H
+    INX D
+    MOV A, M
+    STAX D
+    JMP loc_ed_codes_ok
+loc_ed_not_chaser:
+    XRA A
+    STA var_ed_is_chaser              ; обычный враг: только падение -> midpoint
+loc_ed_codes_ok:
     CALL func_ed_codes_same
     STA var_ed_same                 ; 0 = картинка не менялась
     ; --- решение ---
@@ -251,15 +291,81 @@ loc_ed_hset:
     XRA A
     STA var_ed_newv
     JMP loc_ed_erase
+; --- смена строки (A = tr - dr, знаковое): вертикальный midpoint (СИММЕТРИЧНО)
+; или диагональ (вертикаль + горизонталь вместе). Клетка отображения стоит
+; (newr=dr, newc=dc), едут только пиксели: вертикаль — знаковым newv (+4 вниз
+; = 04h, вверх = 0FCh; механизм SUB/ADD трактует его как знаковый байт),
+; горизонталь — hoff (1 вправо, 2 влево) + 3-колоночное окно blit3.
+; На следующем кадре vo!=0 || ho!=0 -> доезжаем (loc_ed_snap).
 loc_ed_rowdiff:
-    CPI 01h                         ; ровно +1 вниз?
-    JNZ loc_ed_snap                 ; подъём / >1 клетки -> snap
+    ; Обычный враг (не погонщик): старая асимметрия — midpoint ТОЛЬКО при падении
+    ; (Δrow=+1) и неподвижной колонке; подъём/диагональ -> snap. Не менять: её
+    ; правка не заказывалась.
+    LDA var_ed_is_chaser
+    ORA A
+    JZ loc_ed_rd_legacy
+    MOV C, A                          ; C = Δrow (tr-dr), знаковый
+    ; Δcol = tc - dc
+    LDA var_ed_dc
+    MOV B, A
+    LDA var_ed_tc
+    SUB B                             ; A = Δcol
+    CPI 01h
+    JZ loc_ed_rd_right                ; вправо -> hoff=1
+    CPI 0FFh
+    JZ loc_ed_rd_left                 ; влево  -> hoff=2
+    ORA A
+    JNZ loc_ed_snap                   ; |Δcol|>1 -> мгновенно
+    XRA A
+    STA var_ed_newh                   ; Δcol=0 -> hoff=0
+    JMP loc_ed_rd_row
+loc_ed_rd_right:
+    LDA var_ed_dc                     ; окно col..col+2: у правой стены нет места
+    CPI 1Eh
+    JNC loc_ed_snap
+    MVI A, 01h
+    STA var_ed_newh
+    JMP loc_ed_rd_row
+loc_ed_rd_left:
+    LDA var_ed_dc                     ; окно col-1..col+1: у левой стены нет места
+    ORA A
+    JZ loc_ed_snap
+    MVI A, 02h
+    STA var_ed_newh
+loc_ed_rd_row:
+    ; клетка отображения не едет: сдвиг пикселями (newr=dr, newc=dc)
+    LDA var_ed_dr
+    STA var_ed_newr
+    LDA var_ed_dc
+    STA var_ed_newc
+    MOV A, C                          ; A = Δrow
+    CPI 01h
+    JZ loc_ed_rd_vdown                ; вниз: newv=+4
+    CPI 0FFh
+    JZ loc_ed_rd_vup                  ; вверх: newv=0FCh (= -4)
+    JMP loc_ed_snap                   ; |Δrow|>1 -> мгновенно
+loc_ed_rd_vdown:
+    MVI A, 04h
+    STA var_ed_newv
+    JMP loc_ed_erase
+loc_ed_rd_vup:
+    MVI A, 0FCh
+    STA var_ed_newv
+    JMP loc_ed_erase
+loc_ed_rd_legacy:
+    ; A = Δrow (вход rowdiff). Ровно +1 вниз иначе snap.
+    LDA var_ed_dr
+    MOV C, A
+    LDA var_ed_tr
+    SUB C                             ; A = Δrow (tr-dr)
+    CPI 01h
+    JNZ loc_ed_snap                   ; подъём / >1 клетки -> snap
     LDA var_ed_dc
     MOV C, A
     LDA var_ed_tc
     SUB C
-    JNZ loc_ed_snap                 ; одновременно со сменой колонки -> snap
-    LDA var_ed_dr                   ; падение: остаёмся в dr, сдвиг 4 px вниз
+    JNZ loc_ed_snap                   ; одновременно со сменой колонки -> snap
+    LDA var_ed_dr                     ; падение: остаёмся в dr, сдвиг 4 px вниз
     STA var_ed_newr
     LDA var_ed_dc
     STA var_ed_newc
@@ -297,7 +403,9 @@ loc_ed_eo:
 loc_ed_commit:
     CALL func_ed_commit_disp
     CALL func_ed_commit_codes
-    ; --- draw: вертикальный сдвиг = вычесть voff из var_screen_mode на время блита ---
+    ; --- draw: вертикальный сдвиг = вычесть ЗНАКОВЫЙ newv из var_screen_mode на
+    ; время блита. newv=04h -> mode-4 (вниз); newv=0FCh -> mode-FCh = mode+4 (вверх)
+    ; по дополнительному коду, поэтому ветка по знаку НЕ нужна — SUB/ADD симметричны.
     LDA var_ed_newv
     ORA A
     JZ loc_ed_draw
@@ -322,6 +430,12 @@ loc_ed_drawa:
     LDA var_ed_newr
     MOV E, A
     LXI H, var_ed_gcodes            ; «тайл-графика» = забранные коды цели
+    LDA var_ed_is_chaser
+    ORA A
+    JZ loc_ed_drawa_flat
+    CALL func_render_tile_vram_or   ; погонщик: OR-композит поверх стен (маска П0=entry+24)
+    JMP loc_ed_post
+loc_ed_drawa_flat:
     CALL func_render_tile_vram      ; обычная (не OR) перерисовка 4 глифов
     JMP loc_ed_post
 loc_ed_draw3:
@@ -339,6 +453,12 @@ loc_ed_dset:
     MOV D, A
     LDA var_ed_newr
     MOV E, A
+    LDA var_ed_is_chaser
+    ORA A
+    JZ loc_ed_d3_flat
+    CALL func_render_tile_vram_or3   ; погонщик: OR 3 колонки из предсдвинутого окна
+    JMP loc_ed_post
+loc_ed_d3_flat:
     CALL func_ed_blit3              ; обычный (не OR) блит 6 готовых фрагментов
 loc_ed_post:
     LDA var_ed_newv
@@ -507,9 +627,18 @@ loc_ed_eo_vo:
     LDA var_ed_vo
     ORA A
     JZ loc_ed_eo_done
-    ; строка dr+1 (спил вниз): те же колонки (base, и base+1 если ho != 0)
+    ; строка спила: знак vo задаёт направление. vo>0 (04h) -> dr+1 (вниз),
+    ; vo<0 (0FCh) -> dr-1 (вверх). Base erase выше покрыл dr,dr+1.
+    ; 8080_strict: BIT нет, знак снимаем сравнением с 80h (borrow => |vo|<80h).
+    CPI 80h
+    JC loc_ed_eo_vdown                ; vo < 80h (положительный) -> спил вниз
     LDA var_ed_dr
-    INR A
+    DCR A                             ; vo >= 80h (отрицательный) -> вверх (dr>=1)
+    JMP loc_ed_eo_vset
+loc_ed_eo_vdown:
+    LDA var_ed_dr
+    INR A                             ; vo>0 -> вниз
+loc_ed_eo_vset:
     STA var_ed_erase_rc
     LDA var_ed_ebase
     STA var_ed_erase_rc+1
@@ -779,12 +908,13 @@ loc_fp_miss:
 ;   13h = +4Ch (state2), 14h = +50h (state1)
 ; 0Fh, 12h — соседи по хвосту таблицы: окно дешёвое (сборка один раз на старте),
 ; а промах поиска стоит лишь один кадр без easing. 0FFh = стоп.
+; 0F0h — sentinel: коды погонщика из data_tile_table_26DE[8], не из data_tile_graphics.
 ; Тайл, которого в списке нет, рисуется выровненно (не ошибка, просто без easing).
 ; При изменении списка синхронно проверяем разметку var_enemy_pre_keys (0x7E00,
 ; <=8 записей по 8 байт = 64 байта внутри одной страницы): число записей берётся из
 ; var_enemy_pre_n, но пока оно <=31, курсор поиска не меняет старший байт.
 data_enemy_pre_tiles:
-    DEFB 01h, 0Fh, 10h, 11h, 12h, 13h, 14h, 0FFh   ; 7 записей
+    DEFB 01h, 0Fh, 10h, 11h, 12h, 13h, 14h, 0F0h, 0FFh   ; 8 записей
 
 ; --- func_enemy_prebuild: собрать ВСЕ предсдвинутые окна врагов -----------------
 ; Вызывается ОДИН раз из func_main_init, до первого кадра. Для каждого индекса из
@@ -814,6 +944,9 @@ loc_epb_tile:
     PUSH H                            ; курсор списка
     PUSH D                            ; приёмник окна
     PUSH B                            ; приёмник ключа
+    ; --- 0F0h: погонщик, коды из data_tile_table_26DE[8] ---
+    CPI 0F0h
+    JZ loc_epb_chaser
     ; --- HL = data_tile_graphics + idx*4, его 4 кода -> var_ed_gcodes ---
     ADD A
     ADD A
@@ -836,10 +969,43 @@ loc_epb_tile:
     INX B
     MOV A, M
     STAX B
+    XRA A
+    STA var_ed_bc_or              ; обычный враг: вакуум маски = 0 (плоский блит)
+    JMP loc_epb_lddone
+loc_epb_chaser:
+    LXI H, data_tile_table_26DE + 8 * 4
+    LXI B, var_ed_gcodes
+    MOV A, M
+    STAX B
+    INX H
+    INX B
+    MOV A, M
+    STAX B
+    INX H
+    INX B
+    MOV A, M
+    STAX B
+    INX H
+    INX B
+    MOV A, M
+    STAX B
+    MVI A, 01h
+    STA var_ed_bc_or              ; погонщик: окно нужно для OR (вакуум маски = 1)
+loc_epb_lddone:
     POP B
     POP D
     POP H
     CALL func_enemy_build_cache       ; DE = приёмник окна, коды в var_ed_gcodes
+    ; Погонщик рисуется OR-композитом, поэтому его предсдвинутое окно должно иметь
+    ; вакуум МАСКИ (П0) = 1 на освобождённых 4px-крайках (сохранить фон), как у героя;
+    ; билдер оставил вакуум = 0 во всех плоскостях (расчёт на плоский блит). Правим
+    ; только маски frag0/frag2 (верх) и frag3/frag5 (низ); DE = база окна (билдер
+    ; восстанавливает DE), сохранны для шага цикла loc_epb_step.
+    LDA var_ed_bc_or
+    ORA A
+    JZ loc_epb_noor
+    CALL loc_epb_orfill               ; DE = база окна; OR фикс вакуума маски
+loc_epb_noor:
     ; Ключ записи пишем ВСЕГДА (таблица саморасшифруема для отладчика), а байт
     ; «годно» — по флагу compact. Форма явная (LDA -> ORA A -> JZ): ORA A пересчитывает
     ; Z из уже загруженного значения, поэтому результат не зависит от того, переживёт
@@ -890,6 +1056,82 @@ loc_epb_done:
     POP D
     POP B
     POP PSW
+    RET
+
+; --- loc_epb_orfill: довести окно погонщика до OR-формата ---------------------
+; Вход: DE = база окна (192 Б = 6 фрагментов по 32 Б; маска П0 = фрагмент+24).
+; func_enemy_build_cache оставил вакуум = 0 во всех плоскостях (обычный блит).
+; Для OR освобождённый nibble МАСКИ обязан = 1 (сохранить фон), как в
+; func_build_hero_shift_cache: ЛЕВЫЙ nibble крайних левых колонок (frag0/frag3)
+; = 0xF0, ПРАВЫЙ nibble крайних правых (frag2/frag5) = 0x0F. Средняя колонка
+; (frag1/frag4) целиком перекрыта — не трогаем. Цветовые плоскости не правим:
+; освобождённый nibble цвета = 0 корректен (фон под OR сохраняется маской).
+; Смещения масок от базы окна: frag0 +24, frag2 +88, frag3 +120, frag5 +184
+; (порядок обхода окон: TL,TR,правый-верх / BL,BR,правый-низ;row0 +0..95,row1 +96..191).
+; Сохраняет PSW,B,D,H (цикл держит базу окна в DE, курсор списка в HL, ключ в BC);
+; внутри сломит только A,C,HL.
+loc_epb_orfill:
+    PUSH PSW
+    PUSH B
+    PUSH D
+    PUSH H
+    XCHG                              ; HL = база окна (была в DE)
+    LXI B, 0018h
+    DAD B                             ; +24  -> маска frag0
+    MVI C, 0F0h
+    CALL loc_epb_or8                  ; HL |= C ×8; HL->+8 (=+32)
+    LXI B, 0038h
+    DAD B                             ; +56  -> +88  маска frag2
+    MVI C, 00Fh
+    CALL loc_epb_or8                  ; HL->+8 (=+96)
+    LXI B, 0018h
+    DAD B                             ; +24  -> +120 маска frag3
+    MVI C, 0F0h
+    CALL loc_epb_or8                  ; HL->+8 (=+128)
+    LXI B, 0038h
+    DAD B                             ; +56  -> +184 маска frag5
+    MVI C, 00Fh
+    CALL loc_epb_or8                  ; HL->+8 (=+192)
+    POP H
+    POP D
+    POP B
+    POP PSW
+    RET
+
+; --- loc_epb_or8: (HL) |= C, 8 байт; HL += 8. Лобит A,HL; B,C,D целые. --------
+loc_epb_or8:
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
+    MOV A, M
+    ORA C
+    MOV M, A
+    INX H
     RET
 
 ; --- func_ed_resolve_glyph: код глифа -> адрес его записи ---------------------

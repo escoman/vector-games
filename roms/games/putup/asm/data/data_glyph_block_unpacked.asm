@@ -10,22 +10,25 @@
 ; Фаза 4 (мигание выхода): в placeholder-слотах глифов 18..21 (@+528..+655)
 ;   записаны тёмно-синие варианты глифов выхода 188..191: маска в A000+E000,
 ;   C000=0 -> физ. индекс 5 -> слот палитры 0C9h (тёмно-синий).
-; SHA256 этого компактного блока = 5355ccfd77328793fc8920eddae5a9f26350f67ae0226bb0ad75436f8ab9c1a2
-;   (до Фазы 4 — a489876c896c53efbbdbf57c87b840ca9a0e920e36790668fc7dc77416e8ff2a;
+; SHA256 этого компактного блока = aafc14a4c0594732631e83ca837e8eb639c31c23d695264e5a6b8eaa03276318
+;   (до OR-реформата погонщика (глифы 2..5: П3=0, П2=П1=S, маска ¬S в П0/0xE000 —
+;    вывод как у героя через func_render_tile_vram_or) — 817bb59fea764c85730c08d97c7768d87177db82abbbe95e7a490380d49317f7;
+;    до плоской маски погонщика (глифы 2..5, plane0:=¬plane1, flat-blit) — 5355ccfd77328793fc8920eddae5a9f26350f67ae0226bb0ad75436f8ab9c1a2;
+;    до Фазы 4 — a489876c896c53efbbdbf57c87b840ca9a0e920e36790668fc7dc77416e8ff2a;
 ;    исходный снимок оригинала — 45919a36b3fed08b6a81d58ae26f17dc4f274fb603608915239a283036ef55b5;
 ;    после Стадии 1 (полный 8192) — 6fd358ad5dff6e8865eeaf9a8840167dbf4b5d6e2a69a5efae05843b5d5c3879).
 
 data_glyph_block:
 data_glyph_block_unpacked:
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h   ; глиф 0 @+0 [compact]
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h   ; глиф 2
-    DEFB 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h
+    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h   ; глиф 2 (OR-формат как у героя: П3=0, П2=S, П1=S, П0/маска=¬S)
+    DEFB 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h, 042h, 04Ch, 0A0h, 0A0h, 0D0h, 0E8h, 0F3h, 0FCh
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh   ; глиф 3
-    DEFB 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh
+    DEFB 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh, 0FCh, 0F3h, 0E8h, 0D0h, 0A3h, 0AFh, 043h, 040h
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h   ; глиф 4
-    DEFB 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h
+    DEFB 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h, 042h, 032h, 005h, 005h, 00Bh, 017h, 0CFh, 03Fh
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh   ; глиф 5
-    DEFB 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh
+    DEFB 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh, 03Fh, 0CFh, 017h, 00Bh, 0C5h, 0F5h, 0C2h, 002h
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h
     DEFB 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h, 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 038h, 010h, 07Ch, 0FEh, 07Ch, 038h, 010h, 010h

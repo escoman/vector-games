@@ -8,6 +8,11 @@
 ;           (стереть старую позицию); затем записывает новые координаты в
 ;           08E3h/08E5h/08E7h, XCHG, A=090Ch*4, HL=data_tile_table_26DE+A
 ;           (func_hl_add_a), CALL func_render_tile_vram (нарисовать тайл в VRAM).
+;           Третий блок (был var_egg_rc=08E7h) теперь работает по disp-кэшу
+;           рендерера var_enemy_disp_rc+2 (slot 1, погонщик): на парковке (level
+;           loader / collision death / hall of fame) стирает последний видимый
+;           footprint погонщика и коммитит disp = клетку парковки. Погонщик больше
+;           не рисуется немедленным блитом в func_entity_state10.
 ;           Примечание: блок 0x13AA-0x1476 (обработчик потери жизни/game over,
 ;           цель JNZ 13AAh из func_game_update) — отдельная gap-зона, не тело
 ;           этой функции.
@@ -71,7 +76,7 @@ loc_135F:
     LXI H, data_tile_table_26DE ; 0x1370
     CALL func_hl_add_a          ; 0x1373
     CALL func_render_tile_vram  ; 0x1376
-    LXI H, var_egg_rc                 ; 0x1379
+    LXI H, var_enemy_disp_rc+02h    ; 3-й блок: погонщик (slot 1) — disp-кэш рендерера
     LDA var_scr_090A                    ; 0x137C
     CMP M                       ; 0x137F
     JNZ loc_138C                ; 0x1380
@@ -89,7 +94,7 @@ loc_138F:
     MOV L, A                    ; 0x1392
     LDA var_scr_0909                    ; 0x1393
     MOV H, A                    ; 0x1396
-    SHLD var_egg_rc                   ; 0x1397
+    SHLD var_enemy_disp_rc+02h    ; commit disp-кэш slot 1 = клетка парковки
     XCHG                        ; 0x139A
     LDA var_obj_type_idx                    ; 0x139B
     ADD A                       ; 0x139E
