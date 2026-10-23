@@ -11,8 +11,10 @@
      скан переключает их за оборот: выход в {12,14,13,15}, огонь 75->FE /
      FE->75; через полный оборот (~6 кадров) всё возвращается; VRAM-блоки
      клеток побайтово равны модели record(нового кода);
-  B) победа: код 17h ПОД ногами героя диспетчер нормализует в 74h ->
-     func_player_move_a вызывается (BP).
+  B) победа: код 17h (BL мигающего 2x2) ПОД ногами героя диспетчер
+     нормализует в 74h -> func_player_move_a вызывается (BP); коды других
+     клеток выхода (16h — TL) победу НЕ взводят (негативный проход),
+     иначе вход справа/сверху срабатывает на полшага.
 
 Важно по boot-секвенции: на первом попадании в lbl_main_game_loop level loader
 ещё не инициализировал var_player_* (в RAM лежат дефолты образа 08C3) —
@@ -200,18 +202,37 @@ def part_fa_flip():
 
 def part_b_win():
     s.call("debug_set_breakpoint", {"address": MOVE_A})
-    hit = None
+
+    def poke_foot(code_lo, code_next):
+        # bufaddr пересчитываем КАЖДЫЙ кадр: герой может падать/идти,
+        # а диспетчер читает M[bufaddr_new+0x20]; целимся на два вперёд
+        buf = read(PLAYER_BUF, 2)[0] | (read(PLAYER_BUF + 1, 1)[0] << 8)
+        foot = (buf + 0x20) & 0xFFFF
+        write(foot, [code_lo])
+        write((foot + 0x20) & 0xFFFF, [code_next])
+        return foot
+
+    # негатив: 16h (TL тайла) под ногами — побеждать НЕ должен; скан может
+    # развернуть его в 12h — тоже не взводящий код
+    spurious = None
     foot = None
+    for i in range(5):
+        foot = poke_foot(0x16, 0x16)
+        pc = frame()
+        if pc == MOVE_A:
+            spurious = i
+            break
+    check(spurious is None,
+          "B-) 16h (не BL-клетка) под героем -> победы НЕТ",
+          f"ложное срабатывание на кадре {spurious}, foot=0x{foot:04X}")
+    if spurious is not None:
+        s.call("debug_remove_breakpoint", {"address": MOVE_A})
+        return
+
+    hit = None
     try:
         for i in range(14):
-            # bufaddr пересчитываем КАЖДЫЙ кадр: герой может падать/идти,
-            # а диспетчер читает M[bufaddr+0x20] свежего кадра
-            buf = read(PLAYER_BUF, 2)[0] | (read(PLAYER_BUF + 1, 1)[0] << 8)
-            foot = (buf + 0x20) & 0xFFFF
-            # целимся на два вперёд: за кадр герой успевает упасть на строку,
-            # и диспетчер читает M[bufaddr_new+0x20] = foot+0x20
-            write(foot, [0x17])           # светлый выход под ногами = мигание
-            write((foot + 0x20) & 0xFFFF, [0x16])
+            foot = poke_foot(0x17, 0x17)   # BL-коды выхода под ногами = мигание
             pc = frame()
             if pc == MOVE_A:
                 hit = i
