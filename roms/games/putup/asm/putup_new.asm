@@ -149,6 +149,7 @@
     include "funcs/func_hero_render.asm"
     include "funcs/func_set_tile_buf.asm"
     include "funcs/func_enemy_render.asm"
+    include "funcs/func_enemy_settle.asm"
     include "funcs/func_build_hero_shift_cache.asm"
     defs $ & 1 ; выровнять блок глифов на чётный (бит0 = тег compactness)
     include "data/data_glyph_block_unpacked.asm"   ; блок глифов

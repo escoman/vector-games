@@ -4,8 +4,21 @@
 ; Описание: Коллизия/гибель: проход по data_egg_speed_table, сравнение с
 ;   врагом (var_enemy_rc), перерис тайлов, подсчёт дельты счёта. 0x143B —
 ;   site релокации textbuf (516Ah). Входы loc_ из func_game_update (JNZ 13AA).
+;   Улёт героя: каждый шаг рисуется guarded OR-композитом (func_raster_guard_hero +
+;   func_render_tile_vram_or, кадр [6] выровненно) — единый flicker-free-идиом с
+;   gameplay/exit; ранняя opaque-запись func_render_tile_vram затирала фон под героем.
 
 func_collision_death:
+    ; При коллизии враг может быть застёгнут на midpoint-кадре easing'а
+    ; (hoff/voff != 0): 3-колоночное окно = выровненно + перелив со сдвигом 4px.
+    ; func_game_update уходит сюда по JNZ, и пока идёт улёт/GameOver рендерер
+    ; врагов не вызывается -> враг остаётся отрисованным наполовину весь пролёт.
+    ; Нельзя просто вызвать func_enemy_render: он рендерит ОБА слота и для
+    ; ВЫРОВНЕННОГО слота с целью на клетку в стороне запустит НОВЫЙ midpoint
+    ; (hoff 0->2), т.е. сам создаст полу-кадр. func_enemy_settle трогает только
+    ; слоты в фазе midpoint (snap: стереть перелив + нарисовать выровненно по
+    ; цели), выровненные оставляет как есть.
+    CALL  func_enemy_settle
     MVI   B, 0002h            ; 0x13AA
     CALL  func_sound_init     ; 0x13AC
     LDA   var_player_row      ; 0x13AF
@@ -34,6 +47,10 @@ loc_13C0:
     STA   var_scr_0909                ; 0x13DF
     MVI   A, 06h              ; 0x13E2
     STA   var_obj_type_idx    ; 0x13E4
+    ; --- flicker-free: тот же идиом, что gameplay/exit-перекраска героя -------
+    ; Один raster-guard на окно erase+draw этого шага улёта: полоса = union(старая
+    ; строка в var_enemy_rc, новая в var_scr_090A). Пишется вне прохода луча.
+    CALL  func_raster_guard_hero
     PUSH  H                   ; 0x13E7
     PUSH  B                   ; 0x13E8
     LXI   H, var_enemy_rc     ; 0x13E9
@@ -59,7 +76,15 @@ loc_13FF:
     ADD   A                   ; 0x140F
     LXI   H, data_tile_table_26DE; 0x1410
     CALL  func_hl_add_a       ; 0x1413
-    CALL  func_render_tile_vram; 0x1416
+    ; OR-композит улетающего героя (было func_render_tile_vram — непрозрачно,
+    ; пустые пиксели героя zero-write'ом затирали фон/огонь -> чёрный прямоугольник).
+    ; Кадр [6] (var_obj_type_idx) при DEAD не использует суб-сдвиг -> выровненно:
+    ; обнуляем var_glyph_voff, чтобы func_render_tile_vram_or не применил твин-сдвиг
+    ; от последнего hero_render-кадра. Erase старой клетки (loc_13FC) остаётся restore
+    ; из тени — корректно снимает OR-оверлей.
+    XRA   A
+    STA   var_glyph_voff
+    CALL  func_render_tile_vram_or
     MVI   B, 0001h            ; 0x1419
     CALL  func_delay          ; 0x141B
     POP   B                   ; 0x141E
@@ -77,6 +102,15 @@ loc_1424:
     JZ    loc_1438            ; 0x1432
     JMP   loc_19A0            ; 0x1435
 loc_1438:
+    ; --- полная очистка экрана в начале GAME OVER -----------------------------
+    ; func_clear_textbuf чистит лишь ТЕНЬ (data_text_buffer), а func_put_char
+    ; дифует по ней (CMP M / RZ) и НЕ перерисовывает VRAM-клетку, чей код уже в
+    ; буфере. OR-оверлеи (герой/враги/огонь) в тени не лежат: их клетки в тени =
+    ; пробел, а в VRAM = пиксель оверлея -> redraw не происходит -> следы.
+    ; Поэтому стираем VRAM целиком (тот же идиом, что func_level_loader loc_19A0
+    ; перед сборкой уровня), затем чистим тень и печатаем GAME OVER.
+    CALL  func_clear_vram
+    EI                          ; func_clear_vram делает DI; вернуть прерывания
     CALL  func_clear_textbuf  ; 0x1438
     LXI   H, data_text_buffer+016Ah; 0x143B
     CALL  func_set_text_ptr   ; 0x143E
