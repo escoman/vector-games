@@ -6,5 +6,5 @@
 ;             Терминатор — 0FFh.
 
 str_game_over:
-    DEFM "GAME OVER"
+    DEFM "GAME  OVER"
     DEFB 0FFh
