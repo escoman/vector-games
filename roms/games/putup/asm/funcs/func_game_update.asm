@@ -15,11 +15,11 @@
 ;           090Ah=row; 090Ch=tile; erase пред.позиции 08E3h через
 ;           func_draw_tile_at_ptr (EI;HLT синк) + СРАЗУ draw героя func_render_tile_vram_or (OR-композит: пустые пиксели героя не затирают фрукт/фон под ним)
 ;           (пара в одном окне гашения — инвариант flicker-free, как у врагов);
-;           SHLD 08E3h=новая поз.; ШАГ 0: скан буфера 0300h (огонь 75h<->0FEh)
-;           ВЫНЕСЕН в func_render_all (по 128 ячеек каждый кадр); здесь остаются
-;           мигание выхода (var_exit_phase 0<->1, безусловная перерисовка
-;           [7]/[10]) и ПОВТОРНАЯ дорисовка героя (loc_exit_hero) — поверх выхода.
-;           Затем второй проход коллизий по 't'(74h); при nonzero -> JNZ 13Ah (gap).
+;           SHLD 08E3h=новая поз.; ШАГ 0: скан буфера 0300h (флип огня и выхода
+;           по таблице data_flip_tab) ВЫНЕСЕН в func_render_all (по 128 ячеек
+;           каждый кадр); здесь остаётся только ПОВТОРНАЯ дорисовка героя
+;           (loc_exit_hero) — поверх флипаемых клеток выхода, по гейту
+;           var_exit_phase. Затем второй проход коллизий по 't'(74h); при nonzero -> JNZ 13Ah (gap).
 ;           Обновление 08E9h, CALL func_erase_char_08E9, проверка 08EAh==2 -> 1252h.
 ;           Финал: char ниже игрока; если <6Eh -> RC; иначе CALL func_sound_init и
 ;           диспетчер (A-6Dh): 1..4 -> func_score_and_redraw; 5->0F39h; 6->0F63h;
@@ -115,27 +115,18 @@ loc_0D6D:
     ;     плавный твин и сама отрисовка героя — в func_hero_render (главный цикл,
     ;     каждый кадр). Здесь только выставлен ЦЕЛЬ var_scr_090A/0909 (выше) и
     ;     вычислен var_obj_type_idx — их читает func_hero_render и loc_exit_hero.
-    ; --- Step 0: скан огня (loc_0DBE..loc_0DD6) вынесен в func_render_all,
+    ; --- Step 0: скан (loc_0DBE..loc_0DD6) вынесен в func_render_all,
     ;     теперь он идёт по 128 ячеек каждый кадр из главного цикла. Здесь
-    ;     остаётся только мигание выхода и повторная дорисовка героя. ------
-    ; --- Фаза 4: мигание выхода 6<->5 в том же темпе, что огонь выше ----------
-    ; Появляется вместе с выходом (ветка 0x10C8 handlers), гаснет в func_level_loader.
+    ;     остаётся только повторная дорисовка героя. --------------------------
+    ; --- Фаза 4 (упрощена): мигание выхода делает общий скан func_render_all --
+    ; (флип 16h..19h<->12h..15h по data_flip_tab; коды лежат в теневом буфере
+    ; с момента открытия выхода — ветка loc_10C8 handlers, код клетки заодно
+    ; взводит победу через диапазонную нормализацию в диспетчере ниже).
+    ; Здесь остаётся только гейт: пока выход активен, герой перекладывается
+    ; поверх флипаемых клеток (артефакт под героем — как у огня, Step 2a).
     LDA var_exit_phase          ; 0FFh = выход не активен
     CPI 0FFh
-    JZ loc_exit_done            ; выхода нет: ни мигания, ни дорисовки героя
-    INR A
-    ANI 01h                     ; фаза: 0=светлый(нарисован), 1=тёмный
-    STA var_exit_phase
-    MOV B, A
-    LHLD var_exit_rc            ; lo=строка, hi=колонка (кэш из loc_10FD)
-    XCHG                        ; DE=позиция — как в вызовах отрисовки выхода
-    LXI H, data_tile_table_26DE+01Ch   ; [7] = светлый выход (глифы BC..BF)
-    MOV A, B
-    ORA A
-    JZ loc_exit_draw
-    LXI H, data_tile_table_26DE+028h   ; [10] = тёмный выход (глифы 12..15)
-loc_exit_draw:
-    CALL func_render_tile_vram
+    JZ loc_exit_done            ; выхода нет: дорисовка героя не нужна
 loc_exit_hero:
     ; --- герой поверх огня и мигания выхода: ПОВТОРНАЯ дорисовка --------------
     ; Вынесено в func_hero_repaint_over (raster-guard + OR-композит в ОТОБРАЖАЕМой
@@ -203,9 +194,23 @@ loc_0E4A:
     MOV A, M                    ; 0x0E51
     STA var_collision_flag      ; 0x0E52
     CPI 6Eh                     ; 0x0E55
-    RC                          ; 0x0E57
+    JNC loc_disp_item           ; предметы >=6Eh — штатный путь (прежний RC при <6Eh)
+    CPI 12h
+    JNC loc_disp_exitchk        ; 12h..6Dh — проверить верхнюю границу
+loc_disp_none:                  ; клетки без объекта — прежний RC (Carry никто
+    RET                         ;   не читает: CALL в главном цикле без Jcond)
+loc_disp_exitchk:
+    CPI 1Ah
+    JNC loc_disp_none           ; 1Ah..6Dh — тоже ничего
+    ; Коды флипа выхода 12h..19h замещают 'т' (в оригинале 74h лежал в буфере
+    ; постоянно и взводил победу каждый проход — func_player_move_a, вплоть
+    ; до func_level_loader). Нормализуем в 74h и идём штатным путём 'т'.
+    MVI A, 74h
+    STA var_collision_flag
+loc_disp_item:
     MVI B, 02h                  ; 0x0E58
     CALL func_sound_init        ; 0x0E5A
+loc_disp_body:
     LDA var_collision_flag      ; 0x0E5D
     SUI 6Dh                     ; 0x0E60
     CPI 01h                     ; 0x0E62
@@ -221,5 +226,5 @@ loc_0E4A:
     CPI 06h                     ; 0x0E7B
     JZ func_item_bonus_timer     ; 0x0E7D
     CPI 07h                     ; 0x0E80
-    JZ func_player_move_a        ; 0x0E82
+    JZ func_player_move_a       ; 0x0E82
     ; fall-through в lbl_main_game_loop (0x0E85)

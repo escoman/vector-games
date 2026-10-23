@@ -14,9 +14,9 @@ data_glyph_ptr_table:
     DEFW data_glyph_block+336      , data_glyph_block+368      , data_glyph_block+400      , data_glyph_block+432      
     ; глифы 16..23
     DEFW data_glyph_block+464      , data_glyph_block+496      , data_glyph_block+528      , data_glyph_block+560      
-    DEFW data_glyph_block+592      , data_glyph_block+624      , data_glyph_block+656      , data_glyph_block+688      
+    DEFW data_glyph_block+592      , data_glyph_block+624      , data_glyph_block+4384     , data_glyph_block+4416     ; 22,23 <- art 188,189 (светлый выход)
     ; глифы 24..31
-    DEFW data_glyph_block+720      , data_glyph_block+752      , data_glyph_block+784      , data_glyph_block+816      
+    DEFW data_glyph_block+4448     , data_glyph_block+4480     , data_glyph_block+784      , data_glyph_block+816      ; 24,25 <- art 190,191 (светлый выход)
     DEFW data_glyph_block+848      , data_glyph_block+880      , data_glyph_block+913      , data_glyph_block+921      
     ; глифы 32..39
     DEFW data_glyph_block+929      , data_glyph_block+937      , data_glyph_block+945      , data_glyph_block+953      

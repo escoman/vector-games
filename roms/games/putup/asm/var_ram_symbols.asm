@@ -102,7 +102,8 @@ var_scr_091D:           EQU data_ram_init_image_08C3+5Ah   ; HUD-счётчик 
 data_tile_2706:         EQU data_tile_graphics   ; глиф-тайл (spawn fallback)
 data_tile_empty:        EQU data_tile_graphics+04h   ; глиф пустой клетки
 data_tile_2716:         EQU data_tile_graphics+10h   ; глиф-тайл (spawn variant B)
-data_tile_272A:         EQU data_tile_graphics+24h   ; глиф-тайл (bonus draw)
+; (data_tile_272A {60,60,74,60} удалена: открытие выхода пишет в буфер запись
+;  [7] таблицы 26DE — флипаемые проходимые коды 16h..19h, см. data_flip_tab)
 
 ; --- Буфер параметров текущего уровня (копия записи data_level_params) --------
 data_level_param_buf:   EQU data_ram_init_image_08C3+4Eh   ; 8 байт: 0x0911..0x0918
@@ -140,12 +141,13 @@ var_text_ptr:           EQU data_game_object_init+17h   ; слово: указа
 data_text_buffer:       EQU 6600h   ; 1024 байта: текстовый/символьный back-буфер
 data_text_buffer_end:   EQU 6A00h
 textbuf_to_vram:        EQU 0 - data_text_buffer   ; 9A00h: HL(буфер)+константа = смещение клетки
-; --- Мигание выхода (Фаза 4) — 3 байта сразу за текстовым буфером ------------
+; --- Гейт дорисовки героя поверх выхода (Фаза 4, упрощена) — 1 байт ----------
 ; Зона 0x6A00.. свободна: буфер заполняется только 0x400 байтами от 0x6600,
 ; координаты курсора не превышают 31*32+31=0x3FF. Иниц. в func_main_init
 ; (var_exit_phase=0FFh) и сброс в func_level_loader на каждом уровне.
-var_exit_phase:         EQU 6A00h   ; байт: 0FFh=выкл; 0=светлый нарисован, 1=тёмный
-var_exit_rc:            EQU 6A01h   ; слово: lo=строка, hi=колонка выхода (как var_bonus_rc)
+; Мигание выхода делает скан func_render_all (флип по data_flip_tab), поэтому
+; здесь только флаг «выход активен» для func_hero_repaint_over.
+var_exit_phase:         EQU 6A00h   ; байт: 0FFh=выкл; 0=выход активен (мигает скан)
 ; --- Масочный scratch OR-композита (func_render_glyph_or) --------------------
 ; 8 байт плоскости 0 (маски) текущего глифа: копятся сюда один раз, чтобы
 ; указатель приёмника (HL), указатель цвета (DE) и указатель маски (BC) шли

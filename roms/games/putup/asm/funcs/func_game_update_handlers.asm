@@ -206,7 +206,10 @@ loc_10C8:
     MOV   D, A                ; 0x10D2
     LDA   data_level_param_buf+1; 0x10D3
     MOV   E, A                ; 0x10D6
-    LXI   H, data_tile_272A   ; 0x10D7
+    LXI   H, data_tile_table_26DE+1Ch  ; [7] светлый выход {16h,18h,17h,19h} —
+                                ;   проходимые коды: буфер становится истиной
+                                ;   физики (стена «взламывается») + глиф рисуется;
+                                ;   дальше клетки флипаются сканом func_render_all
     CALL  func_draw_tile_to_buf; 0x10DA
     MVI   B, 0005h            ; 0x10DD
     CALL  func_sound_init     ; 0x10DF
@@ -229,10 +232,12 @@ loc_10FD:
     LDA   data_level_param_buf; 0x1101
     MOV   H, A                ; 0x1104
     SHLD  var_bonus_rc        ; 0x1105
-    ; (Фаза 4) запомнить позицию выхода и включить мигание (скан в func_game_update)
-    SHLD  var_exit_rc         ; lo=строка, hi=колонка — тот же кэш
+    ; (Фаза 4) включить гейт дорисовки героя поверх выхода: мигание теперь
+    ; делает скан func_render_all (флип 16h..19h<->12h..15h по data_flip_tab),
+    ; var_exit_phase != 0FFh значит «выход активен» — func_game_update только
+    ; перекладывает героя поверх флипаемых клеток (func_hero_repaint_over).
     XRA   A
-    STA   var_exit_phase      ; светлый нарисован, следующий проход — тёмный
+    STA   var_exit_phase      ; выход активен (сброс в 0FFh — func_level_loader)
     XCHG                      ; 0x1108
     LDA   var_obj_type_idx    ; 0x1109
     ADD   A                   ; 0x110C

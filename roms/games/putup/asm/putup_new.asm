@@ -147,6 +147,7 @@
     include "funcs/func_render_tile_vram_or.asm"
     include "funcs/func_render_all.asm"
     include "funcs/func_hero_render.asm"
+    include "data/data_flip_tab.asm"
     include "funcs/func_set_tile_buf.asm"
     include "funcs/func_enemy_render.asm"
     include "funcs/func_enemy_settle.asm"
