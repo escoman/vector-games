@@ -362,7 +362,12 @@ static unsigned char update_state(void)
             anim_step = (anim_step + 1) & 3;   /* ноги шагают вместе с шагом */
         }
     } else {
-        move_timer = 0;
+        /* move_timer принадлежит машине разворота: пока turning=1, его тикает
+         * ветка `if (turning)` выше. Без этого условия он обнулялся каждый
+         * кадр (moving принудительно 0 при развороте) и turn_step никогда не
+         * доходил до 1 — Марио залипал во фронтальной позe «лицом в камеру».
+         * step_timer/anim_timer — обычные «стой на месте» таймеры, их трогаем. */
+        if (!turning) move_timer = 0;
         step_timer = 0;                       /* сброс: со старта отсчёт заново */
         if (++anim_timer >= 16) { anim_timer = 0; anim_step = (anim_step + 1) & 3; }
     }
