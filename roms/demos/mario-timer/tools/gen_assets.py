@@ -139,6 +139,10 @@ def shift_trip(trips):
 
     Это даёт готовый префаб для dr_tile (быстрый путь), frac=4 на рантайме
     больше не нужен; весь draw идёт одним тяжьёным циклом dr_p0/dr_p1.
+
+    На сборке НЕ печатается: та же формула применяется на старте ROM
+    генератором предсдвигов в RAM (main.c, sh_build_one); here она —
+    эталон для офлайн-теста tools/test_preshift.py.
     """
     wc = len(trips)
     assert all(len(t) == HPX for t in trips)
@@ -237,11 +241,18 @@ def main():
         assert all(len(t) == HPX for t in trips)
         # Пакуем в тайл-префаб: только непустые 8x8-тайлы. Лево — как в позе,
         # право — зеркало (реверс клеток + бит), уже по готовым колонкам троек.
-        # Суб-пиксельный сдвиг +4 px считается НА РАНТАЙМЕ (render.asm,
-        # SBYTE-стейджинг при rs_frac=4), поэтому отдельный _sh-префаб не
-        # печатаем — экономим ~половину ROM на спрайтах Марио.
+        # Суб-пиксельный сдвиг +4 px: предсдвинутые префабы генерируются на
+        # СТАРТЕ ROM в RAM (main.c: sh_build_one/sh_pool), в ROM печатается только
+        # базовый вариант — экономия ~половины ROM на спрайтах Марио.
         sprites.append(('mario%d_l' % (pi + 1), to_prefab(trips)))
         sprites.append(('mario%d_r' % (pi + 1), to_prefab(mirror_trip(trips))))
+
+    # Верхняя оценка RAM под предсдвинутые префабы (её резервирует main.c):
+    # сдвиг+4px даёт не более min(2*nTiles, (wc+1)*HCELLS) непустых тайлов
+    # по 25 B (1+24) плюс 4 B заголовка на спрайт.
+    sh_total = 0
+    for _, data in sprites:
+        sh_total += 4 + 25 * min(2 * data[3], (data[0] + 1) * HCELLS)
 
     # ---- тайл земли: берём tile_001.png донора, квант в 4 цвета ----
     donor = os.path.join(DONOR_TILES, 'tile_001.png')
@@ -259,7 +270,9 @@ def main():
         f.write('/* автоген: tools/gen_assets.py — НЕ править руками */\n\n')
         f.write('#define MARIO_NPOSE   %d\n' % MAIN_POSES)
         f.write('#define MARIO_HCELLS  %d\n' % HCELLS)
-        f.write('#define MARIO_HPIX    %d\n\n' % HPX)
+        f.write('#define MARIO_HPIX    %d\n' % HPX)
+        f.write('#define MARIO_NSPR    %d      /* всего поз×направлений */\n' % len(sprites))
+        f.write('#define SH_POOL_SIZE  %d      /* RAM под предсдвиги, верхняя оценка */\n\n' % sh_total)
         for name, data in sprites:
             emit_bytes(f, name, data)
         f.write('/* таблица указателей: [фаза][направление] 0=лево 1=право */\n')

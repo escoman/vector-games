@@ -31,10 +31,13 @@
  * RAM-патча) и рисуем нового; перед отрисовкой фон снимается в патч.
  *
  * Марио набран кубиками 8x8, поза = 3 клетки x 4. Шаг 4 px (x кратно 4); при x
- * кратном 8 — побайтовый вывод (frac=0), при сдвиге на 4 px — тетрадный сдвиговый
- * вывод (frac=4). Вывод спрайта — 8080-ассемблер (include/render.asm): спрайт закодирован
- * КОЛОНОЧНО, столбец VRAM проходится линейно (данные +3, адрес -1), стирание —
- * копирование из относительного RAM-патча (шаг колонки = ROWS).
+ * кратном 8 — побайтовый вывод, при сдвиге на 4 px — вывод через ПРЕСДВИНУТЫЙ
+ * префаб: все сдвинутые на +4 px варианты поз генерируются один раз при старте
+ * ROM в RAM (секция ПРЕСДВИГ ниже), поэтому налёту ничего не сдвигается и оба
+ * случая идут одним быстрым путём render.asm. Вывод спрайта — 8080-ассемблер
+ * (include/render.asm): спрайт закодирован тайл-ПРЕФАБОМ (непустые тайлы 8x8),
+ * каждый тайл — линейный проход по колонке (данные +3, адрес -1), стирание —
+ * sparse-обнуление ровно того же footprint тем же префабом.
  * Раскладка файлов: include/ — всё, что участвует в конечной сборке (код
  * render.asm/sfx_mario.c и генерируемые данные .inc); assets/ — исходники-«сырьё»
  * (xcf/png/txt/mp3), из которых эти .inc добываются скриптами tools/*.py и которые
@@ -50,7 +53,6 @@
 /* Примитивы вывода из render.asm (по идиомам mario-16cols/mario.asm).
  * Параметры передаются через глобалы rs_* ниже — без стековых аргументов. */
 extern void mario_draw_sprite(void);      /* draw (rs_zero=0) и sparse-erase (rs_zero=1) */
-extern void mario_init_renderer(void);    /* разовая обнуляция zcol (нуля-тайлы frac=4) */
 
 /* Примитивы «секундомера растра» — стандартный модуль библиотеки
  * lib/timer/timer.asm (КР580ВИ53 канал 2, порт 09h), объявления в v06.h:
@@ -82,8 +84,9 @@ extern unsigned char mario_sfx_running;   /* зеркало флага бега 
 #define MAX_MX       (SCR_W - 3 * 8)  /* правый край (x верха клетки)*/
 
 /* Тиков (по 1/VSync) на один 4px-шаг. Шаг обязан быть 4px (mx кратно 4 →
- * frac ∈ {0,4}); 2px сломал бы тетрадный сдвиговый рендер, поэтому скорость
- * задаём частотой шага, а не размером. Ходьба вдвое медленнее бега. */
+ * суб-пиксельная фаза x&7 ∈ {0,4} — ровно два варианта предсдвига на позе);
+ * 2px сломал бы сетку фаз, поэтому скорость задаём частотой шага, а не
+ * размером. Ходьба вдвое медленнее бега. */
 #define RUN_STEP     2                 /* бег:   4px раз в 2 тика  (~100 px/с) */
 #define WALK_STEP    4                 /* ходьба: 4px раз в 4 тика (~50 px/с)  */
 
@@ -124,8 +127,9 @@ extern unsigned char mario_sfx_running;   /* зеркало флага бега 
 /* На сколько строк НИЖЕ верха пятна ждать луч перед выводом. Отрисовка идёт
  * медленнее полёта луча, но redraw каждой строки успевает закончиться до её
  * скана, поэтому весь низ полосы (MARIO_HPIX) ждать не обязательно — стартуем
- * на середине спрайта. Увеличить (→ MARIO_HPIX) — если на frac=4 появляется
- * мерцание правых колонок; уменьшить (→ 0) — если хочется начать ещё раньше. */
+ * на середине спрайта. Увеличить (→ MARIO_HPIX) — если при сдвинутой фазе x
+ * (предсдвинутый префаб на одну колонку шире) мерцают правые колонки;
+ * уменьшить (→ 0) — если хочется начать ещё раньше. */
 #define WAKE_REF       (MARIO_HPIX / 2)
 /* Строка 0 (FPS) вверху (y<8). От VBlank до y=0 луч идёт 312−256 = 56 строк.
  * Окно 44 строки — HUD пишется раньше спрайта и в узком верхнем окне. */
@@ -151,28 +155,26 @@ static unsigned char palA[16];
 /* Параметры для render.asm (ассемблер читает/пишет их напрямую).
  * НЕ static — символы должны быть видны линкеру. */
 unsigned int  rs_spr;                    /* указатель на спрайт (заголовок)  */
-unsigned int  rs_data;                   /* колонка данных (считает asm)     */
 unsigned int  rs_p0, rs_p1;              /* VRAM-указатели верха колонки     */
-unsigned char rs_frac;                   /* суб-клеточный сдвиг: 0 или 4 px */
 unsigned char rs_zero;                   /* 1 = mario_draw_sprite затирает (erase), 0 = рисует */
 
 /* ВРЕМЕННАЯ диагностика wake-гонки (учёт перехода через VBlank). */
-unsigned char dbg_frac;                  /* frac текущего кадра (0 или 4)     */
+unsigned char dbg_frac;                  /* фаза кадра: x&7 (0=выровн., 4=предсдв.) */
 unsigned int  dbg_start;                 /* raster старта erase (кадр N)      */
 unsigned int  dbg_mid;                   /* raster после erase (старт draw)   */
 unsigned int  dbg_eline;                 /* длительность erase, строк         */
 unsigned int  dbg_dline;                  /* длительность draw, строк          */
-unsigned int  dbg_elmax4;                /* макс. erase строк среди frac=4    */
-unsigned int  dbg_dlmax4;                /* макс. draw  строк среди frac=4    */
-unsigned int  dbg_elmax0;                /* макс. erase строк среди frac=0    */
-unsigned int  dbg_dlmax0;                /* макс. draw  строк среди frac=0    */
+unsigned int  dbg_elmax4;                /* макс. erase строк среди сдвинутых  */
+unsigned int  dbg_dlmax4;                /* макс. draw  строк среди сдвинутых  */
+unsigned int  dbg_elmax0;                /* макс. erase строк среди выровненных */
+unsigned int  dbg_dlmax0;                /* макс. draw  строк среди выровненных */
 unsigned int  dbg_endr;                  /* raster конца draw (в СВОЁМ кадре)  */
 unsigned int  dbg_earliest;              /* 40 + min(old_y,my): raster первого  */
                                          /*   чтения написанных строк в N+1     */
 int           dbg_minmargin;             /* мин. запас (earliest-endr, wrap)    */
-int           dbg_minm4;                 /* то же, но только для frac=4         */
+int           dbg_minm4;                 /* то же, но только для сдвинутой фазы   */
 unsigned int  dbg_tear;                  /* кадров с margin<0                   */
-unsigned int  dbg_tear4;                 /* кадров с margin<0 И frac=4          */
+unsigned int  dbg_tear4;                 /* кадров с margin<0 И сдвинутой фазой   */
 unsigned int  dbg_draws;                 /* сколько реальных erase+draw         */
 
 /* Прямоугольник последнего НАРИСОВАННОГО спрайта (для стирания). Заполняется
@@ -282,11 +284,170 @@ static unsigned int sprite_p0(unsigned char x, unsigned int y)
     return BASE_A0 + ((unsigned int)(x >> 3)) * 0x100u + (255u - y);
 }
 
+/* ----------------------------- ПРЕСДВИГ (+4 px) -------------------------- */
+/* Быстрый путь render.asm пишет каждый байт как (op & bit) — без чтения VRAM,
+ * но требует данные уже в байтовой сетке (x кратно 8). Раньше при x ≡ 4 (mod 8)
+ * каждый кадр шёл тетрадный сдвиг налёту (merge байта = high|low nibble из двух
+ * клеток) — в разы дороже и с мерцанием правых колонок на тяжёлых кадрах.
+ * Теперь сдвинутые префабы СГЕНЕРИРОВАНЫ ОДИН РАЗ при старте ROM;
+ * вывод — всегда dr_tile быстрым путём.
+ * Формула сдвига (та же, что merge в старом SBYTE): для выходной клетки c
+ * (0..wcells) каждый байт = (in[c] >> 4) | (in[c-1] << 4), компоненты
+ * (op,b0,b1) сливаются независимо; выход на 1 клетку шире, левый край остаётся
+ * в той же VRAM-колонке, т.е. картинка смещается на +4 px. Префаб хранит
+ * только непустые тайлы, pos=(col<<2)|row — генератор разворачивает записи
+ * в плотную сетку колонок, мерджит и перепечатывает записями. */
+
+static unsigned char sh_pool[SH_POOL_SIZE];    /* RAM пул предсдвинутых поз */
+static unsigned int  sh_of[MARIO_NSPR];        /* смещение каждой позы в пуле (до 8..10 КБ, нужен 16 бит) */
+static unsigned int  all_spr[MARIO_NSPR];      /* плоский список базовых префабов */
+/* Скреетч билдера: плотная сетка (wc+1) колонок-клеток × 4 тайл-ряда × 24 B
+ * (i = col*96 + row*24 + b, где 96 = MARIO_HCELLS*24) + тайловый buffer 24 B. */
+static unsigned char sh_dense[(4 + 1) * MARIO_HCELLS * 24];
+static unsigned char sh_tile[24];
+
+/* Плоский список всех базовых префабов (порядок = нумерация sh_of). */
+static void sh_fill_list(void)
+{
+    unsigned char i;
+    unsigned char n;
+    n = 0;
+    for (i = 0; i < MARIO_NPOSE; i++) {
+        all_spr[n++] = (unsigned int)mario_frames[i][0];
+        all_spr[n++] = (unsigned int)mario_frames[i][1];
+    }
+    for (i = 0; i < 2; i++) {
+        all_spr[n++] = (unsigned int)mario_turn[i][0];
+        all_spr[n++] = (unsigned int)mario_turn[i][1];
+    }
+    for (i = 0; i < 3; i++) {
+        all_spr[n++] = (unsigned int)mario_run[i][0];
+        all_spr[n++] = (unsigned int)mario_run[i][1];
+    }
+}
+
+/* Построить предсдвинутый +4px префаб из src в dst; вернуть размер в байтах.
+ * Плотная сетка колонок 0..wc (col+1 — spill). Формула: out[b] = (cur>>4) |
+ * (prev<<4); cur = (col <= wc ? src[col] : 0), prev = (col > 0 ? src[col-1]
+ * : 0). Пропуск пустых тайлов (все 24 B ==0). */
+static unsigned int sh_build_one(const unsigned char *src, unsigned char *dst)
+{
+    unsigned char  wc;
+    unsigned char  hc;
+    unsigned char  n;
+    unsigned int   i;                     /* число байт обнуления dense: (wc+1)*hc*24
+                                             доходит до 384 — НЕ влезает в байт! */
+    unsigned char  J;
+    unsigned char  r;
+    unsigned char  b;
+    unsigned char  col;
+    unsigned char  row;
+    unsigned char  cnt;
+    unsigned char  pv;                   /* байт-источник prev (0 для J==0) */
+    unsigned int   tbase;                /* тайл-строковый base */
+    unsigned int   cur;
+    unsigned int   p;
+    unsigned int   endp;
+    const unsigned char *rec;            /* текущая запись (src) */
+    unsigned char *o;
+
+    wc = *src;
+    hc = *(src + 1);                     /* = MARIO_HCELLS */
+    n  = *(src + 3);
+    endp = (unsigned int)(src + 4 + (unsigned int)n * 25u);
+    /* шаг колонки плотной сетки = hc*24 (при hc=4 это 96) */
+
+    /* 1. обнулить ВСЮ плотную сетку колонок 0..wc (i — 16-битный счётчик) */
+    i = ((unsigned int)wc + 1u) * (unsigned int)hc * 24u;
+    for (p = 0; p < i; p++) sh_dense[p] = 0;
+
+    /* 2. развернуть записями src в плотную сетку */
+    for (rec = src + 4; (unsigned int)rec < endp; rec += 25u) {
+        col = (*rec) >> 2;
+        row = (*rec) & 3u;
+        tbase = (((unsigned int)col * (unsigned int)hc) + (unsigned int)row) * 24u;
+        for (b = 0; b < 24u; b++) sh_dense[tbase + b] = *(rec + 1u + b);
+    }
+
+    /* 3. для каждой выходной клетки col=0..wc слить prev<<4 | cur>>4 в
+     * sh_tile[]; если тайл непустой — записать заголовок pos + 24 B в dst. */
+    cnt = 0;
+    for (J = 0; J <= wc; J++) {
+        for (r = 0; r < hc; r++) {
+            tbase = (((unsigned int)J * (unsigned int)hc) + (unsigned int)r) * 24u;
+            for (b = 0; b < 24u; b++) {
+                cur = tbase + b;
+                /* prev = dense[tbase - hc*24 + b]; при J==0 левый сосед за
+                 * сеткой = 0 (spill-колонка), иначе индекс ушёл бы в минус. */
+                pv = 0;
+                if (J > 0) pv = sh_dense[tbase - ((unsigned int)hc * 24u) + b];
+                sh_tile[b] = (unsigned char)(sh_dense[cur] >> 4) |
+                             (unsigned char)(pv << 4);
+            }
+            /* пропуск пустого тайла (после merge) */
+            {
+                unsigned char z = 1;
+                for (b = 0; b < 24u; b++) if (sh_tile[b]) { z = 0; break; }
+                if (z) continue;
+            }
+            /* запись pos + 24B */
+            o = dst + 4u + (unsigned int)cnt * 25u;
+            *o = (unsigned char)((J << 2) | r);
+            for (b = 0; b < 24u; b++) *(o + 1u + b) = sh_tile[b];
+            cnt++;
+        }
+    }
+
+    /* header */
+    *dst       = (unsigned char)(wc + 1u);
+    *(dst + 1) = hc;
+    *(dst + 2) = MARIO_HPIX;
+    *(dst + 3) = cnt;
+    return (unsigned int)(4u + (unsigned int)cnt * 25u);
+}
+
+/* Один раз при старте ROM: построить пул sh_pool и smестния sh_of[]. */
+static void mario_prebuild_shifted(void)
+{
+    unsigned char i;
+    unsigned int  off;
+    sh_fill_list();
+    off = 0;
+    for (i = 0; i < MARIO_NSPR; i++) {
+        unsigned int sz;
+        sh_of[i] = off;
+        sz = sh_build_one((const unsigned char *)all_spr[i], sh_pool + off);
+        off += sz;
+    }
+}
+
+/* Линейный поиск индекса базового префаба в all_spr; 255 = не найдено. */
+static unsigned char sh_find(const unsigned char *spr)
+{
+    unsigned char i;
+    unsigned int  p = (unsigned int)spr;
+    for (i = 0; i < MARIO_NSPR; i++)
+        if (all_spr[i] == p) return i;
+    return 255u;
+}
+
+/* Выбор варианта по фазе x: x кратно 8 — базовый префаб; x ≡ 4 mod 8 —
+ * предсдвинутый из пула. sh_find ~ 26 LDA, вызывается на кадр из draw_frame
+ * до wake-спина (в критической секции его нет). */
+static const unsigned char *sh_select(const unsigned char *spr, unsigned char x)
+{
+    unsigned char k;
+    if (!(x & 7u)) return spr;
+    k = sh_find(spr);
+    if (k == 255u) return spr;
+    return sh_pool + sh_of[k];
+}
+
 /* ------------------------------ ЛОГИКА КАДРА ---------------------------- */
 
-/* Выбрать позу [0..7] по состоянию. Суб-пиксельный сдвиг (mx & 7 == 4)
- * обрабатывается рантайм-путём render.asm (rs_frac), поэтому здесь всегда
- * отдаётся ВЫРОВНЕННЫЙ префаб — двойные _sh-варианты в ROM больше не нужны. */
+/* Выбрать позу [0..7] по состоянию. Возвращается ВСЕГДА базовый (выровненный
+ * по сетке 8 px) префаб; выбор базовый/предсдвинутый (+4 px) делается в
+ * draw_frame через sh_select по фазе x&7 — здесь про сдвиг ничего не знают. */
 static const unsigned char *pick_sprite(void)
 {
     unsigned char f;
@@ -452,13 +613,14 @@ static void draw_frame(void)
     unsigned int  wake;                /* счётчик, при котором луч под полосой  */
     unsigned int  e_spr, e_p0, e_p1;   /* footprint erase (прошлой позы)         */
     unsigned int  d_spr, d_p0, d_p1;   /* footprint draw  (новой позы)           */
-    unsigned char e_frac, d_frac;
     int           sl, ey;              /* raster старта (ожидаемый) и перечитки  */
     /* Дидагностика: сырые тики на границах; перевод в строки — после вывода. */
     unsigned int  midl_t, el_t;
     int           midl, el, wrap, margin, eln, dln;
 
-    spr = pick_sprite();
+    /* Базовый префаб позы или его предсдвинутый +4px вариант (фаза x&7) —
+     * дальше вывод идёт им как обычным выровненным спрайтом. */
+    spr = sh_select(pick_sprite(), mx);
 
     /* Строка 0 (FPS) — раньше спрайта: верхнее окно T_HUD_MAX. Сюда попадают
      * только кадры, вошедшие в draw_frame до прохода лучом строки 0 (простой и
@@ -481,18 +643,18 @@ static void draw_frame(void)
 
     /* ============ ВСЕ ВЫЧИСЛЕНИЯ — ДО ОЖИДАНИЯ ЛУЧА ============
      * erase прежнего Mariо СПАРСНО: mario_draw_sprite в режиме rs_zero=1 на
-     * ДАННЫХ ПРОШЛОГО спрайта (поза last_spr, тот же frac) обходит occupied-тайлы
-     * и dr_pz пишет 0 в те же адреса, что прошлый draw заполнил -> footprint
-     * совпадает, призраков нет, пустые клетки bounding box не затираются.
-     * draw нового — rs_zero=0 на новой позе. Адреса колонок (sprite_p0) и
-     * суб-пиксельный frac (x&7) считаются здесь, а не в критической секции. */
+     * ДАННЫХ ПРОШЛОГО варианта (last_spr — тот же префаб, что реально рисовал:
+     * базовый или предсдвинутый) обходит occupied-тайлы и dr_pz пишет 0 в те же
+     * адреса, что прошлый draw заполнил -> footprint совпадает, призраков нет,
+     * пустые клетки bounding box не затираются. draw нового — rs_zero=0 на
+     * выбранном варианте. Адреса колонок (sprite_p0) считаются здесь, а не в
+     * критической секции; суб-пиксельной фазы больше нет — она «запечена»
+     * в выбор spr через sh_select. */
     e_spr  = (unsigned int)last_spr;
-    e_frac = (unsigned char)(old_x & 7u);
     e_p0   = sprite_p0(old_x, (unsigned int)old_y);
     e_p1   = e_p0 - 0x2000u;
 
     d_spr  = (unsigned int)spr;
-    d_frac = (unsigned char)(mx & 7u);
     d_p0   = sprite_p0(mx, (unsigned int)my);
     d_p1   = d_p0 - 0x2000u;
 
@@ -500,10 +662,10 @@ static void draw_frame(void)
      * wy = max(my, old_y) + WAKE_REF. Отрисовка идёт медленнее полёта луча, но
      * redraw строки успевает закончиться до её скана, поэтому ждать НИЗА полосы
      * (MARIO_HPIX) не нужно — стартуем на середине (WAKE_REF = MARIO_HPIX/2),
-     * выигрывая ~16 строк запаса на тяжёлых кадрах. Для сдвинутого пути (frac=4,
-     * вывод КОЛОНКАМИ через ds_cc) слишком ранний старт может вернуть мерцание
-     * правых колонок прочитанных строк — если оно появится, увеличь WAKE_REF к
-     * низу. sl — raster, на котором реально начнём вывод. */
+     * выигрывая ~16 строк запаса на тяжёлых кадрах. Все варианты вывода
+     * (базовый и предсдвинутый) теперь идут одним тайловым путём dr_tile —
+     * никаких колоночных staging-циклов, поэтому ранний старт одинаково
+     * безопасен при любой фазе x. sl — raster, на котором реально начнём вывод. */
     {
         int wy = my + WAKE_REF;
         if (old_valid) { int wo = (int)old_y + WAKE_REF; if (wo > wy) wy = wo; }
@@ -528,14 +690,14 @@ static void draw_frame(void)
     timer_wait(wake);
 
     if (old_valid) {
-        rs_spr  = e_spr;  rs_frac = e_frac;  rs_p0 = e_p0;  rs_p1 = e_p1;
+        rs_spr  = e_spr;  rs_p0 = e_p0;  rs_p1 = e_p1;
         rs_zero = 1;
         mario_draw_sprite();
         rs_zero = 0;
     }
     midl_t = timer_elapsed();                   /* = строка луча на входе в draw */
 
-    rs_spr  = d_spr;  rs_frac = d_frac;  rs_p0 = d_p0;  rs_p1 = d_p1;
+    rs_spr  = d_spr;  rs_p0 = d_p0;  rs_p1 = d_p1;
     mario_draw_sprite();
     el_t = timer_elapsed();
 
@@ -632,8 +794,8 @@ void main(void)
 
     build_palette();
     mario_sfx_init();
-    mario_init_renderer();               /* zcol (нуля-тайлы frac=4) чистим ОДИН раз:
-                                          * drs_start больше не зануляет его на кадре */
+    mario_prebuild_shifted();          /* предсдвинутые +4px варианты всех поз в RAM:
+                                        * draw идёт быстрым путём при любой фазе x */
 
     /* Кадровый ISR (пуск таймера + звук) ставим ДО первой отрисовки: после
      * первого же VBlank счётчик канала 2 синхронизируется с лучом, и draw_frame

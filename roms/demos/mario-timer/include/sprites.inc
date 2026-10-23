@@ -3,6 +3,8 @@
 #define MARIO_NPOSE   8
 #define MARIO_HCELLS  4
 #define MARIO_HPIX    32
+#define MARIO_NSPR    26      /* всего поз×направлений */
+#define SH_POOL_SIZE  10204      /* RAM под предсдвиги, верхняя оценка */
 
 static const unsigned char mario1_l[] = {
     0x03, 0x04, 0x20, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
