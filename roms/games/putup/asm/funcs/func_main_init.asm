@@ -1,8 +1,9 @@
 ; Функция: func_main_init
 ; Адрес: 0x0B57
-; Размер: 262 байт кода (оригинал 0x0B57-0x0C64 = 270 Б; −11 Б inline-петли +3 Б
-;         CALL func_clear_vram), fall-through в lbl_title_key_poll. Перед меткой
-;         layout'ится 16-байтовый блок data_palette (не код).
+; Размер: 290 байт кода (оригинал 0x0B57-0x0C64 = 270 Б; −11 Б inline-петли +3 Б
+;         CALL func_clear_vram; + окна субпиксельных сдвигов подписей), fall-through в
+;         lbl_title_key_poll. Перед меткой layout'ится 16-байтовый блок
+;         data_palette (не код).
 ; Описание: Инициализация программы и вывод заставки. DI; LXI SP,0100h;
 ;           CALL func_clear_vram (выделена из inline-петли 0x0B5B..0x0B65;
 ;           очистка VRAM 0x8000-0xFFFF=0); CALL func_hw_init; var_palette_ptr=data_palette+00Fh (метка);
@@ -20,7 +21,8 @@
 ;           var_bonus_counter, var_bonus_threshold=07D0h; CALL func_clear_textbuf;
 ;           рисунок заставки
 ;           тайлами data_tile_graphics; строки str_title_logo, str_push_space,
-;           str_msx_magazine, str_hi + счёт, str_credits_koi8. Далее без возврата
+;           str_msx_magazine, str_hi + счёт, str_credits_koi8 (две строки с
+;           разными сдвигами: +4/+8 px) + str_remastered (натуральный ряд 26). Далее без возврата
 ;           переходит в lbl_title_key_poll (ожидание пробела).
 ;
 ; data_palette (16 слотов BBGGGRRR) перенесена из хвоста func_render_glyph —
@@ -175,8 +177,48 @@ loc_0C0F:
     CALL func_print_uint16      ; 0x0C51
     MVI A, 30h                  ; 0x0C54
     CALL func_print_char_at_ptr ; 0x0C56
-    LXI H, data_text_buffer+02E0h                ; 0x0C59
+    ; --- Подписи заставки: три окна субпиксельного сдвига (по требованию
+    ; пользователя). str_credits_koi8 (96 симв.) переносится на три ряда: 23
+    ; «Версия для "Вектор-06Ц" 1991», 24 пустой (наш 0FFh @idx 63 терминует
+    ; первую печать), 25 «Центр "КОМПЬЮТЕР" г.Кишинев» (метка str_credits_line2).
+    ; Сдвиги: строка 1 — на 4 px вверх (y=180..187); строка 2 — на 8 px (y=192..199);
+    ; str_remastered — ряд 26, окно SUI 04h: на 4 px НИЖЕ сетки (y=212..219).
+    ; Окна печати накапливаются: 1-е +4, 2-е ещё +4 (итого +8 над сеткой),
+    ; возврат SUI 0Ch; подпись — своё окно −4, возврат ADI 04h.
+    ; Приёмник глифа = col_page<<8 | (var_screen_mode - rowbits), адрес растёт
+    ; ВВЕРХ (func_render_glyph, §7.2 VECTOR_VERIFIED), значит сдвиг вверх =
+    ; ВРЕМЕННОЕ повышение mode на величину сдвига (канон врагов: вниз = mode -= voff).
+    ; var_screen_mode читают только блитеры (render_glyph/tile_vram_or/ed_blit_frag),
+    ; func_vblank_isr — нет (grep), окна при включённых прерываниях безопасны.
+    ; Ряды 24..26 игрой не рисуются; полоса стирается func_clear_vram на старте
+    ; уровня (CLS всей VRAM) и func_clear_textbuf (0x400 = все 32 ряда) при
+    ; пересборке заставки после GAME OVER (CMP M/RZ не блокирует: после пробелов
+    ; буфера коды клеток отличаются).
+    LDA var_screen_mode
+    ADI 04h                     ; строка 1: +4 px вверх
+    STA var_screen_mode
+    LXI H, data_text_buffer+02E0h                ; 0x0C59 (ряд 23)
     CALL func_set_text_ptr      ; 0x0C5C
     LXI H, str_credits_koi8     ; 0x0C5F
-    CALL func_print_string      ; 0x0C62
+    CALL func_print_string      ; 0x0C62 (встанет на наш 0FFh @idx 63)
+    LDA var_screen_mode
+    ADI 04h                     ; строка 2: ещё +4 (итого +8 над сеткой)
+    STA var_screen_mode
+    LXI H, data_text_buffer+0320h                ; ряд 25 (группа 3, within 1, col 0)
+    CALL func_set_text_ptr
+    LXI H, str_credits_line2
+    CALL func_print_string
+    LDA var_screen_mode
+    SUI 08h                     ; канон 0E0h обратно (сумма окон 4+4)
+    STA var_screen_mode
+    LDA var_screen_mode
+    SUI 04h                     ; подпись: на 4 px НИЖЕ сетки (y=212..219)
+    STA var_screen_mode
+    LXI H, data_text_buffer+0340h                ; ряд 26 (группа 3, within 2, col 0)
+    CALL func_set_text_ptr
+    LXI H, str_remastered
+    CALL func_print_string      ; подпись: y=212..219
+    LDA var_screen_mode
+    ADI 04h                     ; канон 0E0h обратно
+    STA var_screen_mode
     ; fall-through в lbl_title_key_poll (0x0C65)
