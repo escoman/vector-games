@@ -120,6 +120,12 @@ func_enemy_render:
     STA var_ed_voff_sv
     XRA A
     STA var_glyph_voff
+    STA var_chaser_pending    ; pending — СВЕЖИЙ флаг каждого кадра: обнуляем ДО
+    ;                             ;   проходов слотов (слот-погонщик выставит его сам
+    ;                             ;   через func_ed_stash_chaser). Иначе мусор в newly-
+    ;                             ;   claimed RAM-зоне 0x6A80 на 1-м кадре уровня дал бы
+    ;                             ;   ложный apply с мусорными var_ch_* (на обычных
+    ;                             ;   уровнях погонщика нет — apply обязан молчать).
     MVI A, 01h
     STA var_ed_slot
     CALL func_enemy_render_slot
@@ -260,8 +266,13 @@ loc_ed_codes_ok:
     JNZ loc_ed_coldiff              ; E2: горизонтальный midpoint?
     LDA var_ed_same                 ; та же клетка: возможен только новый кадр
     ORA A
-    JZ loc_ed_done                  ; коды те же -> ничего не рисуем
-    JMP loc_ed_reanim
+    JNZ loc_ed_reanim               ; сменились коды -> перерисовать
+    ; коды те же. Обычный враг: ничего не рисуем. Погонщик: всё равно перекрасить
+    ; поверх героя — в idle-кадрах между его шагами движущийся герой затирает его.
+    LDA var_ed_is_chaser
+    ORA A
+    JZ loc_ed_done
+    JMP loc_ed_repaint_chaser
 ; --- смена колонки (A = tc - dc): середина по горизонтали или snap -----------
 ; Композит НЕ зависит от направления, задаёт его только базовая колонка
 ; блита (hoff=1: base=dc, hoff=2: base=dc-1) — как у героя. Клетка отображения
@@ -383,6 +394,23 @@ loc_ed_reanim:
     STA var_ed_newv
     STA var_ed_newh
     JMP loc_ed_erase
+; Перекраска ПОКОЯЩЕГОСЯ погонщика: new := текущий disp (dr/dc, vo=ho=0 на покое).
+; Координаты уже в var_ed_*, коды var_ed_gcodes загружены оверрайдом state==09.
+; Выставляем repaint=1 и stash -> func_enemy_chaser_apply вызовет func_ed_draw_slot,
+; который НЕПРОЗРАЧно переложит погонщика поверх героя (restore фона клетки + OR).
+loc_ed_repaint_chaser:
+    LDA var_ed_dr
+    STA var_ed_newr
+    LDA var_ed_dc
+    STA var_ed_newc
+    LDA var_ed_vo
+    STA var_ed_newv
+    LDA var_ed_ho
+    STA var_ed_newh
+    MVI A, 01h
+    STA var_ch_repaint
+    CALL func_ed_stash_chaser
+    JMP loc_ed_done
 ; loc_ed_finish: (E1) убрана — «доехать» активный midpoint и snap к цели
 ; это одно и то же решение new=(tr,tc,0,0), наследие разветвления.
 loc_ed_snap:
@@ -394,13 +422,118 @@ loc_ed_snap:
     STA var_ed_newv
     STA var_ed_newh
 loc_ed_erase:
-    ; E3-6a: пересборки композита здесь больше нет — окна предсдвинуты на старте
-    ; (func_enemy_prebuild), в кадре их только ищут (func_ed_find_pre в loc_ed_draw).
-    ; var_ed_same остаётся: он решает НАДО ли рисовать покой (строка 208), а не что
-    ; собирать.
-loc_ed_eo:
+    ; E3-6a: пересборки композита в кадре нет — окна предсдвинуты на старте
+    ; (func_enemy_prebuild), в кадре их только ищут (func_ed_find_pre в draw-теле).
+    ; var_ed_same остаётся: он решает НАДО ли рисовать покой, а не что собирать.
+    ; Применение решения (erase -> commit -> draw) вынесено в func_ed_apply_slot.
+    ; ДВУХФАЗА (Hurry-up): погонщик НЕ рисуется здесь — его burst откладывается в
+    ; func_enemy_chaser_apply ПОСЛЕ func_hero_render, иначе непрозрачный erase героя
+    ; затирает погонщика. Обычные слоты (is_chaser==0) применяются как раньше.
+    LDA var_ed_is_chaser
+    ORA A
+    JNZ loc_ed_defer
+    CALL func_ed_apply_slot
+    JMP loc_ed_done
+loc_ed_defer:
+    XRA A
+    STA var_ch_repaint          ; move-burst: полный erase(src)->commit->draw(с restore dst)
+    CALL func_ed_stash_chaser   ; var_ed_* -> var_ch_*; var_chaser_pending=1
+loc_ed_done:
+    POP H
+    POP D
+    POP B
+    POP PSW
+    RET
+
+; Молча подтянуть отображение к цели (никаких отрисовок ВИДА) — для пассивных
+; состояний 0 / 9 / 0Ah. Но если отображение ОТСТАЛО от цели, старый footprint
+; всё-таки стирается (restore фона из буфера): иначе враг замрёт призраком в
+; клетке отображения до конца уровня. Клетку цели не трогаем — если disp == цель,
+; там уже нарисовано то, что нарисовала логика (egg-кадр / погонщик).
+; КОДЫ НЕ КОММИТЯТСЯ: рендерер в этом слоте ничего не рисовал, поэтому кэш кодов
+; (и, следом, композит E2) остаётся привязанным к последнему НАРИСОВАННОМУ виду.
+; Выйти из 0/9/0Ah в 1..8 посреди уровня невозможно (09h/0Ah пишет только
+; func_egg_caught, обратно — лишь func_level_loader, который вызывает init) —
+; переспаун всегда пересевает кэш через func_enemy_render_init.
+loc_ed_passive:
+    ; Решение «подтянуть к цели» готовим ДО erase: func_ed_erase_old (E3-6b)
+    ; смотрит на var_ed_new*, чтобы понять, какие колонки перекроет новая отрисовка.
+    ; Здесь новое отображение всегда выровненное (newv=newh=0) и равно цели.
+    LDA var_ed_tr
+    STA var_ed_newr
+    LDA var_ed_tc
+    STA var_ed_newc
+    XRA A
+    STA var_ed_newv
+    STA var_ed_newh
+    ; disp == цель -> стирать нечего (клетку цели рисует логика)
+    LDA var_ed_dr
+    MOV C, A
+    LDA var_ed_newr
+    SUB C
+    JNZ loc_ed_p_erase
+    LDA var_ed_dc
+    MOV C, A
+    LDA var_ed_newc
+    SUB C
+    JZ loc_ed_p_commit
+loc_ed_p_erase:
     CALL func_ed_erase_old
-loc_ed_commit:
+loc_ed_p_commit:
+    CALL func_ed_commit_disp
+    JMP loc_ed_done
+
+; --- func_ed_apply_slot: применить решение, посчитанное в var_ed_* --------------
+; Хвост func_enemy_render_slot, вынесенный без изменений: erase старого footprint
+; (func_ed_erase_old) -> коммит disp+codes -> draw нового вида. Индекс var_ed_*
+; (dr/dc/vo/ho/newr/newc/newv/newh/gcodes/is_chaser/slot) уже выставлен решением
+; вызывающего; draw-тело опирается только на память, живых регистров не несёт.
+; Регистры прозрачны: PUSH/POP PSW,B,D,H. Вызывается из func_enemy_render_slot и из
+; func_enemy_chaser_apply (отложенный burst погонщика).
+func_ed_apply_slot:
+    PUSH PSW
+    PUSH B
+    PUSH D
+    PUSH H
+    CALL func_ed_erase_old
+    POP H
+    POP D
+    POP B
+    POP PSW
+    ; Полный burst (erase+draw): сначала стирание старого footprint, затем хвост.
+    JMP func_ed_draw_slot
+
+; --- func_ed_draw_slot: commit disp/codes + draw NEW-вида ------------------------
+; Хвост func_ed_apply_slot. Вызывается также из func_enemy_chaser_apply напрямую для
+; перекраски НЕПОДВИЖНОГО погонщика: каждый кадр ПОСЛЕ героя заново наложить спрайт
+; по текущему disp (new*=disp, commit идемпотентен).
+; НЕПРОЗРАЧНОСТЬ ПОГОНЩИКА: OR-композит умеет только ДОБАВЛЯТЬ биты, поэтому биты
+; героя, попавшие в окно погонщика, OR не стирает -> спрайты сливались (жалоба
+; «герой затирает погонщика», зонд probe_chaser_overlay: потеря битов 0, объединение 76).
+; Поэтому перед OR-отрисовкой для ПОГОНЩИКА (is_chaser!=0) восстанавливаем фон 2x2
+; ТЕКУЩЕЙ клетки из текстового буфера (func_draw_tile_at_ptr): стираем пиксели героя
+; в окне, оставляем чистый лабиринт, сверху OR-им спрайт. Итог: погонщик целый, герой
+; аккуратно обрезан его квадратом (приоритет погонщика). Обычные враги НЕ трог
+; уются (у них плоский непрозрачный блит func_render_tile_vram). Рег. прозрачны.
+func_ed_draw_slot:
+    PUSH PSW
+    PUSH B
+    PUSH D
+    PUSH H
+    ; --- погонщик: непрозрачная подложка — restore фона destination 2x2 (ho=vo=0
+    ;     на покойной перекраске; на move-кадре src уже стёр erase_old'ом) ---
+    LDA var_ed_is_chaser
+    ORA A
+    JZ loc_ed_ds_nobuf
+    LDA var_ed_newr
+    CPI 18h                         ; вне поля — не рисуем и не трог
+    JNC loc_ed_ds_nobuf
+    STA var_ed_erase_rc
+    LDA var_ed_newc
+    STA var_ed_erase_rc+1
+    LXI H, var_ed_erase_rc
+    CALL func_draw_tile_at_ptr      ; восстановить лабиринт под клеткой погонщика
+loc_ed_ds_nobuf:
     CALL func_ed_commit_disp
     CALL func_ed_commit_codes
     ; --- draw: вертикальный сдвиг = вычесть ЗНАКОВЫЙ newv из var_screen_mode на
@@ -463,55 +596,117 @@ loc_ed_d3_flat:
 loc_ed_post:
     LDA var_ed_newv
     ORA A
-    JZ loc_ed_done
+    JZ loc_ed_ap_done
     MOV C, A
     LDA var_screen_mode
     ADD C
     STA var_screen_mode             ; восстановить режим экрана
-loc_ed_done:
+loc_ed_ap_done:
     POP H
     POP D
     POP B
     POP PSW
     RET
 
-; Молча подтянуть отображение к цели (никаких отрисовок ВИДА) — для пассивных
-; состояний 0 / 9 / 0Ah. Но если отображение ОТСТАЛО от цели, старый footprint
-; всё-таки стирается (restore фона из буфера): иначе враг замрёт призраком в
-; клетке отображения до конца уровня. Клетку цели не трогаем — если disp == цель,
-; там уже нарисовано то, что нарисовала логика (egg-кадр / погонщик).
-; КОДЫ НЕ КОММИТЯТСЯ: рендерер в этом слоте ничего не рисовал, поэтому кэш кодов
-; (и, следом, композит E2) остаётся привязанным к последнему НАРИСОВАННОМУ виду.
-; Выйти из 0/9/0Ah в 1..8 посреди уровня невозможно (09h/0Ah пишет только
-; func_egg_caught, обратно — лишь func_level_loader, который вызывает init) —
-; переспаун всегда пересевает кэш через func_enemy_render_init.
-loc_ed_passive:
-    ; Решение «подтянуть к цели» готовим ДО erase: func_ed_erase_old (E3-6b)
-    ; смотрит на var_ed_new*, чтобы понять, какие колонки перекроет новая отрисовка.
-    ; Здесь новое отображение всегда выровненное (newv=newh=0) и равно цели.
-    LDA var_ed_tr
-    STA var_ed_newr
-    LDA var_ed_tc
-    STA var_ed_newc
-    XRA A
-    STA var_ed_newv
-    STA var_ed_newh
-    ; disp == цель -> стирать нечего (клетку цели рисует логика)
+; --- func_ed_stash_chaser: переписать контекст применения погонщика в var_ch_* ---
+; Вызывается из func_enemy_render_slot, когда var_ed_is_chaser!=0: решение уже в
+; var_ed_*, снимки старого disp (dr/dc/vo/ho) тоже. Копируем всё, что нужно
+; func_ed_apply_slot, и выставляем var_chaser_pending, чтобы func_enemy_chaser_apply
+; доделал burst после героя (иначе непрозрачный erase героя затирает погонщика).
+func_ed_stash_chaser:
+    LDA var_ed_slot
+    STA var_ch_slot
     LDA var_ed_dr
-    MOV C, A
-    LDA var_ed_newr
-    SUB C
-    JNZ loc_ed_p_erase
+    STA var_ch_dr
     LDA var_ed_dc
-    MOV C, A
+    STA var_ch_dc
+    LDA var_ed_vo
+    STA var_ch_vo
+    LDA var_ed_ho
+    STA var_ch_ho
+    LDA var_ed_newr
+    STA var_ch_newr
     LDA var_ed_newc
-    SUB C
-    JZ loc_ed_p_commit
-loc_ed_p_erase:
-    CALL func_ed_erase_old
-loc_ed_p_commit:
-    CALL func_ed_commit_disp
-    JMP loc_ed_done
+    STA var_ch_newc
+    LDA var_ed_newv
+    STA var_ch_newv
+    LDA var_ed_newh
+    STA var_ch_newh
+    LDA var_ed_is_chaser
+    STA var_ch_is
+    LDA var_ed_gcodes
+    STA var_ch_gcodes
+    LDA var_ed_gcodes+1
+    STA var_ch_gcodes+1
+    LDA var_ed_gcodes+2
+    STA var_ch_gcodes+2
+    LDA var_ed_gcodes+3
+    STA var_ch_gcodes+3
+    MVI A, 01h
+    STA var_chaser_pending
+    RET
+
+; --- func_enemy_chaser_apply: отложенный burst погонщика (после func_hero_render) --
+; Из главного цикла каждый кадр. Если погонщик был отложен (var_chaser_pending),
+; восстановить var_ed_* из stash, отгвардить полосу погонщика и нарисовать:
+;   * var_ch_repaint==0 (погонщик ДВИГАЛСЯ) — полный burst erase(src)->commit->draw;
+;   * var_ch_repaint==1 (погонщик ПОКОИТСЯ, перекраска) — только commit+draw.
+; В ОБОИХ случаях func_ed_draw_slot для погонщика сначала восстановит фон клетки
+; (непрозрачная подложка), затем OR-нимает спрайт — иначе биты героя внутри окна
+; погонщика не стирались бы и спрайты сливались.
+; Если погонщика не было — мгновенный RET (обычные уровни byte-for-byte не затронуты).
+; var_glyph_voff на время OR-draw обнуляется (твин героя не должен просочиться в
+; позицию погонщика), затем восстанавливается — как на входе func_enemy_render.
+func_enemy_chaser_apply:
+    LDA var_chaser_pending
+    ORA A
+    RZ
+    XRA A
+    STA var_chaser_pending
+    LDA var_ch_slot
+    STA var_ed_slot
+    LDA var_ch_dr
+    STA var_ed_dr
+    LDA var_ch_dc
+    STA var_ed_dc
+    LDA var_ch_vo
+    STA var_ed_vo
+    LDA var_ch_ho
+    STA var_ed_ho
+    LDA var_ch_newr
+    STA var_ed_newr
+    LDA var_ch_newc
+    STA var_ed_newc
+    LDA var_ch_newv
+    STA var_ed_newv
+    LDA var_ch_newh
+    STA var_ed_newh
+    LDA var_ch_is
+    STA var_ed_is_chaser
+    LDA var_ch_gcodes
+    STA var_ed_gcodes
+    LDA var_ch_gcodes+1
+    STA var_ed_gcodes+1
+    LDA var_ch_gcodes+2
+    STA var_ed_gcodes+2
+    LDA var_ch_gcodes+3
+    STA var_ed_gcodes+3
+    LDA var_glyph_voff
+    STA var_ed_voff_sv
+    XRA A
+    STA var_glyph_voff
+    CALL func_raster_guard_enemy
+    LDA var_ch_repaint
+    ORA A
+    JNZ loc_cap_repaint
+    CALL func_ed_apply_slot         ; погонщик двигался: erase старого + draw нового
+    JMP loc_cap_after
+loc_cap_repaint:
+    CALL func_ed_draw_slot          ; покой: непрозрачная перекраска (restore+OR)
+loc_cap_after:
+    LDA var_ed_voff_sv
+    STA var_glyph_voff
+    RET
 
 ; --- хелперы -----------------------------------------------------------------
 ; ERASE старого footprint: restore фона ИЗ БУФЕРА. Ширина старого окна: 2 колонки,

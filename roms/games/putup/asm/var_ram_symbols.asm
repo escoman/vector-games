@@ -280,6 +280,29 @@ var_ed_bc_or:      EQU 6A70h      ; байт: 1 = предсобираемое �
                                   ; до 1 для OR-композита; 0 = обычный враг (плоский блит)
 var_ed_voff_sv:    EQU 6A71h      ; байт: сохранённый var_glyph_voff на время
                                   ; func_enemy_render (OR-путь погонщика обнуляет его)
+; --- Двухфазный рендер погонщика (Hurry-up): stash контекста отложенного burst. --
+; В Hurry-up погонщик (slot1, state==09) не рисуется внутри func_enemy_render_slot
+; (иначе непрозрачный erase героя в func_hero_render затирает его). Вместо этого
+; решение + снимки переписываются сюда, а весь burst (erase->commit->draw) откладывается
+; в func_enemy_chaser_apply ПОСЛЕ героя. Слот 2 пассивен (disp==цель, erase не пишет),
+; поэтому одного stash-набора на единственный рисуемый слот достаточно.
+; Зона 0x6A72.. свободна (var_ed_* кончается 6A71, hero-кэш с 6C00).
+var_ch_dr:          EQU 6A72h     ; байт: снимок старой строки (var_ed_dr)
+var_ch_dc:          EQU 6A73h     ; байт: старая колонка (var_ed_dc)
+var_ch_vo:          EQU 6A74h     ; байт: старый voff (var_ed_vo)
+var_ch_ho:          EQU 6A75h     ; байт: старый hoff (var_ed_ho)
+var_ch_newr:        EQU 6A76h     ; байт: решение — новая строка (var_ed_newr)
+var_ch_newc:        EQU 6A77h     ; байт: новая колонка (var_ed_newc)
+var_ch_newv:        EQU 6A78h     ; байт: новый voff (var_ed_newv)
+var_ch_newh:        EQU 6A79h     ; байт: новый hoff (var_ed_newh)
+var_ch_gcodes:      EQU 6A7Ah     ; 4 байта: коды спрайта (var_ed_gcodes)
+var_ch_is:          EQU 6A7Eh     ; байт: is_chaser (var_ed_is_chaser)
+var_ch_slot:        EQU 6A7Fh     ; байт: номер слота (var_ed_slot)
+var_chaser_pending: EQU 6A80h     ; байт: 1 = погонщик отложен, ждёт apply в этом кадре
+var_ch_repaint:     EQU 6A81h     ; байт: 1 = неподвижный погонщик — НЕПРОЗРАЧНАЯ
+                                  ;   перекраска поверх героя (erase фона ТЕКУЩЕЙ клетки
+                                  ;   + OR-спрайт); 0 = ДВИГАЛСЯ — обычный burst
+                                  ;   erase(старого)+draw(нового)
 ; --- Step 2b: RAM-кэш сдвинутых ±4px композитных колонок героя (precompute). ----
 ; Генерируется ОДИН раз при инициализации (func_build_hero_shift_cache) до первого
 ; кадра; арт героя статична -> инвалидации нет. В горячем пути midpoint — обычный

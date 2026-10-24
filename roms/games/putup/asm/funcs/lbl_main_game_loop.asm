@@ -39,6 +39,10 @@ lbl_main_game_loop:
     CALL func_hero_render       ; Step 2a (Вариант A): плавный твин+отрисовка героя
     ;                             ;   (цель = var_player_row/col; каждый кадр шаг 4px
     ;                             ;    по вертикали; на покое — без перерисовки)
+    CALL func_enemy_chaser_apply ; Двухфаз (Hurry-up): отложенный burst погонщика после
+    ;                             ;   героя (erase+commit+draw одним beam-guarded окном),
+    ;                             ;   чтобы непрозрачный erase героя не затирал погонщика.
+    ;                             ;   На обычных уровнях pending=0 -> мгновенный RET.
     ; --- гейт: два проходных кадра в 12-кадровом окне ----------------------
     LXI H, var_frame_sub
     INR M                       ; sub++ (кадр учтён), 1..12

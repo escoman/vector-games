@@ -131,3 +131,116 @@ loc_gr_ret:
     POP B
     POP PSW
     RET
+
+; Функция: func_raster_guard_enemy
+; Описание: Страж полосы отложенного burst'а погонщика (копия func_raster_guard_hero,
+;           но строки берутся из var_ed_dr (prev) и var_ed_newr (new)). Плюс
+;           нижняя граница полосы расширяется на строку при активном вертикальном
+;           спиле (var_ed_vo!=0 или var_ed_newv!=0) — покрыть 4px сдвинутого вида.
+;           Те же пороги (VISIBLE_TOP=48, elapsed=0x7500-count, MARGIN=0x2A00) и тот
+;           же антизацикливатель. Регистры прозрачны: PUSH/POP PSW,B,D,H (C/L трогает
+;           косвенно — вызывающий func_enemy_chaser_apply не держит в них живых).
+func_raster_guard_enemy:
+    PUSH PSW
+    PUSH B
+    PUSH D
+    PUSH H
+    ; --- min/max строк: new=var_ed_newr, prev=var_ed_dr ---
+    LDA var_ed_newr
+    MOV C, A                    ; C = new row
+    LDA var_ed_dr
+    MOV B, A                    ; B = prev row
+    MOV A, B
+    SUB C                       ; prev - new
+    JC  loc_gre_newlt
+    MOV D, C                    ; min = new
+    MOV E, B                    ; max = prev
+    JMP loc_gre_spill
+loc_gre_newlt:
+    MOV D, B                    ; min = prev
+    MOV E, C                    ; max = new
+loc_gre_spill:
+    ; спил вниз на 4px добавляет строку к нижней границе полосы
+    LDA var_ed_newv
+    ORA A
+    JNZ loc_gre_e1
+    LDA var_ed_vo
+    ORA A
+    JZ  loc_gre_band
+loc_gre_e1:
+    INR E                       ; max+1 строка
+loc_gre_band:
+    ; elapsed_top = 0x1200 + (min*3)<<8
+    MOV A, D
+    ADD A
+    ADD D                       ; A = min*3
+    ADI 12h                     ; + (48*96)>>8
+    MOV H, A
+    MVI L, 00h
+    SHLD var_raster_top
+    ; elapsed_bot = 0x17A0 + (max*3)<<8
+    MOV A, E
+    ADD A
+    ADD E                       ; A = max*3
+    ADI 17h                     ; + ((48+15)*96)>>8
+    MOV H, A
+    MVI L, 0A0h
+    SHLD var_raster_bot
+    MVI A, 0FFh
+    STA var_raster_cap
+loc_gre_loop:
+    CALL func_beam_count        ; DE = count
+    ; elapsed(HL) = 0x7500 - count
+    LXI H, 7500h
+    MOV A, L
+    SUB E
+    MOV L, A
+    MOV A, H
+    SBB D
+    MOV H, A                    ; HL = elapsed
+    ; (1) elapsed >= elapsed_bot ?  -> луч прошёл -> рисуем сейчас
+    LDA var_raster_bot
+    MOV E, A
+    LDA var_raster_bot+1
+    MOV D, A                    ; DE = bot
+    MOV A, L
+    SUB E
+    MOV A, H
+    SBB D
+    JNC loc_gre_ret             ; elapsed>=bot -> past
+    ; (2) elapsed >= elapsed_top ?  -> внутри [top,bot) -> ждать
+    LDA var_raster_top
+    MOV E, A
+    LDA var_raster_top+1
+    MOV D, A                    ; DE = top
+    MOV A, L
+    SUB E
+    MOV A, H
+    SBB D
+    JC  loc_gre_below           ; elapsed<top -> возможно «далеко»
+    JMP loc_gre_wait            ; top<=elapsed<bot -> луч в полосе -> ждать
+loc_gre_below:
+    ; gap = elapsed_top - elapsed ; если gap >= MARGIN -> далеко -> рисуем сейчас
+    MOV A, E
+    SUB L
+    MOV C, A                    ; gap_lo
+    MOV A, D
+    SBB H
+    MOV B, A                    ; gap_hi  (BC = gap > 0)
+    LXI D, 2A00h                ; MARGIN = 112*96
+    MOV A, C
+    SUB E
+    MOV A, B
+    SBB D
+    JNC loc_gre_ret             ; gap>=MARGIN -> безопасно сейчас
+loc_gre_wait:
+    LXI H, var_raster_cap
+    DCR M
+    JZ  loc_gre_ret             ; cap исчерпан -> bail
+    JMP loc_gre_loop
+loc_gre_ret:
+    POP H
+    POP D
+    POP B
+    POP PSW
+    RET
