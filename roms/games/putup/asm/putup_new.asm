@@ -147,6 +147,7 @@
     include "funcs/func_beam_count.asm"
     include "funcs/func_raster_guard_hero.asm"
     include "funcs/func_render_tile_vram_or.asm"
+    include "funcs/func_raster_guard_row.asm"
     include "funcs/func_render_all.asm"
     include "funcs/func_hero_render.asm"
     include "data/data_flip_tab.asm"
