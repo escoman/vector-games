@@ -21,14 +21,14 @@
 data_glyph_block:
 data_glyph_block_unpacked:
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h   ; глиф 0 @+0 [compact]
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h   ; глиф 2 (OR-формат как у героя: П3=0, П2=S, П1=S, П0/маска=¬S)
-    DEFB 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h, 042h, 04Ch, 0A0h, 0A0h, 0D0h, 0E8h, 0F3h, 0FCh
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh   ; глиф 3
-    DEFB 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh, 0FCh, 0F3h, 0E8h, 0D0h, 0A3h, 0AFh, 043h, 040h
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h   ; глиф 4
-    DEFB 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h, 042h, 032h, 005h, 005h, 00Bh, 017h, 0CFh, 03Fh
-    DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh   ; глиф 5
-    DEFB 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh, 03Fh, 0CFh, 017h, 00Bh, 0C5h, 0F5h, 0C2h, 002h
+    DEFB 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h, 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h   ; глиф 2 (OR-формат как у героя: П3=0, П2=S, П1=S, П0/маска=¬S)
+    DEFB 0BDh, 0B3h, 05Fh, 05Fh, 02Fh, 017h, 00Ch, 003h, 000h, 000h, 080h, 080h, 0C0h, 0E0h, 0F0h, 0FCh
+    DEFB 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh, 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh   ; глиф 3
+    DEFB 003h, 00Ch, 017h, 02Fh, 05Ch, 050h, 0BCh, 0BFh, 0FCh, 0F0h, 0E0h, 0C0h, 080h, 080h, 000h, 000h
+    DEFB 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h, 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h   ; глиф 4
+    DEFB 0BDh, 0CDh, 0FAh, 0FAh, 0F4h, 0E8h, 030h, 0C0h, 000h, 000h, 001h, 001h, 003h, 007h, 00Fh, 03Fh
+    DEFB 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh, 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh   ; глиф 5
+    DEFB 0C0h, 030h, 0E8h, 0F4h, 03Ah, 00Ah, 03Dh, 0FDh, 03Fh, 00Fh, 007h, 003h, 001h, 001h, 000h, 000h
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h
     DEFB 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h, 038h, 010h, 0D6h, 0FEh, 0FEh, 038h, 07Ch, 038h
     DEFB 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 038h, 010h, 07Ch, 0FEh, 07Ch, 038h, 010h, 010h
