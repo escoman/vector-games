@@ -6,10 +6,10 @@
 ;   0x12F6 game_state==2 (уклонение). 0x1296 — site релокации textbuf (500Ah).
 
 func_egg_caught:
-    LXI   H, 00E0h            ; 0x1252
+    LXI   H, 00E0h            ; 0x1252  переставить курсор скана мигания
     SHLD  var_blink_cell      ; 0x1255
-    MVI   A, 07h              ; 0x1258
-    STA   var_lives_icons     ; 0x125A
+    MVI   A, TIME_BAR_HURRYUP ; 0x1258  укоротить шкалу TIME (с 10h до 07h)
+    STA   var_time_bar_ticks  ; 0x125A
     CALL  func_draw_status_hud; 0x125D
     CALL  func_prng           ; 0x1260
     ANI   03h                 ; 0x1263
@@ -79,7 +79,7 @@ loc_12E0:
     JC    loc_12F3            ; 0x12E7
     XRA   A                   ; 0x12EA
     STA   var_scr_0906                ; 0x12EB
-    MVI   A, 02h              ; 0x12EE
+    MVI   A, GAME_STATE_EVADE ; 0x12EE  = 2: счётчик доехал -> режим evade
     STA   var_game_state                ; 0x12F0
 loc_12F3:
     JMP   loc_0D41            ; 0x12F3

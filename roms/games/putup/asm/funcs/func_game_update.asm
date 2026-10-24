@@ -69,7 +69,7 @@ loc_0D27:
     JZ loc_0D3E                 ; 0x0D2B
     LXI H, var_player_row       ; 0x0D2E
     DCR M                       ; 0x0D31
-    MVI A, 01h                  ; 0x0D32
+    MVI A, GAME_STATE_CATCH     ; 0x0D32  = 1: герой на опоре -> режим catch
     STA var_game_state          ; 0x0D34
     XRA A                       ; 0x0D37
     STA var_scr_0906                    ; 0x0D38
@@ -94,7 +94,7 @@ loc_0D41:
     CPI 07h                     ; 0x0D63
     JZ func_player_move_c        ; 0x0D65
 loc_0D68:
-    MVI A, 03h                  ; 0x0D68
+    MVI A, HERO_FRAME_BASE_STAND ; 0x0D68  база индекса тайла героя (стойка/шаг)
     STA var_work_const          ; 0x0D6A
 loc_0D6D:
     LDA var_player_col          ; 0x0D6D

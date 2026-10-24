@@ -4,7 +4,7 @@
 ; Описание: Отрисовка строки состояния HUD. Курсор 52F2h -> печатает var_level
 ;           через func_print_uint16; курсор 52EFh -> str_round ("ROUND");
 ;           курсор 5302h -> str_time ("TIME"); курсор 5307h -> печатает
-;           var_lives_icons раз символ 9Bh (значок жизни) через
+;           var_time_bar_ticks раз символ 9Bh (засечка шкалы TIME) через
 ;           func_print_char_at_ptr (цикл loc_124A).
 
 func_draw_status_hud:
@@ -22,7 +22,7 @@ func_draw_status_hud:
     CALL func_print_string      ; 0x123B
     LXI H, data_text_buffer+0307h                ; 0x123E
     CALL func_set_text_ptr      ; 0x1241
-    LDA var_lives_icons         ; 0x1244
+    LDA var_time_bar_ticks      ; 0x1244
     MOV B, A                    ; 0x1247
     MVI A, 9Bh                  ; 0x1248
 loc_124A:

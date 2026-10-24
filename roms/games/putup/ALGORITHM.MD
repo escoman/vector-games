@@ -237,8 +237,8 @@ JMP loop
 Триггер: `var_blink_type==2` в блинк-сканере (§2.8) → `func_egg_caught`
 (@0x1252, `func_gamestate_handlers.asm`). Что делает `func_egg_caught`:
 ```
-var_blink_cell = 0x00E0
-var_lives_icons = 7; func_draw_status_hud
+var_blink_cell = 0x00E0                        ; курсор скана мигания -> клетка 0xE0
+var_time_bar_ticks = 7; func_draw_status_hud   ; шкала TIME укорочена до 7 засечек
 var_egg_slot = (PRNG & 3) + 0x0A
 нарисовать tile[data_tile_2706 + var_egg_slot*4] в клетке entity1 (xcoords+1,ycoords+1)
 нарисовать tile в клетке entity2 (xcoords+2,ycoords+2)
@@ -339,7 +339,9 @@ JMP loc_0E4A
   мигания выхода). Если жизни кончились (`0xFF`) → `func_clear_textbuf` +
   `"GAME OVER"` → эпилог `loc_1447` → `loc_0BC2` → заставка/рестарт.
 - **+1 жизнь**: предмет-кольцо `0x73` (§3.2) или переход порога очков каждые
-  2000 (§3.2). `var_lives_icons` — число иконок в статус-HUD.
+  2000 (§3.2). Число жизней хранит `var_bonus_counter`; `func_draw_level_hud` рисует
+  его значками (обрезка до 6). `var_time_bar_ticks` — это засечки шкалы **TIME** в
+  статус-HUD (стартовое `0x10`), к жизням отношения не имеет.
 
 ### Состояния catch/evade (`var_game_state`)
 - `1 = catch` (`func_gamestate_catch`): проверка опоры под игроком (`>=0x77`);

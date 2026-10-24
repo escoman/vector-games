@@ -54,7 +54,7 @@ STATE2 = ISLAND + 0x58              # var_entity2_state
 XC = ISLAND + 0x5C                  # data_entity_xcoords[0]
 YC = ISLAND + 0x5F                  # data_entity_ycoords[0]
 PLAYER_RC = ISLAND + 0x3E           # var_player_row, +1 = var_player_col
-LIVES = ISLAND + 0x5B               # var_lives_icons (байт-паттерн значков HUD)
+TIME_BAR = ISLAND + 0x5B             # var_time_bar_ticks (засечки шкалы TIME в HUD; не жизни)
 BONUS = ISLAND + 0x38               # var_bonus_counter: счётчик жизней (DCR в death)
 DISP_RC = 0x6A37
 DISP_HOFF = 0x6A3D

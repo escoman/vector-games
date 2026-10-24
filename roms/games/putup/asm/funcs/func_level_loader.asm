@@ -10,7 +10,7 @@
 ;           текстового буфера (func_clear_textbuf), вычисление указателя карты
 ;           уровня в data_level_maps (карта = 0B0h байт = 16x11 тайлов),
 ;           отрисовка всех тайлов карты в буфер (func_draw_tile_to_buf),
-;           отрисовка HUD (счёт/жизни/статус), инициализация координат игрока и
+;           отрисовка HUD (счёт/статус со шкалой TIME), инициализация координат игрока и
 ;           сущностей из буфера параметров, затем JMP lbl_main_game_loop.
 ;           Ветка победы: рисует рамку, поздравление (str_congratulation) и
 ;           бонус (str_bonus), начисляет 5000 (1388h) очков, JMP 1447h
@@ -107,35 +107,44 @@ loc_19DA:
     JNZ loc_19BE                ; 0x19E0
     CALL func_draw_score_hud    ; 0x19E3
     CALL func_play_sfx          ; 0x19E6
-    MVI A, 10h                  ; 0x19E9
-    STA var_lives_icons         ; 0x19EB
+    ; --- Шкала TIME: стартовое число засечек (не жизни; см. var_time_bar_ticks) -
+    MVI A, TIME_BAR_START       ; 0x19E9
+    STA var_time_bar_ticks      ; 0x19EB
     CALL func_draw_status_hud   ; 0x19EE
-    MVI A, 01h                  ; 0x19F1
+    ; --- Стартовая позиция героя (точка спауна) ------------------------------
+    MVI A, PLAYER_START_ROW     ; 0x19F1  строка спауна
     STA var_player_row          ; 0x19F3
-    INR A                       ; 0x19F6
+    MVI A, PLAYER_START_COL     ; 0x19F6  колонка спауна (= row+1)
     STA var_player_col          ; 0x19F7
+    ; --- var_game_state = GAME_STATE_NORMAL (0): обычный режим, не catch/evade -
     XRA A                       ; 0x19FA
     STA var_game_state          ; 0x19FB
-    LDA data_level_param_buf+02h                    ; 0x19FE
-    STA var_entity1_state       ; 0x1A01
-    LDA data_level_param_buf+05h                    ; 0x1A04
-    STA var_entity2_state       ; 0x1A07
-    LDA data_level_param_buf+03h                    ; 0x1A0A
-    STA data_entity_xcoords+01h                    ; 0x1A0D
-    LDA data_level_param_buf+04h                    ; 0x1A10
-    STA data_entity_ycoords+01h                    ; 0x1A13
-    LDA data_level_param_buf+06h                    ; 0x1A16
-    STA data_entity_xcoords+02h                    ; 0x1A19
-    LDA data_level_param_buf+07h                    ; 0x1A1C
-    STA data_entity_ycoords+02h                    ; 0x1A1F
+    ; --- Загрузка начальных состояний и позиций врагов -----------------------
+    ;     data_level_param_buf = копия записи уровня (data_level_params);
+    ;     поля адресуются через LPB_* (состояния сущностей + их X/Y в спауне).
+    LDA data_level_param_buf+LPB_ENT1_STATE   ; 0x19FE
+    STA var_entity1_state                     ; 0x1A01
+    LDA data_level_param_buf+LPB_ENT2_STATE   ; 0x1A04
+    STA var_entity2_state                     ; 0x1A07
+    LDA data_level_param_buf+LPB_ENT1_X       ; 0x1A0A
+    STA data_entity_xcoords+01h               ; 0x1A0D  спаун врага 1 (слот 1)
+    LDA data_level_param_buf+LPB_ENT1_Y       ; 0x1A10
+    STA data_entity_ycoords+01h               ; 0x1A13
+    LDA data_level_param_buf+LPB_ENT2_X       ; 0x1A16
+    STA data_entity_xcoords+02h               ; 0x1A19  спаун врага 2 (слот 2)
+    LDA data_level_param_buf+LPB_ENT2_Y       ; 0x1A1C
+    STA data_entity_ycoords+02h               ; 0x1A1F
+    ; --- var_egg_seq = EGG_SEQ_START (0): сброс очереди спавна яиц ------------
     XRA A                       ; 0x1A22
-    STA var_egg_seq                    ; 0x1A23
-    LXI H, 0000h                ; 0x1A26
-    SHLD var_blink_cell                   ; 0x1A29
+    STA var_egg_seq             ; 0x1A23
+    ; --- var_blink_cell = 0: курсор скана мигания/стирания в начало буфера ----
+    LXI H, BLINK_SCAN_START     ; 0x1A26
+    SHLD var_blink_cell         ; 0x1A29
     CALL func_draw_game_objects ; 0x1A2C
-    XRA A                       ; 0x1A2F
-    STA var_move_dir                    ; 0x1A30
-    MVI A, 03h                  ; 0x1A33
+    ; --- Герой: стартовая фаза/направление -----------------------------------
+    XRA A                       ; 0x1A2F  = MOVE_DIR_START (смотрит вправо/вверх)
+    STA var_move_dir            ; 0x1A30
+    MVI A, HERO_FRAME_BASE_STAND ; 0x1A33  база индекса тайла стойки (idx=база+3*dir-1=2)
     STA var_work_const          ; 0x1A35
     CALL func_raster_timer_init ; включить секундомер растра (ch1) — растр-safe рисование героя
     ; --- Step 0: сброс кадрового каркеса перед входом в игровой цикл ---------

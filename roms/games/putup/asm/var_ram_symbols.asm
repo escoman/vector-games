@@ -15,6 +15,27 @@
 data_int_vector_reset:  EQU 0000h   ; RST 0x00 / RESET-вектор (JMP в точку входа)
 data_int_vector_rst7:   EQU 0038h   ; RST 0x38 / VBlank ISR-вектор (JMP 0x03A4)
 
+; --- Игровые стартовые константы (убираем magic-числа; значения = оригиналу) ---
+; Семантика взята из func_level_loader / func_game_update / func_gamestate_handlers.
+TIME_BAR_START          EQU 10h     ; засечек шкалы TIME при старте уровня (var_time_bar_ticks)
+TIME_BAR_HURRYUP        EQU 07h     ; засечек шкалы TIME после ловли яйца (HURRY UP)
+PLAYER_START_ROW        EQU 01h     ; стартовая строка героя (var_player_row)
+PLAYER_START_COL        EQU 02h     ; стартовая колонка героя (var_player_col)
+GAME_STATE_NORMAL       EQU 00h     ; var_game_state: 0 = обычный режим (не catch/evade)
+GAME_STATE_CATCH        EQU 01h     ; var_game_state: 1 = catch (проверка опоры под героем)
+GAME_STATE_EVADE        EQU 02h     ; var_game_state: 2 = evade (уход от погонщика)
+MOVE_DIR_START          EQU 00h     ; var_move_dir: 0 = герой смотрит вправо/вверх
+HERO_FRAME_BASE_STAND   EQU 03h     ; var_work_const: база индекса тайла стойки (idx=база+3*dir-1=2)
+EGG_SEQ_START           EQU 00h     ; var_egg_seq: сброс счётчика очереди спавна яиц
+BLINK_SCAN_START        EQU 0000h   ; var_blink_cell: курсор скана мигания/стирания = 0-я клетка
+; Смещения полей буфера параметров уровня (data_level_param_buf) — загрузка врагов:
+LPB_ENT1_STATE          EQU 02h     ; состояние сущности 1
+LPB_ENT1_X              EQU 03h     ; X спауна сущности 1
+LPB_ENT1_Y              EQU 04h     ; Y спауна сущности 1
+LPB_ENT2_STATE          EQU 05h     ; состояние сущности 2
+LPB_ENT2_X              EQU 06h     ; X спауна сущности 2
+LPB_ENT2_Y              EQU 07h     ; Y спауна сущности 2
+
 ; --- Звук VI53 (каналы) -------------------------------------------------------
 var_snd_period_ch0:     EQU data_snd_init   ; слово: период канала 0
 var_snd_period_ch1:     EQU data_snd_init+02h   ; слово: период канала 1
@@ -112,7 +133,7 @@ data_level_param_buf_end: EQU data_ram_init_image_08C3+56h
 ; --- Сущности ---------------------------------------------------------------
 var_entity1_state:      EQU data_ram_init_image_08C3+57h   ; байт: состояние сущности 1
 var_entity2_state:      EQU data_ram_init_image_08C3+58h   ; байт: состояние сущности 2
-var_lives_icons:        EQU data_ram_init_image_08C3+5Bh   ; байт: счётчик/иконки жизней
+var_time_bar_ticks:     EQU data_ram_init_image_08C3+5Bh   ; байт: число засечек шкалы TIME в status-HUD (не жизни; жизни = var_bonus_counter)
 data_entity_xcoords:    EQU data_ram_init_image_08C3+5Ch   ; 3 байта: X-координаты сущностей
 data_entity_xcoords_end: EQU data_ram_init_image_08C3+5Fh
 data_entity_ycoords:    EQU data_ram_init_image_08C3+5Fh   ; 3 байта: Y-координаты сущностей
