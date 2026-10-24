@@ -1,23 +1,26 @@
 ; Функция: func_prng
 ; Адрес: 0x1123
 ; Размер: 50 байт
-; Описание: 16-битный ГПСЧ (LFSR/сдвиг с умножением). Состояние хранится в слове
-;           1155h. HL=seed; BC=0383h (константа-множитель); DE=0; 16 итераций
-;           (loc_1132): сдвиг BC вправо через RAR, если перенос (JC пропущен) ->
-;           DE+=HL (XCHG; DAD D; XCHG); HL<<=1 (DAD H). Результат: HL&=7Fh,
-;           seed=HL, A=L+L. Возвращает A=псевдослучайный байт. Сохраняет H,D,B,PSW.
-;           Примечание: 1155h — переменная состояния ГПСЧ (не объект RDB), hex.
-;           0383h — числовая константа, не ссылка на func_hw_init.
+; Описание: 16-битный ГПСЧ — мультипликативный конгруентный (Лемер):
+;           state = (state × PRNG_MULTIPLIER) mod 2^15. Реализован побитовым
+;           умножением «русского крестьянина». Состояние в var_prng_state.
+;           HL=state; BC=PRNG_MULTIPLIER(0383h); DE=0; PRNG_ITERATIONS(16)
+;           итераций (loc_1132): сдвиг BC вправо через RAR, если перенос (JC пропущен) ->
+;           DE+=HL (XCHG; DAD D; XCHG); HL<<=1 (DAD H). Результат: HL&=PRNG_MODULUS_MASK,
+;           state=HL, A=hi+lo. Возвращает A=псевдослучайный байт. Сохраняет H,D,B,PSW.
+;           ЭНТРОПИЯ: сид НЕ сбрасывается; разнообразие даёт число вызовов —
+;           func_prng дёргается в цикле опроса заставки и каждый кадр игры,
+;           так что состояние уже прокручивается, пока игрок жмёт старт/играет.
 
 func_prng:
     PUSH H                      ; 0x1123
     PUSH D                      ; 0x1124
     PUSH B                      ; 0x1125
     PUSH PSW                    ; 0x1126
-    LHLD var_prng_seed          ; 0x1127
-    LXI B, 0383h                ; 0x112A
+    LHLD var_prng_state         ; 0x1127
+    LXI B, PRNG_MULTIPLIER      ; 0x112A
     LXI D, 0000h                ; 0x112D
-    MVI A, 10h                  ; 0x1130
+    MVI A, PRNG_ITERATIONS      ; 0x1130
 loc_1132:
     PUSH PSW                    ; 0x1132
     MOV A, B                    ; 0x1133
@@ -37,9 +40,9 @@ loc_113F:
     JNZ loc_1132                ; 0x1142
     XCHG                        ; 0x1145
     MOV A, H                    ; 0x1146
-    ANI 7Fh                     ; 0x1147
+    ANI PRNG_MODULUS_MASK       ; 0x1147
     MOV H, A                    ; 0x1149
-    SHLD var_prng_seed          ; 0x114A
+    SHLD var_prng_state         ; 0x114A
     ADD L                       ; 0x114D
     MOV L, A                    ; 0x114E
     POP PSW                     ; 0x114F

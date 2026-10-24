@@ -104,7 +104,13 @@ var_egg_seq:            EQU data_ram_init_image_08C3+4Dh   ; байт: поря�
 var_egg_slot:           EQU data_ram_init_image_08C3+59h   ; байт: выбранный слот яйца (spawn)
 var_score_delta:        EQU data_ram_init_image_08C3+28h   ; слово: дельта счёта (scratch collision-death)
 var_score_scratch:      EQU data_game_object_init+01h   ; байт: перенос/scratch (collision-death)
-var_prng_seed:          EQU var_prng_seed_init   ; слово: сид PRNG (иниц. в ROM, правится in-place)
+var_prng_state:         EQU var_prng_seed_init   ; слово: ТЕКУЩЕЕ состояние ГПСЧ (func_prng); иниц. в ROM=0x0001, правится in-place
+; --- Параметры ГПСЧ (func_prng): мультипликативный конгруентный (Лемер),
+;     state = (state × PRNG_MULTIPLIER) mod 2^15; детерминирован, энтропию даёт
+;     число вызовов (аттракт-опрос клавиши + игровой кадр), а не сброс сида.
+PRNG_MULTIPLIER:        EQU 0383h   ; константа-множитель (899)
+PRNG_ITERATIONS:        EQU 10h     ; число итерацийpartial-product (16-битное побитовое умножение)
+PRNG_MODULUS_MASK:      EQU 7Fh     ; маска обнуления бита15 => модуль 2^15
 
 ; --- Scratch-байты островка data_ram_init_image_08C3 (0x08C3..0x0924). -------
 ; Роль точно не установлена — именованы нейтрально по адресу, чтобы emit-код

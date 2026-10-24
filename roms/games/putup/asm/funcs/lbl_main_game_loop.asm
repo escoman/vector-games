@@ -34,6 +34,9 @@ lbl_main_game_loop:
     ; --- Шаг 1: кадровый синхрон + единый рендер ---------------------------
     EI                          ; разрешить INT; следующий VBlank вернёт управление
     HLT                         ; спать до RST7 (was_halt=true каждый кадр)
+    CALL func_prng              ; энтропия игрового цикла: крутить ГПСЧ один раз за
+    ;                             ;   hw-кадр на границе VBlank (вне raster-окна героя),
+    ;                             ;   так число кадров до события влияет на сид
     CALL func_render_all        ; чанк скана огня (128 ячеек из data_text_buffer)
     CALL func_enemy_render      ; Step E1: плавный vertical easing врагов (обычный блит)
     CALL func_hero_render       ; Step 2a (Вариант A): плавный твин+отрисовка героя
