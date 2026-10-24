@@ -22,7 +22,8 @@
 ;           рисунок заставки
 ;           тайлами data_tile_graphics; строки str_title_logo, str_push_space,
 ;           str_msx_magazine, str_hi + счёт, str_credits_koi8 (две строки с
-;           разными сдвигами: +4/+8 px) + str_remastered (натуральный ряд 26). Далее без возврата
+;           разными сдвигами: +4/+8 px) + str_remastered (натуральный ряд 26)
+;           + str_version (ряд 0, правый верхний угол). Далее без возврата
 ;           переходит в lbl_title_key_poll (ожидание пробела).
 ;
 ; data_palette (16 слотов BBGGGRRR) перенесена из хвоста func_render_glyph —
@@ -177,6 +178,24 @@ loc_0C0F:
     CALL func_print_uint16      ; 0x0C51
     MVI A, 30h                  ; 0x0C54
     CALL func_print_char_at_ptr ; 0x0C56
+    ; --- Версия сборки в правом верхнем углу (ряд 0, кол. 26..31, +16 px вверх) --
+    ;     Печатаем ПОСЛЕ фона-тайлов (цикл loc_0BF3). Окно var_screen_mode +0x10
+    ;     поднимает глифы на 16 px ВЫШЕ сетки (VRAM Y-инвертирована: mode↑ = выше,
+    ;     см. func_render_glyph L.70-81) — в чёрную полосу над кирпичами, в самый
+    ;     верхний угол. У ряда 0 (L=mode) есть запас ~31 px до верха столбца
+    ;     (L=0xFF), поэтому +16 px не обрезаются. data_text_buffer+001Ah =
+    ;     row0*0x20+col26; str_version = "2026.1" (6 симв. до правого края
+    ;     32-кол. экрана), терминатор 0FFh.
+    LDA var_screen_mode
+    ADI 010h                    ; +16 px вверх (окно сдвига, как у кредитов)
+    STA var_screen_mode
+    LXI H, data_text_buffer+001Ah
+    CALL func_set_text_ptr
+    LXI H, str_version
+    CALL func_print_string
+    LDA var_screen_mode
+    SUI 010h                    ; канон var_screen_mode обратно
+    STA var_screen_mode
     ; --- Подписи заставки: три окна субпиксельного сдвига (по требованию
     ; пользователя). str_credits_koi8 (96 симв.) переносится на три ряда: 23
     ; «Версия для "Вектор-06Ц" 1991», 24 пустой (наш 0FFh @idx 63 терминует

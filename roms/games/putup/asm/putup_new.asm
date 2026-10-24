@@ -141,6 +141,7 @@
     include "data/data_music_vibrato_pre_445C.asm"
     include "data/data_note_freq_table_ch0.asm"
     include "data/str_remastered.asm"
+    include "data/str_version.asm"
     include "funcs/func_hero_repaint_over.asm"
     include "funcs/func_raster_timer_init.asm"
     include "funcs/func_beam_count.asm"
