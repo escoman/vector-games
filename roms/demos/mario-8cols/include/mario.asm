@@ -509,46 +509,25 @@ rw_scan:
         ldax    d               ; A = старый тайл
         cmp     m               ; совпал с новым?
         jz      rw_scan_next
-        push    b
-        push    d
-        push    h
-        call    _rw_put_cell
-        pop     h
-        pop     d
-        pop     b
-rw_scan_next:
-        mov     a,c
-        sui     8               ; кольцевой переход (0->255) для следующей строки
-        mov     c,a
-        inx     h
-        inx     d
-        dcr     b
-        jnz     rw_scan
-rw_blk_ret:
-        ret
-
-; ---------------------------------------------------------------
-; _rw_put_cell: нарисовать одну «грязную» клетку (2 фоновые плоскости).
-;
-; Входе: A = индекс СТАРОГО тайла, HL = &tile_win[новый], C = кольцевой dst_low
-; строки. Вызывающий сохранил B/D/H (и пару BC), поэтому здесь свободно
-; портяся A,B,D,E,H,L; C не трогаем. Все промежуточные значения (новый тайл,
-; nzmask) живут в регистрах — BSS-переменных нет. Плоскость пропускается, если
-; она пуста и в старом, и в новом тайле (карта tile_nz).
-; ---------------------------------------------------------------
-        SECTION code_clib
-_rw_put_cell:
+        push    b               ; rowcount — инлайн-тело портя B, сохраним
+        push    d               ; ref-walk
+        push    h               ; new-walk
+        ; ===== инлайн рисовка грязной клетки (бывш. _rw_put_cell) =====
+        ; Входе: A = СТАРЫЙ тайл, HL = &tile_win[новый], C = кольцевой dst_low.
+        ; Убраны call/ret: на плотном экране это ~27 T на каждую грязную клетку.
         mov     b,m             ; B = новый тайл
-        ; nzmask = tile_nz[new] | tile_nz[ref] -> A (DE = база tile_nz держим)
+        ; B = (nz[ref]<<2) | nz[new]: бит0/1 = плоскости НОВОГО (copy), бит2/3 = СТАРОГО (erase)
         mov     l,a             ; A = ref ещё цел
         mvi     h,0
         lxi     d,_tile_nz
         dad     d
         mov     a,m             ; A = nz[ref]
+        add     a               ; nzref<<2 в биты 2..3 (освоб. биты 0..1 под nznew)
+        add     a
         mov     l,b
         mvi     h,0
         dad     d               ; HL = &nz[new], DE = база не тронута
-        ora     m               ; A = nzmask
+        ora     m               ; A = (nzref<<2)|nznew
         ; HL = &_tileset[new*16] (плоскость веса 8, строка 0)
         mov     l,b
         mvi     h,0
@@ -558,11 +537,39 @@ _rw_put_cell:
         dad     h
         lxi     d,_tileset
         dad     d
-        mov     b,a             ; B = nzmask (новый тайл больше не нужен)
+        mov     b,a             ; B = комбин. маска (новый тайл больше не нужен)
 
-        ; --- плоскость 0 (вес 8): копия инлайн, без call/ret (#7) ---
-        ani     01h
-        jnz     rw_p0w
+        ; --- плоскость 0 (вес 8) ---
+        ani     01h             ; bit0 = nznew.plane0
+        jnz     rw_p0w          ; новый содержит плоскость -> copy8
+        mov     a,b
+        ani     04h             ; bit2 = nzref.plane0
+        jz      rw_p0skip       ; пусто в обоих -> пропуск
+        ; erase: новый пуст, старый содержал -> залить нулями без чтения tileset
+        lda     rw_dsthi
+        mov     d,a
+        mov     e,c
+        xra     a
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        lxi     d,8
+        dad     d               ; HL += 8 -> плоскость веса 4
+        jmp     rw_p1
+rw_p0skip:
         lxi     d,8
         dad     d               ; HL += 8 -> плоскость веса 4 (пропуск)
         jmp     rw_p1
@@ -603,11 +610,36 @@ rw_p0w:
         inx     h
         dcx     d               ; HL += 8 -> плоскость веса 4
 
-        ; --- плоскость 1 (вес 4): копия инлайн (#7) ---
+        ; --- плоскость 1 (вес 4) ---
 rw_p1:
         mov     a,b
-        ani     02h
-        jz      rw_pcell_ret
+        ani     02h             ; bit1 = nznew.plane1
+        jnz     rw_p1w          ; новый содержит -> copy8
+        mov     a,b
+        ani     08h             ; bit3 = nzref.plane1
+        jz      rw_pcell_done   ; пусто в обоих -> готово
+        lda     rw_dsthi+1      ; erase: новый пуст, старый содержал -> нули
+        mov     d,a
+        mov     e,c
+        xra     a
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        stax    d
+        dcx     d
+        jmp     rw_pcell_done
+rw_p1w:
         lda     rw_dsthi+1
         mov     d,a
         mov     e,c
@@ -643,8 +675,27 @@ rw_p1:
         stax    d
         inx     h
         dcx     d
-rw_pcell_ret:
+rw_pcell_done:
+        pop     h
+        pop     d
+        pop     b
+rw_scan_next:
+        mov     a,c
+        sui     8               ; кольцевой переход (0->255) для следующей строки
+        mov     c,a
+        inx     h
+        inx     d
+        dcr     b
+        jnz     rw_scan
+rw_blk_ret:
         ret
+
+; ---------------------------------------------------------------
+; (рисовка грязной клетки инлайнена в rw_scan выше — см. _rw_block;
+;  отдельная рутина _rw_put_cell убрана, чтобы не платить call/ret на
+;  каждую клетку. Семантика та же: A=ref, HL=&new, C=dst_low, плоскости
+;  веса 8 и 4 пишутся по маске tile_nz.)
+; ---------------------------------------------------------------
 
 ; ---------------------------------------------------------------
 ; _rw_copy8: перенести 8 байт тайла (HL, вверх) в VRAM (DE, вниз).
