@@ -56,6 +56,81 @@ class Prng:
         return ((self.state >> 8) + (self.state & 0xFF)) & 0xFF
 
 
+# --- ПОРТ func_gen_level: уровни 2..15 (решаемость по построению) -----------
+# Точное зеркало ассемблерного генератора: тот же порядок вызовов func_prng и
+# те же таблицы. После rgl_rndpick флаг переноса всегда 0 (DAD без переполнения),
+# поэтому RLC даёт ровно 2*row/2*col, а RLCx4 в rgl_setcell — ровно row*16.
+RGL_COL8  = [0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x05, 0x09]  # колонки предметов/выхода
+RGL_ECOL8 = [0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]  # колонки огня/врагов
+RGL_EROW8 = [0x03, 0x04, 0x05, 0x06, 0x07, 0x05, 0x03, 0x06]  # air-ряды огня/врагов
+RGL_FRT8  = [0x0A, 0x0B, 0x0C, 0x0D, 0x0B, 0x0C, 0x0D, 0x0A]  # тайлы фруктов
+
+
+def framework_map():
+    """Шаг 1: memset 0x01, периметр 0x02 (row0/row10/col0/col15)."""
+    mp = [0x01] * 176
+    for tc in range(TILE_COLS):
+        mp[tc] = 0x02
+        mp[(TILE_ROWS - 1) * TILE_COLS + tc] = 0x02
+    for tr in range(1, TILE_ROWS - 1):
+        mp[tr * TILE_COLS] = 0x02
+        mp[tr * TILE_COLS + TILE_COLS - 1] = 0x02
+    return mp
+
+
+def _rndpick(prng, table):
+    return table[prng.next() & 7]
+
+
+def _setcell(mp, row, col, tile):
+    mp[row * TILE_COLS + col] = tile
+
+
+def gen_random_level(prng, level):
+    """Один уровень 2..15 поверх каркаса; прнг — общий сквозной поток."""
+    mp = framework_map()
+    B = 1 if level < 10 else 2
+    # ОГОНЬ: 2..5 клеток в воздухе (rows 3..7, cols 4..11)
+    off = (prng.next() & 0x03) + 2
+    for _ in range(off):
+        r = _rndpick(prng, RGL_EROW8); c = _rndpick(prng, RGL_ECOL8)
+        _setcell(mp, r, c, 0x06)
+    # ФРУКТЫ: 3 клетки на row9
+    for _ in range(3):
+        c = _rndpick(prng, RGL_COL8); t = _rndpick(prng, RGL_FRT8)
+        _setcell(mp, 9, c, t)
+    # КЛЮЧИ (яйцо 0x07) на row9, ровно B РАЗНЫХ колонок (nudge 4<->6 при коллизии)
+    for _ in range(B):
+        c = _rndpick(prng, RGL_COL8)
+        if mp[9 * TILE_COLS + c] == 0x07:      # клетка уже с яйцом -> увести
+            c = 0x06 if c == 0x04 else 0x04
+        _setcell(mp, 9, c, 0x07)
+    # СКРЫТАЯ КОРОБКА (тайл 5) в полу row10
+    c = _rndpick(prng, RGL_COL8); _setcell(mp, 10, c, 0x05)
+    # ЗАМОК (тайл 8) в полу row10 — ПОСЛЕДНИМ
+    c = _rndpick(prng, RGL_COL8); _setcell(mp, 10, c, 0x08)
+    # ВРАГ-1: горизонтальный state 1/2, air-row 3..7 + клетка-отражатели
+    s1 = (prng.next() & 0x01) + 1
+    r1 = _rndpick(prng, RGL_EROW8); y1 = (r1 * 2) & 0xFF
+    c1 = _rndpick(prng, RGL_ECOL8); x1 = (c1 * 2) & 0xFF
+    _setcell(mp, r1, 2, 0x03); _setcell(mp, r1, 13, 0x03)
+    # ВРАГ-2
+    s2 = (prng.next() & 0x01) + 1
+    r2 = _rndpick(prng, RGL_EROW8); y2 = (r2 * 2) & 0xFF
+    c2 = _rndpick(prng, RGL_ECOL8); x2 = (c2 * 2) & 0xFF
+    _setcell(mp, r2, 2, 0x03); _setcell(mp, r2, 13, 0x03)
+    # ВЫХОД: col из rgl_col8 на row9
+    ec = _rndpick(prng, RGL_COL8); ex = (ec * 2) & 0xFF
+    desc = [ex, 0x12, s1, x1, y1, s2, x2, y2]
+    return mp, desc
+
+
+def gen_levels(seed):
+    """Уровни 2..15 из одного сквозного потока func_prng, засеянного seed."""
+    p = Prng(seed)
+    return {lvl: gen_random_level(p, lvl) for lvl in range(2, 16)}
+
+
 # --- загрузка кураторского уровня 1 из asm ----------------------------------
 def _grab_defb(txt, label):
     m = re.search(r'^' + re.escape(label) + r':\s*$', txt, re.M)
@@ -91,12 +166,11 @@ def load_curated_level1(asm_path):
 
 
 # --- pathfinder: решает карту поиском пути ----------------------------------
-def solve(mp, desc, verbose=False):
+def solve(mp, desc, level=1, verbose=False):
     """BFS по состояниям (tr,tc,carried,seq,frozenset(collected)).
     Возвращает (True, путь) если уровень проходим, иначе (False, причина)."""
     door_tc = desc[0] // 2
     door_tr = desc[1] // 2
-    level = 1  # уровень 1 -> B=1
     B = 1 if level < 10 else 2
 
     def tile(tr, tc):
@@ -255,6 +329,38 @@ def run_negative_tests(mp0, desc0):
     return all_ok
 
 
+def do_gen_seed(seed):
+    """Печатает карты уровней 2..15 для заданного сида — для побайтовой
+    сверки с дампом памяти эмулятора (кросс-чек порта func_gen_level)."""
+    print('# seed=0x%04X' % (seed & 0x7FFF))
+    for lvl, (mp, desc) in sorted(gen_levels(seed).items()):
+        print('LVL %d desc=%s' % (lvl, ' '.join('%02X' % b for b in desc)))
+        for tr in range(TILE_ROWS):
+            row = mp[tr * TILE_COLS:(tr + 1) * TILE_COLS]
+            print('  ' + ' '.join('%02X' % v for v in row))
+
+
+def do_sweep(n):
+    """Прогон решаемости уровней 2..15 на сидах 1..n: каждая карта обязана
+    пройти и гейты §10, и pathfinder."""
+    total = 0
+    fails = []
+    for seed in range(1, n + 1):
+        for lvl, (mp, desc) in sorted(gen_levels(seed).items()):
+            total += 1
+            errs = check_invariants(mp, desc)
+            ok, info = solve(mp, desc, lvl)
+            if errs or not ok:
+                why = '; '.join(errs) if errs else info
+                fails.append((seed, lvl, why))
+    print('Прогон: %d уровней (seed 1..%d), отказов: %d' % (total, n, len(fails)))
+    for seed, lvl, why in fails[:40]:
+        print('  FAIL seed=%d lv=%d: %s' % (seed, lvl, why))
+    if len(fails) > 40:
+        print('  ... ещё %d' % (len(fails) - 40))
+    return not fails
+
+
 def main():
     ap = argparse.ArgumentParser(description='Гейты решаемости RANDOM PUTUP')
     here = os.path.dirname(os.path.abspath(__file__))
@@ -264,7 +370,17 @@ def main():
                     help='пока поддержан только 1 (кураторский)')
     ap.add_argument('--selftest', action='store_true',
                     help='негатив-тест строгости поиска пути на мутациях уровня 1')
+    ap.add_argument('--gen-seed', type=lambda s: int(s, 0), metavar='N',
+                    help='напечатать карты уровней 2..15 для сида N (кросс-чек, dec/hex)')
+    ap.add_argument('--sweep', type=int, metavar='N', default=0,
+                    help='прогнать решаемость уровней 2..15 на сидах 1..N')
     args = ap.parse_args()
+
+    if args.gen_seed is not None:
+        do_gen_seed(args.gen_seed)
+        return
+    if args.sweep:
+        sys.exit(0 if do_sweep(args.sweep) else 1)
 
     if args.level != 1:
         sys.exit('Stage 4 v1: реализован уровень 1; уровни 2..15 '
