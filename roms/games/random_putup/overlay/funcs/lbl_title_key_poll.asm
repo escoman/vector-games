@@ -8,8 +8,12 @@
 ;           CALL func_prng (энтропия аттракта); XRA A; PUSH B;
 ;           CALL func_check_start_key; POP B; ORA A; JNZ loc_0C9D (пробел/SHIFT
 ;           нажат). Иначе DCX B; MOV A,C; ORA B; JNZ loc_0C68 (отсчёт таймаута).
-;           По таймауту: бегущая строка в буфере 5180h (32 символа, переключение
-;           'u'(75h)<->0FEh через func_draw_char_at_hl), затем JMP lbl_title_key_poll.
+;           По таймауту: анимация ОГНЯ заставки — проход по 32 символам ряда
+;           огня, переключение 'u'(75h)<->0FEh через func_draw_char_at_hl, затем
+;           JMP lbl_title_key_poll. RANDOM PUTUP: нижняя лента тайлов (огонь+замки)
+;           в Stage-3 опущена на 2 знакоместа вниз (ряд 12->14, зазор под 10-
+;           рядным логотипом), поэтому цель анимации сдвинута с +180h на +1C0h
+;           (0x75 теперь на знакоряду 14), иначе цикл сканировал бы пустой ряд.
 ;           При нажатии (loc_0C9D): CALL func_music_start_track; JMP func_level_loader.
 ; RANDOM PUTUP (Stage 2): перед входом в игру (после старта музыки) вызываем
 ;   func_gen_level — он заполняет ПЕРИМЕТР всех 15 карт стеной и прописывает
@@ -40,7 +44,7 @@ loc_0C68:
     MOV A, C                    ; 0x0C73
     ORA B                       ; 0x0C74
     JNZ loc_0C68                ; 0x0C75
-    LXI H, data_text_buffer+0180h                ; 0x0C78
+    LXI H, data_text_buffer+01C0h                ; 0x0C78  RANDOM PUTUP: ряд ОГНЯ = знакоряд 14 (0x75 на кол.4..11 и 20..27); в оригинале был ряд 12 (+180h), лента опущена на 2 ряда
     MVI B, 20h                  ; 0x0C7B
 loc_0C7D:
     MOV A, M                    ; 0x0C7D
