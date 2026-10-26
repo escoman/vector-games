@@ -157,7 +157,13 @@ rgl_frt:
     STA rgl_off
     JNZ rgl_frt
 
-    ; ---- КЛЮЧИ (яйцо 0x07) на row9, ровно B штук ----
+    ; ---- КЛЮЧИ (яйцо 0x07) на row9, ровно B РАЗНЫХ колонок ----
+    ; Коллизия двух независимых rndpick(rgl_col8) давала 1 яйцо при пороге B=2
+    ; (уровни 10..15) => var_egg_seq не доходил до B => уровень нерешаем.
+    ; Ловит validate_random.py (--sweep). Лечим сдвигом на заведомо свободную
+    ; колонку (4<->6): клетка (9,col)==0x07 только если там уже лежит яйцо.
+    ; Число вызовов func_prng не меняется (B штук) => поток врагов/двери и
+    ; уровни 2..9 (B=1) не затронуты.
     LDA rgl_run
     STA rgl_off
 rgl_egg:
@@ -166,6 +172,20 @@ rgl_egg:
     STA rgl_col
     MVI A, 09h
     STA rgl_row
+    LHLD rgl_mapbase
+    CALL rgl_getcell                    ; A = map(9,col)
+    CPI 07h
+    JNZ rgl_egg_place                   ; клетка свободна от яйца — кладём
+    LDA rgl_col                         ; коллизия: увести на 4<->6
+    CPI 04h
+    JNZ rgl_egg_to4
+    MVI A, 06h
+    JMP rgl_egg_setc
+rgl_egg_to4:
+    MVI A, 04h
+rgl_egg_setc:
+    STA rgl_col
+rgl_egg_place:
     MVI A, 07h
     STA rgl_tmp
     LHLD rgl_mapbase
@@ -366,6 +386,23 @@ rgl_setcell:
     DAD B                               ; HL = &клетки
     LDA rgl_tmp
     MOV M, A
+    RET
+
+; rgl_getcell: HL = база КАРТЫ уровня; A = map(rgl_row*16 + rgl_col).
+;   Зеркало rgl_setcell без записи. Clobbers: A,B,C,H,L.
+rgl_getcell:
+    LDA rgl_row
+    RLC
+    RLC
+    RLC
+    RLC                                 ; A = row*16
+    MOV C, A
+    MVI B, 000h
+    LDA rgl_col
+    ADD C
+    MOV C, A                            ; BC = row*16 + col
+    DAD B                               ; HL = &клетки
+    MOV A, M
     RET
 
 ; --- 8-байтные таблицы случайного выбора (индекс = func_prng & 7) -----------
