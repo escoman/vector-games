@@ -16,5 +16,15 @@ rgl_tmp:   EQU 6A87h   ; байт: временное значение (код �
 rgl_cnt:   EQU 6A88h   ; байт: счётчик проходов/попыток
 rgl_row:   EQU 6A89h   ; байт: текущая строка карты (0..10)
 rgl_col:   EQU 6A8Ah   ; байт: текущая колонка карты (0..15)
-rgl_run:   EQU 6A8Bh   ; байт: длина сегмента (wall/fire-участка)
-rgl_off:   EQU 6A8Ch   ; байт: смещение сегмента внутри ряда
+rgl_run:   EQU 6A8Bh   ; байт: длина сегмента / число ключей B (fire/wall-участки)
+rgl_off:   EQU 6A8Ch   ; байт: внутренний счётчик цикла (scatter fire/fruit/egg)
+
+; --- Состояние поуровневого randomizer-цикла (Stage 2b) ---------------------
+rgl_mapbase:  EQU 6A8Dh  ; 2 байта: база текущей КАРТЫ (LHLD/SHLD), +176/итер
+rgl_descbase: EQU 6A8Fh  ; 2 байта: база текущего ОПИСАТЕЛЯ, +8/итер
+rgl_s1:  EQU 6A92h   ; байт: state врага-1 (1/2 — горизонтальный)
+rgl_x1:  EQU 6A93h   ; байт: char-X врага-1 (=2*col)
+rgl_y1:  EQU 6A94h   ; байт: char-Y врага-1 (=2*row)
+rgl_s2:  EQU 6A95h   ; байт: state врага-2
+rgl_x2:  EQU 6A96h   ; байт: char-X врага-2
+rgl_y2:  EQU 6A97h   ; байт: char-Y врага-2
