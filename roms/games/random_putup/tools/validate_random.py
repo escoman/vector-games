@@ -64,6 +64,8 @@ RGL_COL8  = [0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x05, 0x09]  # колонки �
 RGL_ECOL8 = [0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]  # колонки огня/врагов
 RGL_EROW8 = [0x03, 0x04, 0x05, 0x06, 0x07, 0x05, 0x03, 0x06]  # air-ряды огня/врагов
 RGL_FRT8  = [0x0A, 0x0B, 0x0C, 0x0D, 0x0B, 0x0C, 0x0D, 0x0A]  # тайлы фруктов
+RGL_PCOL8 = [0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x04, 0x06]  # стартовые колонки платформ (<=8)
+RGL_PROW8 = [0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x06]  # #3: ряд платформ (row8 = запрыг. с земли)
 
 
 def framework_map():
@@ -90,11 +92,19 @@ def gen_random_level(prng, level):
     """Один уровень 2..15 поверх каркаса; прнг — общий сквозной поток."""
     mp = framework_map()
     B = 1 if level < 10 else 2
-    # ОГОНЬ: 2..5 клеток в воздухе (rows 3..7, cols 4..11)
-    off = (prng.next() & 0x03) + 2
-    for _ in range(off):
-        r = _rndpick(prng, RGL_EROW8); c = _rndpick(prng, RGL_ECOL8)
-        _setcell(mp, r, c, 0x06)
+    # ОГОНЬ (#4) перенесён ПОСЛЕ мебели (см. rgl_fire_draw ниже): низ-стилю нужен
+    # routeRight — правая колонка обязательного маршрута, чтобы класть огонь в
+    # row10 ПРАВЕЕ неё (герой туда не доходит, опора под путём цела).
+    # ПЛАТФОРМЫ (Stage 5 / #3): 1..2 уступа (tile 0x02). Порядок consume как в asm:
+    # count=next(); на платформу: row(rgl_prow8),col(rgl_pcol8),length.
+    # #3: row8 = единственная высота, запрыгиваемая с пола row9 за 1 прыжок
+    # (герой ногами на row7, опираясь на solid row8); row6 — верхняя полка.
+    for _ in range((prng.next() & 0x01) + 1):
+        r = _rndpick(prng, RGL_PROW8)
+        c = _rndpick(prng, RGL_PCOL8)
+        length = (prng.next() & 0x03) + 3
+        for i in range(length):
+            _setcell(mp, r, c + i, 0x02)
     # ФРУКТЫ: 3 клетки на row9
     for _ in range(3):
         c = _rndpick(prng, RGL_COL8); t = _rndpick(prng, RGL_FRT8)
@@ -105,22 +115,93 @@ def gen_random_level(prng, level):
         if mp[9 * TILE_COLS + c] == 0x07:      # клетка уже с яйцом -> увести
             c = 0x06 if c == 0x04 else 0x04
         _setcell(mp, 9, c, 0x07)
-    # СКРЫТАЯ КОРОБКА (тайл 5) в полу row10
-    c = _rndpick(prng, RGL_COL8); _setcell(mp, 10, c, 0x05)
-    # ЗАМОК (тайл 8) в полу row10 — ПОСЛЕДНИМ
-    c = _rndpick(prng, RGL_COL8); _setcell(mp, 10, c, 0x08)
-    # ВРАГ-1: горизонтальный state 1/2, air-row 3..7 + клетка-отражатели
-    s1 = (prng.next() & 0x01) + 1
+    # МЕБЕЛЬ (Stage 5-fix): выход + коробка + B замков на РАЗНЫХ колонках.
+    # Замок одноразовый (loc_106B меняет 0x79->0x7B) => для B=2 нужно 2 замка;
+    # выход не над замком (base != lock-индексы). Индексы rgl_col8 различны.
+    base = prng.next() & 7
+    loff = (prng.next() & 3) + 1                        # 1..4
+    ex = (RGL_COL8[base] * 2) & 0xFF                   # char-X выхода
+    door_col = RGL_COL8[base]                          # колонка двери (#4)
+    _setcell(mp, 10, RGL_COL8[(base + 6) & 7], 0x05)   # скрытая коробка
+    _setcell(mp, 10, RGL_COL8[(base + loff) & 7], 0x08)        # замок-1
+    if B == 2:
+        _setcell(mp, 10, RGL_COL8[(base + loff + 1) & 7], 0x08)  # замок-2
+    # ---- ОГОНЬ (#4): два стиля, разбор бита4 func_prng. Зеркало rgl_fire_draw.
+    #  решаемость по построению цела: стиль P — огонь на кирпичной полке (rows7/8,
+    #  row9/row10 не трогает); стиль B — огонь в row10 правее routeRight (герой не
+    #  доходит). Нет места (routeRight>=13) -> откат к стилю P.
+    b = prng.next()
+    fcount = (b & 0x03) + 2                            # 2..5 клеток
+    fstyle = (b >> 4) & 1                              # 0=platform, 1=bottom
+    if fstyle == 1:
+        rmax = door_col                                # правосторонняя нужная колонка
+        for fc in range(14, 1, -1):                    # 14..2, первый справа egg/lock
+            if mp[9 * TILE_COLS + fc] in (0x07, 0x08) or \
+               mp[10 * TILE_COLS + fc] in (0x07, 0x08):
+                if fc > rmax:
+                    rmax = fc
+                break
+        if rmax >= 13:
+            fstyle = 0                                 # нет места справа -> платформа
+    if fstyle == 1:
+        fc = rmax + 2                                  # буфер 1 колонка (rmax+1)
+        while fc < 15 and fcount > 0:                  # col15 = правая стена
+            if mp[10 * TILE_COLS + fc] == 0x02:         # только свободный пол-стена
+                mp[10 * TILE_COLS + fc] = 0x06
+                fcount -= 1
+            fc += 1
+    else:
+        for _ in range(fcount):
+            c = _rndpick(prng, RGL_ECOL8)              # 4..11
+            _setcell(mp, 8, c, 0x02)                   # опора-кирпич
+            _setcell(mp, 7, c - 1, 0x02)               # левый кирпич
+            _setcell(mp, 7, c, 0x06)                   # огонь
+            _setcell(mp, 7, c + 1, 0x02)               # правый кирпич
+    # ВРАГИ: тип из тех же 3 вызовов func_prng на слот (поток не смещается).
+    def _est(b):
+        typ = b & 0x03
+        sub = (b >> 2) & 0x03
+        if typ in (0, 1):          return typ, 1 + (sub & 1)   # ходок 1/2
+        if typ == 2:               return typ, 3 + (sub & 1)   # ворона 3/4
+        return typ, 5 + (sub & 3)                              # вертолёт 5..8
+
+    def _cage(typ, r, c):
+        if typ in (0, 1):                       # ходок: боковые отражатели
+            _setcell(mp, r, 2, 0x03); _setcell(mp, r, 13, 0x03)
+        elif typ == 2:                          # ворона: вверх/вниз по колонке
+            _setcell(mp, 2, c, 0x03); _setcell(mp, 8, c, 0x03)
+
+    frame = False
+    # ВРАГ-1
+    typ1, s1 = _est(prng.next())
     r1 = _rndpick(prng, RGL_EROW8); y1 = (r1 * 2) & 0xFF
     c1 = _rndpick(prng, RGL_ECOL8); x1 = (c1 * 2) & 0xFF
-    _setcell(mp, r1, 2, 0x03); _setcell(mp, r1, 13, 0x03)
+    _cage(typ1, r1, c1)
+    if typ1 == 3:
+        frame = True
     # ВРАГ-2
-    s2 = (prng.next() & 0x01) + 1
+    typ2, s2 = _est(prng.next())
     r2 = _rndpick(prng, RGL_EROW8); y2 = (r2 * 2) & 0xFF
+    if y2 == y1:                                 # #1: не в одном air-ряду (3<->5)
+        r2 = 0x03 if r1 != 0x03 else 0x05
+        y2 = (r2 * 2) & 0xFF
     c2 = _rndpick(prng, RGL_ECOL8); x2 = (c2 * 2) & 0xFF
-    _setcell(mp, r2, 2, 0x03); _setcell(mp, r2, 13, 0x03)
-    # ВЫХОД: col из rgl_col8 на row9
-    ec = _rndpick(prng, RGL_COL8); ex = (ec * 2) & 0xFF
+    _cage(typ2, r2, c2)
+    if typ2 == 3:
+        frame = True
+    # РАМКА-АРЕНА (если есть вертолёт): row2/row8 (cols2..13) + col2/col13
+    # (rows2..8) — замкнутый контур держит хоминг в rows3..7/cols3..12.
+    # #3: НЕ перекрашиваем уже твёрдую стену-платформу (0x02) — она сама служит
+    # полом арены (solid блокирует вертолёт) и остаётся запрыгиваемой для героя.
+    def _paint_reflect(mp, row, col):
+        if mp[row * TILE_COLS + col] != 0x02:      # стену платформы не трогаем
+            _setcell(mp, row, col, 0x03)
+    if frame:
+        for tc in range(2, 14):
+            _paint_reflect(mp, 2, tc); _paint_reflect(mp, 8, tc)
+        for tr in range(2, 9):
+            _paint_reflect(mp, tr, 2); _paint_reflect(mp, tr, 13)
+    # ВЫХОД уже вычислен в МЕБЕЛИ (ex = 2*col8[base]); desc[1]=Y=row9=18.
     desc = [ex, 0x12, s1, x1, y1, s2, x2, y2]
     return mp, desc
 
@@ -167,8 +248,10 @@ def load_curated_level1(asm_path):
 
 # --- pathfinder: решает карту поиском пути ----------------------------------
 def solve(mp, desc, level=1, verbose=False):
-    """BFS по состояниям (tr,tc,carried,seq,frozenset(collected)).
-    Возвращает (True, путь) если уровень проходим, иначе (False, причина)."""
+    """BFS по состояниям (tr,tc,carried,coll,used). seq = len(used) — число
+    сданных яиц; каждый замок используется РОВНО один раз (после депозита
+    loc_106B меняет глиф 0x79->0x7B, повторный депозит невозможен). Победа:
+    seq>=B и герой на клетке двери."""
     door_tc = desc[0] // 2
     door_tr = desc[1] // 2
     B = 1 if level < 10 else 2
@@ -178,11 +261,13 @@ def solve(mp, desc, level=1, verbose=False):
             return mp[tr * TILE_COLS + tc]
         return 2  # вне карты = стена
 
+    locks = {(i // TILE_COLS, i % TILE_COLS)
+             for i, v in enumerate(mp) if v == LOCK}
+
     def passable(tr, tc, seq):
-        idx = tile(tr, tc)
         if tr == door_tr and tc == door_tc and seq >= B:
             return True  # открытая дверь проходима
-        return not solid(idx)
+        return not solid(tile(tr, tc))
 
     def fall(tr, tc, seq):
         while tr + 1 < TILE_ROWS and passable(tr + 1, tc, seq):
@@ -193,31 +278,34 @@ def solve(mp, desc, level=1, verbose=False):
             for i, v in enumerate(mp) if v == EGG}
 
     start = (fall(START_TR, START_TC, 0), START_TC)
-    # состояние: tr, tc, carried, seq, collected(frozenset)
-    init = (start[0], start[1], 0, 0, frozenset())
+    # состояние: tr, tc, carried, coll(яйца), used(замки)
+    init = (start[0], start[1], 0, frozenset(), frozenset())
     seen = {init}
     q = deque([(init, [init])])
 
     def win(st):
-        return st[3] >= B and (st[0], st[1]) == (door_tr, door_tc)
+        return len(st[4]) >= B and (st[0], st[1]) == (door_tr, door_tc)
 
     while q:
-        (tr, tc, carried, seq, coll), path = q.popleft()
-        if win((tr, tc, carried, seq, coll)):
+        (tr, tc, carried, coll, used), path = q.popleft()
+        if win((tr, tc, carried, coll, used)):
             return True, path
+        seq = len(used)
 
         # подбор яйца под ногами (принудительно при стоянии на тайле 7)
-        st0 = (tr, tc, carried, seq, coll)
+        st0 = (tr, tc, carried, coll, used)
         if tile(tr, tc) == EGG and (tr, tc) not in coll:
-            st0 = (tr, tc, carried + 1, seq, coll | {(tr, tc)})
+            st0 = (tr, tc, carried + 1, coll | {(tr, tc)}, used)
             if st0 not in seen:
                 seen.add(st0)
                 q.append((st0, path + [st0]))
-        tr, tc, carried, seq, coll = st0
+        tr, tc, carried, coll, used = st0
+        seq = len(used)
 
-        # депозит: стою НА замке (тайл под ногами == LOCK), несу 1..2 яйца
-        if tile(tr + 1, tc) == LOCK and 1 <= carried <= 2:
-            ns = (tr, tc, carried - 1, seq + 1, coll)
+        # депозит: стою НА НЕИСПОЛЬЗОВАННОМ замке (клетка под ногами), несу 1..2
+        below = (tr + 1, tc)
+        if below in locks and below not in used and 1 <= carried <= 2:
+            ns = (tr, tc, carried - 1, coll, used | {below})
             if ns not in seen:
                 seen.add(ns)
                 q.append((ns, path + [ns]))
@@ -239,10 +327,9 @@ def solve(mp, desc, level=1, verbose=False):
                 if passable(atr, ntc, seq):
                     moves.append((fall(atr, ntc, seq), ntc))
         for ntr, ntc in moves:
-            ns = (ntr, ntc, carried, seq, coll)
-            # пересбор яйца в новой точке
+            ns = (ntr, ntc, carried, coll, used)
             if tile(ntr, ntc) == EGG and (ntr, ntc) not in coll:
-                ns = (ntr, ntc, carried + 1, seq, coll | {(ntr, ntc)})
+                ns = (ntr, ntc, carried + 1, coll | {(ntr, ntc)}, used)
             if ns not in seen:
                 seen.add(ns)
                 q.append((ns, path + [ns]))
@@ -251,27 +338,78 @@ def solve(mp, desc, level=1, verbose=False):
 
 
 # --- инварианты §10 ----------------------------------------------------------
-def check_invariants(mp, desc):
+def check_invariants(mp, desc, level=1):
     errs = []
+    B = 1 if level < 10 else 2
     eggs = [i for i, v in enumerate(mp) if v == EGG]
     locks = [i for i, v in enumerate(mp) if v == LOCK]
+    lock_cols = {i % TILE_COLS for i in locks}
     if not eggs:
         errs.append('нет ключа (тайл 7)')
+    if len(eggs) < B:
+        errs.append('ключей %d < требуется %d' % (len(eggs), B))
     if not locks:
         errs.append('нет замка (тайл 8)')
+    # замок одноразовый => нужно минимум B замков на РАЗНЫХ колонках
+    if len(locks) < B:
+        errs.append('замков %d < требуется %d (замок одноразовый)' % (len(locks), B))
+    if len(lock_cols) < len(locks):
+        errs.append('замки на одинаковых колонках')
     dtr, dtc = desc[1] // 2, desc[0] // 2
     if (dtr, dtc) in {(0, 0), (0, 15), (10, 0), (10, 15)}:
         errs.append('выход в углу (%d,%d)' % (dtr, dtc))
-    # ровно 2 врага, состояния 1..8, не на клетке старта
+    if dtc in lock_cols:
+        errs.append('выход прямо над замком (col %d) -> мгновенная победа' % dtc)
+    # ровно 2 врага, клетка containment, не на клетке старта/коридоре
+    # frame_present: замкнутая рамка-арена (держит 2D-преследователя в air-области).
+    # #3: границей арены считает ЛЮБУЮ блокирующую врага клетку — отражатель 0x03
+    # ИЛИ стену-платформу 0x02 (обе TL!=0x20 => враг отскакивает). Ряд row8 может
+    # содержать платформы, поэтому чисто ==0x03 уже неверно.
+    _blk = (0x02, 0x03)
+    frame_present = (all(mp[2 * TILE_COLS + tc] in _blk for tc in range(2, 14))
+                     and all(mp[8 * TILE_COLS + tc] in _blk for tc in range(2, 14))
+                     and all(mp[tr * TILE_COLS + 2] in _blk for tr in range(2, 9))
+                     and all(mp[tr * TILE_COLS + 13] in _blk for tr in range(2, 9)))
+    epos = []
     for base, name in ((2, 'ent1'), (5, 'ent2')):
         st, ex, ey = desc[base], desc[base + 1] // 2, desc[base + 2] // 2
+        # states 9/10 = динамический погонщик Hurry-Up, в параметрах быть не должен
         if not (1 <= st <= 8):
             errs.append('%s: состояние %d вне 1..8' % (name, st))
         if (ey, ex) == (START_TR, START_TC):
             errs.append('%s: стартует на клетке героя' % name)
-    # периметр solid (стена 2; в полу допустим замок 8 — он тоже solid)
+        # враг не должен стоять на выигрышном коридоре row9 или на col1/col0/col15
+        if ey == 9:
+            errs.append('%s: на коридоре row9 (перекрыт выигрышный путь)' % name)
+        if ex <= 1 or ex >= 15:
+            errs.append('%s: вне safe-колонок (col %d)' % (name, ex))
+        # клетка containment актуальна только для random-уровней (2..15);
+        # кураторский L1 — эталон с открытой ареной, проверок клетки не требует.
+        if level >= 2:
+            # 2D-преследователь (5..8) обязан быть заперт рамкой-ареной
+            if 5 <= st <= 8 and not (frame_present and 3 <= ey <= 7 and 3 <= ex <= 12):
+                errs.append('%s: вертолёт без замкнутой рамки (state %d @ %d,%d)' % (name, st, ey, ex))
+            # ворона (3/4): клетки сверху/снизу своей колонки (или рамка)
+            if 3 <= st <= 4 and not (frame_present or (mp[2 * TILE_COLS + ex] == 0x03
+                                   and mp[8 * TILE_COLS + ex] == 0x03)):
+                errs.append('%s: ворона без вертикальной клетки (col %d)' % (name, ex))
+            # ходок (1/2): боковые клетки своего ряда (или рамка)
+            if 1 <= st <= 2 and not (frame_present or (mp[ey * TILE_COLS + 2] == 0x03
+                                  and mp[ey * TILE_COLS + 13] == 0x03)):
+                errs.append('%s: ходок без боковой клетки (row %d)' % (name, ey))
+        epos.append((ey, ex))
+    # #1: два врага не должны сливаться в одного (разные air-ряды)
+    if epos and epos[0] == epos[1]:
+        errs.append('оба врага в одной точке %s -> видно одного' % (epos[0],))
+    if len({r for (r, _c) in epos}) < len(epos):
+        errs.append('враги в одном air-ряду (могут визуально сливаться)')
+    # периметр solid (стена 2; в полу допустим замок 8 — он тоже solid).
+    # #4: в НИЖНЕМ ряду row10 разрешён ОГОНЬ 0x06 как граница (пользователь
+    # авторизовал «вместо стены огонь»); потолок row0 обязателен solid.
     for tc in range(TILE_COLS):
-        if not solid(mp[0 * TILE_COLS + tc]) or not solid(mp[(TILE_ROWS - 1) * TILE_COLS + tc]):
+        top = mp[0 * TILE_COLS + tc]
+        bot = mp[(TILE_ROWS - 1) * TILE_COLS + tc]
+        if not solid(top) or not (solid(bot) or bot == 0x06):
             errs.append('нарушен периметр по горизонтали')
             break
     for tr in range(TILE_ROWS):
@@ -348,7 +486,7 @@ def do_sweep(n):
     for seed in range(1, n + 1):
         for lvl, (mp, desc) in sorted(gen_levels(seed).items()):
             total += 1
-            errs = check_invariants(mp, desc)
+            errs = check_invariants(mp, desc, lvl)
             ok, info = solve(mp, desc, lvl)
             if errs or not ok:
                 why = '; '.join(errs) if errs else info
@@ -398,7 +536,7 @@ def main():
     print(render(mp))
     print()
 
-    errs = check_invariants(mp, desc)
+    errs = check_invariants(mp, desc, args.level)
     for e in errs:
         print('  [инвариант] ПРОБЛЕМА:', e)
     if not errs:
