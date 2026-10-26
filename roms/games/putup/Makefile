@@ -15,11 +15,16 @@ include ../../../config.mk
 
 ASMFLAGS  = -b -m=8080_strict -s
 TARGET    = putup_new.rom
+MAPFILE   = putup_new.map
 FULLBIN   = build_full.bin
 MASTER    = putup_new.asm
 GEN       = tools/gen_layout.py
 MANIFEST  = tools/mk_manifest.py
 IMGADDR   = 0x100
+
+# Карта символов (тот же формат, что у fire2/mario-8c) полезна дебаггеру:
+# vector-debugger по `NAME = $ADDR` берёт адреса функций/RAM. KEEP_MAP=0 не
+# влияет — .map нужен по умолчанию; clean убирает его вместе с артефактами.
 
 .PHONY: all layout clean full deploy
 
@@ -35,15 +40,16 @@ layout:
 $(TARGET): $(GEN) $(MANIFEST) $(wildcard asm/*.asm) $(wildcard asm/funcs/*.asm) $(wildcard asm/data/*.asm)
 	@python3 $(GEN)
 	@cd asm && $(Z80ASM) $(ASMFLAGS) -o=../$(FULLBIN) $(MASTER)
+	@cp asm/$(MASTER:.asm=.sym) $(MAPFILE)
 	@python3 $(MANIFEST)
 	@python3 -c "d=open('$(FULLBIN)','rb').read();open('$(TARGET)','wb').write(d[256:])"
 	@rm -f $(FULLBIN) asm/*.o asm/*.sym asm/*.err
-	@echo "=== Done: $@ ($$(stat -c%s $@) bytes, конкатенация) ==="
+	@echo "=== Done: $@ ($$(stat -c%s $@) bytes, конкатенация), map: $$(stat -c%s $(MAPFILE)) B ==="
 
 full: clean all deploy
 
 clean:
-	rm -f $(TARGET) $(FULLBIN) asm/*.o asm/*.sym asm/*.err
+	rm -f $(TARGET) $(MAPFILE) $(FULLBIN) asm/*.o asm/*.sym asm/*.err
 
 # Финализация по стандарту проекта: цели deploy/full.
 include $(PROJECT_ROOT)finally.mk

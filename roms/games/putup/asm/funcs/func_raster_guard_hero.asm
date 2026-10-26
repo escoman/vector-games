@@ -19,7 +19,12 @@
 ;             * elapsed >= elapsed_bot -> луч УЖЕ прошёл полосу => рисуем сейчас;
 ;             * elapsed <  elapsed_top и (elapsed_top - elapsed) >= MARGIN => луч
 ;               далеко СВЕРХУ, успеем отрисовать до его прихода => рисуем сейчас;
-;               MARGIN = RASTER_DRAW_LINES*96 = 112*96 = 0x2A00 (окно записи).
+;               MARGIN теперь берётся из var_raster_margin (тики, = строки*96) и
+;               задаётся КАЖДЫМ caller'ом перед CALL. 0 => fallback 0x2A00
+;               (112 строк: прежнее worst-case erase+OR героя). Срез A даёт
+;               caller'ам возможность сузить ahead-окно до реальной стоимости
+;               paint'а: repaint_over 80 (=0x1E00), enemy_render 40 (=0x0F00),
+;               hero_render/collision_death 110 (=0x2940).
 ;               Замер D (erase+OR-композит) в эмуляторе = ~99 строк (guard RET line 9
 ;               -> render RET line 108); + фаза перезагрузки ~6 => 112 с запасом.
 ;             * иначе (луч входит/входит в полосу) => крутимся на func_beam_count,
@@ -114,7 +119,17 @@ loc_gr_below:
     MOV A, D
     SBB H
     MOV B, A                    ; gap_hi  (BC = gap = top - elapsed > 0)
-    LXI D, 2A00h                ; MARGIN = 112*96 (окно записи D~99 + фаза ~6)
+    ; МARGIN теперь per-caller из var_raster_margin (тики). 0 => default 0x2A00
+    ; (прежнее поведение, если caller не объял стоимость).
+    LDA var_raster_margin
+    MOV E, A
+    LDA var_raster_margin+1
+    MOV D, A
+    MOV A, E
+    ORA D
+    JNZ loc_gr_margin_ok
+    LXI D, 2A00h                ; default MARGIN = 112*96
+loc_gr_margin_ok:
     MOV A, C
     SUB E
     MOV A, B
@@ -227,7 +242,16 @@ loc_gre_below:
     MOV A, D
     SBB H
     MOV B, A                    ; gap_hi  (BC = gap > 0)
-    LXI D, 2A00h                ; MARGIN = 112*96
+    ; МARGIN теперь per-caller из var_raster_margin (тики). 0 => default 0x2A00.
+    LDA var_raster_margin
+    MOV E, A
+    LDA var_raster_margin+1
+    MOV D, A
+    MOV A, E
+    ORA D
+    JNZ loc_gre_margin_ok
+    LXI D, 2A00h                ; default MARGIN = 112*96
+loc_gre_margin_ok:
     MOV A, C
     SUB E
     MOV A, B

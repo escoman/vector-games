@@ -252,6 +252,13 @@ var_sfx_len:      EQU 6A36h ; байт: кадров до gate-off канала 
 ; «бипы сливаются». Настоящая причина долгого звука ключа — арифметический баг
 ; B/2 через RRC в func_sound_init (RRC зациклирует bit0 в bit7: для B=05h давал
 ; 130 кадров вместо 2). 0x6A37..0x6A38 снова свободны.
+; --- Срез A (темп/tearing): per-caller raster-guard cost hint -----------------
+; Слово var_raster_margin в тиках секундомера (= строки * 96). Caller ставит
+; LXI H,<cost*96>/SHLD var_raster_margin ПЕРЕД CALL func_raster_guard_{hero,enemy},
+; guard поднимает DE=var_raster_margin вместо константы 0x2A00. 0 => default 0x2A00
+; (112 строк, прежнее поведение для callers, не успевших обновиться).
+; Размещено в свободной зоне после var_ch_repaint(6A81); кэш-область с 0x6C00.
+var_raster_margin: EQU 6A82h ; слово: MARGIN (тики) для ahead-порога guard'а
 ; --- Step E1: плавная (суб-пиксельная) анимация врагов ------------------------
 ; Отображаемое состояние врага (единственный источник истины для ВИДА; логика
 ; врага по-прежнему живёт в data_entity_xcoords/ycoords и в текстовом буфере).

@@ -50,6 +50,11 @@ loc_13C0:
     ; --- flicker-free: тот же идиом, что gameplay/exit-перекраска героя -------
     ; Один raster-guard на окно erase+draw этого шага улёта: полоса = union(старая
     ; строка в var_enemy_rc, новая в var_scr_090A). Пишется вне прохода луча.
+    ; Срез A: cost-hint = erase+OR шага улёта ~110 строк*96 = 0x2940
+    PUSH H
+    LXI H, 2940h
+    SHLD var_raster_margin
+    POP H
     CALL  func_raster_guard_hero
     PUSH  H                   ; 0x13E7
     PUSH  B                   ; 0x13E8

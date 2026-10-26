@@ -695,6 +695,11 @@ func_enemy_chaser_apply:
     STA var_ed_voff_sv
     XRA A
     STA var_glyph_voff
+    ; Срез A: cost-hint = burst погонщика (1 tile draw + sparse erase) ~40 строк*96 = 0x0F00
+    PUSH H
+    LXI H, 0F00h
+    SHLD var_raster_margin
+    POP H
     CALL func_raster_guard_enemy
     LDA var_ch_repaint
     ORA A

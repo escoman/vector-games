@@ -202,6 +202,11 @@ loc_hr_move:
     INR A                              ; cv!=0 -> +1 строка (покрыть спил снизу)
 loc_hr_band0:
     STA var_scr_090A
+    ; Срез A: cost-hint = erase+OR (up to 3-col wide + spill) ~110 строк*96 = 0x2940
+    PUSH H
+    LXI H, 2940h
+    SHLD var_raster_margin
+    POP H
     CALL func_raster_guard_hero
     ; --- ERASE старого footprint (restore фона из текстового буфера) ----------
     ; base = oldcol; при hoff=2 base=oldcol-1; wide = (ohoff!=0) -> доп. колонка.

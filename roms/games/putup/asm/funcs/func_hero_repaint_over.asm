@@ -32,6 +32,11 @@
 ;           перезагружает всё из RAM.
 
 func_hero_repaint_over:
+    ; Срез A: cost-hint = только draw (2x2 or, без erase) ~80 строк*96 = 0x1E00
+    PUSH H
+    LXI H, 1E00h
+    SHLD var_raster_margin
+    POP H
     CALL func_raster_guard_hero ; raster-sync: перекраска вне прохода луча
     LDA var_enemy_rc            ; lo = ОТОБРАЖАЕМая строка героя (твин-cr)
     MOV L, A
