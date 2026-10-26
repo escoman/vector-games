@@ -1,0 +1,444 @@
+{
+ "tiles": {
+  "0": {
+   "codes": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "kind": "floor",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "1": {
+   "codes": [
+    32,
+    32,
+    32,
+    32
+   ],
+   "kind": "floor",
+   "uses_total": 1180,
+   "levels_used": 15
+  },
+  "2": {
+   "codes": [
+    119,
+    120,
+    120,
+    119
+   ],
+   "kind": "wall",
+   "uses_total": 1135,
+   "levels_used": 15
+  },
+  "3": {
+   "codes": [
+    96,
+    96,
+    96,
+    96
+   ],
+   "kind": "safe",
+   "uses_total": 46,
+   "levels_used": 10
+  },
+  "4": {
+   "codes": [
+    126,
+    128,
+    129,
+    130
+   ],
+   "kind": "wall",
+   "uses_total": 3,
+   "levels_used": 3
+  },
+  "5": {
+   "codes": [
+    125,
+    120,
+    120,
+    119
+   ],
+   "kind": "wall",
+   "uses_total": 21,
+   "levels_used": 12
+  },
+  "6": {
+   "codes": [
+    117,
+    117,
+    118,
+    118
+   ],
+   "kind": "fire",
+   "uses_total": 107,
+   "levels_used": 11
+  },
+  "7": {
+   "codes": [
+    32,
+    32,
+    114,
+    109
+   ],
+   "kind": "egg",
+   "uses_total": 21,
+   "levels_used": 15
+  },
+  "8": {
+   "codes": [
+    121,
+    122,
+    120,
+    119
+   ],
+   "kind": "wall",
+   "uses_total": 21,
+   "levels_used": 15
+  },
+  "9": {
+   "codes": [
+    96,
+    96,
+    116,
+    96
+   ],
+   "kind": "trap_t",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "10": {
+   "codes": [
+    32,
+    107,
+    110,
+    108
+   ],
+   "kind": "fruit",
+   "uses_total": 18,
+   "levels_used": 4
+  },
+  "11": {
+   "codes": [
+    99,
+    100,
+    111,
+    101
+   ],
+   "kind": "fruit",
+   "uses_total": 31,
+   "levels_used": 8
+  },
+  "12": {
+   "codes": [
+    102,
+    103,
+    112,
+    104
+   ],
+   "kind": "fruit",
+   "uses_total": 21,
+   "levels_used": 7
+  },
+  "13": {
+   "codes": [
+    32,
+    105,
+    113,
+    106
+   ],
+   "kind": "fruit",
+   "uses_total": 34,
+   "levels_used": 9
+  },
+  "14": {
+   "codes": [
+    97,
+    32,
+    115,
+    98
+   ],
+   "kind": "ring",
+   "uses_total": 2,
+   "levels_used": 2
+  },
+  "15": {
+   "codes": [
+    132,
+    133,
+    134,
+    135
+   ],
+   "kind": "wall",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "16": {
+   "codes": [
+    136,
+    137,
+    134,
+    135
+   ],
+   "kind": "wall",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "17": {
+   "codes": [
+    139,
+    140,
+    141,
+    142
+   ],
+   "kind": "wall",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "18": {
+   "codes": [
+    143,
+    144,
+    145,
+    146
+   ],
+   "kind": "wall",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "19": {
+   "codes": [
+    147,
+    148,
+    149,
+    150
+   ],
+   "kind": "wall",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "20": {
+   "codes": [
+    151,
+    152,
+    153,
+    154
+   ],
+   "kind": "wall",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "21": {
+   "codes": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "kind": "floor",
+   "uses_total": 0,
+   "levels_used": 0
+  },
+  "22": {
+   "codes": [
+    0,
+    0,
+    0
+   ],
+   "kind": "floor",
+   "uses_total": 0,
+   "levels_used": 0
+  }
+ },
+ "doors": [
+  {
+   "level": 1,
+   "X": 20,
+   "Y": 16,
+   "cell": [
+    8,
+    10
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 2,
+   "X": 28,
+   "Y": 16,
+   "cell": [
+    8,
+    14
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 3,
+   "X": 8,
+   "Y": 18,
+   "cell": [
+    9,
+    4
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 4,
+   "X": 30,
+   "Y": 18,
+   "cell": [
+    9,
+    15
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 5,
+   "X": 2,
+   "Y": 18,
+   "cell": [
+    9,
+    1
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 6,
+   "X": 24,
+   "Y": 20,
+   "cell": [
+    10,
+    12
+   ],
+   "tile": 6,
+   "kind": "fire",
+   "model_ok": true
+  },
+  {
+   "level": 7,
+   "X": 12,
+   "Y": 16,
+   "cell": [
+    8,
+    6
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 8,
+   "X": 16,
+   "Y": 14,
+   "cell": [
+    7,
+    8
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 9,
+   "X": 30,
+   "Y": 16,
+   "cell": [
+    8,
+    15
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 10,
+   "X": 2,
+   "Y": 20,
+   "cell": [
+    10,
+    1
+   ],
+   "tile": 6,
+   "kind": "fire",
+   "model_ok": true
+  },
+  {
+   "level": 11,
+   "X": 4,
+   "Y": 4,
+   "cell": [
+    2,
+    2
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 12,
+   "X": 20,
+   "Y": 14,
+   "cell": [
+    7,
+    10
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 13,
+   "X": 28,
+   "Y": 20,
+   "cell": [
+    10,
+    14
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 14,
+   "X": 30,
+   "Y": 4,
+   "cell": [
+    2,
+    15
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  },
+  {
+   "level": 15,
+   "X": 0,
+   "Y": 14,
+   "cell": [
+    7,
+    0
+   ],
+   "tile": 2,
+   "kind": "wall",
+   "model_ok": true
+  }
+ ],
+ "notes": [
+  "exit X,Y = пиксельные координаты КЛЕТКИ карты: cell=(Y/2, X/2)",
+  "дверь появляется после var_egg_seq>=B (B=1 для lv<10, 2 для lv>=10; loc_10C8)",
+  "предметы лежат на клетках с wall/fire снизу (диспетчер читает клетку под ногами)",
+  "perimeter НЕ инвариант оригиналов; генератор кладёт row0/row10/col0/col15 = tile 2"
+ ]
+}

@@ -1,0 +1,8 @@
+[
+ {"name": "rand_ram_symbols", "file": "rand_ram_symbols.asm", "after": "HEAD"},
+ {"name": "func_gen_level", "file": "funcs/func_gen_level.asm", "after": "func_prng"},
+ {"name": "str_msx_sarmin", "file": "data/str_msx_sarmin.asm", "after": "str_title_logo"},
+ {"name": "str_years", "file": "data/str_years.asm", "after": "str_msx_sarmin"},
+ {"name": "str_desc1", "file": "data/str_desc1.asm", "after": "str_years"},
+ {"name": "str_desc2", "file": "data/str_desc2.asm", "after": "str_desc1"}
+]
