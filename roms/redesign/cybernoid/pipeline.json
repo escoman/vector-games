@@ -1,0 +1,55 @@
+{
+ "note": "Профиль pipeline для run_pipeline.sh (ТЗ Stage 0). cybernoid — .rom-соглашение: образ грузится с 0x0100 (NOP-sled 0x0000..0x00FF), entry 0x0100, верх 0x6BFF; ORG в launcher не переопределяем. Главный интерес — ГЕНЕРАТОР ГОЛОСА: подтверждено, что речь идёт 1-битным PDM/PWM-потоком в порт 0x00 (OUT 00h, ~37 кГц) уже на заставке. Клавиши прогона: первые секунды — голос на заставке (не трогаем), SPACE (снять интро/меню), 1 (START → игра), затем стрелки/SPACE (геймплей). Родительский RDB: src/cyberno.rdb родится первым debug_save_rdb внутри seed_rdb.",
+ "stage_args": {
+  "seed_rdb": {
+   "--max-depth": "12",
+   "--max-instructions": "100000"
+  },
+  "probe": {
+   "--seconds": "20",
+   "--snapshot": true,
+   "--key": [
+    "2:SPACE",
+    "6:1",
+    "9:LEFT",
+    "10:RIGHT",
+    "11:UP",
+    "12:DOWN",
+    "14:SPACE",
+    "16:SPACE",
+    "18:SPACE"
+   ]
+  },
+  "io_signature": {
+   "--seconds": "20"
+  },
+  "memory_diff": {
+   "--run-seconds": "20"
+  },
+  "abi_scan": {
+   "--limit": "32",
+   "--run": "6",
+   "--key": [
+    "2:SPACE",
+    "5:1",
+    "8:LEFT",
+    "10:RIGHT"
+   ]
+  },
+  "table_shape": {
+   "--runtime": true,
+   "--limit": "200"
+  },
+  "strings_scan": {
+   "--allow-ya": true,
+   "--min-len": "4"
+  }
+ },
+ "persistence": {
+  "max_unsaved_objects": 10,
+  "max_checkpoint_seconds": 300,
+  "save_after_stage": true,
+  "verify_after_save": true,
+  "checkpoint_after_save": true
+ }
+}

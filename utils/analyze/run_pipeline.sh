@@ -32,7 +32,7 @@ REPO="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # §5/§29: таблица профилей. Единственное место launcher'а, где живёт
 # ROM-специфика (пути), — политика прогона остаётся в pipeline/config.
-PROFILES="riseout putup testay exolon basic"
+PROFILES="riseout putup testay exolon cybernoid basic"
 
 available_roms() {
     local p
@@ -69,7 +69,7 @@ NAME="$1"; shift
 
 ROM=""; CONFIG=""; ORG=""; PROFILE=0
 case "$NAME" in
-    riseout|putup|testay|exolon|basic)
+    riseout|putup|testay|exolon|cybernoid|basic)
         PROFILE=1
         case "$NAME" in
             riseout) ROM="$REPO/roms/redesign/riseout/src/riseout.rom"
@@ -80,6 +80,10 @@ case "$NAME" in
                      CONFIG="$REPO/roms/redesign/testay/pipeline.json" ;;
             exolon)  ROM="$REPO/roms/redesign/exolon/src/exolon.rom"
                      CONFIG="$REPO/roms/redesign/exolon/pipeline.json" ;;
+            # cybernoid — .rom-соглашение: образ грузится с 0x0100 (NOP-sled
+            # 0x0000..0x00FF), entry 0x0100; ORG не переопределяем (дефолт верен).
+            cybernoid) ROM="$REPO/roms/redesign/cybernoid/src/cyberno.rom"
+                       CONFIG="$REPO/roms/redesign/cybernoid/pipeline.json" ;;
             # basic — объект анализа распакованный RAM-образ basic.r0m (снят
             # Stage 0 с bas2997.rom через tools/dump_interp.py); .r0m грузится
             # на 0x0000, поэтому org/entry = 0x0000, а не .rom-соглашение 0x0100.
