@@ -1,0 +1,242 @@
+{
+  "format": "rdb",
+  "objects": [
+    {
+      "address": "0x0000",
+      "name": "vec_reset",
+      "type": "label"
+    },
+    {
+      "address": "0x0038",
+      "name": "vec_rst7",
+      "type": "label"
+    },
+    {
+      "address": "0x291C",
+      "name": "tbl_melody_stream_A",
+      "type": "label"
+    },
+    {
+      "address": "0x2931",
+      "name": "tbl_melody_stream_ALT",
+      "type": "label"
+    },
+    {
+      "address": "0x2BC0",
+      "name": "func_vi53_channels",
+      "type": "function"
+    },
+    {
+      "address": "0x3792",
+      "comment": "3x MVI A + OUT 08h (0x36/0x76/0xB6): ch0/ch1/ch2 mode 3 square-wave RW=11 BCD=0",
+      "name": "func_vi53_mode_setup",
+      "type": "function"
+    },
+    {
+      "address": "0x379F",
+      "name": "func_sys_init_hlt",
+      "type": "function"
+    },
+    {
+      "address": "0x37A8",
+      "comment": "DI;XRA A;OUT 10h;STA 0100-0102;LXI SP,7FFF;CALL vi53_mode_setup;install JMP vectors at 0x0000/0x0038;CALL sys_init; main loop",
+      "name": "func_main_entry",
+      "type": "function"
+    },
+    {
+      "address": "0x394B",
+      "comment": "RST7 VBlank: PUSH H/D/B/PSW; 8-row keyboard matrix scan (OUT 00, row strobe via 03, read 02); palette rampa",
+      "name": "func_irq_vblank",
+      "type": "function"
+    },
+    {
+      "address": "0x3979",
+      "name": "var_stream_ptr",
+      "type": "label"
+    },
+    {
+      "address": "0x397B",
+      "name": "var_kbd_matrix",
+      "type": "label"
+    },
+    {
+      "address": "0x3982",
+      "name": "var_melody_flag",
+      "type": "label"
+    },
+    {
+      "address": "0x3983",
+      "name": "var_palette_state",
+      "type": "label"
+    },
+    {
+      "address": "0x3AE5",
+      "name": "func_stamp_vram_banks",
+      "type": "function"
+    },
+    {
+      "address": "0x3B9B",
+      "comment": "7 rows x 16 cols AND-mask across 4 VRAM banks (8568/A568/C568/E568) stride 0x2000",
+      "name": "func_draw_masked_glyph_4banks",
+      "type": "function"
+    },
+    {
+      "address": "0x3BD2",
+      "name": "func_sprite_row_copy",
+      "type": "function"
+    },
+    {
+      "address": "0x3BFE",
+      "comment": "Play melody event: HL=C444/D544, DE=291C/2931 by flag@3982; CALL 3AE7 stamps 3x7 note bytes to VRAM",
+      "name": "func_melody_frame",
+      "type": "function"
+    },
+    {
+      "address": "0xFF50",
+      "name": "func_unpacker_shilin",
+      "type": "function"
+    }
+  ],
+  "platform": "vector06c",
+  "ports": [
+    {
+      "comment": "Keyboard matrix column (active-low)",
+      "direction": "input",
+      "name": "PIA_PB_KEYBOARD",
+      "polarity": "active-low",
+      "port": "0x01"
+    },
+    {
+      "comment": "Keyboard row status",
+      "direction": "input",
+      "name": "PIA_PC_STATUS",
+      "polarity": "active-high",
+      "port": "0x02"
+    },
+    {
+      "comment": "Keyboard row strobe (one-hot)",
+      "direction": "output",
+      "name": "PIA_PC_ROWSTROBE",
+      "polarity": "active-low",
+      "port": "0x03"
+    },
+    {
+      "comment": "K580VI53 mode/command latch (0x36/0x76/0xB6 = mode 3 ch0/1/2)",
+      "direction": "output",
+      "name": "VI53_CONTROL",
+      "polarity": "active-high",
+      "port": "0x08"
+    },
+    {
+      "comment": "K580VI53 counter 2 (channel C) 16-bit lo/hi",
+      "direction": "in-out",
+      "name": "VI53_CTR2_PORT_C",
+      "polarity": "active-high",
+      "port": "0x09"
+    },
+    {
+      "comment": "K580VI53 counter 1 (channel B) 16-bit lo/hi",
+      "direction": "in-out",
+      "name": "VI53_CTR1_PORT_B",
+      "polarity": "active-high",
+      "port": "0x0A"
+    },
+    {
+      "comment": "K580VI53 counter 0 (channel A) 16-bit lo/hi",
+      "direction": "in-out",
+      "name": "VI53_CTR0_PORT_A",
+      "polarity": "active-high",
+      "port": "0x0B"
+    },
+    {
+      "comment": "Colour rampa data write (16 slots/frame)",
+      "direction": "output",
+      "name": "PALETTE_DATA",
+      "polarity": "active-high",
+      "port": "0x0C"
+    }
+  ],
+  "protocol": [
+    {
+      "address": "0xFF50",
+      "evidence": "Disassembly of 116 instructions at 0xFF50: 6 classes (<0x30 literal, 0x30..0xAF short-ref, 0xB0..0CF medium-ref, 0xD0..0xEF zero-fill, 0xF0..0xFE RLE, 0xFF END+PCHL to 0x0100).",
+      "id": "P-0001",
+      "method": "static",
+      "scope": "rom",
+      "status": "VERIFIED_BY_TRACE",
+      "thesis": "Unpacker = shilin-LZ variant (Д.В'94), 6 opcode classes, terminator returns via PCHL",
+      "timestamp": "2026-10-27T17:04:18Z"
+    },
+    {
+      "address": "0x37A8",
+      "evidence": "func_main_entry @ 0x37A8: DI/XRA A/OUT 10/STA 0100..0102/LXI SP,7FFF/CALL 3892. Confirmed by debug_disassemble_image(0,16384).",
+      "id": "P-0002",
+      "method": "static",
+      "scope": "rom",
+      "status": "VERIFIED_BY_TRACE",
+      "thesis": "Boot loader copies unpacker to 0xFF50 + compressed to 0xDA80, JMP 0xFF50 → decompress to 0x0100 → PCHL → func_main_entry",
+      "timestamp": "2026-10-27T17:04:18Z"
+    },
+    {
+      "address": "0x2BEF",
+      "evidence": "io_trace (60 events): every frame OUT 0x0B(lo),OUT 0x0B(hi),OUT 0x0A(lo),OUT 0x0A(hi),OUT 0x09(lo),OUT 0x09(hi) — same value on all 3 counters. Period increments +0xC8 (200) per frame: 0x0ED6→0x0F9E→0x1066→0x112E→0x11F6→0x12BE→0x1386→0x144E→0x1516.",
+      "id": "P-0003",
+      "method": "trace",
+      "scope": "rom",
+      "status": "VERIFIED_BY_TRACE",
+      "thesis": "Dense sound = triple unison: all three counters get identical period every frame, swept linearly +200/frame (glissando down)",
+      "timestamp": "2026-10-27T17:04:18Z"
+    },
+    {
+      "evidence": "After debug_type_key('p'), IN 0x01 = 0xE0 in all subsequent frames (no key held). Period sweep pattern unchanged. P key had no observable effect on sound output.",
+      "id": "P-0004",
+      "method": "trace",
+      "scope": "rom",
+      "status": "PARTIALLY_VERIFIED",
+      "thesis": "Keyboard input (P key) does not alter melody/sweep — demo runs autonomously",
+      "timestamp": "2026-10-27T17:04:18Z"
+    },
+    {
+      "address": "0x3792",
+      "evidence": "0x3892: MVI A,36h/OUT 08/MVI A,76h/OUT 08/MVI A,B6h/OUT 08/RET. SC=00/01/10, RW=11, M=011 (mode 3), BCD=0.",
+      "id": "P-0005",
+      "method": "static",
+      "scope": "rom",
+      "status": "VERIFIED_BY_TRACE",
+      "thesis": "VI53 ch0/ch1/ch2 configured mode 3 square-wave, 16-bit load (RW=11)",
+      "timestamp": "2026-10-27T17:04:18Z"
+    }
+  ],
+  "rom": {
+    "file": "soundemo.rom",
+    "sha256": "41eefb4fb175a8c16be1da9cf76d12cf3a2cfcd589a2e750b3cfb3c824467815",
+    "size": 9344
+  },
+  "version": 2,
+  "watchlist": [
+    {
+      "address": "0x3979",
+      "format": "uint16-le",
+      "length": 2,
+      "name": "var_stream_ptr"
+    },
+    {
+      "address": "0x397B",
+      "format": "uint8",
+      "length": 8,
+      "name": "var_kbd_matrix"
+    },
+    {
+      "address": "0x3982",
+      "format": "uint8",
+      "length": 1,
+      "name": "var_melody_variant_flag"
+    },
+    {
+      "address": "0x3983",
+      "format": "uint8",
+      "length": 8,
+      "name": "var_palette_state"
+    }
+  ]
+}

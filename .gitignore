@@ -58,6 +58,7 @@ roms/redesign/basic/asm/*.sym
 roms/redesign/basic/src/basic_new.zx0
 
 !roms/redesign/putup/src/putup.rom
+!roms/redesign/soundemo/src/soundemo.rom
 
 # games/putup: lint-отчёт (генерируется)
 roms/games/putup/tools/stage_b_lint.json

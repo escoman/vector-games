@@ -1,0 +1,4 @@
+# Analysis intermediates (large JSON dumps, regeneratable via MCP)
+dump/*.json
+# Build output (regeneratable via tools/build_uncompressed.py)
+src/soundemo_uncompressed.rom

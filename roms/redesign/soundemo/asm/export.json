@@ -1,0 +1,11 @@
+{
+  "rom": "SOUNDEMO.ROM",
+  "rom_size": 9344,
+  "rom_sha256": "41eefb4fb175a8c16be1da9cf76d12cf3a2cfcd589a2e750b3cfb3c824467815",
+  "origin": "0x0100",
+  "decompressed_size": 16384,
+  "unpacker": "shilin LZ (c) \u0428\u0438\u043b\u0438\u043d \u0414.\u0412. 1994, 160 bytes at 0xFF50",
+  "code_ranges": 4,
+  "data_ranges": 5,
+  "entries": 7
+}
