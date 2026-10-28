@@ -32,7 +32,7 @@ REPO="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # §5/§29: таблица профилей. Единственное место launcher'а, где живёт
 # ROM-специфика (пути), — политика прогона остаётся в pipeline/config.
-PROFILES="riseout putup testay exolon cybernoid basic"
+PROFILES="riseout putup testay exolon cybernoid cybernoid-unpacked basic"
 
 available_roms() {
     local p
@@ -69,7 +69,7 @@ NAME="$1"; shift
 
 ROM=""; CONFIG=""; ORG=""; PROFILE=0
 case "$NAME" in
-    riseout|putup|testay|exolon|cybernoid|basic)
+    riseout|putup|testay|exolon|cybernoid|cybernoid-unpacked|basic)
         PROFILE=1
         case "$NAME" in
             riseout) ROM="$REPO/roms/redesign/riseout/src/riseout.rom"
@@ -84,6 +84,14 @@ case "$NAME" in
             # 0x0000..0x00FF), entry 0x0100; ORG не переопределяем (дефолт верен).
             cybernoid) ROM="$REPO/roms/redesign/cybernoid/src/cyberno.rom"
                        CONFIG="$REPO/roms/redesign/cybernoid/pipeline.json" ;;
+            # cybernoid-unpacked — RAM-снимок после самораспаковки (снят через
+            # debug_dump_memory 0x0000..0x7FFF с cyberno.rom). .r0m грузится на
+            # 0x0000, org/entry = 0x0000. RDB-сосед = cybernoid_unpacked.rdb
+            # (post-unpack база, 339 объектов; cyberno.rdb оставлен как pre-unpack
+            # запись bootstrap'а). Рабочий вход Stage 9+.
+            cybernoid-unpacked) ROM="$REPO/roms/redesign/cybernoid/src/cybernoid_unpacked.r0m"
+                       CONFIG="$REPO/roms/redesign/cybernoid/pipeline.json"
+                       ORG="0x0000" ;;
             # basic — объект анализа распакованный RAM-образ basic.r0m (снят
             # Stage 0 с bas2997.rom через tools/dump_interp.py); .r0m грузится
             # на 0x0000, поэтому org/entry = 0x0000, а не .rom-соглашение 0x0100.

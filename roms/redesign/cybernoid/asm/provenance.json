@@ -1,0 +1,368 @@
+{
+  "rom": "--rom",
+  "exporter": "/home/alexey/Projects/vector-debug/build/v06c-asm-export",
+  "origin": "0x0000",
+  "status": "DERIVED",
+  "export_json": {
+    "rom": "cybernoid_unpacked.r0m",
+    "rom_size": 32768,
+    "origin": "0x0000",
+    "mapping_entry_point": "0x0000",
+    "rom_sha256": "d29d7d813b3add02e94fb3940341a82225d27f77588ad9bbd90637e7c48c9cbf",
+    "objects": 339,
+    "links": 63,
+    "code_ranges": 74,
+    "data_ranges": 19,
+    "warnings": 92,
+    "errors": 0,
+    "conflicts": 3,
+    "unresolved_references": 0,
+    "coverage": {
+      "rom_bytes": 32768,
+      "code_bytes": 7449,
+      "data_bytes": 531,
+      "instruction_count": 4369,
+      "outside_window_dropped": 5631,
+      "uncovered": [
+        {
+          "start": "0x0003",
+          "end": "0x00FF"
+        },
+        {
+          "start": "0x01B4",
+          "end": "0x01BD"
+        },
+        {
+          "start": "0x01D5",
+          "end": "0x0209"
+        },
+        {
+          "start": "0x0249",
+          "end": "0x0254"
+        },
+        {
+          "start": "0x0256",
+          "end": "0x025D"
+        },
+        {
+          "start": "0x026A",
+          "end": "0x028D"
+        },
+        {
+          "start": "0x029B",
+          "end": "0x02E7"
+        },
+        {
+          "start": "0x031A",
+          "end": "0x031F"
+        },
+        {
+          "start": "0x033F",
+          "end": "0x0341"
+        },
+        {
+          "start": "0x0434",
+          "end": "0x051F"
+        },
+        {
+          "start": "0x0526",
+          "end": "0x0527"
+        },
+        {
+          "start": "0x052E",
+          "end": "0x052F"
+        },
+        {
+          "start": "0x05EC",
+          "end": "0x05FF"
+        },
+        {
+          "start": "0x0601",
+          "end": "0x0659"
+        },
+        {
+          "start": "0x0736",
+          "end": "0x0737"
+        },
+        {
+          "start": "0x082F",
+          "end": "0x0934"
+        },
+        {
+          "start": "0x093A",
+          "end": "0x098C"
+        },
+        {
+          "start": "0x09B7",
+          "end": "0x09B7"
+        },
+        {
+          "start": "0x0A11",
+          "end": "0x0A22"
+        },
+        {
+          "start": "0x0AC7",
+          "end": "0x0ACD"
+        },
+        {
+          "start": "0x0B07",
+          "end": "0x0B0F"
+        },
+        {
+          "start": "0x0B36",
+          "end": "0x0B95"
+        },
+        {
+          "start": "0x0BB2",
+          "end": "0x0BB4"
+        },
+        {
+          "start": "0x0BCF",
+          "end": "0x0BD6"
+        },
+        {
+          "start": "0x0BEE",
+          "end": "0x0C38"
+        },
+        {
+          "start": "0x0C4B",
+          "end": "0x0DCF"
+        },
+        {
+          "start": "0x0DF4",
+          "end": "0x0DFF"
+        },
+        {
+          "start": "0x0E62",
+          "end": "0x0EFF"
+        },
+        {
+          "start": "0x0F05",
+          "end": "0x0F07"
+        },
+        {
+          "start": "0x0F54",
+          "end": "0x0F5A"
+        },
+        {
+          "start": "0x0F67",
+          "end": "0x0F71"
+        },
+        {
+          "start": "0x0F7D",
+          "end": "0x0F8C"
+        },
+        {
+          "start": "0x0FFA",
+          "end": "0x0FFF"
+        },
+        {
+          "start": "0x1009",
+          "end": "0x100D"
+        },
+        {
+          "start": "0x10AD",
+          "end": "0x10C2"
+        },
+        {
+          "start": "0x11CE",
+          "end": "0x11D4"
+        },
+        {
+          "start": "0x1252",
+          "end": "0x126F"
+        },
+        {
+          "start": "0x13ED",
+          "end": "0x1437"
+        },
+        {
+          "start": "0x159B",
+          "end": "0x159B"
+        },
+        {
+          "start": "0x1610",
+          "end": "0x1610"
+        },
+        {
+          "start": "0x161D",
+          "end": "0x1621"
+        },
+        {
+          "start": "0x166A",
+          "end": "0x1679"
+        },
+        {
+          "start": "0x1691",
+          "end": "0x1692"
+        },
+        {
+          "start": "0x18F4",
+          "end": "0x18F8"
+        },
+        {
+          "start": "0x1A2E",
+          "end": "0x1A2E"
+        },
+        {
+          "start": "0x1A40",
+          "end": "0x1A41"
+        },
+        {
+          "start": "0x1A82",
+          "end": "0x1A83"
+        },
+        {
+          "start": "0x1B43",
+          "end": "0x1B49"
+        },
+        {
+          "start": "0x1B96",
+          "end": "0x1B97"
+        },
+        {
+          "start": "0x1B9A",
+          "end": "0x1B9E"
+        },
+        {
+          "start": "0x1C21",
+          "end": "0x1C25"
+        },
+        {
+          "start": "0x1D12",
+          "end": "0x1D19"
+        },
+        {
+          "start": "0x1D64",
+          "end": "0x1D65"
+        },
+        {
+          "start": "0x1E01",
+          "end": "0x1E05"
+        },
+        {
+          "start": "0x1E68",
+          "end": "0x1E69"
+        },
+        {
+          "start": "0x1EB5",
+          "end": "0x1EB9"
+        },
+        {
+          "start": "0x1F0C",
+          "end": "0x1F10"
+        },
+        {
+          "start": "0x1F63",
+          "end": "0x1F63"
+        },
+        {
+          "start": "0x1F7F",
+          "end": "0x1F80"
+        },
+        {
+          "start": "0x1F9E",
+          "end": "0x1FA3"
+        },
+        {
+          "start": "0x20BA",
+          "end": "0x20BA"
+        },
+        {
+          "start": "0x20CC",
+          "end": "0x20D1"
+        },
+        {
+          "start": "0x20FB",
+          "end": "0x20FF"
+        },
+        {
+          "start": "0x210D",
+          "end": "0x2110"
+        },
+        {
+          "start": "0x22B2",
+          "end": "0x22B6"
+        },
+        {
+          "start": "0x230C",
+          "end": "0x2310"
+        },
+        {
+          "start": "0x248E",
+          "end": "0x2499"
+        },
+        {
+          "start": "0x24B0",
+          "end": "0x24E4"
+        },
+        {
+          "start": "0x2516",
+          "end": "0x2516"
+        },
+        {
+          "start": "0x2589",
+          "end": "0x258D"
+        },
+        {
+          "start": "0x25BC",
+          "end": "0x25C9"
+        },
+        {
+          "start": "0x25D6",
+          "end": "0x25DE"
+        },
+        {
+          "start": "0x25FF",
+          "end": "0x263C"
+        },
+        {
+          "start": "0x264A",
+          "end": "0x264C"
+        },
+        {
+          "start": "0x2671",
+          "end": "0x377F"
+        },
+        {
+          "start": "0x3781",
+          "end": "0x3FFF"
+        },
+        {
+          "start": "0x4001",
+          "end": "0x77FF"
+        },
+        {
+          "start": "0x78A2",
+          "end": "0x78A2"
+        },
+        {
+          "start": "0x790F",
+          "end": "0x790F"
+        },
+        {
+          "start": "0x791D",
+          "end": "0x791F"
+        },
+        {
+          "start": "0x7946",
+          "end": "0x7949"
+        },
+        {
+          "start": "0x7A07",
+          "end": "0x7A08"
+        },
+        {
+          "start": "0x7A10",
+          "end": "0x7A1F"
+        },
+        {
+          "start": "0x7A27",
+          "end": "0x7FFF"
+        }
+      ],
+      "complete": false
+    }
+  },
+  "note": "ASM генерирует v06c-asm-export; пакет только запускает и разбирает (ТЗ §24)"
+}
