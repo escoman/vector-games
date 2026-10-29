@@ -17,13 +17,16 @@
  * То же для draw_sprite_new (SPR_FORMAT, flat) — bm_new_*.
  * И для варианта с маской (OR-композит, без erase) — bm_mask_*,
  * плюс bm_mask_fill — время заливки шахматной подложки.
- * И для SMC-ядра (RST 1 + развёрнутая «лесенка») — bm_smc_*:
+ * И для SMC-ядра (обработчик столбца + развёрнутая «лесенка») — bm_smc_*:
  * те же дескрипторы, что у draw_sprite_new, другой блиттер.
+ * Пары движков: SMC с маской (spr_smc.asm) — bm_smc_mask_*; STUB и STUB с
+ * маской (spr_stub.asm; маска плоскостей и COLS развёрнуты при сборке) —
+ * bm_stub_*, bm_stub_mask_*.
  *
- * После замера ROM крутит четыре сцены по очереди (round-robin — по одной на
- * кадр: OLD / NEW / MASK / SMC), чтобы каждая успевала дорисоваться до прохода
- * луча: стирание + вывод одной сцены — ~180 строк растра, вчетвером в кадр
- * не влезают.
+ * После замера ROM крутит семь сцен по очереди (round-robin — по одной на
+ * кадр), по колонкам экрана: слева OLD / NEW / MASK / SMC / SMC+MSK, справа
+ * STUB / STUB+MSK — чтобы каждая сцена успевала дорисоваться до прохода луча:
+ * стирание + вывод одной сцены — ~180 строк растра, всемером в кадр не лезут.
  */
 
 #include "v06.h"
@@ -61,10 +64,21 @@ extern void fill_checker(unsigned char x, unsigned char y,
                          unsigned char wcells,
                          unsigned char hpix) __z88dk_callee;
 
-/* SMC-ядро (spr_smc.asm): flat-вывод через RST 1 + развёрнутая лесенка. */
+/* SMC-ядро (spr_smc.asm): flat-вывод — обработчик столбца + лесенка в ОЗУ. */
 extern void draw_sprite_smc(unsigned char x, unsigned int y,
                             const unsigned char *desc) __z88dk_callee;
-/* Раскладка обработчика RST 1 (0x0008) и лесенки (0x7000) — один раз на старте. */
+/* Пара к нему: та же лесенка, но с OR-композитом по маске
+ * (dst = (dst AND mask) OR color) — дескриптор с маской. */
+extern void draw_sprite_smc_mask(unsigned char x, unsigned int y,
+                                 const unsigned char *desc) __z88dk_callee;
+/* STUB-ядро (spr_stub.asm): линейный стаб класса — маска плоскостей и число
+ * столбцов развёрнуты при сборке, в кадре ни загрузки флагов, ни ветвлений. */
+extern void draw_sprite_stub(unsigned char x, unsigned int y,
+                             const unsigned char *desc) __z88dk_callee;
+/* Пара к нему: тот же стаб, но столбцы компонуются по маске. */
+extern void draw_sprite_stub_mask(unsigned char x, unsigned int y,
+                                  const unsigned char *desc) __z88dk_callee;
+/* Сборка лесенок в ОЗУ (копирование 0x7000, композиция 0x7100) — один раз. */
 extern void smc_init(void);
 
 /* ------------------------------ ПАЛИТРА -------------------------------- */
@@ -91,6 +105,15 @@ volatile unsigned int bm_mask_fill;  /* одна заливка шахматки
 volatile unsigned int bm_smc_draw;   /* один draw_sprite_smc (тики)         */
 volatile unsigned int bm_smc_total;  /* N вызовов через RST 1 (тики)       */
 volatile unsigned int bm_smc_anim;   /* анимация 3 кадров через RST 1 (тики) */
+volatile unsigned int bm_smc_mask_draw;  /* один draw_sprite_smc_mask (тики) */
+volatile unsigned int bm_smc_mask_total; /* N вызовов SMC с маской (тики)  */
+volatile unsigned int bm_smc_mask_anim;  /* анимация 3 кадров SMC+маска  */
+volatile unsigned int bm_stub_draw;  /* один draw_sprite_stub (тики)        */
+volatile unsigned int bm_stub_total; /* N вызовов через стаб (тики)         */
+volatile unsigned int bm_stub_anim;  /* анимация 3 кадров через стаб (тики) */
+volatile unsigned int bm_stub_mask_draw;   /* один draw_sprite_stub_mask */
+volatile unsigned int bm_stub_mask_total;  /* N вызовов STUB с маской    */
+volatile unsigned int bm_stub_mask_anim;   /* анимация 3 кадров STUB+маска */
 volatile unsigned int bm_magic;      /* 0xBEEF = замер выполнен            */
 
 #define R_OLD 3u
@@ -188,6 +211,10 @@ static void measure(void)
     unsigned char new_y = 56;           /* y верха: уровень надписи NEW ENGINE */
     unsigned char mask_y = 104;         /* y верха: уровень MASK ENGINE */
     unsigned char smc_y = 152;          /* y верха: уровень SMC ENGINE */
+    unsigned char smcm_y = 200;         /* y верха: SMC с маской (пл. STUB) */
+    unsigned char stub_x = 128;         /* x начала второй колонки */
+    unsigned char stub_y = 8;           /* y верха: уровень STUB ENGINE */
+    unsigned char stubm_y = 56;         /* y верха: STUB с маской */
     unsigned char phase;
     unsigned int e0;
     unsigned char f0;
@@ -282,13 +309,76 @@ static void measure(void)
         draw_sprite_smc(old_x, smc_y, mario_frames_new[phase]);
     bm_smc_anim = t_span(e0, f0);
 
+    /* === Замеры SMC с маской (та же лесенка, композит по маске) === */
+    /* 14) Одиночный вызов draw_sprite_smc_mask. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    draw_sprite_smc_mask(old_x, smcm_y, mario_frames_new_mask[0]);
+    bm_smc_mask_draw = t_span(e0, f0);
+
+    /* 15) Пачка из R_OLD вызовов. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (i = 0; i < R_OLD; ++i)
+        draw_sprite_smc_mask(old_x, smcm_y, mario_frames_new_mask[i % 3]);
+    bm_smc_mask_total = t_span(e0, f0);
+
+    /* 16) Анимация 3 кадров. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (phase = 0; phase < 3; ++phase)
+        draw_sprite_smc_mask(old_x, smcm_y, mario_frames_new_mask[phase]);
+    bm_smc_mask_anim = t_span(e0, f0);
+
+    /* === Замеры STUB-ядра (линейный стаб, вторая колонка экрана) === */
+    /* 17) Одиночный вызов draw_sprite_stub. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    draw_sprite_stub(stub_x, stub_y, mario_frames_new[0]);
+    bm_stub_draw = t_span(e0, f0);
+
+    /* 18) Пачка из R_OLD вызовов. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (i = 0; i < R_OLD; ++i)
+        draw_sprite_stub(stub_x, stub_y, mario_frames_new[i % 3]);
+    bm_stub_total = t_span(e0, f0);
+
+    /* 19) Анимация 3 кадров. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (phase = 0; phase < 3; ++phase)
+        draw_sprite_stub(stub_x, stub_y, mario_frames_new[phase]);
+    bm_stub_anim = t_span(e0, f0);
+
+    /* === Замеры STUB-ядра с маской (та же пара, дескрипторы с маской) === */
+    /* 20) Одиночный вызов draw_sprite_stub_mask. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    draw_sprite_stub_mask(stub_x, stubm_y, mario_frames_new_mask[0]);
+    bm_stub_mask_draw = t_span(e0, f0);
+
+    /* 21) Пачка из R_OLD вызовов. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (i = 0; i < R_OLD; ++i)
+        draw_sprite_stub_mask(stub_x, stubm_y, mario_frames_new_mask[i % 3]);
+    bm_stub_mask_total = t_span(e0, f0);
+
+    /* 22) Анимация 3 кадров. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (phase = 0; phase < 3; ++phase)
+        draw_sprite_stub_mask(stub_x, stubm_y, mario_frames_new_mask[phase]);
+    bm_stub_mask_anim = t_span(e0, f0);
+
     bm_magic = 0xBEEFu;
 }
 
 /* -------------------------------- MAIN --------------------------------- */
 int main(void)
 {
-    unsigned char phase = 0;               /* текущая сцена 0..2 (round-robin) */
+    unsigned char phase = 0;               /* текущая сцена 0..4 (round-robin) */
     unsigned char next = 0;                /* фаза анимации Марио 0..2 */
     volatile unsigned char *fc_lo;
     unsigned char last_fc;
@@ -299,49 +389,87 @@ int main(void)
 
     frame_handler = spr_frame;
     timer_start_sync();
-    smc_init();                           /* RST 1 -> 0x0008, лесенка -> 0x7000 */
+    smc_init();                           /* лесенки -> 0x7000 и 0x7100 */
 
     /* Статичный текст: заголовок и подписи метрик (фоновые плоскости, цвет 4). */
     gfx_active_planes = 0x0C;             /* только фоновые биты 2..3 */
-    gfx_print(8, 8, "OLD ENGINE", 4);
-    gfx_print(8, 24, "DRAW:", 4);
-    gfx_print(8, 32, "TOTAL:", 4);
-    gfx_print(8, 40, "ANIM:", 4);
-    gfx_print(8, 56, "NEW ENGINE", 4);
-    gfx_print(8, 72, "DRAW:", 4);
-    gfx_print(8, 80, "TOTAL:", 4);
-    gfx_print(8, 88, "ANIM:", 4);
-    gfx_print(8, 104, "MASK ENGINE", 4);
-    gfx_print(8, 120, "DRAW:", 4);
-    gfx_print(8, 128, "TOTAL:", 4);
-    gfx_print(8, 136, "ANIM:", 4);
-    gfx_print(8, 144, "FILL:", 4);
-    gfx_print(8, 152, "SMC ENGINE", 4);
-    gfx_print(8, 168, "DRAW:", 4);
-    gfx_print(8, 176, "TOTAL:", 4);
-    gfx_print(8, 184, "ANIM:", 4);
+    unsigned char x = 4;
+    gfx_print(x, 8, "OLD ENGINE", 4);
+    gfx_print(x, 16, "DRAW:", 4);
+    gfx_print(x, 24, "TOTAL:", 4);
+    gfx_print(x, 32, "ANIM:", 4);
+
+    gfx_print(x, 56, "NEW ENGINE", 4);
+    gfx_print(x, 64, "DRAW:", 4);
+    gfx_print(x, 72, "TOTAL:", 4);
+    gfx_print(x, 80, "ANIM:", 4);
+
+    gfx_print(x, 104, "MASK ENGINE", 4);
+    gfx_print(x, 112, "DRAW:", 4);
+    gfx_print(x, 120, "TOTAL:", 4);
+    gfx_print(x, 128, "ANIM:", 4);
+    gfx_print(x, 136, "FILL:", 4);
+
+    gfx_print(x, 152, "SMC ENGINE", 4);
+    gfx_print(x, 160, "DRAW:", 4);
+    gfx_print(x, 168, "TOTAL:", 4);
+    gfx_print(x, 176, "ANIM:", 4);
+
+    gfx_print(x, 200, "SMC MASK", 4);
+    gfx_print(x, 208, "DRAW:", 4);
+    gfx_print(x, 216, "TOTAL:", 4);
+    gfx_print(x, 224, "ANIM:", 4);
+
+    /* Вторая колонка: спрайты с x=128, подписи — за ними. */
+    x = 20;
+    gfx_print(x, 8, "STUB ENGINE", 4);
+    gfx_print(x, 16, "DRAW:", 4);
+    gfx_print(x, 24, "TOTAL:", 4);
+    gfx_print(x, 32, "ANIM:", 4);
+
+    gfx_print(x, 56, "STUB MASK", 4);
+    gfx_print(x, 64, "DRAW:", 4);
+    gfx_print(x, 72, "TOTAL:", 4);
+    gfx_print(x, 80, "ANIM:", 4);
     gfx_active_planes = 0x0F;
 
     measure();
 
     /* Вывод результатов замера (фоновые плоскости, цвет 4). */
     gfx_active_planes = 0x0C;
-    print_hex_u16(16, 24, bm_old_draw);
-    print_hex_u16(16, 32, bm_old_total);
-    print_hex_u16(16, 40, bm_old_anim);
-    print_hex_u16(16, 72, bm_new_draw);
-    print_hex_u16(16, 80, bm_new_total);
-    print_hex_u16(16, 88, bm_new_anim);
-    print_hex_u16(16, 120, bm_mask_draw);
-    print_hex_u16(16, 128, bm_mask_total);
-    print_hex_u16(16, 136, bm_mask_anim);
-    print_hex_u16(16, 144, bm_mask_fill);
-    print_hex_u16(16, 168, bm_smc_draw);
-    print_hex_u16(16, 176, bm_smc_total);
-    print_hex_u16(16, 184, bm_smc_anim);
+    x = 11;
+    print_hex_u16(x, 16, bm_old_draw);
+    print_hex_u16(x, 24, bm_old_total);
+    print_hex_u16(x, 32, bm_old_anim);
+
+    print_hex_u16(x, 64, bm_new_draw);
+    print_hex_u16(x, 72, bm_new_total);
+    print_hex_u16(x, 80, bm_new_anim);
+
+    print_hex_u16(x, 112, bm_mask_draw);
+    print_hex_u16(x, 120, bm_mask_total);
+    print_hex_u16(x, 128, bm_mask_anim);
+    print_hex_u16(x, 136, bm_mask_fill);
+
+    print_hex_u16(x, 160, bm_smc_draw);
+    print_hex_u16(x, 168, bm_smc_total);
+    print_hex_u16(x, 176, bm_smc_anim);
+
+    print_hex_u16(x, 208, bm_smc_mask_draw);
+    print_hex_u16(x, 216, bm_smc_mask_total);
+    print_hex_u16(x, 224, bm_smc_mask_anim);
+
+    x = 27;                             /* вторая колонка: значения за подписями */
+    print_hex_u16(x, 16, bm_stub_draw);
+    print_hex_u16(x, 24, bm_stub_total);
+    print_hex_u16(x, 32, bm_stub_anim);
+
+    print_hex_u16(x, 64, bm_stub_mask_draw);
+    print_hex_u16(x, 72, bm_stub_mask_total);
+    print_hex_u16(x, 80, bm_stub_mask_anim);
     gfx_active_planes = 0x0F;
 
-    /* Замер выполнен — крутим четыре сцены по очереди (по одной на кадр). */
+    /* Замер выполнен — крутим семь сцен по очереди (по одной на кадр). */
     fc_lo   = (volatile unsigned char *)&frame_count;
     last_fc = *fc_lo;
 
@@ -355,7 +483,7 @@ int main(void)
          * затем erase+draw ПОДРЯД. Иначе луч сканирует строки Марио в момент
          * между erase и draw и на реальном экране видит пустое место.
          * Стирание и вывод одной сцены (~180 строк) успевают за кадр;
-         * три сцены вместе — нет, поэтому обновляется одна за кадр.
+         * семь сцен вместе — нет, поэтому обновляется одна за кадр.
          */
         switch (phase) {
         case 0:                             /* OLD: erase + flat */
@@ -370,22 +498,40 @@ int main(void)
             erase_sprite_box(0, 56, 3, SPR_H);
             draw_sprite_new(0, 56, mario_frames_new[next]);
             break;
-        default:                            /* MASK: подложка + OR-композит */
+        case 2:                             /* MASK: подложка + OR-композит */
             timer_wait(TIMER_REMAIN(TIMER_LINES(
                 RASTER_BASE + 104 + SPR_H + WAKE_MARGIN)));
             fill_checker(0, 104, 3, SPR_H);
             draw_sprite_new_mask(0, 104, mario_frames_new_mask[next]);
             break;
-        case 3:                             /* SMC: erase + RST 1 */
+        case 3:                             /* SMC: erase + CALL столбца */
             timer_wait(TIMER_REMAIN(TIMER_LINES(
                 RASTER_BASE + 152 + SPR_H + WAKE_MARGIN)));
             erase_sprite_box(0, 152, 3, SPR_H);
             draw_sprite_smc(0, 152, mario_frames_new[next]);
             break;
+        case 4:                             /* SMC+MSK: подложка + композит */
+            timer_wait(TIMER_REMAIN(TIMER_LINES(
+                RASTER_BASE + 200 + SPR_H + WAKE_MARGIN)));
+            fill_checker(0, 200, 3, SPR_H);
+            draw_sprite_smc_mask(0, 200, mario_frames_new_mask[next]);
+            break;
+        case 5:                             /* STUB: erase + линейный стаб */
+            timer_wait(TIMER_REMAIN(TIMER_LINES(
+                RASTER_BASE + 8 + SPR_H + WAKE_MARGIN)));
+            erase_sprite_box(128, 8, 3, SPR_H);
+            draw_sprite_stub(128, 8, mario_frames_new[next]);
+            break;
+        default:                            /* STUB+MSK: подложка + стаб */
+            timer_wait(TIMER_REMAIN(TIMER_LINES(
+                RASTER_BASE + 56 + SPR_H + WAKE_MARGIN)));
+            fill_checker(128, 56, 3, SPR_H);
+            draw_sprite_stub_mask(128, 56, mario_frames_new_mask[next]);
+            break;
         }
 
         /* Очередь и фаза анимации. */
-        phase = (phase + 1) % 4;
+        phase = (phase + 1) % 7;
         if (phase == 0)
             next = (next + 1) % 3;
     }
