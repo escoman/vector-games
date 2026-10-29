@@ -2,7 +2,11 @@
 ; Формат дескриптора: [FLAGS, COLS, DEPTH] + DATA
 ; FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит
 ; Данные: для каждой присутствующей плоскости (по порядку П3,П2,П1,П0)
-;   подряд по COLS прогонов, прогон = DEPTH*8 байт (dense).
+;   подряд по COLS столбцов; столбец = [SHIFT, LEN] + LEN байт:
+;   SHIFT — сдвиг от верхней строки спрайта до первой выводимой строки,
+;   LEN   — число выводимых байтов (0 = столбец пуст).
+;   Выводятся только строки с первой по последнюю ненулевую — головные
+;   и хвостовые нули не хранятся и не пишутся в VRAM.
 ;
 ; Вызов: draw_sprite_new(x, y, desc) — flat-запись (перезапись VRAM)
 ;   x — пиксельная координата X (кратна 8)
@@ -190,7 +194,8 @@ plane_skip:
 
 ; ---------------------------------------------------------------
 ; plane_blit — flat-запись одной плоскости
-; HL = dst, DE = курсор данных, B = cols, C = depth
+; Вход: DE = курсор данных, HL = dst (верх левого столбца), B = cols
+; Столбец данных: [SHIFT, LEN] + LEN байт.
 ; ---------------------------------------------------------------
 plane_blit:
         lhld    _rn_data
@@ -200,22 +205,31 @@ plane_blit:
         mov     b, a            ; B = счётчик столбцов
 pb_col:
         push    b
-        push    h               ; адрес колонки
-        lda     _rn_depth
-        mov     c, a            ; C = счётчик рядов
-pb_row:
-        push    b
-        mvi     b, 8            ; 8 байт тайл-ряда
+        push    h               ; верх колонки (восстановим после столбца)
+        ldax    d               ; A = SHIFT
+        inx     d
+        mov     c, a
+        mvi     b, 0            ; BC = SHIFT
+        ; HL = HL - SHIFT (адрес убывает вниз по экрану)
+        mov     a, l
+        sub     c
+        mov     l, a
+        mov     a, h
+        sbb     b
+        mov     h, a
+        ldax    d               ; A = LEN
+        inx     d
+        ora     a
+        jz      pb_next         ; LEN = 0 — пустой столбец
+        mov     c, a
 pb_byte:
         ldax    d
         inx     d
         mov     m, a            ; плоская запись
         dcx     h               ; адрес убывает вниз по экрану
-        dcr     b
-        jnz     pb_byte
-        pop     b
         dcr     c
-        jnz     pb_row
+        jnz     pb_byte
+pb_next:
         pop     h
         inr     h               ; следующий столбец +0x100
         pop     b

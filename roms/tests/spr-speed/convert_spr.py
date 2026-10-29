@@ -16,9 +16,12 @@
   Если op бит = 1: result = bit (из b0/b1)
   Если op бит = 0: result = 0 (фон)
 
-Новый формат (SPR_FORMAT.MD):
+Новый формат (SPR_FORMAT.MD + SHIFT/LEN):
   Заголовок: [FLAGS, COLS, DEPTH]
-  DATA: прогоны по плоскостям (П3, П2, П1, П0)
+  DATA: по плоскостям (П3, П2, П1, П0), в каждой — по COLS столбцов:
+    [SHIFT, LEN] + LEN байт (строки с первой по последнюю ненулевую)
+  SHIFT — сдвиг от верхней строки спрайта до первой выводимой строки
+  LEN   — кол-во выводимых байтов в столбце (0 = столбец пуст)
   FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит
 """
 
@@ -110,6 +113,24 @@ def build_columns(wcells, hcells, tiles):
     
     return columns
 
+def compact_column(col_bytes):
+    """
+    Упаковывает плотную колонку в [SHIFT, LEN] + данные.
+    SHIFT — индекс первой ненулевой строки (сдвиг от верха спрайта),
+    LEN — число строк с первой по последнюю ненулевую (включая
+    внутренние нули). Полностью пустая колонка -> [0, 0].
+    """
+    first = None
+    last = None
+    for i, b in enumerate(col_bytes):
+        if b != 0:
+            if first is None:
+                first = i
+            last = i
+    if first is None:
+        return [0, 0]
+    return [first, last - first + 1] + col_bytes[first:last + 1]
+
 def build_descriptor(columns, wcells, hcells, use_or=True):
     """
     Строит дескриптор в новом формате.
@@ -133,15 +154,17 @@ def build_descriptor(columns, wcells, hcells, use_or=True):
     cols = wcells
     depth = hcells  # в тайл-рядах
     
-    # Собираем DATA: для каждой плоскости (П3, П2, П1, П0) подряд по COLS прогонов
+    # Собираем DATA: для каждой плоскости (П3, П2, П1, П0) подряд по COLS
+    # столбцов; каждый столбец — [SHIFT, LEN] + LEN байт (без хвостовых
+    # и головных нулей).
     data = []
     for plane_id in [3, 2, 1, 0]:
         if not plane_present[plane_id]:
             continue
-        
+
         for col in range(wcells):
-            data.extend(columns[col][plane_id])
-    
+            data.extend(compact_column(columns[col][plane_id]))
+
     return flags, cols, depth, data
 
 def format_c_array(name, data, indent=4):
@@ -202,7 +225,8 @@ def main():
     output = []
     output.append('/*')
     output.append(' * mario_new.inc — спрайты идущего влево Марио в новом формате SPR_FORMAT.')
-    output.append(' * Формат: [FLAGS, COLS, DEPTH] + DATA (прогоны по плоскостям)')
+    output.append(' * Формат: [FLAGS, COLS, DEPTH] + DATA (по плоскостям)')
+    output.append(' * DATA на столбец: [SHIFT, LEN] + LEN байт (первая..последняя ненулевая строка)')
     output.append(' * FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит')
     output.append(' *')
     output.append(' * Используются только 3 фазы ходьбы (walk_seq = {0,1,2,1} из mario-dbl):')
