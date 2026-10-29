@@ -15,10 +15,10 @@ MAPFILE = spr-speed.map
 
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
-       $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm \
+       $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/gfx/pr.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
-       $(LIB)/timer/timer.asm $(LIB)/gfx/spr.asm $(LIB)/gfx/spr.c \
-       $(LIB)/gfx/spr_fmt.asm spr_new.asm spr_smc.asm main.c
+       $(LIB)/timer/timer.asm \
+       spr_old.asm spr_new.asm main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
 

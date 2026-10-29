@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""
+Конвертер mario_old.inc (тайл-префаб) → mario_new.inc (SPR_FORMAT)
+
+Старый формат:
+  Заголовок: [wcells, hcells, hpix, nTiles]
+  nTiles записей: [pos] + 8×(op, b0, b1)
+  pos = (col << 2) | row
+  
+  Каждый тайл 8x8: 8 строк, каждая строка = (op, b0, b1)
+  op — маска (какие пиксели активны)
+  b0 — биты плоскостей П3,П2 (старший бит пикселя)
+  b1 — биты плоскостей П1,П0 (младший бит пикселя)
+  
+  Композиция: res = cur ^ ((cur ^ bit) & op)
+  Если op бит = 1: result = bit (из b0/b1)
+  Если op бит = 0: result = 0 (фон)
+
+Новый формат (SPR_FORMAT.MD):
+  Заголовок: [FLAGS, COLS, DEPTH]
+  DATA: прогоны по плоскостям (П3, П2, П1, П0)
+  FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит
+"""
+
+import sys
+import re
+from pathlib import Path
+
+def parse_old_format(data):
+    """Парсит тайл-префаб данные."""
+    wcells = data[0]
+    hcells = data[1]
+    hpix = data[2]
+    nTiles = data[3]
+    
+    tiles = []
+    idx = 4
+    for _ in range(nTiles):
+        pos = data[idx]
+        col = pos >> 2
+        row = pos & 3
+        idx += 1
+        
+        rows = []
+        for _ in range(8):
+            op = data[idx]
+            b0 = data[idx + 1]
+            b1 = data[idx + 2]
+            idx += 3
+            rows.append((op, b0, b1))
+        
+        tiles.append((col, row, rows))
+    
+    return wcells, hcells, hpix, tiles
+
+def extract_planes_from_tile(rows):
+    """
+    Извлекает данные плоскостей из тайла (8 строк по 3 байта).
+    
+    По spr_old.asm (dr_p0/dr_p1):
+    - b0 = данные плоскости П0 (VRAM E000)
+    - b1 = данные плоскости П1 (VRAM C000)
+    - op = маска прозрачности (бит=0 => пиксель прозрачный)
+    
+    Композиция старого алгоритма: res = cur ^ ((cur ^ bit) & op)
+    Для нового flat-алгоритма с erase-фоном: color = bit & op
+    (прозрачные пиксели = 0, фон зачищается отдельно).
+    
+    Возвращает: 4 списка по 8 байт (по одному на плоскость)
+    """
+    planes = {3: [], 2: [], 1: [], 0: []}
+    
+    for op, b0, b1 in rows:
+        # П0 (E000) = b0, маскировано op
+        # П1 (C000) = b1, маскировано op
+        # П2, П3 не используются Марио
+        planes[0].append(b0 & op)
+        planes[1].append(b1 & op)
+        planes[2].append(0)
+        planes[3].append(0)
+    
+    return planes
+
+def build_columns(wcells, hcells, tiles):
+    """
+    Строит плотные колонки из тайлов.
+    Возвращает: columns[col][plane_id] = список байт
+    """
+    # Инициализируем пустые колонки
+    columns = {c: {p: [] for p in range(4)} for c in range(wcells)}
+    
+    # Для каждой колонки собираем тайлы сверху вниз
+    for col in range(wcells):
+        for row in range(hcells):
+            # Находим тайл для этой позиции
+            tile_data = None
+            for t_col, t_row, rows in tiles:
+                if t_col == col and t_row == row:
+                    tile_data = rows
+                    break
+            
+            if tile_data:
+                planes = extract_planes_from_tile(tile_data)
+                for plane_id in range(4):
+                    columns[col][plane_id].extend(planes[plane_id])
+            else:
+                # Пустой тайл — добавляем нули
+                for plane_id in range(4):
+                    columns[col][plane_id].extend([0] * 8)
+    
+    return columns
+
+def build_descriptor(columns, wcells, hcells, use_or=True):
+    """
+    Строит дескриптор в новом формате.
+    """
+    # Проверяем какие плоскости непустые
+    plane_present = {3: False, 2: False, 1: False, 0: False}
+    
+    for col in range(wcells):
+        for plane_id in range(4):
+            if any(b != 0 for b in columns[col][plane_id]):
+                plane_present[plane_id] = True
+    
+    # Строим FLAGS
+    # Марио использует П1 (C000) и П0 (E000), flat-режим (без OR)
+    flags = 0
+    if plane_present[3]: flags |= 0x01
+    if plane_present[2]: flags |= 0x02
+    if plane_present[1]: flags |= 0x04
+    if plane_present[0]: flags |= 0x08
+    
+    cols = wcells
+    depth = hcells  # в тайл-рядах
+    
+    # Собираем DATA: для каждой плоскости (П3, П2, П1, П0) подряд по COLS прогонов
+    data = []
+    for plane_id in [3, 2, 1, 0]:
+        if not plane_present[plane_id]:
+            continue
+        
+        for col in range(wcells):
+            data.extend(columns[col][plane_id])
+    
+    return flags, cols, depth, data
+
+def format_c_array(name, data, indent=4):
+    """Форматирует данные как C-массив."""
+    lines = []
+    prefix = ' ' * indent
+    line = prefix
+    for i, b in enumerate(data):
+        line += f'0x{b:02X}, '
+        if (i + 1) % 16 == 0:
+            lines.append(line)
+            line = prefix
+    if line != prefix:
+        lines.append(line)
+    return '\n'.join(lines)
+
+def convert_sprite(name, old_data, use_or=True):
+    """Конвертирует один спрайт."""
+    wcells, hcells, hpix, tiles = parse_old_format(old_data)
+    columns = build_columns(wcells, hcells, tiles)
+    flags, cols, depth, data = build_descriptor(columns, wcells, hcells, use_or)
+    
+    return {
+        'name': name,
+        'flags': flags,
+        'cols': cols,
+        'depth': depth,
+        'data': data,
+        'wcells': wcells,
+        'hcells': hcells,
+        'hpix': hpix
+    }
+
+def main():
+    # Читаем mario_old.inc
+    old_file = Path('/home/alexey/Projects/vector-games/roms/tests/spr-speed/mario_old.inc')
+    old_content = old_file.read_text()
+    
+    # Парсим массивы mario1_l, mario2_l, mario3_l
+    sprites = {}
+    for match in re.finditer(r'static const unsigned char (mario\d_l)\[\] = \{([^}]+)\}', old_content):
+        name = match.group(1)
+        data_str = match.group(2)
+        data = [int(x, 16) for x in re.findall(r'0x[0-9A-Fa-f]+', data_str)]
+        sprites[name] = data
+    
+    print(f"Найдено спрайтов: {list(sprites.keys())}")
+    
+    # Конвертируем каждый спрайт
+    converted = []
+    for name in ['mario1_l', 'mario2_l', 'mario3_l']:
+        if name in sprites:
+            desc = convert_sprite(name, sprites[name], use_or=True)
+            converted.append(desc)
+            print(f"{name}: FLAGS=0x{desc['flags']:02X}, COLS={desc['cols']}, DEPTH={desc['depth']}, DATA={len(desc['data'])} байт")
+    
+    # Генерируем mario_new.inc
+    output = []
+    output.append('/*')
+    output.append(' * mario_new.inc — спрайты идущего влево Марио в новом формате SPR_FORMAT.')
+    output.append(' * Формат: [FLAGS, COLS, DEPTH] + DATA (прогоны по плоскостям)')
+    output.append(' * FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит')
+    output.append(' *')
+    output.append(' * Используются только 3 фазы ходьбы (walk_seq = {0,1,2,1} из mario-dbl):')
+    output.append(' *   mario1_new — фаза 0 (ноги вместе)')
+    output.append(' *   mario2_new — фаза 1 (шаг вперёд)')
+    output.append(' *   mario3_new — фаза 2 (широкий шаг)')
+    output.append(' */')
+    output.append('')
+    output.append('#define MARIO_NPOSE   3')
+    output.append('#define MARIO_HCELLS  4')
+    output.append('#define MARIO_HPIX    32')
+    output.append('')
+    
+    for desc in converted:
+        name_new = desc['name'].replace('_l', '_new')
+        output.append(f'static const unsigned char {name_new}[] = {{')
+        output.append(f'    0x{desc["flags"]:02X}, 0x{desc["cols"]:02X}, 0x{desc["depth"]:02X},')
+        output.append(format_c_array('', desc['data'], 4))
+        output.append('};')
+        output.append('')
+    
+    output.append('/* таблица указателей: [фаза] 0..2 — только ходьба (walk_seq из mario-dbl) */')
+    output.append('static const unsigned char * const mario_frames_new[MARIO_NPOSE] = {')
+    output.append('    mario1_new, mario2_new, mario3_new')
+    output.append('};')
+    output.append('')
+    
+    # Записываем файл
+    new_file = Path('/home/alexey/Projects/vector-games/roms/tests/spr-speed/mario_new.inc')
+    new_file.write_text('\n'.join(output))
+    print(f"\nСоздан {new_file}")
+
+if __name__ == '__main__':
+    main()

@@ -1,127 +1,227 @@
+; spr_new.asm — новый алгоритм отрисовки спрайтов (SPR_FORMAT) для 8080
+; Формат дескриптора: [FLAGS, COLS, DEPTH] + DATA
+; FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит
+; Данные: для каждой присутствующей плоскости (по порядку П3,П2,П1,П0)
+;   подряд по COLS прогонов, прогон = DEPTH*8 байт (dense).
 ;
-; spr_new.asm — ПРОТОТИП нового блит-ядра beam-sprites для бенчмарка spr-speed.
-; Живёт ТОЛЬКО в roms/tests/spr-speed (не трогает lib/gfx/spr.asm). Реализует
-; dense-путь формата из docs/SPR_FORMAT.MD: один setup на спрайт, пропуск
-; отсутствующих плоскостей (не затираем нулями), длинный вертикальный прогон
-; на столбец (адрес убывает вниз по экрану — dec H).
+; Вызов: draw_sprite_new(x, y, desc) — flat-запись (перезапись VRAM)
+;   x — пиксельная координата X (кратна 8)
+;   y — пиксельная координата Y (0..248, верх спрайта)
+;   desc — указатель на дескриптор
 ;
-; Конвенция z88dk classic (как _spr_glyph_at): аргументы на стеке, caller-cleanup,
-; SP не трогаем, ret. arg1 (dst) в sp+4, arg2 (desc) в sp+2.
-;
-; void spr_blit_dense(unsigned int dst, unsigned int desc)
-;   dst  = адрес ВЕРХНЕЙ строки левого столбца, база плоскости П3 (0x8000+...)
-;   desc = [0]FLAGS [1]COLS [2]DEPTH(тайл-ряды) [3..]DATA
-;          FLAGS bit0..3 = наличие П3/П2/П1/П0; bit4 маска; bit5 sparse; bit6 OR
-;          (dense-прототип чтит только биты наличия плоскостей bit0..3)
-;          DATA: по плоскостям (П3,П2,П1,П0) x по столбцам, прогон = DEPTH*8 байт
-;
-; Геометрия (docs/SPR_FORMAT.MD §2): шаг в соседний столбец +0x100 (inr H),
-; шаг в следующую плоскость +0x2000 (H += 20h); внутри прогона адрес УБЫВАЕТ
-; (dcx H) — экранная строка Y вниз => смещение 255-Y.
-;
+; erase_sprite_box(x, y, wcells, hpix) — затереть нулями прямоугольник
+;   wcells*8 x hpix в плоскостях П0 (E000) и П1 (C000).
 
         SECTION code_clib
-        PUBLIC  _spr_blit_dense
+        PUBLIC  _draw_sprite_new
+        PUBLIC  _erase_sprite_box
 
-; --- рабочие переменные (bss при --no-crt не зануляется, но все инициализируются
-;     на входе до первого использования) ---
-        SECTION bss_clib
-sbd_vram:   defw    0       ; база текущей плоскости (VRAM-курсор)
-sbd_cdst:   defw    0       ; курсор столбца (верх)
-sbd_data:   defw    0       ; курсор блока данных
-sbd_flags:  defb    0       ; FLAGS
-sbd_cols:   defb    0       ; COLS
-sbd_cc:     defb    0       ; счётчик столбцов
-sbd_runlen: defb    0       ; DEPTH*8 — байт на прогон
-sbd_pmask:  defb    0       ; маска наличия текущей плоскости (1,2,4,8)
-sbd_pc:     defb    0       ; счётчик плоскостей 4..1
+        SECTION bss_compiler
+_rn_dst:  defw    0          ; базовый адрес VRAM (верх левого столбца)
+_rn_desc: defw    0
+_rn_flags: defb   0
+_rn_cols: defb    0
+_rn_depth: defb   0
+_rn_data: defw    0
+_rn_x:    defb    0
+_rn_y:    defb    0
+er_x:     defb    0
+er_y:     defb    0
+er_w:     defb    0
+er_h:     defb    0
+er_base:  defw    0
 
         SECTION code_clib
-_spr_blit_dense:
-        lxi     h,2
-        dad     sp
-        mov     e,m
-        inx     h
-        mov     d,m             ; DE = desc (arg2, sp+2)
-        lxi     h,4
-        dad     sp
-        mov     a,m
-        inx     h
-        mov     h,m
-        mov     l,a             ; HL = dst (arg1, sp+4)
-        shld    sbd_vram        ; база плоскости П3 = верх левого столбца
-        xchg                    ; HL = desc
-        mov     a,m
-        sta     sbd_flags       ; [0] FLAGS
-        inx     h
-        mov     a,m
-        sta     sbd_cols        ; [1] COLS
-        inx     h
-        mov     a,m             ; [2] DEPTH (тайл-ряды)
-        rlc
-        rlc
-        rlc                     ; *8 -> байт на прогон
-        sta     sbd_runlen
-        inx     h               ; HL = DATA
-        shld    sbd_data
-        mvi     a,01h
-        sta     sbd_pmask       ; бит наличия П3
-        mvi     a,04h
-        sta     sbd_pc          ; 4 плоскости
 
-sbd_plane:
-        lda     sbd_flags
-        mov     b,a
-        lda     sbd_pmask
-        ana     b
-        jz      sbd_adv         ; плоскость отсутствует: данных нет, пропуск
-        ; --- COLS прогонов текущей плоскости ---
-        lhld    sbd_vram
-        shld    sbd_cdst        ; курсор столбцов = база плоскости
-        lda     sbd_cols
-        sta     sbd_cc
-sbd_col:
-        lhld    sbd_data
-        xchg                    ; DE = src (данные прогона)
-        lhld    sbd_cdst        ; HL = dst (верх столбца)
-        lda     sbd_runlen
-        mov     b,a             ; B = счётчик байт прогона
-sbd_run:
-        ldax    d
-        mov     m,a
-        inx     d               ; src++
-        dcx     h               ; dst-- (адрес вниз по экрану)
-        dcr     b
-        jnz     sbd_run
-        ; DE = sbd_data + runlen -> следующий прогон
-        mov     a,e
-        sta     sbd_data
-        mov     a,d
-        sta     sbd_data+1
-        ; курсор столбца += 0x100 (соседний столбец)
-        lhld    sbd_cdst
+; ---------------------------------------------------------------
+; void erase_sprite_box(unsigned char x, unsigned char y,
+;                       unsigned char wcells, unsigned char hpix)
+; ---------------------------------------------------------------
+_erase_sprite_box:
+        ; Соглашение __z88dk_callee (как lib/gfx/pr.asm): каждый аргумент —
+        ; 16-битный слот, значение в младшем байте; последний аргумент сверху.
+        ; Стек: ret(2), hpix(2), wcells(2), y(2), x(2).
+        pop     d               ; ret
+        pop     h
+        mov     a, l
+        sta     er_h            ; hpix
+        pop     h
+        mov     a, l
+        sta     er_w            ; wcells
+        pop     h
+        mov     a, l
+        sta     er_y            ; y
+        pop     h
+        mov     a, l
+        sta     er_x            ; x
+        push    d
+
+        ; base = 0xE000 + (x>>3)*256 + (255-y)
+        lda     er_x
+        ora     a               ; CY=0, иначе rar вставит бит переноса в H
+        rar
+        rar
+        rar
+        mov     h, a
+        mvi     l, 0
+        mov     a, h
+        adi     0E0h
+        mov     h, a
+        lda     er_y
+        cma
+        ora     a               ; CY=0 перед add l
+        add     l
+        mov     l, a
+        jnc     e1
         inr     h
-        shld    sbd_cdst
-        ; счётчик столбцов
-        lda     sbd_cc
-        dcr     a
-        sta     sbd_cc
-        jnz     sbd_col
+e1:     shld    er_base
 
-sbd_adv:
-        ; база плоскости += 0x2000
-        lhld    sbd_vram
-        mov     a,h
+        ; Плоскость П0 (E000)
+        call    erase_plane
+
+        ; Плоскость П1 (C000) = base - 0x2000
+        lhld    er_base
+        mov     a, h
+        sui     20h
+        mov     h, a
+        shld    er_base
+        call    erase_plane
+        ret
+
+; Затереть одну плоскость: er_w колонок x er_h строк нулями
+erase_plane:
+        lhld    er_base
+        lda     er_w
+        mov     b, a
+er_col:
+        push    b
+        push    h
+        lda     er_h
+        mov     c, a
+er_row:
+        mvi     m, 0
+        dcx     h
+        dcr     c
+        jnz     er_row
+        pop     h
+        inr     h              ; следующий столбец +0x100
+        pop     b
+        dcr     b
+        jnz     er_col
+        ret
+
+; ---------------------------------------------------------------
+; void draw_sprite_new(unsigned char x, unsigned int y,
+;                      const unsigned char *desc)
+; ---------------------------------------------------------------
+_draw_sprite_new:
+        ; Соглашение __z88dk_callee (как lib/gfx/pr.asm): каждый аргумент —
+        ; 16-битный слот, значение в младшем байте; последний аргумент сверху.
+        ; Стек: ret(2), desc(2), y(2), x(2).
+        pop     d               ; ret
+
+        pop     h
+        shld    _rn_desc        ; desc — последний аргумент, снимается первым
+
+        pop     h
+        mov     a, l
+        sta     _rn_y           ; y
+
+        pop     h
+        mov     a, l
+        sta     _rn_x           ; x — первый аргумент, снимается последним
+
+        push    d
+
+        ; dst = 0x8000 + (x/8)*256 + (255-y)  — база П3 (верх левого столбца)
+        lda     _rn_x
+        ora     a               ; CY=0, иначе rar вставит бит переноса в H
+        rar
+        rar
+        rar
+        mov     h, a
+        mvi     l, 0
+        mov     a, h
+        adi     80h
+        mov     h, a
+        lda     _rn_y
+        cma
+        ora     a               ; CY=0 перед add l
+        add     l
+        mov     l, a
+        jnc     nc1
+        inr     h
+nc1:    shld    _rn_dst
+
+        ; Разобрать дескриптор
+        lhld    _rn_desc
+        mov     a, m            ; FLAGS
+        sta     _rn_flags
+        inx     h
+        mov     a, m            ; COLS
+        sta     _rn_cols
+        inx     h
+        mov     a, m            ; DEPTH
+        sta     _rn_depth
+        inx     h
+        shld    _rn_data        ; DATA = desc+3
+
+        ; Перебор плоскостей П3..П0, шаг адреса +0x2000
+        mvi     c, 01h          ; бит текущей плоскости: 1,2,4,8
+plane_loop:
+        lda     _rn_flags
+        ana     c
+        jz      plane_skip
+        push    b
+        call    plane_blit
+        pop     b
+plane_skip:
+        lhld    _rn_dst
+        mov     a, h
         adi     20h
-        mov     h,a
-        shld    sbd_vram
-        ; маска наличия <<= 1
-        lda     sbd_pmask
+        mov     h, a
+        shld    _rn_dst
+        mov     a, c
         rlc
-        sta     sbd_pmask
-        ; счётчик плоскостей
-        lda     sbd_pc
-        dcr     a
-        sta     sbd_pc
-        jnz     sbd_plane
+        mov     c, a
+        ani     10h             ; прошли все 4 плоскости?
+        jz      plane_loop
+        ret
+
+; ---------------------------------------------------------------
+; plane_blit — flat-запись одной плоскости
+; HL = dst, DE = курсор данных, B = cols, C = depth
+; ---------------------------------------------------------------
+plane_blit:
+        lhld    _rn_data
+        xchg                    ; DE = курсор данных
+        lhld    _rn_dst         ; HL = VRAM (верх левого столбца)
+        lda     _rn_cols
+        mov     b, a            ; B = счётчик столбцов
+pb_col:
+        push    b
+        push    h               ; адрес колонки
+        lda     _rn_depth
+        mov     c, a            ; C = счётчик рядов
+pb_row:
+        push    b
+        mvi     b, 8            ; 8 байт тайл-ряда
+pb_byte:
+        ldax    d
+        inx     d
+        mov     m, a            ; плоская запись
+        dcx     h               ; адрес убывает вниз по экрану
+        dcr     b
+        jnz     pb_byte
+        pop     b
+        dcr     c
+        jnz     pb_row
+        pop     h
+        inr     h               ; следующий столбец +0x100
+        pop     b
+        dcr     b
+        jnz     pb_col
+        ; Сохранить продвинутый курсор данных
+        xchg                    ; HL = DE
+        shld    _rn_data
         ret
