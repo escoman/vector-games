@@ -63,9 +63,8 @@ extern void mario_sfx_land(void);
 extern void mario_sfx_frame(void);
 extern unsigned char mario_sfx_running;   /* зеркало флага бега для ISR-движка */
 
-/* Загрузка палитры ИЗ ISR: тот же v06_pal_write, но БЕЗ ei/halt (мы уже в
- * прерывании, в гасящем интервале; ei внутри ISR открыл бы реентерабельный вход). */
-extern void v06_set_palette_isr(const unsigned char *pal);
+/* v06_set_palette_isr() теперь вызывается внутри lib/gfx/dblbuf.asm
+ * (функция gfx_dblbuf_isr()). Прямое объявление здесь не нужно. */
 
 /* ------------------------------- ГЕОМЕТРИЯ ------------------------------ */
 #define SCR_W        256
@@ -124,14 +123,12 @@ extern unsigned char kbd_shift_state;
 #define EV_JUMP      1
 #define EV_LAND      2
 
-static unsigned char palA[16], palB[16];
-static unsigned char front;              /* 0 = виден A, 1 = виден B          */
-/* Flip буфера выполняет ISR (mario_frame): main выставляет жедаемую палитру в
- * show_pal и поднимает pal_dirty; ISR грузит её ПЕРВОЙ (до звука) и сбрасывает
- * флаг. Флаг нужен, чтобы на лишних VBlank тяжёлого/пропущенного кадра палитру
- * не перезаписывать впустую (между показами она не меняется). */
-static const unsigned char *show_pal;    /* палитра, которую ISR грузит на VBlank */
-static volatile unsigned char pal_dirty; /* 1 = show_pal_changed → перезаписать   */
+/* Состояние double buffer теперь управляется модулем lib/gfx/dblbuf.asm:
+ * - палитры-маски: db_pal_a[], db_pal_b[] (в BSS)
+ * - front/back: db_front (в BSS)
+ * - pal_dirty/show_pal: db_pal_dirty, db_show_pal (в BSS)
+ * API: gfx_dblbuf_init(), gfx_dblbuf_present(), gfx_dblbuf_isr() и т.д.
+ * См. lib/v06.h для полных объявлений. */
 
 /* Относительный RAM-патч фона ПОД СПРАЙТОМ (вместо полноширинной тени): по
  * одному патчу на плоскость и на буфер A/B. Байт = relcol * PATCH_ROWS + row
@@ -200,15 +197,8 @@ static unsigned int fps_frames;                 /* показанных кадр
 
 /* ------------------------------- УТИЛИТЫ -------------------------------- */
 
-/* Собрать 16-слотовые палитры-маски из 4 цветов экрана. */
-static void build_palettes(void)
-{
-    unsigned char i;
-    for (i = 0; i < 16u; i++) {
-        palA[i] = screen_pal4[i & 3u];
-        palB[i] = screen_pal4[(i >> 2) & 3u];
-    }
-}
+/* build_palettes() удалена: теперь палитры-маски строятся внутри
+ * lib/gfx/dblbuf.asm функцией gfx_dblbuf_init(screen_pal4). */
 
 /* Зарисовать тайл земли в обе пары плоскостей (фон одинаков в A и B).
  * Данные (16 байт тайла) передаются asm'у через rs_spr. */
@@ -429,10 +419,10 @@ static void fps_refresh(void)
 static void hud_paint_digits(unsigned char back)
 {
     unsigned char col = (back == 0) ? 2 : 8;
-    gfx_active_planes = (back == 0) ? 0x03 : 0x0C;
+    gfx_dblbuf_set_planes((back == 0) ? 0x03 : 0x0C);
     gfx_put_char(17, 0, (char)('0' + fps_val / 10u), col);
     gfx_put_char(18, 0, (char)('0' + fps_val % 10u), col);
-    gfx_active_planes = 0x0F;
+    gfx_dblbuf_set_planes(0x0F);
 }
 
 /* Обработчик кадрового прерывания (50 Гц). ПОРЯДОК важен:
@@ -442,22 +432,27 @@ static void hud_paint_digits(unsigned char back)
  *    (ack), поэтому на лишних VBlank тяжёлого кадра палитра не трогается.
  * 2) затем — покадровый звук. Он долгий, но пишет только ВИ53/AY-порты
  *    (не 02/0C), поэтому после палитры безопасен, даже если вылезет из гашения. */
+/* Кадровый ISR: палитра (через dblbuf) → звук.
+ * Вызывается из startup.asm на каждом VBlank (50 Гц).
+ * gfx_dblbuf_isr() загружает палитру-маску, если запрошен свап (pal_dirty=1). */
 static void mario_frame(void)
 {
-    if (pal_dirty) {
-        v06_set_palette_isr(show_pal);
-        pal_dirty = 0;                     /* ack: main спит до этого момента */
-    }
-    mario_sfx_frame();                     /* ровно 1 такт звука за VBlank    */
+    gfx_dblbuf_isr();                    /* 1. смена палитры, если запрошена */
+    mario_sfx_frame();                   /* 2. ровно 1 такт звука за VBlank  */
 }
 
 /* present != 0 — показать наполненный буфер: переключить палитру-маску
  * (= свап видимого буфера, VSync-синхронно) и активные плоскости.
  * present == 0 — только нарисовать в скрытый буфер, экран НЕ трогать
- * (нужно для пред-фейдового кадра: иначе палитра мигнёт ярким кадром до fade). */
+ * (нужно для пред-фейдового кадра: иначе палитра мигнёт ярким кадром до fade).
+ *
+ * Использует новый API lib/gfx/dblbuf.asm:
+ * - gfx_dblbuf_back() — индекс back-буфера (0=A, 1=B)
+ * - gfx_dblbuf_present() — свап front/back + запрос палитры через ISR
+ * - gfx_dblbuf_set_front() — ручная установка front (без свопа палитры) */
 static void draw_frame(unsigned char present)
 {
-    unsigned char back = (unsigned char)(front ^ 1u);
+    unsigned char back = gfx_dblbuf_back();
     const unsigned char *spr = pick_sprite();
     unsigned char wcells = spr[0];
     unsigned char w_new;
@@ -506,15 +501,13 @@ static void draw_frame(unsigned char present)
     }
 
     /* Этот буфер теперь держит текущий кадр — независимо от показа. */
-    front = back;
-
-    /* 4. Показать этот буфер: НЕ грузим палитру напрямую (это делало ei/halt),
-     *    а просим ISR сделать flip на ближайшем VBlank (палитра — первой в
-     *    mario_frame). Само ожидание VBlank даёт v06_wait_frame в main-цикле. */
     if (present) {
-        gfx_active_planes = 0x0F;
-        show_pal = (back == 0) ? palA : palB;
-        pal_dirty = 1;
+        /* Показать: свап front/back + запрос палитры через ISR. */
+        gfx_dblbuf_present();
+    } else {
+        /* Не показывать: только обновить front (без свопа палитры).
+         * Нужно для пред-фейдового кадра: fade_in проявит этот буфер. */
+        gfx_dblbuf_set_front(back);
     }
 }
 
@@ -558,19 +551,19 @@ static void init_background(void)
      * Рисуем ПОСЛЕ copy_A_to_B, иначе «1» перекочевала бы в B.
      * Цвет = бит той же весовой плоскости: A — лог. 2 (w2), B — 8 (w8),
      * под palB (i>>2)&3 = 2 — тот же розовый. */
-    gfx_active_planes = 0x03;               /* только буфер A */
+    gfx_dblbuf_set_planes(0x03);          /* только буфер A */
     gfx_print(0, 0, "BUFFER 1", 2);
-    gfx_active_planes = 0x0C;               /* только буфер B */
+    gfx_dblbuf_set_planes(0x0C);          /* только буфер B */
     gfx_print(24, 0, "BUFFER 2", 8);
-    gfx_active_planes = 0x0F;
+    gfx_dblbuf_set_planes(0x0F);
 
     /* FPS-приставка «FPS=» статична — печатаем один раз в обе пары плоскостей
      * (как индикаторы буферов). Цифры поверх обновляет draw_frame по требованию.
      * Начальные цифры (fps_val=50) кладём сразу в обе пары, чтобы до первого
      * окна измерений не было расхождения A/B. */
-    gfx_active_planes = 0x03; gfx_print(13, 0, "FPS=", 2);
-    gfx_active_planes = 0x0C; gfx_print(13, 0, "FPS=", 8);
-    gfx_active_planes = 0x0F;
+    gfx_dblbuf_set_planes(0x03); gfx_print(13, 0, "FPS=", 2);
+    gfx_dblbuf_set_planes(0x0C); gfx_print(13, 0, "FPS=", 8);
+    gfx_dblbuf_set_planes(0x0F);
     hud_paint_digits(0); hud_val[0] = fps_val;
     hud_paint_digits(1); hud_val[1] = fps_val;
 
@@ -584,7 +577,7 @@ void main(void)
     unsigned char fc, last_fc, raw;
     volatile unsigned char *fc_lo;
 
-    build_palettes();
+    gfx_dblbuf_init(screen_pal4);        /* инициализация палитр-масок (A/B) */
     mario_sfx_init();
     init_background();
 
@@ -598,17 +591,15 @@ void main(void)
     /* Первый кадр рисуем в A (front=1 → back=0=A), НО не показываем
      * (present=0): экран остаётся чёрным, fade_in ниже сам проявит A с
      * Марио — без лишней вспышки палитры. */
-    front = 1;
+    gfx_dblbuf_set_front(1);
     draw_frame(0);
 
-    gfx_fade_in(palA, FADE_HOLD);   /* проявить A уже с Марио */
-    front = 0;
+    gfx_fade_in(gfx_dblbuf_front_pal(), FADE_HOLD);   /* проявить A уже с Марио */
+    gfx_dblbuf_set_front(0);
 
     /* Кадровое прерывание ведёт flip буфера (палитра ПЕРВОЙ) + звук. Назначаем
      * после фейда: пока идёт fade, палитрой владеет gfx_fade_in. A уже показан,
-     * так что стартовый flip не нужен (pal_dirty=0). */
-    show_pal = palA;
-    pal_dirty = 0;
+     * так что стартовый flip не нужен (pal_dirty=0, установлен gfx_dblbuf_init). */
     frame_handler = mario_frame;
 
     /* fixed timestep. Младший байт frame_count (его инкрементирует VBlank-ISR

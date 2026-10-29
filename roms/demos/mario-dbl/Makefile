@@ -18,6 +18,7 @@ MAPFILE = mario-dbl.map
 SRCS_COMMON = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/gfx/plane.asm \
+       $(LIB)/gfx/dblbuf.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/fade.c $(LIB)/gfx/pr.asm $(LIB)/kbd/keyboard.c \
        $(LIB)/mem/heap.c \
        include/render.asm include/sfx_mario.c main.c

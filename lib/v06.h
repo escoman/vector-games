@@ -191,6 +191,44 @@ extern void gfx_plane_or(const unsigned char *src);
 extern void gfx_plane_andn(const unsigned char *src);
 
 
+/* - - - - - - - - - Double Buffer (dblbuf.asm) - - - - - - - - - - - - - - - */
+
+/* Модуль двойной буферизации для устранения tearing и плавной анимации.
+ * Экран 256×256×16 разбит на две пары плоскостей (буфер A и буфер B),
+ * маскировка — палитрой. Смена палитры = смена видимого буфера (VSync-синхронно).
+ * Основан на технологии из демки roms/demos/mario-dbl.
+ *
+ * Типичное использование:
+ *   gfx_dblbuf_init(c4);           // инициализация палитр-масок
+ *   gfx_dblbuf_set_planes(0x03);   // рисуем в буфер A
+ *   // ... рисуем статичный фон ...
+ *   gfx_dblbuf_copy_ab();          // копируем фон в B
+ *   gfx_dblbuf_show();             // показываем A (ei/halt)
+ *   frame_handler = my_isr;        // ISR вызывает gfx_dblbuf_isr()
+ *   for (;;) {
+ *       gfx_dblbuf_set_planes(back_mask);  // рисуем в back-буфер
+ *       // ... erase/draw sprites ...
+ *       gfx_dblbuf_set_planes(0x0F);
+ *       gfx_dblbuf_present();      // свап на следующем VBlank
+ *       v06_wait_frame();
+ *   }
+ */
+
+extern void gfx_dblbuf_init(const unsigned char *c4) __z88dk_callee;
+extern unsigned char gfx_dblbuf_present(void);
+extern void gfx_dblbuf_show(void);
+extern unsigned char gfx_dblbuf_set_planes(unsigned char mask) __z88dk_callee;
+extern void gfx_dblbuf_copy_ab(void);
+extern void gfx_dblbuf_copy_ba(void);
+extern void gfx_dblbuf_isr(void);
+extern unsigned char gfx_dblbuf_front(void);
+extern unsigned char gfx_dblbuf_back(void);
+extern const unsigned char *gfx_dblbuf_front_pal(void);
+extern const unsigned char *gfx_dblbuf_back_pal(void);
+extern void gfx_dblbuf_invalidate(void);
+extern void gfx_dblbuf_set_front(unsigned char front) __z88dk_callee;
+
+
 /* ----------------------------- Шрифты ------------------------------ */
 
 /* Дескриптор шрифта. Все четыре поля читают pr.asm, pr512.asm и

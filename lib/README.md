@@ -6,7 +6,7 @@ Architecture:
 - `sys/v06io.asm` — port write/read (self-modifying operand);
 - `sys/startup.asm` — ROM entry, frame interrupt 50 Hz, `frame_count`, `frame_handler`, `irq_active`;
 - `sys/v06pal.asm` — palette register write during vertical blank;
-- `gfx/` — video memory, modes, clearing, text rendering;
+- `gfx/` — video memory, modes, clearing, text rendering, double-buffer palette swap (`dblbuf.asm`);
 - `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), 3-voice SFX mixer (`sfx.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `timer/` — raster stopwatch on KR580VI53 channel 2 (racing-the-beam sync);
@@ -96,6 +96,55 @@ Glyph set: `" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:()."` Cell is opaque: glyph 
 ### Frame Sync
 
 `gfx_next_frame()` — waits for the next 50 Hz VBlank (HLT until interrupt, then checks `frame_count`).
+
+### Double Buffer (`gfx/dblbuf.asm`)
+
+Two-plane-pair palette-swap double buffering for 256x256x16. The 16-slot palette is split into two 16-byte masks:
+- **pal_a** — shows plane pair A (E000h/C000h, bits 0-1), hides B (A000h/8000h);
+- **pal_b** — shows B, hides A.
+
+The visible buffer is selected purely by which palette is loaded; both buffers are always present in VRAM. The swap is requested from the main loop and executed by the ISR during VBlank (no `ei/halt` in the main path).
+
+| Symbol | Meaning |
+|--------|---------|
+| `void gfx_dblbuf_init(const unsigned char *c4)` | Build 16-slot masks from 4 base colors; reset state (front=0, pal_dirty=0, show_pal=pal_a). |
+| `unsigned char gfx_dblbuf_present(void)` | Swap front/back, select palette, set `pal_dirty=1` and `gfx_active_planes=0x0F`. Returns new front (0=A, 1=B). |
+| `void gfx_dblbuf_show(void)` | Load palette IMMEDIATELY (with `ei/halt`) — for fade-in, startup. |
+| `unsigned char gfx_dblbuf_set_planes(unsigned char mask)` | Set `gfx_active_planes` mask (0x03=A, 0x0C=B, 0x0F=all). Returns old value. |
+| `void gfx_dblbuf_isr(void)` | Lightweight ISR handler: if `pal_dirty`, load `show_pal` via `v06_set_palette_isr` and clear the flag. ~15 ticks idle, ~200 ticks on swap. Call FIRST in `frame_handler`. |
+| `unsigned char gfx_dblbuf_front(void)` | Current front index (0=A, 1=B). |
+| `unsigned char gfx_dblbuf_back(void)` | Back index (`front ^ 1`). Draw into this buffer. |
+| `const unsigned char *gfx_dblbuf_front_pal(void)` | Pointer to the palette mask of the visible buffer (for `gfx_fade_in`). |
+| `const unsigned char *gfx_dblbuf_back_pal(void)` | Pointer to the palette mask of the hidden buffer. |
+| `void gfx_dblbuf_invalidate(void)` | Force palette reload on next VBlank without swapping front. |
+| `void gfx_dblbuf_set_front(unsigned char front)` | Manually set front index (init only; no palette swap). |
+| `void gfx_dblbuf_copy_ab(void)` | Copy A→B (16 KB: E000→A000, C000→8000). ~0.3 s. |
+| `void gfx_dblbuf_copy_ba(void)` | Copy B→A (mirror of `copy_ab`). |
+
+Typical cycle:
+
+```c
+/* init */
+gfx_dblbuf_init(screen_pal4);       /* build masks from 4 colors */
+gfx_set_black_palette();
+gfx_set_mode(GFX_MODE_256_16);
+gfx_fill_planes(0x0F, 0x00);
+/* ... draw background into both buffers ... */
+gfx_dblbuf_set_front(1);
+draw_frame(0);                      /* draw into A, don't show */
+gfx_fade_in(gfx_dblbuf_front_pal(), 32, 2);  /* fade visible A */
+gfx_dblbuf_set_front(0);
+frame_handler = my_frame;           /* my_frame calls gfx_dblbuf_isr() */
+
+/* each frame */
+back = gfx_dblbuf_back();           /* 0=A or 1=B */
+gfx_dblbuf_set_planes(back ? 0x0C : 0x03);  /* write into back only */
+/* ... draw sprites into back ... */
+gfx_dblbuf_set_planes(0x0F);
+gfx_dblbuf_present();               /* swap + request palette via ISR */
+```
+
+BSS footprint: 41 bytes (4 tmp + 16 pal_a + 16 pal_b + 1 front + 1 pal_dirty + 1 active + 2 show_pal).
 
 ---
 
