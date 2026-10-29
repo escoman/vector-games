@@ -273,6 +273,34 @@ extern void gfx_select_font_512(const gfx_font_t *font) __z88dk_callee;
 extern void gfx_select_font_512t(const gfx_font_t *font) __z88dk_callee;
 
 
+/* - - - - - - - - - - Спрайты (spr.asm) - - - - - - - - - - - - - - - - - */
+
+/* Стандартные ядра вывода спрайтов формата SPR_FORMAT (lib/gfx/spr.asm,
+ * спека docs/SPR_FORMAT.MD): пара «чистый битблит / битблит с маской».
+ *
+ * Дескриптор: [FLAGS, COLS, DEPTH] + (TABLE) + DATA.
+ * FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit4=маска, bit6=OR.
+ * spr_blit (без маски): на каждую присутствующую плоскость (П3,П2,П1,П0)
+ *   подряд по COLS столбцов; столбец = [SHIFT, LEN] + LEN байт — SHIFT
+ *   отступ от верха спрайта, LEN — число строк (0 = пустой столбец).
+ *   Запись плоская (overwrite), пустые плоскости пропускаются целиком.
+ * spr_blit_mask (bit4): + TABLE (COLS пар [SHIFT, LEN], общая для всех
+ *   блоков), DATA = [маска][прогоны плоскостей] — маска ПЕРВОЙ;
+ *   композиция dst = (dst AND mask) OR color, erase не нужен.
+ *
+ * Ограничения: x кратен 8; LEN <= 32 (spr_blit) / <= 28 (spr_blit_mask).
+ * spr_init() собирает в ОЗУ развёрнутые «лесенки» (0x7000..0x7203) и
+ * обязана быть вызвана ОДИН раз до первого вывода; куча (heap_top) не
+ * должна дорастать до 0x7000. Замеры — roms/tests/spr-speed:
+ * спрайт 16×24 (3 столбца, 2 плоскости): spr_blit 4208 тиков,
+ * spr_blit_mask 7274 тиков. */
+extern void spr_init(void);
+extern void spr_blit(unsigned char x, unsigned int y,
+                     const unsigned char *desc) __z88dk_callee;
+extern void spr_blit_mask(unsigned char x, unsigned int y,
+                          const unsigned char *desc) __z88dk_callee;
+
+
 
 /* ----------------------------------------------------------------------- */
 /*                                UNPACK                                   */

@@ -6,7 +6,7 @@ Architecture:
 - `sys/v06io.asm` — port write/read (self-modifying operand);
 - `sys/startup.asm` — ROM entry, frame interrupt 50 Hz, `frame_count`, `frame_handler`, `irq_active`;
 - `sys/v06pal.asm` — palette register write during vertical blank;
-- `gfx/` — video memory, modes, clearing, text rendering, double-buffer palette swap (`dblbuf.asm`);
+- `gfx/` — video memory, modes, clearing, text rendering, double-buffer palette swap (`dblbuf.asm`), sprite blit kernels (`spr.asm`);
 - `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), 3-voice SFX mixer (`sfx.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `timer/` — raster stopwatch on KR580VI53 channel 2 (racing-the-beam sync);
@@ -145,6 +145,51 @@ gfx_dblbuf_present();               /* swap + request palette via ISR */
 ```
 
 BSS footprint: 41 bytes (4 tmp + 16 pal_a + 16 pal_b + 1 front + 1 pal_dirty + 1 active + 2 show_pal).
+
+### Sprites (`gfx/spr.asm`)
+
+Standard SPR_FORMAT sprite blit kernels (spec: `docs/SPR_FORMAT.MD`): a pair
+"pure bitblit / bitblit with mask". Measured in `roms/tests/spr-speed` on a
+16×24-px sprite (3 columns, 2 planes, ~168 VRAM writes):
+
+| Symbol | Meaning |
+|--------|---------|
+| `void spr_init(void)` | Build both unrolled "ladders" in RAM once, before the first blit. |
+| `void spr_blit(x, y, desc)` | Pure (overwrite) blit of a descriptor. 4208 ticks = 43.8 raster lines. |
+| `void spr_blit_mask(x, y, desc)` | OR-composite blit `dst = (dst AND mask) OR color`; background outside the silhouette survives, no erase needed. 7274 ticks = 75.8 lines. |
+
+Calling convention: `__z88dk_callee` (`x` multiple of 8, `y` = sprite top,
+`desc` = descriptor pointer).
+
+Descriptor format: `[FLAGS, COLS, DEPTH] + (TABLE) + DATA`.
+`FLAGS`: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit4=mask, bit6=OR.
+
+* `spr_blit`: for each present plane (in order П3,П2,П1,П0) `COLS` columns in a
+  row; a column = `[SHIFT, LEN]` + `LEN` bytes — `SHIFT` is the offset from the
+  sprite top to the first drawn row, `LEN` the row count (0 = empty column).
+  Only rows from the first to the last non-zero one are stored/written.
+  Absent planes are skipped entirely (not zero-filled).
+* `spr_blit_mask`: `+ TABLE` (`COLS` `[SHIFT, LEN]` pairs shared by the mask and
+  all planes), `DATA` = `[mask block][plane runs]` — the mask block comes FIRST
+  (`mask_base = DATA`), color runs follow it linearly.
+
+Kernel technology: a column handler (`col_copy` / `col_or`) jumps into an
+unrolled straight-line ladder in RAM (24 ticks/row copy, 53 ticks/row composite)
+instead of a DCR/JNZ loop; the per-frame path has no flag loads or branches,
+just one CALL per column. The handlers `col_copy`/`col_or`/`col_or_plane`/
+`mask_state`/`mask_span` are PUBLIC building blocks for per-class build-time
+"stubs" (an example is `spr_stub.asm` in `roms/tests/spr-speed`).
+
+Constraints:
+
+* `spr_init()` owns RAM `0x7000..0x7081` (copy ladder, 32 rows × 4 bytes) and
+  `0x7100..0x7203` (composite ladder, 28 rows × 9 bytes) — keep the heap below
+  `0x7000` (the default `heap_top` 0x8000 is fine unless the heap actually
+  grows that far).
+* `LEN <= 32` for `spr_blit`, `LEN <= 28` for `spr_blit_mask`.
+* 8080 instructions only. The benchmark `roms/tests/spr-speed` links this
+  library file directly, so the numbers in `spr-speed` measure the library
+  kernels themselves.
 
 ---
 
