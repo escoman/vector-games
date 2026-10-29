@@ -161,19 +161,32 @@ extern unsigned char gfx_scroll_row;
 /* Синхронизация кадров */
 extern void gfx_next_frame(void);
 
-/* Текст 8x8 (256x256) */
+/* Текст 8x8 (256x256). КОМПЕТЕНЦИЯ КООРДИНАТ (путают постоянно):
+ * x — СТОЛБЕЦ VRAM (номер байта-колонки, 0..31), а НЕ пиксель:
+ *   один символ = 8 пикселей, пиксельный x = колонка * 8.
+ * y — СТРОКА В ПИКСЕЛЯХ (0..255), НЕ номер символьной строки:
+ *   строку шрифта 8x8 не надо делить/умножать на 8.
+ * Переноса строк нет: x в gfx_print растёт без проверки, и хвост
+ * строки за колонкой 31 ЗАВОРАЧИВАЕТСЯ в левый край (and 31) —
+ * следите, чтобы длина строки не превышала 32 - x. */
 extern void gfx_put_char(unsigned char x, unsigned char y, char ch,
                          unsigned char color) __z88dk_callee;
 extern void gfx_print(unsigned char x, unsigned char y, const char *s,
                       unsigned char color) __z88dk_callee;
 
-/* Текст 16x8 (512x256) */
+/* Текст 16x8 (512x256). Та же компетентация: x — СТОЛБЕЦ VRAM
+ * (байтовая колонка 0..31 = 16-пиксельная клетка), y — СТРОКА В
+ * ПИКСЕЛЯХ (0..255). Ширина символа 16 пикселей — это КЛЕТКА, а не
+ * единицы x: x=2 значит «третья байтовая колонка», не «32 пикселя». */
 extern void gfx_put_char_512(unsigned char x, unsigned char y, char ch,
                              unsigned char color) __z88dk_callee;
 extern void gfx_print_512(unsigned char x, unsigned char y, const char *s,
                           unsigned char color) __z88dk_callee;
 
-/* Текст 4x8 тонкий (512x256) */
+/* Текст 4x8 тонкий (512x256). Исключение из правила: x — позиция
+ * тонкого символа 0..63 (половина байта VRAM: чётный — левая тетрада,
+ * нечётный — правая; байтовая колонка = x / 2). y — СТРОКА В
+ * ПИКСЕЛЯХ (0..248), как в остальных текстовых функциях. */
 extern void gfx_print_512t(unsigned char x, unsigned char y, const char *s,
                            unsigned char color) __z88dk_callee;
 
