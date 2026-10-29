@@ -18,7 +18,7 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/gfx/pr.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
        $(LIB)/timer/timer.asm \
-       spr_old.asm spr_new.asm main.c
+       spr_old.asm spr_smc.asm main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
 
