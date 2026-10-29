@@ -23,6 +23,20 @@
   SHIFT — сдвиг от верхней строки спрайта до первой выводимой строки
   LEN   — кол-во выводимых байтов в столбце (0 = столбец пуст)
   FLAGS: bit0=П3, bit1=П2, bit2=П1, bit3=П0, bit6=OR-композит
+
+Вариант с маской (mario_new_mask.inc, SPR_FORMAT.MD §3/§4.6/§5):
+  Заголовок: [FLAGS, COLS, DEPTH] + TABLE + DATA
+  TABLE: COLS пар [SHIFT, LEN] — ОДНА на все блоки (sparse, bit5)
+  DATA:  БЛОК МАСКИ (Σ LEN байт) первым — она применяется первой, поэтому
+         mask_base = DATA без вычислений; за ней прогоны цветных
+         плоскостей (П3,П2,П1,П0) подряд по COLS прогонов, без префиксов:
+         указатель данных идёт линейно через все блоки.
+  МАСКА = ~(П1 | П0) построчно — «¬S», маска сохранения фона (§5).
+  Прогоны — ОБЩИЙ (union) span всех цветных плоскостей столбца, иначе
+  курсоры цвета и маски разойдутся.
+  Композиция: dst = (dst AND mask) OR color — фон сохраняется в строках,
+  где спрайт прозрачен, поэтому отдельный erase не нужен.
+  FLAGS: bit2=П1, bit3=П0, bit4=есть маска, bit5=sparse(TABLE), bit6=OR
 """
 
 import sys
@@ -167,6 +181,69 @@ def build_descriptor(columns, wcells, hcells, use_or=True):
 
     return flags, cols, depth, data
 
+# --- вариант с маской (SPR_FORMAT.MD §3/§4.6/§5) -------------------------
+FLAG_MASK   = 0x10   # bit4: есть блок маски
+FLAG_SPARSE = 0x20   # bit5: per-column таблица (SHIFT,LEN), общая для блоков
+FLAG_OR     = 0x40   # bit6: композиция dst = (dst AND msk) OR color
+
+def union_span(col_planes):
+    """Общий (union) прогон столбца по всем цветным плоскостям: первая..
+    последняя строка, где хоть одна плоскость ненулевая. Возвращает
+    (SHIFT, LEN); пустой столбец -> (0, 0)."""
+    n = len(col_planes[0])
+    first = last = None
+    for i in range(n):
+        if any(p[i] for p in col_planes):
+            if first is None:
+                first = i
+            last = i
+    if first is None:
+        return 0, 0
+    return first, last - first + 1
+
+def build_descriptor_mask(columns, wcells, hcells):
+    """Дескриптор с маской: общая TABLE + прогоны цветных плоскостей +
+    блок маски после них (§4.6). Прогоны всех блоков синхронны (одни и те
+    же SHIFT/LEN из TABLE), поэтому ядро читает цвет и маску в замке
+    двумя курсорами: DE=цвет, BC=маска (§4.4 sbf_plane_or)."""
+    present = [p for p in (3, 2, 1, 0)
+               if any(any(columns[c][p]) for c in range(wcells))]
+    flags = 0
+    for p in present:
+        flags |= 1 << (3 - p)          # bit0=П3, bit1=П2, bit2=П1, bit3=П0
+    flags |= FLAG_MASK | FLAG_SPARSE | FLAG_OR
+
+    # Общий span: маска и цветные прогоны обязаны идти в замке, иначе
+    # курсоры разойдутся; строки вне span во всех плоскостях нулевые.
+    table = []
+    spans = []
+    for c in range(wcells):
+        s, l = union_span([columns[c][p] for p in present])
+        spans.append((s, l))
+        table += [s, l]
+
+    data = []
+
+    # Маска — ПЕРВЫМ блоком DATA: она применяется первой, поэтому
+    # mask_base = DATA (никакой арифметики в setup). Затем плоские
+    # прогоны цветных плоскостей — курсор данных идёт линейно.
+    mask_len = 0
+    for c in range(wcells):
+        s, l = spans[c]
+        for i in range(s, s + l):
+            acc = 0
+            for p in present:
+                acc |= columns[c][p][i]
+            data.append((~acc) & 0xFF)
+        mask_len += l
+
+    for p in present:
+        for c in range(wcells):
+            s, l = spans[c]
+            data += columns[c][p][s:s + l]
+
+    return flags, wcells, hcells, table, data, mask_len
+
 def format_c_array(name, data, indent=4):
     """Форматирует данные как C-массив."""
     lines = []
@@ -195,7 +272,8 @@ def convert_sprite(name, old_data, use_or=True):
         'data': data,
         'wcells': wcells,
         'hcells': hcells,
-        'hpix': hpix
+        'hpix': hpix,
+        'columns': columns
     }
 
 def main():
@@ -215,11 +293,19 @@ def main():
     
     # Конвертируем каждый спрайт
     converted = []
+    converted_mask = []
     for name in ['mario1_l', 'mario2_l', 'mario3_l']:
         if name in sprites:
             desc = convert_sprite(name, sprites[name], use_or=True)
             converted.append(desc)
             print(f"{name}: FLAGS=0x{desc['flags']:02X}, COLS={desc['cols']}, DEPTH={desc['depth']}, DATA={len(desc['data'])} байт")
+            fl, co, de, tab, dat, mlen = build_descriptor_mask(
+                desc['columns'], desc['wcells'], desc['hcells'])
+            converted_mask.append({
+                'name': name, 'flags': fl, 'cols': co, 'depth': de,
+                'table': tab, 'data': dat
+            })
+            print(f"  +маска: FLAGS=0x{fl:02X}, TABLE={len(tab)}, DATA={len(dat)} байт (из них маска {mlen})")
     
     # Генерируем mario_new.inc
     output = []
@@ -258,6 +344,45 @@ def main():
     new_file = Path('/home/alexey/Projects/vector-games/roms/tests/spr-speed/mario_new.inc')
     new_file.write_text('\n'.join(output))
     print(f"\nСоздан {new_file}")
+
+    # --- вариант с маской: mario_new_mask.inc ------------------------------
+    mask_out = []
+    mask_out.append('/*')
+    mask_out.append(' * mario_new_mask.inc — те же спрайты с маской и OR-композитом')
+    mask_out.append(' * (SPR_FORMAT.MD §3/§4.6/§5): [FLAGS, COLS, DEPTH] + TABLE + DATA.')
+    mask_out.append(' * TABLE: COLS пар [SHIFT, LEN] — общая для всех блоков (sparse, bit5).')
+    mask_out.append(' * DATA: блок МАСКИ первым (mask_base = DATA), затем прогоны П1, П0')
+    mask_out.append(' * — указатель данных идёт линейно через все блоки.')
+    mask_out.append(' * Маска = ~(П1|П0) построчно: композиция dst = (dst AND msk) OR color')
+    mask_out.append(' * сохраняет фон вне силуэта — отдельный erase не нужен.')
+    mask_out.append(' * FLAGS: bit2=П1, bit3=П0, bit4=маска, bit5=sparse, bit6=OR')
+    mask_out.append(' */')
+    mask_out.append('')
+    mask_out.append('#ifndef MARIO_NPOSE')
+    mask_out.append('#define MARIO_NPOSE   3')
+    mask_out.append('#endif')
+    mask_out.append('')
+
+    for desc_m in converted_mask:
+        name_m = desc_m['name'].replace('_l', '_new_mask')
+        mask_out.append(f'static const unsigned char {name_m}[] = {{')
+        mask_out.append(f'    0x{desc_m["flags"]:02X}, 0x{desc_m["cols"]:02X}, 0x{desc_m["depth"]:02X},')
+        mask_out.append('    /* TABLE: пары [SHIFT, LEN] на столбец (общая для всех блоков) */')
+        mask_out.append(format_c_array('', desc_m['table'], 4))
+        mask_out.append('    /* DATA: блок маски, затем прогоны П1, П0 — все по TABLE */')
+        mask_out.append(format_c_array('', desc_m['data'], 4))
+        mask_out.append('};')
+        mask_out.append('')
+
+    mask_out.append('/* таблица указателей: [фаза] 0..2 — только ходьба (walk_seq из mario-dbl) */')
+    mask_out.append('static const unsigned char * const mario_frames_new_mask[MARIO_NPOSE] = {')
+    mask_out.append('    mario1_new_mask, mario2_new_mask, mario3_new_mask')
+    mask_out.append('};')
+    mask_out.append('')
+
+    mask_file = Path('/home/alexey/Projects/vector-games/roms/tests/spr-speed/mario_new_mask.inc')
+    mask_file.write_text('\n'.join(mask_out))
+    print(f"Создан {mask_file}")
 
 if __name__ == '__main__':
     main()

@@ -15,10 +15,19 @@
 ;
 ; erase_sprite_box(x, y, wcells, hpix) — затереть нулями прямоугольник
 ;   wcells*8 x hpix в плоскостях П0 (E000) и П1 (C000).
+;
+; fill_checker(x, y, wcells, hpix) — шахматная подложка под спрайт:
+;   строки FF/AA в П0 и П1 — на неё накладывается маска.
+;
+; draw_sprite_new_mask(x, y, desc) — OR-композит с маской (FLAGS bit4):
+;   dst = (dst AND mask) OR color. Блок маски лежит ПЕРВЫМ в DATA
+;   (mask_base = DATA), за ним прогоны плоскостей — указатель идёт линейно.
 
         SECTION code_clib
         PUBLIC  _draw_sprite_new
         PUBLIC  _erase_sprite_box
+        PUBLIC  _fill_checker
+        PUBLIC  _draw_sprite_new_mask
 
         SECTION bss_compiler
 _rn_dst:  defw    0          ; базовый адрес VRAM (верх левого столбца)
@@ -34,6 +43,24 @@ er_y:     defb    0
 er_w:     defb    0
 er_h:     defb    0
 er_base:  defw    0
+
+; --- вариант с маской ---
+_rn_mask: defw    0          ; база блока маски = DATA (маска лежит первой)
+_rn_mcur: defw    0          ; курсор маски (линейно по блоку)
+_rn_cbase: defw   0          ; верх текущего столбца ЭТОЙ плоскости
+_rn_tab:  defw    0          ; база TABLE [SHIFT, LEN]
+_rn_tcur: defw    0          ; курсор TABLE
+_rn_tabc: defb    0          ; счётчик столбцов
+_rn_sh:   defb    0          ; SHIFT текущего столбца
+_rn_len:  defb    0          ; LEN текущего столбца
+_rn_cnt:  defb    0          ; счётчик строк композиции
+
+; --- fill_checker ---
+fc_x:     defb    0
+fc_y:     defb    0
+fc_w:     defb    0
+fc_h:     defb    0
+fc_base:  defw    0
 
         SECTION code_clib
 
@@ -112,6 +139,90 @@ er_row:
         pop     b
         dcr     b
         jnz     er_col
+        ret
+
+; ---------------------------------------------------------------
+; void fill_checker(unsigned char x, unsigned char y,
+;                   unsigned char wcells, unsigned char hpix)
+; Шахматная подложка под маску: строки 0xFF, 0xAA, 0xFF, 0xAA...
+; сразу в П0 (E000) и П1 (C000). hpix — чётное (пары строк).
+; ---------------------------------------------------------------
+_fill_checker:
+        pop     d               ; ret
+        pop     h
+        mov     a, l
+        sta     fc_h            ; hpix
+        pop     h
+        mov     a, l
+        sta     fc_w            ; wcells
+        pop     h
+        mov     a, l
+        sta     fc_y            ; y
+        pop     h
+        mov     a, l
+        sta     fc_x            ; x
+        push    d
+
+        ; base = 0xE000 + (x>>3)*256 + (255-y) — верх левой колонки, П0
+        lda     fc_x
+        ora     a               ; CY=0, иначе rar вставит бит переноса в H
+        rar
+        rar
+        rar
+        mov     h, a
+        mvi     l, 0
+        mov     a, h
+        adi     0E0h
+        mov     h, a
+        lda     fc_y
+        cma
+        ora     a               ; CY=0 перед add l
+        add     l
+        mov     l, a
+        jnc     fc1
+        inr     h
+fc1:    shld    fc_base
+
+        ; B = hpix/2 (пары строк), C = wcells
+        lda     fc_h
+        ora     a               ; CY=0
+        rar
+        mov     b, a
+        lda     fc_w
+        mov     c, a
+        lhld    fc_base         ; HL = верх П0
+        mov     a, h
+        sui     20h
+        mov     d, a            ; DE = верх П1 = base - 0x2000
+        mov     e, l
+
+fc_col:
+        push    b
+        push    h
+        push    d
+fc_pair:
+        mvi     a, 0FFh
+        mov     m, a            ; П0 = 0xFF
+        stax    d               ; П1 = 0xFF
+        dcx     h
+        dcx     d
+        mvi     a, 0AAh
+        mov     m, a            ; П0 = 0xAA
+        stax    d               ; П1 = 0xAA
+        dcx     h
+        dcx     d
+        dcr     b
+        jnz     fc_pair
+        pop     d
+        pop     h
+        inr     h               ; следующий столбец +0x100
+        mov     a, h
+        sui     20h
+        mov     d, a
+        mov     e, l
+        pop     b
+        dcr     c
+        jnz     fc_col
         ret
 
 ; ---------------------------------------------------------------
@@ -238,4 +349,198 @@ pb_next:
         ; Сохранить продвинутый курсор данных
         xchg                    ; HL = DE
         shld    _rn_data
+        ret
+
+; ===============================================================
+; МАСКА + OR-КОМПОЗИТ (FLAGS bit4/bit5/bit6)
+; [FLAGS, COLS, DEPTH] + TABLE + DATA, где DATA = [МАСКА][П3][П2][П1][П0]:
+;   - маска лежит ПЕРВОЙ: mask_base = DATA, без арифметики;
+;   - TABLE общая для всех блоков, прогоны синхронны;
+;   - курсор цвета идёт линейно через блоки плоскостей.
+; Композиция строки: dst = (dst AND mask) OR color — фон в прозрачных
+; строках сохраняется, erase не нужен.
+; ===============================================================
+_draw_sprite_new_mask:
+        ; Стек: ret(2), desc(2), y(2), x(2)
+        pop     d               ; ret
+        pop     h
+        shld    _rn_desc
+        pop     h
+        mov     a, l
+        sta     _rn_y
+        pop     h
+        mov     a, l
+        sta     _rn_x
+        push    d
+
+        ; dst = 0x8000 + (x/8)*256 + (255-y) — база П3
+        lda     _rn_x
+        ora     a               ; CY=0, иначе rar вставит бит переноса в H
+        rar
+        rar
+        rar
+        mov     h, a
+        mvi     l, 0
+        mov     a, h
+        adi     80h
+        mov     h, a
+        lda     _rn_y
+        cma
+        ora     a               ; CY=0 перед add l
+        add     l
+        mov     l, a
+        jnc     nm1
+        inr     h
+nm1:    shld    _rn_dst
+
+        ; Заголовок
+        lhld    _rn_desc
+        mov     a, m            ; FLAGS
+        sta     _rn_flags
+        inx     h
+        mov     a, m            ; COLS
+        sta     _rn_cols
+        inx     h
+        mov     a, m            ; DEPTH
+        sta     _rn_depth
+        inx     h
+        shld    _rn_tab         ; TABLE = desc+3
+
+        ; DATA = TABLE + 2*COLS (маска — первым блоком)
+        lda     _rn_cols
+        add     a               ; A = 2*COLS
+        mov     e, a
+        mvi     d, 0
+        lhld    _rn_tab
+        dad     d
+        shld    _rn_mask        ; mask_base = DATA
+
+        ; Σ LEN по TABLE -> DE; так как блок маски = Σ LEN,
+        ; курсор цвета = mask_base + Σ LEN (маска кончилась — начались П1)
+        lhld    _rn_tab         ; HL = TABLE (после dad d HL указывает на DATA)
+        lda     _rn_cols
+        mov     b, a
+        lxi     d, 0
+nm_sum:
+        inx     h               ; пропустить SHIFT
+        mov     a, m            ; LEN
+        add     e
+        mov     e, a
+        mvi     a, 0
+        adc     d
+        mov     d, a
+        inx     h
+        dcr     b
+        jnz     nm_sum
+        lhld    _rn_mask
+        dad     d
+        shld    _rn_data
+
+        ; Перебор плоскостей П3..П0, шаг адреса +0x2000
+        mvi     c, 01h
+nplane_loop:
+        lda     _rn_flags
+        ana     c
+        jz      nplane_skip
+        push    b
+        call    plane_or
+        pop     b
+nplane_skip:
+        lhld    _rn_dst
+        mov     a, h
+        adi     20h
+        mov     h, a
+        shld    _rn_dst
+        mov     a, c
+        rlc
+        mov     c, a
+        ani     10h             ; прошли все 4 плоскости?
+        jz      nplane_loop
+        ret
+
+; ---------------------------------------------------------------
+; plane_or — OR-композит одной плоскости с маской
+; Вход: _rn_data = курсор цвета (продвигается), HL = dst — берётся из
+;       _rn_dst; маска перечитывается с начала блока для ЭТОЙ плоскости.
+; ---------------------------------------------------------------
+plane_or:
+        lhld    _rn_data
+        xchg                    ; DE = курсор цвета
+        lhld    _rn_mask
+        shld    _rn_mcur        ; маска — с начала блока для этой плоскости
+        lhld    _rn_dst
+        shld    _rn_cbase       ; верх столбца: СВОЙ курсор, _rn_dst не трогаем
+        lda     _rn_cols
+        sta     _rn_tabc
+        lhld    _rn_tab
+        shld    _rn_tcur
+po_col:
+        ; SHIFT/LEN из таблицы (HL уходит под VRAM — читаем заранее)
+        push    d
+        push    b
+        lhld    _rn_tcur
+        mov     a, m            ; SHIFT
+        sta     _rn_sh
+        inx     h
+        mov     a, m            ; LEN
+        sta     _rn_len
+        inx     h
+        shld    _rn_tcur
+        pop     b
+        pop     d
+        lda     _rn_len
+        ora     a
+        jz      po_next         ; пустой столбец — ни цвета, ни маски
+        sta     _rn_cnt
+
+        ; BC = курсор маски (продолжение с прошлого столбца)
+        lhld    _rn_mcur
+        mov     c, l
+        mov     b, h
+
+        ; HL = _rn_cbase - SHIFT (DE — цвет, откладываем в стек)
+        push    d
+        lhld    _rn_cbase
+        lda     _rn_sh
+        mov     e, a
+        mvi     d, 0
+        mov     a, l
+        sub     e
+        mov     l, a
+        mov     a, h
+        sbb     d
+        mov     h, a
+        pop     d
+        call    por_run
+po_next:
+        lhld    _rn_cbase
+        inr     h               ; следующий столбец +0x100
+        shld    _rn_cbase
+        lda     _rn_tabc
+        dcr     a
+        sta     _rn_tabc
+        jnz     po_col
+        xchg                    ; HL = DE (продвинутый курсор цвета)
+        shld    _rn_data
+        ret
+
+; Композиция LEN строк: DE = цвет, BC = маска, HL = VRAM (вниз).
+; Счётчик строк — в _rn_cnt (на 8080 нет третьей пары под него).
+por_run:
+        ldax    b               ; A = маска строки
+        ana     m               ; A = фон AND маска
+        xchg                    ; HL = цвет, DE = VRAM
+        ora     m               ; A = (фон AND msk) OR цвет
+        xchg                    ; HL = VRAM, DE = цвет
+        mov     m, a
+        inx     b               ; следующая строка маски
+        inx     d               ; следующая строка цвета
+        dcx     h               ; адрес убывает вниз по экрану
+        lda     _rn_cnt
+        dcr     a
+        sta     _rn_cnt
+        jnz     por_run
+        mov     h, b            ; курсор маски — в _rn_mcur
+        mov     l, c
+        shld    _rn_mcur
         ret
