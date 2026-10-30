@@ -141,6 +141,9 @@ extern unsigned char kbd_shift_state; /* СС из kbdscan.asm (action-клав�
 static unsigned int  enemy_x[NUM_ENEMIES], enemy_y[NUM_ENEMIES];
 static signed char   enemy_dir[NUM_ENEMIES];
 static unsigned char enemy_shown[NUM_ENEMIES];
+/* состояние вертолёта: 5 вправо, 6 влево, 7 вверх, 8 вниз
+ * (как state5-state8 в оригинале putup) */
+static unsigned char enemy_state[NUM_ENEMIES];
 
 static beam_pat_t hero_pat;           /* attr: mask-путь, приоритет 2 */
 static beam_pat_t enemy_pat[NUM_ENEMIES]; /* attr: плоский, приоритет 1 */
@@ -414,6 +417,9 @@ static void restart_level(void)
         enemy_y[i] = (unsigned int)level_enemy_spawns[i][0] * 16u;
         enemy_dir[i] = (i & 1) ? -1 : 1;
         enemy_shown[i] = 0;
+        /* вертолёт стартует в state5 (вправо), если он ниже героя,
+         * иначе в state7 (вверх) — по логике оригинала */
+        enemy_state[i] = (level_enemy_kinds[i] == ENEMY_HELI) ? 5u : 0u;
         enemy_pat[i].attr = 0x01u;    /* плоский путь, приоритет 1 */
         enemy_pat[i].desc = enemy_frames[level_enemy_kinds[i]][0][0];
     }
@@ -554,8 +560,9 @@ static void hero_render_commit(void)
     beam_move(HERO_ID, (unsigned char)(hero_x & 0xF8u), hero_y);
 }
 
-/* Патруль врагов — только логика (клеточный шаг, коллизии); вид и
- * отображаемую позицию выставляет enemies_render_commit. */
+/* Логика врагов: ходок — горизонтальный патруль, ворона — вертикальный,
+ * вертолёт — преследование героя. Вид и отображаемую позицию выставляет
+ * enemies_render_commit. */
 static void enemies_logic(void)
 {
     unsigned char i;
@@ -566,20 +573,98 @@ static void enemies_logic(void)
 
     for (i = 0; i < NUM_ENEMIES; i++) {
         int rel = (int)enemy_y[i] - (int)cam_y;
+        unsigned char kind = level_enemy_kinds[i];
 
-        /* патруль по строке: 4px за свой кадр, разворот у стены/
-         * фрукта/края */
         if (move_now) {
-            int nx = (int)enemy_x[i] + (int)enemy_dir[i] * ENEMY_X_STEP;
-            unsigned char probe_col, row = (unsigned char)(enemy_y[i] >> 4);
-            if (nx < 0 || nx > 240) {
-                enemy_dir[i] = (signed char)-enemy_dir[i];
-            } else {
-                probe_col = (unsigned char)((enemy_dir[i] > 0 ? nx + 15 : nx) >> 4);
-                if (!cell_enemy_free(probe_col, row))
+            if (kind == ENEMY_HELI) {
+                /* вертолёт (state5-state8): чередует оси при препятствии,
+                 * преследует героя с проверкой препятствий */
+                unsigned char st = enemy_state[i];
+                int nx = (int)enemy_x[i], ny = (int)enemy_y[i];
+                unsigned char blocked = 0;
+                if (st == 5u) {
+                    /* движение вправо */
+                    nx += ENEMY_X_STEP;
+                    if (nx > 240) blocked = 1;
+                    else {
+                        unsigned char pc = (unsigned char)((nx + 15) >> 4);
+                        unsigned char pr = (unsigned char)(ny >> 4);
+                        if (!cell_enemy_free(pc, pr)) blocked = 1;
+                    }
+                    if (blocked) {
+                        enemy_state[i] = (ny >= (int)hero_y) ? 7u : 8u;
+                    } else {
+                        enemy_x[i] = (unsigned int)nx;
+                    }
+                } else if (st == 6u) {
+                    /* движение влево */
+                    nx -= ENEMY_X_STEP;
+                    if (nx < 0) blocked = 1;
+                    else {
+                        unsigned char pc = (unsigned char)(nx >> 4);
+                        unsigned char pr = (unsigned char)(ny >> 4);
+                        if (!cell_enemy_free(pc, pr)) blocked = 1;
+                    }
+                    if (blocked) {
+                        enemy_state[i] = (ny >= (int)hero_y) ? 7u : 8u;
+                    } else {
+                        enemy_x[i] = (unsigned int)nx;
+                    }
+                } else if (st == 7u) {
+                    /* движение вверх */
+                    ny -= ENEMY_X_STEP;
+                    if (ny < 0) blocked = 1;
+                    else {
+                        unsigned char pc = (unsigned char)(nx >> 4);
+                        unsigned char pr = (unsigned char)(ny >> 4);
+                        if (!cell_enemy_free(pc, pr)) blocked = 1;
+                    }
+                    if (blocked) {
+                        enemy_state[i] = (nx >= (int)hero_x) ? 6u : 5u;
+                    } else {
+                        enemy_y[i] = (unsigned int)ny;
+                    }
+                } else {
+                    /* st == 8u: движение вниз */
+                    ny += ENEMY_X_STEP;
+                    if (ny > 496) blocked = 1;
+                    else {
+                        unsigned char pc = (unsigned char)(nx >> 4);
+                        unsigned char pr = (unsigned char)((ny + 15) >> 4);
+                        if (!cell_enemy_free(pc, pr)) blocked = 1;
+                    }
+                    if (blocked) {
+                        enemy_state[i] = (nx >= (int)hero_x) ? 6u : 5u;
+                    } else {
+                        enemy_y[i] = (unsigned int)ny;
+                    }
+                }
+            } else if (kind == ENEMY_CROW) {
+                /* ворона: вертикальный патруль (оригинал state3/state4) */
+                int ny = (int)enemy_y[i] + (int)enemy_dir[i] * ENEMY_X_STEP;
+                unsigned char probe_row;
+                if (ny < 0 || ny > 496) {
                     enemy_dir[i] = (signed char)-enemy_dir[i];
-                else
-                    enemy_x[i] = (unsigned int)nx;
+                } else {
+                    probe_row = (unsigned char)((enemy_dir[i] > 0 ? ny + 15 : ny) >> 4);
+                    if (!cell_enemy_free((unsigned char)(enemy_x[i] >> 4), probe_row))
+                        enemy_dir[i] = (signed char)-enemy_dir[i];
+                    else
+                        enemy_y[i] = (unsigned int)ny;
+                }
+            } else {
+                /* ходок: горизонтальный патруль (оригинал state1/state2) */
+                int nx = (int)enemy_x[i] + (int)enemy_dir[i] * ENEMY_X_STEP;
+                unsigned char probe_col, row = (unsigned char)(enemy_y[i] >> 4);
+                if (nx < 0 || nx > 240) {
+                    enemy_dir[i] = (signed char)-enemy_dir[i];
+                } else {
+                    probe_col = (unsigned char)((enemy_dir[i] > 0 ? nx + 15 : nx) >> 4);
+                    if (!cell_enemy_free(probe_col, row))
+                        enemy_dir[i] = (signed char)-enemy_dir[i];
+                    else
+                        enemy_x[i] = (unsigned int)nx;
+                }
             }
         }
 
