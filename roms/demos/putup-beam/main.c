@@ -2,8 +2,8 @@
  * main.c — putup-beam: демо beam-подсистемы (lib/gfx/beam.c) на ассетах
  * игры putup. Уровень 16×32 клетки (512px = ровно 2 кольца VRAM) с
  * аппаратным вертикальным скроллингом, плавной анимацией героя (маска,
- * клеточный шаг логики + суб-клеточное сглаживание 4px/кадр) и тремя
- * патрулирующими врагами (ходок, ворона, вертолёт — как state1/3/5 putup).
+ * позиция идёт к клетке-цели по 4px за кадр) и тремя патрулирующими
+ * врагами (ходок, ворона, вертолёт — как state1/3/5 putup).
  *
  * Механика (по плану демо, без HUD/счёта/времени/Hurry Up/огня/музыки):
  *   - собрать все предметы {07,0A..0E} -> замок (клетка 24) открывается:
@@ -11,9 +11,11 @@
  *     putup);
  *   - войти в открытый выход -> рестарт уровня;
  *   - касание врага -> рестарт уровня;
- *   - скрытый кирпич (клетка 05h, глиф 7Dh) от надавливания сверху становится
- *     «?»-кубиком (04h), а «?»-кубик — случайным фруктом: как в putup
- *     func_player_move_d (0x7D -> тайл 04h, 0x7E -> func_spawn_egg);
+ *   - скрытый кирпич (клетка 05h, глиф 7Dh) по нажатию ↓ (стоя на нём)
+ *     становится «?»-кубиком (04h), а «?»-кубик (глиф 7Eh) — случайным
+ *     фруктом: как обработчики func_player_move_d putup, которые диспетчер
+ *     клавиш зовёт именно на ↓ (CPI 7Dh / CPI 7Eh на клетку под героем),
+ *     а не на факт приземления;
  *   - ESC -> fade-out и выход.
  *
  * Контракт цикла (BEAM_TZ §2.2, ТФ-1..7): вся видимая графика — через
@@ -130,8 +132,8 @@ static unsigned char rising;          /* шаг по Y — подъём         
 static unsigned char hero_vstate;     /* 0 земля/падение, 1 подъём, 2 апекс */
 static unsigned char jump_left;       /* px подъёма осталось */
 static unsigned char hang_left;       /* кадров зависания на апексе */
-static unsigned char press_col;       /* клетка под боксом, уже нажатая  */
-static unsigned char press_row;       /* 0FFh — герой в воздухе, сброшено */
+static unsigned char down_prev;       /* ↓ была нажата в прошлой итерации:
+                                       * нажатие = кромка, не удержание   */
 static unsigned char rnd_state;       /* xorshift8 (3,5,1): выбор фрукта  */
 static unsigned char hero_dir;        /* 1 вправо, 0 влево (стойка/кадры) */
 extern unsigned char kbd_shift_state; /* СС из kbdscan.asm (action-клавиша) */
@@ -267,10 +269,10 @@ static unsigned char fruit_pick(void)
     return (unsigned char)(FRUIT_FIRST + slot);
 }
 
-/* Нажатие сверху на клетку под боксом. putup: func_player_move_d сверяет
- * глиф клетки, ЛЕЖАЩЕЙ НИЖЕ игрока: 7Dh (скрытый кирпич) -> рисует тайл
- * 04h («?») в этой же клетке; 7Eh («?») -> func_spawn_egg — ставит в
- * клетку случайный фрукт. Твёрдость 04h/05h одинаковая, так что герой после
+/* Превращение клетки под боксом по нажатию ↓. putup: func_player_move_d
+ * сверяет глиф клетки, ЛЕЖАЩЕЙ НИЖЕ игрока: 7Dh (скрытый кирпич) -> новый
+ * тайл в этой же клетке; 7Eh («?») -> func_spawn_egg — ставит в клетку
+ * случайный фрукт. Твёрдость 04h/05h одинаковая, так что герой после
  * превращения продолжает стоять сверху. */
 static void hero_press_cell(unsigned char col, unsigned char row)
 {
@@ -289,19 +291,13 @@ static void hero_press_cell(unsigned char col, unsigned char row)
     }
 }
 
-/* Герой стоит на клетке (шаг вниз упёрся). Нажатие засчитывается ОДИН раз
- * на клетку — иначе «?»-кубик срабатывал бы каждый тик, а скрытый кирпич
- * и кубик превращались бы в один тик. В воздухе press_col сбрасывается,
- * поэтому прыжок на ту же клетку — это новое нажатие. */
-static void hero_press_under(void)
+/* Нажатие ↓, стоя на клетке. Само нажатие (кромку, не удержание) считает
+ * hero_logic — иначе «?»-кубик срабатывал бы каждую итерацию, а скрытый
+ * кирпич и кубик превращались бы в один фрукт за один кадр. */
+static void hero_press_down(void)
 {
-    unsigned char col = (unsigned char)((hero_x + 8u) >> 4);
-    unsigned char row = (unsigned char)((hero_y + 16u) >> 4);
-
-    if (col == press_col && row == press_row) return;
-    press_col = col;
-    press_row = row;
-    hero_press_cell(col, row);
+    hero_press_cell((unsigned char)((hero_x + 8u) >> 4),
+                    (unsigned char)((hero_y + 16u) >> 4));
 }
 
 /* Клетка ПОД центром героя: подбор предмета, вход в открытый выход. */
@@ -345,8 +341,7 @@ static void restart_level(void)
      * получает другое продолжение ряда), но гарантируем ненулевое: из 0
      * xorshift8 не выходит */
     if (!rnd_state) rnd_state = 0x5Au;
-    press_col = 0xFFu;
-    press_row = 0xFFu;
+    down_prev = 0;                    /* ↓ перечитывается на новой карте */
 
     hero_x = (unsigned int)level_hero_spawn[1] * 16u;
     hero_y = (unsigned int)level_hero_spawn[0] * 16u;
@@ -398,7 +393,7 @@ static void restart_level(void)
 
 static void hero_logic(void)
 {
-    unsigned char jump_held, grounded = 0;
+    unsigned char jump_held, down_held, grounded = 0;
 
     /* X: шаг начат — доводим до цели по 4px; иначе стартуем с клетки.
      * Бокс проверяется целиком — допустимо в любой вертикальной фазе. */
@@ -470,13 +465,13 @@ static void hero_logic(void)
         grounded = 1;                     /* стоим на твёрдой клетке */
     }
 
-    /* Нажатие сверху: только стоя на клетке и один раз на клетку. */
-    if (grounded) {
-        hero_press_under();
-    } else {
-        press_col = 0xFFu;
-        press_row = 0xFFu;
-    }
+    /* Секреты и «?»-кубики открываются ТОЛЬКО клавишей ↓ и только стоя на
+     * клетке (как в putup: обработчик клавиши func_player_move_d, а не
+     * следствие приземления). Учитывается кромка нажатия — удержание ↓ не
+     * повторяется, отпустить и нажать снова = следующее превращение. */
+    down_held = (unsigned char)kbd_is_down(KBD_KEY_DOWN);
+    if (grounded && down_held && !down_prev) hero_press_down();
+    down_prev = down_held;
 
     hero_enter_cell();
 }
