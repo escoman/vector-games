@@ -314,6 +314,94 @@ extern void spr_blit_mask(unsigned char x, unsigned int y,
                           const unsigned char *desc) __z88dk_callee;
 
 
+/* - - - - - - Beam: планировщик/пейсер спрайтов (gfx/beam.c) - - - - - */
+
+/* Beam-подсистема (спека roms/games/putup/BEAM_TZ.MD, ред.2) — аналог OAM
+ * NES поверх spr-ядер: игра объявляет дескрипторы SPR_FORMAT один раз и в
+ * цикле меняет только позиции/кадры; тени, diff→план по 8px-полосам,
+ * erase-до-фона, behind-the-beam пейсинг (гарантия tearing=0), бюджет и
+ * атомарность ряда — внутри. Единственный writer VRAM в кадре —
+ * beam_render (ТФ-1: прямые spr_blit/spr_init из игры запрещены).
+ *
+ * КОНТРАКТ ЦИКЛА (ТФ-2/ТФ-4):
+ *   frame_handler = isr;   // timer_start() + kbd_scan_now() — последний
+ *                          // ещё и сбрасывает gfx_scroll_row в порт 03h
+ *                          // на VBlank (flush скролла beam_set_cam)
+ *   beam_init(&level);
+ *   for (;;) {
+ *       v06_wait_frame();
+ *       game_logic();      // ТОЛЬКО beam_move/show/hide/bg_put/set_cam
+ *       beam_update();     // diff -> план по рядам
+ *       beam_render();     // в такт лучу; возврат = конец кадра (50 Гц)
+ *   }
+ * Задержка отображения — ровно 1 кадр (Г4); темп не зависит от загрузки
+ * (Г3); перегруз — перенос ЦЕЛЫХ спрайтов в следующий кадр, не швы (Г2),
+ * диагностируется beam_overbudget() (ТФ-5: бюджет — обязанность игры,
+ * паспорт BEAM_TZ §4: ~200-220 строк растра на кадр).
+ *
+ * ГЕОМЕТРИЯ: кольцо VRAM 256px = 32 полосы 8px; адресация контента мировая
+ * (ring y = world_y & 0xFF), экран показывает кольцо целиком, скролл его
+ * вращает. Уровень может быть выше 256px (y — мировой, unsigned int), но
+ * активные экземпляры игра держит в окне 256px и скрывает остальные: мир
+ * на 256px дальше — алиас того же кольца. beam_set_cam: шаг кратен 8,
+ * открытая полоса перерисовывается в том же кадре в бланкинге — до flush
+ * регистра скролла на VBlank.
+ *
+ * RAM: статика beam (экземпляры/тени/план/RAM-тайлмап ≤ 32×16 клеток,
+ * ~1.2KB) — в BSS, вне 0x7000..0x7203 (лесенки spr.asm); куча < 0x7000. */
+
+/* Паттерн: дескриптор SPR_FORMAT + атрибут. attr: бит0-3 приоритет
+ * (младшие рисуются раньше, старшие поверх), бит4 = путь spr_blit_mask
+ * (OR-композит «герой-класса», лимит 2 инстанса на кадр). */
+typedef struct {
+    const unsigned char *desc;
+    unsigned char attr;
+} beam_pat_t;
+
+/* Уровень: библиотека паттернов (справочно), тайлмап кодов фоновых клеток
+ * (копируется в RAM beam_init, правится beam_bg_put), bg_tiles — таблица
+ * указателей на ПЛОСКИЕ 16x16 дескрипторы клеток (индекс = код тайла;
+ * erase-до-фона пишет клетку целиком), rows/cols — размер в клетках 16px
+ * (≤ 32×16), beam_sync: 1 = behind-the-beam (игра), 0 = BEAM_OFF — записи
+ * только в бланкинг без гарантии (заставки, ТФ-7). */
+typedef struct {
+    const beam_pat_t *pats;
+    const unsigned char *map;
+    const unsigned char *const *bg_tiles;
+    unsigned char rows, cols;
+    unsigned char beam_sync;
+} beam_level_t;
+
+/* Загрузка уровня: копирует тайлмап, гасит тени, ВНУТРИ вызывает spr_init()
+ * ровно один раз (игра spr_init НЕ зовёт). Первое окно рисуется первым
+ * beam_render целиком без пейсинга — вызывай при чёрной палитре
+ * (gfx_set_black_palette), затем gfx_fade_in. */
+extern void beam_init(const beam_level_t *lvl) __z88dk_callee;
+
+/* Мутаторы игрового цикла (до beam_update): экземпляр id 0..15,
+ * x кратен 8, y — МИРОВАЯ пиксельная строка верха (0..rows*16-1);
+ * pat=0 — скрыт. beam_bg_put: cell (col,row) тайлмапа -> код фона. */
+extern void beam_move(unsigned char id, unsigned char x,
+                      unsigned int y) __z88dk_callee;
+extern void beam_show(unsigned char id, const beam_pat_t *p) __z88dk_callee;
+extern void beam_hide(unsigned char id) __z88dk_callee;
+extern void beam_bg_put(unsigned char col, unsigned char row,
+                        unsigned char code) __z88dk_callee;
+
+/* Камера (мировой y верха окна, кратен 8): gfx_set_scroll + пометка
+ * открытой полосы; flush регистра — на VBlank хуком kbd_scan_now. */
+extern void beam_set_cam(unsigned int cam_y) __z88dk_callee;
+
+/* Кадровый контракт: diff -> план; исполнение плана в такт лучу
+ * (возврат = конец кадра). beam_overbudget — счётчик переносов/отказов
+ * (диагностика ТФ-5), beam_blank_wait — спин до бланкинга (строка ≥ 288)
+ * для палитры/HUD-правок вне подсистемы. */
+extern void beam_update(void);
+extern void beam_render(void);
+extern unsigned char beam_overbudget(void);
+extern void beam_blank_wait(void);
+
+
 
 /* ----------------------------------------------------------------------- */
 /*                                UNPACK                                   */

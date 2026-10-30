@@ -6,7 +6,7 @@ Architecture:
 - `sys/v06io.asm` — port write/read (self-modifying operand);
 - `sys/startup.asm` — ROM entry, frame interrupt 50 Hz, `frame_count`, `frame_handler`, `irq_active`;
 - `sys/v06pal.asm` — palette register write during vertical blank;
-- `gfx/` — video memory, modes, clearing, text rendering, double-buffer palette swap (`dblbuf.asm`), sprite blit kernels (`spr.asm`);
+- `gfx/` — video memory, modes, clearing, text rendering, double-buffer palette swap (`dblbuf.asm`), sprite blit kernels (`spr.asm`), beam-synchronized sprite scheduler/pacer (`beam.c`);
 - `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), 3-voice SFX mixer (`sfx.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `timer/` — raster stopwatch on KR580VI53 channel 2 (racing-the-beam sync);
@@ -190,6 +190,87 @@ Constraints:
 * 8080 instructions only. The benchmark `roms/tests/spr-speed` links this
   library file directly, so the numbers in `spr-speed` measure the library
   kernels themselves.
+
+---
+
+## BEAM — Sprite Scheduler/Pacer (`gfx/beam.c`)
+
+The beam subsystem (spec: `roms/games/putup/BEAM_TZ.MD`, rev.2) is an NES-OAM
+analog on top of the spr kernels: the game declares SPR_FORMAT descriptors once
+at level load and then only moves/retargets instances — shadows, diff→per-band
+plan, erase-to-background, behind-the-beam pacing (tearing = 0), raster budget
+and row atomicity all live inside. `beam_render` is the ONLY VRAM writer in a
+frame (TF-1: direct `spr_blit`/`spr_blit_mask`/`spr_init` calls from the game
+are forbidden; `beam_init` calls `spr_init` itself, exactly once).
+
+### Frame contract
+
+```c
+frame_handler = my_isr;      /* timer_start() + kbd_scan_now() — the latter
+                                also flushes gfx_scroll_row to port 03h at
+                                VBlank (the beam_set_cam scroll register) */
+beam_init(&level);           /* at black palette; first beam_render draws the
+                                whole window unpaced, then gfx_fade_in */
+for (;;) {
+    v06_wait_frame();
+    game_logic();            /* ONLY beam_move/show/hide/bg_put/set_cam */
+    beam_update();           /* diff instances vs shadows -> per-band plan */
+    beam_render();           /* paced execution; returns at end of frame */
+}
+```
+
+Display latency is exactly 1 frame (G4); frame tempo is load-independent 50 Hz
+(G3); overload defers WHOLE sprites to the next frame instead of tearing a row
+(G2) and bumps the `beam_overbudget()` counter (TF-5: staying inside the
+budget passport — ~200-220 raster lines/frame, BEAM_TZ §4 — is the game's job).
+
+### Geometry and camera
+
+* The VRAM ring is 256 px = 32 bands of 8 px = 16 cell rows of 16 px. Content
+  addressing is WORLD-based (`ring y = world_y & 0xFF`), so hardware scroll
+  only rotates the ring; the screen shows the whole ring at once.
+* A level may be taller than 256 px (`beam_move` takes a world `unsigned int
+  y`), but the game must keep ACTIVE instances inside the current 256 px
+  window and `beam_hide` the rest — the world 256 px away aliases onto the
+  same ring.
+* `beam_set_cam(cam_y)` (multiple of 8): calls `gfx_set_scroll` and marks the
+  strip opened by the scroll. The strip cells (whole 16 px cells, skipped when
+  the aliased content already matches via the `ring_cells` shadow) are redrawn
+  in the SAME frame during blanking (raster line ≥ 288), strictly before the
+  scroll register is flushed at the next VBlank — so the strip is never
+  visible with stale content.
+
+### Pacing rules (BEAM_TZ §3.1, constants from BLINK.MD/spr-speed)
+
+* A band is written only when `elapsed >= bot(s) = TIMER_LINES(48+8s+8)`
+  (behind-the-beam) OR when `top(s) − elapsed − BEAM_LEAD(6) > cost +
+  MARGIN_MIN(8)` ("make it before the beam"); any doubt degrades to waiting.
+* Row atomicity: one decision per sprite, taken at its BOTTOM band
+  `(y+h−1)/8`; erase cells commit at their bottom band too, and instances
+  overlapping erased cells have their commit band pushed below the cell's.
+* Draw order in a band: erase cells first, then instances by priority
+  (`attr` bits 0-3, lower first). `attr` bit 4 selects the `spr_blit_mask`
+  path — at most 2 mask instances per frame (§3.2), the excess is deferred.
+* Cost model: ΣLEN bytes of the descriptor × 25 ticks/byte (blit) or × 43
+  (mask), /96 ticks per raster line, +2 lines overhead per operation.
+* `beam_sync = 0` (BEAM_OFF, TF-7): writes only in blanking, no pacing
+  guarantee — legitimate for title screens/level loads.
+
+### API
+
+| Symbol | Meaning |
+|--------|---------|
+| `beam_init(lvl)` | Load level: copy tilemap to RAM, invalidate shadows, `spr_init()` inside. `lvl`: `{pats, map, bg_tiles, rows, cols, beam_sync}`; `bg_tiles` = array of pointers to FLAT 16×16 cell descriptors indexed by tile code. |
+| `beam_move(id, x, y)` | Instance 0..15: `x` multiple of 8, `y` = world pixel row of the top. Sub-pixel X = build-time shifted descriptor variants (§3.3), chosen by the game. |
+| `beam_show(id, pat)` / `beam_hide(id)` | Set/clear the pattern (`beam_pat_t {desc, attr}`); hide schedules erase-to-background under the shadow. |
+| `beam_bg_put(col, row, code)` | Edit the RAM tilemap cell and schedule its redraw (e.g. collected key, opened exit). |
+| `beam_set_cam(cam_y)` | Hardware scroll + opened-strip redraw (see above). |
+| `beam_update()` / `beam_render()` | Frame contract pair. |
+| `beam_overbudget()` | Cumulative deferral counter (diagnostics/HUD). |
+| `beam_blank_wait()` | Spin to blanking (line ≥ 288) for palette/HUD edits outside the subsystem. |
+
+RAM: instances 16×5 + shadows 16×6 + plan/tilemap/ring shadows ≈ 1.2 KB of
+BSS — outside `0x7000..0x7203` (spr.asm ladders); keep the heap below `0x7000`.
 
 ---
 

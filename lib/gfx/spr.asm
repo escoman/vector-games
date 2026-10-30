@@ -37,6 +37,17 @@
 ; HL вызывающего. В кадре нет ни загрузки флагов, ни ветвлений — только
 ; CALL столбца (17 тактов) и INR H между столбцами.
 ;
+; Кольцо 256 строк (аппаратный скролл): y спрайта — мировая координата по
+; mod 256, столбец VRAM (256 байт, страница H) — кольцо. Старт прогона
+; (255−y−SHIFT) берётся по mod 256 БЕЗ займа страницы, а прогон, уходящий
+; за нуль столбца, разбивается на два входа в лесенку: seg1 = L+1 строка до
+; offset 0x00, seg2 = LEN−L−1 строк с offset 0xFF того же блока (курсоры
+; данных DE и маски BC линейны — второй проход продолжает первый; хвост
+; seg1 возвращается в промежуточный обработчик, а не вызывающему).
+; LEN ≤ 32 < 256 ⇒ шов на столбец максимум один. Цена проверки шва:
+; ~+14 тактов на столбец у col_copy, ~+10 у col_or; само разбиение —
+; только на шовных столбцах. Спрайт, целиком лежащий в 0..255, шва не имеет.
+;
 ; ВАЖНО — собственность на ОЗУ: spr_init() собирает лесенки по адресам
 ;   0x7000..0x7081 — копирование: 32 строки по 4 байта + хвост pop h/ret;
 ;   0x7100..0x7203 — композиция: 28 строк по 9 байт + хвост 8 байт.
@@ -85,6 +96,11 @@ _sb_mcur: defw    0          ; курсор маски (линейно по бл
 _sb_tab:  defw    0          ; база TABLE [SHIFT, LEN]
 _sb_tcur: defw    0          ; курсор TABLE
 
+; --- разбиение прогона на шве кольца 256 строк (общие col_copy/col_or) ---
+_sb_seg2: defb    0          ; число строк seg2 (с offset 0xFF)
+_sb_start: defw   0          ; старт seg1 (страница = блок столбца)
+_sb_entry: defw   0          ; адрес входа seg1 в лесенку
+
         SECTION code_clib
 
 SPR_COPY_LADDER EQU     7000h   ; страница лесенки копирования (кратна 0x100!)
@@ -126,21 +142,71 @@ SPR_OR_ROW_LEN  EQU     9       ; байт в строке лесенки ком
 ; col_copy — скопировать один столбец в VRAM (вызов: CALL col_copy).
 ; Вход: DE = [SHIFT][LEN][LEN байт], HL = верх столбца в VRAM.
 ; Выход: DE — за байтами столбца, HL = верх столбца (как на входе).
+; Старт прогона — по кольцу mod 256 (страница H не меняется); при LEN >
+; L+1 прогон бьётся на seg1/seg2 вокруг шва (см. шапку файла).
 ; ---------------------------------------------------------------
 col_copy:
         push    h               ; [top] верх столбца — вернётся из хвоста лесенки
         ldax    d               ; A = SHIFT
         inx     d
         mov     c, a
-        mov     a, l            ; HL -= SHIFT: первая выводимая строка
-        sub     c
+        mov     a, l            ; L = (255−y−SHIFT) mod 256 — кольцо,
+        sub     c               ; займа страницы нет
         mov     l, a
-        jnc     rs_nb
-        dcr     h
-rs_nb:
-        push    h               ; [start][top] начало данных в VRAM; снимает XTHL ниже
         ldax    d               ; A = LEN
         inx     d
+        mov     c, a            ; C = LEN
+        mov     a, l            ; шов: прогон уходит за нуль столбца?
+        sub     c               ; CY ⇔ L < LEN
+        jnc     cc_plain        ; L ≥ LEN — шва нет заведомо
+        inr     a               ; L−LEN+1 = 0 ⇔ L = LEN−1: прогон упёрся в нуль
+        jz      cc_plain
+cc_seam:
+        ; seg1 = L+1 строк от старта, seg2 = LEN−L−1 строк с 0xFF того же
+        ; блока; DE линеен — seg2 продолжает байты seg1.
+        mov     a, c
+        dcr     a
+        sub     l               ; A = seg2_len (на шве L ≤ LEN−2, CY=0)
+        sta     _sb_seg2
+        shld    _sb_start       ; старт seg1 (страница = блок столбца)
+        mov     a, l
+        inr     a               ; seg1_len = L+1 ≤ 31
+        add     a
+        add     a               ; 4*seg1_len
+        cma
+        inr     a
+        adi     SPR_COPY_LAST
+        mov     l, a
+        mvi     h, SPR_COPY_PAGE
+        shld    _sb_entry       ; вход seg1 в лесенку
+        ; стек для seg1: [entry1][мусор][cc_seg2][top][ret вызывающего];
+        ; хвост seg1: pop h (мусор), ret → cc_seg2.
+        lxi     h, cc_seg2
+        push    h               ; [cc_seg2][top][ret]
+        lhld    _sb_start
+        push    h               ; [мусор][cc_seg2][top][ret] — снимет pop h хвоста
+        lhld    _sb_entry
+        push    h               ; [entry1][мусор][cc_seg2][top][ret]
+        lhld    _sb_start       ; HL = начало seg1
+        ret                     ; лесенка seg1; её ret-jump снимает entry1
+cc_seg2:
+        ; стек [top][ret]; DE уже за байтами seg1, HL не нужен
+        lhld    _sb_start
+        mvi     l, 0FFh         ; seg2 начинается с offset 0xFF того же блока
+        push    h               ; [seg2_start][top][ret]
+        lda     _sb_seg2
+        add     a
+        add     a               ; 4*seg2_len
+        cma
+        inr     a
+        adi     SPR_COPY_LAST
+        mov     l, a
+        mvi     h, SPR_COPY_PAGE ; HL = вход seg2
+        xthl                    ; HL = seg2_start, в стеке — адрес входа
+        ret                     ; лесенка seg2; хвост: pop h → HL=top, ret → вызывающий
+cc_plain:
+        push    h               ; [start][top] начало данных в VRAM; снимает XTHL ниже
+        mov     a, c            ; A = LEN
         add     a               ; A = 4*LEN
         add     a
         cma                     ; A = 0x80 - 4*LEN — младший байт входа
@@ -163,6 +229,9 @@ col_copy_end:
 ; Выход: DE — за байтами цвета, HL = верх столбца (как на входе),
 ;        _sb_tcur / _sb_mcur — продвинуты, B сохранён (C — нет).
 ; Перед каждой плоскостью курсоры сбрасывает col_or_plane.
+; Старт прогона — по кольцу mod 256 (страница H не меняется); при LEN >
+; L+1 прогон бьётся на seg1/seg2 вокруг шва; хвост seg1 сам сохраняет
+; продвинутый курсор маски в _sb_mcur — seg2 подхватывает его оттуда.
 ;
 ; Стек на столбец: CALL -2; push b -2 (счётчик вызывающего); push h x2 -4
 ; (верх и рабочий экземпляр); push h -2 (начало столбца); push h -2 (адрес
@@ -183,12 +252,74 @@ col_or:
         shld    _sb_tcur        ; TABLE продвинута
         mov     b, a            ; B = LEN (BC пока свободен)
         pop     h               ; HL = верх столбца
-        mov     a, l            ; HL -= SHIFT: первая выводимая строка
-        sub     c
+        mov     a, l            ; L = (255−y−SHIFT) mod 256 — кольцо,
+        sub     c               ; займа страницы нет
         mov     l, a
-        jnc     or_nb
-        dcr     h
-or_nb:
+        mov     a, l            ; шов: прогон уходит за нуль столбца?
+        sub     b               ; CY ⇔ L < LEN
+        jnc     or_plain        ; L ≥ LEN — шва нет заведомо
+        inr     a               ; L−LEN+1 = 0 ⇔ L = LEN−1: прогон упёрся в нуль
+        jz      or_plain
+or_seam:
+        ; seg1 = L+1 строк от старта, seg2 = LEN−L−1 строк с 0xFF того же
+        ; блока; DE (цвет) линеен, курсор маски seg1 сохраняет в _sb_mcur.
+        mov     a, b
+        dcr     a
+        sub     l               ; A = seg2_len (на шве L ≤ LEN−2, CY=0)
+        sta     _sb_seg2
+        shld    _sb_start       ; старт seg1 (страница = блок столбца)
+        mov     a, l
+        inr     a               ; seg1_len = L+1 ≤ 27
+        mov     c, a
+        add     a
+        add     a
+        add     a               ; 8*seg1_len
+        add     c               ; 9*seg1_len
+        cma
+        inr     a
+        adi     SPR_OR_LAST
+        mov     l, a
+        mvi     h, SPR_OR_PAGE
+        shld    _sb_entry       ; вход seg1 в лесенку
+        ; стек для seg1: [entry1][мусор-h][мусор-b][or_seg2][top][B][ret];
+        ; хвост seg1: shld _sb_mcur; pop h (мусор); pop b (мусор); ret → or_seg2.
+        lxi     h, or_seg2
+        push    h               ; [or_seg2][top][B][ret]
+        lhld    _sb_start
+        push    h               ; мусор для pop b хвоста
+        push    h               ; мусор для pop h хвоста
+        lhld    _sb_entry
+        push    h               ; [entry1][мусор-b][мусор-h][or_seg2][top][B][ret]
+        lhld    _sb_mcur
+        mov     c, l
+        mov     b, h            ; BC = курсор маски seg1
+        lhld    _sb_start       ; HL = начало seg1
+        ret                     ; лесенка seg1; её ret-jump снимает entry1
+or_seg2:
+        ; стек [top][B][ret]; DE = цвет за seg1, _sb_mcur = курсор маски seg2
+        lhld    _sb_start
+        mvi     l, 0FFh         ; seg2 начинается с offset 0xFF того же блока
+        push    h               ; [seg2_start][top][B][ret]
+        lda     _sb_seg2
+        mov     c, a
+        add     a
+        add     a
+        add     a               ; 8*seg2_len
+        add     c               ; 9*seg2_len
+        cma
+        inr     a
+        adi     SPR_OR_LAST
+        mov     l, a
+        mvi     h, SPR_OR_PAGE  ; HL = вход seg2
+        push    h               ; [entry2][seg2_start][top][B][ret]
+        lhld    _sb_mcur
+        mov     c, l
+        mov     b, h            ; BC = курсор маски seg2
+        pop     h               ; HL = адрес входа
+        xthl                    ; HL = начало seg2, в стеке — адрес входа
+        ret                     ; лесенка seg2; хвост: shld _sb_mcur;
+                                ; pop h → HL=top; pop b → B=счётчик; ret → вызывающий
+or_plain:
         push    h               ; [start][top][B] начало данных в VRAM
         mov     a, b            ; A = LEN
         add     a               ; 2*LEN
