@@ -236,6 +236,57 @@ static unsigned char hero_box_solid(int x0, int y0)
     return 0;
 }
 
+/* Проверка заметённой области при горизонтальном шаге 16px.
+ * Герой может двигаться по X во время падения (mv_y установлен), тогда
+ * к моменту завершения X-шага герой окажется уже на другом Y (ближе к
+ * целевому). Поэтому проверяем строки от min(hero_y, hero_ty) до
+ * max(hero_y+15, hero_ty+15) — полная заметённая область по обеим осям.
+ * Если mv_y == 0, hero_y == hero_ty и проверка вырождается в текущий
+ * бокс + соседний столбец (как раньше). */
+static unsigned char hero_sweep_solid(int x0, int x1, int y_cur, int y_dst)
+{
+    int xmin, xmax, ymin, ymax;
+    unsigned char c0, c1, r0, r1, r, c;
+
+    xmin = (x0 < x1) ? x0 : x1;
+    xmax = (x0 > x1) ? x0 : x1;
+    if (xmin < 0) return 1;
+    ymin = (y_cur < y_dst) ? y_cur : y_dst;
+    ymax = (y_cur > y_dst) ? y_cur : y_dst;
+    if (ymin < 0) return 1;
+    c0 = (unsigned char)(xmin >> 4);
+    c1 = (unsigned char)((xmax + 15) >> 4);
+    r0 = (unsigned char)(ymin >> 4);
+    r1 = (unsigned char)((ymax + 15) >> 4);
+    for (r = r0; r <= r1; r++)
+        for (c = c0; c <= c1; c++)
+            if (cell_solid(c, r)) return 1;
+    return 0;
+}
+
+/* Вертикальная заметённая область: все строки от min(y0,y1) до
+ * max(y0+15,y1+15) при фиксированных столбцах тела героя (x..x+15).
+ * Без этого падение/прыжок пропускает стену, стоявшую в строке МЕЖДУ
+ * текущей позицией и целью — герой «вставлялся» в стену по Y. */
+static unsigned char hero_vscan_solid(int x, int y0, int y1)
+{
+    int ymin, ymax;
+    unsigned char c0, c1, r0, r1, r, c;
+
+    if (x < 0) return 1;
+    ymin = (y0 < y1) ? y0 : y1;
+    ymax = (y0 > y1) ? y0 : y1;
+    if (ymin < 0) return 1;
+    c0 = (unsigned char)(x >> 4);
+    c1 = (unsigned char)((x + 15) >> 4);
+    r0 = (unsigned char)(ymin >> 4);
+    r1 = (unsigned char)((ymax + 15) >> 4);
+    for (r = r0; r <= r1; r++)
+        for (c = c0; c <= c1; c++)
+            if (cell_solid(c, r)) return 1;
+    return 0;
+}
+
 /* --- скрытый кирпич / «?»-кубик (механика putup) --- */
 
 /* xorshift8 (3,5,1): период 255, без деления и без state-таблиц. */
@@ -409,7 +460,11 @@ static void hero_logic(void)
         if (dir) {
             int nx = (int)hero_x + (int)dir * 16;
             hero_dir = (unsigned char)(dir > 0);
-            if (nx >= 0 && !hero_box_solid(nx, (int)hero_y)) {
+            /* Swept-area: проверяем столбцы от текущего до целевого И
+             * строки от текущего Y до целевого (hero_ty) — герой может
+             * двигаться по X во время падения. */
+            if (nx >= 0 && !hero_sweep_solid((int)hero_x, nx,
+                                              (int)hero_y, (int)hero_ty)) {
                 mv_x = 1;
                 hero_tx = (unsigned int)nx;
             }
@@ -440,7 +495,8 @@ static void hero_logic(void)
         if (!jump_held)
             hero_vstate = 0;
         else if (jump_left == 0u ||
-                 hero_box_solid((int)hero_x, (int)hero_y - 16)) {
+                 hero_vscan_solid((int)hero_x, (int)hero_y,
+                                  (int)hero_y - 16)) {
             hero_vstate = 2;              /* запас кончился/потолок */
             hang_left = HANG_FRAMES;
         } else {
@@ -449,7 +505,8 @@ static void hero_logic(void)
             hero_ty = hero_y - 16u;
         }
     } else if (kbd_is_down(KBD_KEY_UP) &&
-               !hero_box_solid((int)hero_x, (int)hero_y - 16)) {
+               !hero_vscan_solid((int)hero_x, (int)hero_y,
+                                 (int)hero_y - 16)) {
         mv_y = 1;                         /* ↑ — подъём по шахте */
         rising = 0;
         hero_ty = hero_y - 16u;
@@ -457,7 +514,8 @@ static void hero_logic(void)
                hero_box_solid((int)hero_x, (int)hero_y + 16)) {
         hero_vstate = 1;                  /* опора под боксом — прыжок */
         jump_left = JUMP_PX;
-    } else if (!hero_box_solid((int)hero_x, (int)hero_y + 16)) {
+    } else if (!hero_vscan_solid((int)hero_x, (int)hero_y,
+                                 (int)hero_y + 16)) {
         mv_y = 1;                         /* гравитация */
         rising = 0;
         hero_ty = hero_y + 16u;
