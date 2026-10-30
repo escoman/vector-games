@@ -15,19 +15,23 @@ ring = world_y & 0xFF.aliasует хвост уровня с головой):
     ряд  31      нижняя сплошная стена
 
 Коллизии демо (по твёрдости putup — глифы тайла >= 77h): SOLID = {02h,04h,05h,
-08h} (стены + «?»-ящик), ключи = {07h,0Ah,0Bh} (проходимы, подбираются),
-выход = 23 (тёмная фаза, тверд до открытия), остальное проходимо. Вверх — свободный подъём на клетку,
-вниз — гравитация (контракт демо, не байт-в-байт putup).
+08h} (стены + «?»-кубик + скрытый кирпич), ключи = {07h,0Ah,0Bh} (проходимы,
+подбираются), выход = 23 (тёмная фаза, тверд до открытия), остальное проходимо.
+Вверх — свободный подъём на клетку, вниз — гравитация (контракт демо, не
+байт-в-байт putup).
 
 Выход — из data_level_params уровня 1 (X=14h,Y=10h -> клетка (8,10) копии)
 в нижней копии; спавн героя — верхняя копия; спавны врагов — записи params
 копий 1 и 2 (2 слота демо).
 
 Гейт: flood-fill от спавна героя (4 направления, проходимые клетки) обязан
-достичь выхода, всех ключей и обоих спавнов врагов; шахты стыков — сквозные
+достичь выхода, всех ключей и всех спавнов врагов; шахты стыков — сквозные
 (клетка над и под проходимы).
 
-Выход-файл: level.inc (массив карты + метаданные). Запуск: gen_level.py
+Выход-файл: level.inc (массив карты + метаданные). Этот генератор —
+НАЧАЛЬНАЯ раскладка (bootstrap): дальше карту правят редактором
+`tools/level_editor.py` (он читает/пишет тот же level.inc и гоняет гейты).
+Запуск: gen_level.py
 """
 from __future__ import annotations
 
@@ -44,8 +48,9 @@ DEFB_HEX = re.compile(r"(?<![0-9A-Za-z_])0?([0-9A-Fa-f]{1,3})h(?![0-9A-Za-z_])")
 
 ROWS, COLS = 32, 16
 SOLID = {0x02, 0x04, 0x05, 0x08}
-KEYS = {0x07, 0x0A, 0x0B}
-EXIT_CODE = 23
+KEYS = {0x07, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E}
+EXIT_CODE = 24              # замок с ключом; при открытии -> 22/23 (main.c)
+FRUITS = (0x0A, 0x0B, 0x0C, 0x0D)   # вишни, яблоко, ананас, виноград
 SHAFTS_J1 = (3, 12)          # проходы в стыке между копиями 0 и 1
 SHAFTS_J2 = (6, 13)          # проходы в стыке между копиями 1 и 2
 
@@ -116,6 +121,12 @@ def build_map(l01, exit_cell):
         sys.exit("выход (%d,%d): клетка не стена (код %02X)" %
                  (row, ec, m[row][ec]))
     m[row][ec] = EXIT_CODE
+    # все четыре вида фруктов: в level_01 есть только 0Ah/0Bh — циклим
+    # по клетке, иначе винограда/ананаса в демо не будет
+    for r in range(ROWS):
+        for c in range(COLS):
+            if m[r][c] in (0x0A, 0x0B):
+                m[r][c] = FRUITS[(r + c) % len(FRUITS)]
     return m, (row, ec)
 
 
@@ -144,9 +155,12 @@ def main():
     hero_spawn = (1, 8)                             # верхняя копия, пусто
     if m[hero_spawn[0]][hero_spawn[1]] in SOLID:
         sys.exit("спавн героя в стене")
-    # враги: ent1 копий 1 и 2 (2 слота демо); состояние из params
-    espawns = [(12 + (ents[0][1] - 1), ents[0][2], ents[0][0]),
-               (23 + (ents[0][1] - 1), ents[0][2], ents[0][0])]
+    # враги: 3 слота демо (вид — индекс enemy_frames в assets.inc):
+    # 0 = ходок, 1 = ворона (спавны из params копий 1 и 2), 2 = вертолёт
+    # (демо-спавн в коридоре ряда 9, где стоят фрукты)
+    espawns = [(12 + (ents[0][1] - 1), ents[0][2], 0),
+               (23 + (ents[0][1] - 1), ents[0][2], 1),
+               (9, 5, 2)]
     for r, c, _ in espawns:
         if m[r][c] in SOLID:
             sys.exit("спавн врага (%d,%d) в стене" % (r, c))
@@ -176,10 +190,12 @@ def main():
         sys.exit(1)
 
     # --- level.inc ---
-    parts = ["/* level.inc — АВТОГЕНЕРАЦИЯ: tools/gen_level.py, не править.",
+    parts = ["/* level.inc — карта демо putup-beam. Начальная раскладка —",
+             " * tools/gen_level.py; дальше правится tools/level_editor.py.",
              " * Карта 16x32 клетки (512px = 2 кольца VRAM). Коды клеток —",
-             " * индексы bg_tiles[] из assets.inc; 23 = выход (твёрд до",
-             " * открытия). SOLID = {02h,04h,05h,08h}, ключи = {07h,0Ah,0Bh}. */",
+             " * индексы bg_tiles[] из assets.inc; 24 = замок (твёрд до",
+             " * открытия, при открытии становится выходом 22/23).",
+             " * SOLID = {02h,04h,05h,08h}, предметы = {07h,0Ah..0Eh}. */",
              "#ifndef LEVEL_INC",
              "#define LEVEL_INC",
              "",
@@ -196,23 +212,26 @@ def main():
               % hero_spawn,
               "static const unsigned char level_exit[2] = { %d, %d };"
               % exit_pos,
-              "static const unsigned char level_enemy_spawns[2][2] = {",
-              "    { %d, %d }, { %d, %d }," % (espawns[0][0], espawns[0][1],
-                                               espawns[1][0], espawns[1][1]),
+              "static const unsigned char level_enemy_spawns[3][2] = {",
+              "    { %d, %d }, { %d, %d }, { %d, %d },"
+              % (espawns[0][0], espawns[0][1], espawns[1][0], espawns[1][1],
+                 espawns[2][0], espawns[2][1]),
               "};",
-              "static const unsigned char level_enemy_state = %d;"
-              % espawns[0][2],
+              "/* вид врага: 0 ходок, 1 ворона, 2 вертолёт (enemy_frames) */",
+              "static const unsigned char level_enemy_kinds[3] = { %d, %d, %d };"
+              % (espawns[0][2], espawns[1][2], espawns[2][2]),
               "",
               "#endif /* LEVEL_INC */"]
     with open(OUT_INC, "w", encoding="utf-8") as f:
         f.write("\n".join(parts) + "\n")
 
-    print("level.inc: %dx%d, ключей %d, выход %s, враги %s / %s" %
+    print("level.inc: %dx%d, предметов %d, выход %s, враги %s / %s / %s" %
           (ROWS, COLS, len(keys), exit_pos,
-           tuple(espawns[0][:2]), tuple(espawns[1][:2])))
+           tuple(espawns[0][:2]), tuple(espawns[1][:2]), tuple(espawns[2][:2])))
     print("flood-fill: OK (достижимо клеток %d)" % len(reach))
     sym = {0x02: "#", 0x05: "#", 0x08: "#", 0x01: ".", 0x00: ".",
            0x03: ",", 0x04: "d", 0x07: "o", 0x0A: "k", 0x0B: "K",
+           0x0C: "p", 0x0D: "g", 0x0E: "r",
            EXIT_CODE: "X"}
     for r in range(ROWS):
         print("%2d %s" % (r, "".join(sym.get(v, "?") for v in m[r])))

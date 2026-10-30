@@ -14,13 +14,17 @@
   * func_main_init.asm — data_palette (16 байт BBGGGRRR).
 
 Выход — assets.inc (в корне демо):
-  * bg_tile_NNN / bg_tiles[24] — ПЛОСКИЕ дескрипторы 16x16 клеток: ВСЕ 4
+  * bg_tile_NNN / bg_tiles[25] — ПЛОСКИЕ дескрипторы 16x16 клеток: ВСЕ 4
     плоскости, SHIFT=0/LEN=16 без обрезки (erase обязан перезаписывать
-    клетку целиком). Индексы 22/23 — светлая/тёмная фазы выхода;
+    клетку целиком). Индексы 22/23 — светлая/тёмная фазы выхода,
+    [24] — bg_lock_key: СИНТЕЗИРОВАННЫЙ «замок с вставленным ключом»
+    (в putup замка нет — рисуем по палитре игры; код 24 = закрытый выход);
   * hero_N_v0/v1 — MASK-дескрипторы кадров героя: маска = П0 (¬S, как
     entry+24 в func_render_tile_vram_or), цвет = все 4 плоскости verbatim
     (композиция (dst&m)|c побайтно совпадает с OR-рендером putup);
-  * enemy_*_v0/v1 — плоские дескрипторы врагов (обрезка нулевых строк);
+  * enemy_<вид>_<фаза>_v0/v1 — плоские дескрипторы врагов (обрезка нулевых
+    строк): walker = tg[20]/tg[19] (state1/state2 putup), crow =
+    tg[18]/tg[17], heli = tg[15]/tg[16] (два положения ротора);
   * *_v1 — вариант со сдвигом вправо на 4px (3 столбца; выметенные нибли:
     маска 0xF, цвет 0). Субшаг 8px = v0 на x+8, 12px = v1 на x+8.
 
@@ -143,6 +147,55 @@ def shift4_cols(left, right, vac):
     return [bytes(c) for c in out]
 
 
+# ---------- синтезированный тайл «замок с вставленным ключом» ----------
+# В putup замка нет (ключ 0x72 — предмет-бонус, выход — только табличка
+# EXIT), поэтому закрытый выход демо рисуется здесь по палитре игры:
+# g/8 — серый корпус (idx 8), W — белая дужка/блик (14), y — ключ (10),
+# 0/. — фон и замочная скважина (0). Код клетки 24 (см. main.c CODE_LOCK).
+LOCK_ART = [
+    "................",
+    ".......WWWWWW...",
+    ".......W....W...",
+    ".......W....W...",
+    ".......W....W...",
+    ".......W....W...",
+    "....ggggggggggg.",
+    "....gWWWWWWWWWg.",
+    "....g888888888g.",
+    "....g888888888g.",
+    ".yy.g888800888g.",
+    "y..yg888800888g.",
+    "y..yyyyyyy8888g.",
+    "y..yyyyyyy8888g.",
+    ".yy.g888888888g.",
+    "....ggggggggggg.",
+]
+LOCK_COLORS = {".": 0, "0": 0, "g": 8, "8": 8, "W": 14, "y": 10}
+
+
+def art_cols(art, colors):
+    """16x16 индексов палитры -> cols[pi] = (left8, right8), СВЕРХУ вниз
+    (тот же формат, что tile_cols, — дальше идёт обычная сборка/round-trip)."""
+    for y, row in enumerate(art):
+        if len(row) != 16:
+            sys.exit("арт, строка %d: %d символов, нужно 16" % (y, len(row)))
+    cols = []
+    for pi in range(4):
+        left, right = bytearray(), bytearray()
+        for y in range(16):
+            l = r = 0
+            for x in range(16):
+                if colors[art[y][x]] & (1 << pi):
+                    if x < 8:
+                        l |= 0x80 >> x
+                    else:
+                        r |= 0x80 >> (x - 8)
+            left.append(l)
+            right.append(r)
+        cols.append((bytes(left), bytes(right)))
+    return cols
+
+
 # ---------- построение дескрипторов ----------
 
 def build_flat(cols, ncols, do_trim):
@@ -239,7 +292,56 @@ def grids_equal(a, b):
                                     for x, y in zip(ga, gb))
 
 
+# ---------- общее с редактором уровня (tools/level_editor.py) ----------
+
+# bg-коды: всё, что есть в уровне, + ВСЕ предметы putup (07h — яйцо-бонус,
+# 0Ah..0Dh — фрукты: вишни/яблоко/ананас/виноград, 0Eh — кольцо), чтобы
+# карта могла использовать любой вид (в level_01 есть только 10h/11h).
+BG_FIXED = {0, 1, 7, 10, 11, 12, 13, 14}
+
+# виды врагов: (имя, записи data_tile_graphics по фазам). walker = state1/2
+# putup (направление), crow = ворона (направление), heli = два положения ротора.
+ENEMY_RECORDS = (("enemy_walker", (20, 19)),
+                 ("enemy_crow", (18, 17)),
+                 ("enemy_heli", (15, 16)))
+
+
+def bg_codes(lvl):
+    """Коды клеток, для которых печатаются bg-тайлы (порядок = bg_tile_NNN)."""
+    return sorted(BG_FIXED | set(lvl[:176]))
+
+
+def editor_gfx():
+    """Графика для редактора уровня: -> (palette, клетки, актёры).
+
+    клетки = {код: cols} — ровно те коды, что печатает main() (bg_codes()),
+    плюс 22/23 (фазы выхода) и 24 (замок). актёры = {"hero": [cols x7],
+    "enemy": [[cols по фазам] по видам]} — для маркеров спавнов на карте.
+    """
+    glyphs = parse_glyphs()
+    palette = parse_palette()
+    tg = parse_table(os.path.join(PUTUP, "asm", "data",
+                                  "data_tile_graphics.asm"),
+                     "data_tile_graphics", expect=88)
+    tg_records = [tg[i * 4:i * 4 + 4] for i in range(22)]
+    tt = parse_table(os.path.join(PUTUP, "asm", "data",
+                                  "data_tile_table_26DE.asm"),
+                     "data_tile_table_26DE", expect=44)
+    tt_records = [tt[i * 4:i * 4 + 4] for i in range(11)]
+    lvl = parse_table(os.path.join(PUTUP, "asm", "data", "data_level_01.asm"),
+                      "data_level_01", expect=176)
+    cells = {c: tile_cols(glyphs, tg_records[c]) for c in bg_codes(lvl)}
+    cells[22] = tile_cols(glyphs, tt_records[7])
+    cells[23] = tile_cols(glyphs, tt_records[10])
+    cells[24] = art_cols(LOCK_ART, LOCK_COLORS)
+    actors = {"hero": [tile_cols(glyphs, tt_records[r]) for r in range(7)],
+              "enemy": [[tile_cols(glyphs, tg_records[ph]) for ph in recs]
+                        for _name, recs in ENEMY_RECORDS]}
+    return palette, cells, actors
+
+
 # ---------- генерация assets.inc ----------
+
 
 def c_array(name, data):
     lines = ["static const unsigned char %s[] = {" % name]
@@ -302,10 +404,7 @@ def main():
                 sys.exit("кадр героя [%d]: глиф %d compact — нет плоскости маски"
                          % (r, c))
 
-    bg_codes = sorted({0, 1} | set(lvl[:176]))
-    enemies = [("enemy_state1", tg_records[20]),    # func_entity_state1: tg+0x50
-               ("enemy_state2", tg_records[19]),    # func_entity_state2: tg+0x4C
-               ("enemy_pursuer", tt_records[8])]    # state9: tile_table[8]
+    codes = bg_codes(lvl)
     errors = []
     preview = []
     total = 0
@@ -321,12 +420,15 @@ def main():
     # --- bg-тайлы: все 4 плоскости, без обрезки (erase = полная перезапись) ---
     parts.append("/* Фон: плоские 16x16 клетки. bg_tiles[0..21] = коды тайлов")
     parts.append(" * putup, [22] = светлая фаза выхода (tile_table[7]),")
-    parts.append(" * [23] = тёмная (tile_table[10], мигание). */")
+    parts.append(" * [23] = тёмная (tile_table[10], мигание), [24] = замок с")
+    parts.append(" * вставленным ключом (синтез: bg_lock_key, закрытый выход). */")
     bg_have = {}
-    bg_sets = [("bg_tile_%03X" % c, tg_records[c]) for c in bg_codes]
-    bg_sets += [("bg_exit_light", tt_records[7]), ("bg_exit_dark", tt_records[10])]
-    for sym, rec in bg_sets:
-        cols = tile_cols(glyphs, rec)
+    bg_sets = [("bg_tile_%03X" % c, tile_cols(glyphs, tg_records[c]))
+               for c in codes]
+    bg_sets += [("bg_exit_light", tile_cols(glyphs, tt_records[7])),
+                ("bg_exit_dark", tile_cols(glyphs, tt_records[10])),
+                ("bg_lock_key", art_cols(LOCK_ART, LOCK_COLORS))]
+    for sym, cols in bg_sets:
         desc = build_flat(cols, 2, do_trim=False)
         if not grids_equal(decode_flat(desc), expect_cols(cols, 0)):
             errors.append("round-trip %s" % sym)
@@ -335,12 +437,12 @@ def main():
         preview.append((sym, cols))
         parts.append(c_array(sym, desc))
         parts.append("")
-    ptrs = [("bg_tile_%03X" % c if c in bg_codes else "bg_tile_000")
+    ptrs = [("bg_tile_%03X" % c if c in codes else "bg_tile_000")
             for c in range(22)]
-    ptrs += ["bg_exit_light", "bg_exit_dark"]
-    parts.append("static const unsigned char *const bg_tiles[24] = {")
-    for i in range(0, 24, 6):
-        parts.append("    " + ", ".join(ptrs[i:i + 6]) + ",")
+    ptrs += ["bg_exit_light", "bg_exit_dark", "bg_lock_key"]
+    parts.append("static const unsigned char *const bg_tiles[25] = {")
+    for i in range(0, 25, 5):
+        parts.append("    " + ", ".join(ptrs[i:i + 5]) + ",")
     parts.append("};")
     parts.append("")
 
@@ -377,28 +479,34 @@ def main():
     parts.append("};")
     parts.append("")
 
-    # --- враги: плоские + v1 ---
+    # --- враги: три вида x 2 фазы x {v0, v1}, плоские + v1 ---
     parts.append("/* Враги: плоские дескрипторы (spr_blit), обрезка нулевых")
-    parts.append(" * строк. state1/state2 = тайлы putup tg[20]/tg[19],")
-    parts.append(" * pursuer = tile_table[8]. Субшаги X — как у героя. */")
+    parts.append(" * строк. enemy_frames[вид][фаза][субшаг]: walker = tg[20]/")
+    parts.append(" * tg[19] (направление, state1/state2 putup), crow = tg[18]/") 
+    parts.append(" * tg[17] (направление), heli = tg[15]/tg[16] (фазы ротора).")
+    parts.append(" * Субшаги X — как у героя. */")
     enemy_tabs = []
-    for name, rec in enemies:
-        cols = tile_cols(glyphs, rec)
-        preview.append((name, cols))
-        syms = []
-        for v, shift in ((0, 0), (1, 4)):
-            sym = "%s_v%d" % (name, v)
-            desc = flat_variant(cols, shift)
-            if not grids_equal(decode_flat(desc), expect_cols(cols, shift)):
-                errors.append("round-trip %s" % sym)
-            syms.append(sym)
-            total += len(desc)
-            parts.append(c_array(sym, desc))
-            parts.append("")
-        enemy_tabs.append(syms)
-    parts.append("static const unsigned char *const enemy_frames[3][2] = {")
-    for syms in enemy_tabs:
-        parts.append("    { %s, %s }," % tuple(syms))
+    for name, recs in ENEMY_RECORDS:
+        for ph, rec in enumerate(recs):
+            cols = tile_cols(glyphs, tg_records[rec])
+            preview.append(("%s_%d" % (name, ph), cols))
+            syms = []
+            for v, shift in ((0, 0), (1, 4)):
+                sym = "%s_%d_v%d" % (name, ph, v)
+                desc = flat_variant(cols, shift)
+                if not grids_equal(decode_flat(desc), expect_cols(cols, shift)):
+                    errors.append("round-trip %s" % sym)
+                syms.append(sym)
+                total += len(desc)
+                parts.append(c_array(sym, desc))
+                parts.append("")
+            enemy_tabs.append(syms)
+    parts.append("static const unsigned char *const enemy_frames[3][2][2] = {")
+    for t in range(3):
+        parts.append("    {")
+        for ph in range(2):
+            parts.append("        { %s, %s }," % tuple(enemy_tabs[t * 2 + ph]))
+        parts.append("    },")
     parts.append("};")
     parts.append("")
 
@@ -416,10 +524,10 @@ def main():
 
     with open(OUT_INC, "w", encoding="utf-8") as f:
         f.write("\n".join(parts) + "\n")
-    print("assets.inc: %d байт данных (bg=%d, герой=7x2, враги=3x2)" %
+    print("assets.inc: %d байт данных (bg=%d, герой=7x2, враги=3x2x2)" %
           (total, len(bg_have)))
     print("round-trip: OK")
-    print("bg-коды level_01: %s" % ", ".join("%02Xh" % c for c in bg_codes))
+    print("bg-коды level_01: %s" % ", ".join("%02Xh" % c for c in codes))
 
     if args.png:
         render_preview(args.png, preview, palette)
