@@ -9,7 +9,7 @@
 #                     assets/title_music.txt;
 # make font         — перегенерировать include/font.asm из assets/font_6300.bin;
 # make terrain      — перегенерировать include/terrain.inc (рельеф меню)
-#                     из assets/ring_8000.bin + assets/scr_4000.bin;
+#                     из assets/ring_8000.bin + assets/terrain_mask.bin;
 # make preview      — то же + превью PNG в assets/ (сверка глазами);
 # make deploy       — положить ROM в эмулятор;
 # make consist      — разбор состава образа (finally.mk);
@@ -21,8 +21,8 @@
 #   assets/title_music.txt — лог всех переключений бипера ZX (t frame pc value);
 #   assets/font_6300.bin  — шрифт 8x8 оригинала (96 слотов по 8 байт, $6300);
 #   assets/ring_8000.bin  — кольцо $8000-$BFFF из снапшота (сцена без оверлеев);
-#   assets/scr_4000.bin   — экран ZX $4000-$5AFF (только цвета рельефа).
-# Ring/scr снимаются tools/extract_terrain.py — из внешнего zx-disasm, поэтому
+#   assets/terrain_mask.bin — off(0) и окно $D5B2 (ktop,kbot) по 32 столбцам.
+# Ring/mask снимаются tools/extract_terrain.py — из внешнего zx-disasm, поэтому
 # в сборке участвуют уже готовые .bin.
 
 include ../../../config.mk
@@ -76,7 +76,7 @@ $(MUSIC_ASM): assets/title_music.txt $(GEN_MUSIC)
 $(FONT_ASM): assets/font_6300.bin $(GEN_FONT)
 	python3 $(GEN_FONT)
 
-$(TERRAIN_INC): assets/ring_8000.bin assets/scr_4000.bin $(GEN_TERRAIN)
+$(TERRAIN_INC): assets/ring_8000.bin assets/terrain_mask.bin $(GEN_TERRAIN)
 	python3 $(GEN_TERRAIN)
 
 title: $(TITLE_INC)
