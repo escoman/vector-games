@@ -7,7 +7,8 @@
 # make title        — перегенерировать include/title.inc из assets/hate.png;
 # make music        — перегенерировать include/title_music.asm из лога
 #                     assets/title_music.txt;
-# make preview      — то же + assets/title_preview.png для сверки картинки;
+# make font         — перегенерировать include/font.asm из assets/font_6300.bin;
+# make preview      — то же + assets/title_preview.png/assets/font_preview.png;
 # make deploy       — положить ROM в эмулятор;
 # make consist      — разбор состава образа (finally.mk);
 # make clean        — убрать артефакты;
@@ -15,7 +16,8 @@
 #
 # Ассеты — ИСХОДНИКИ, руками не правятся:
 #   assets/hate.png       — картинка заставки 256x192, 8 цветов ZX;
-#   assets/title_music.txt — лог всех переключений бипера ZX (t frame pc value).
+#   assets/title_music.txt — лог всех переключений бипера ZX (t frame pc value);
+#   assets/font_6300.bin  — шрифт 8x8 оригинала (96 слотов по 8 байт, $6300).
 
 include ../../../config.mk
 
@@ -24,21 +26,26 @@ MAPFILE = hate.map
 
 GEN_TITLE = tools/gen_title.py
 GEN_MUSIC = tools/gen_title_music.py
+GEN_FONT  = tools/gen_font.py
 
 TITLE_INC = include/title.inc
 MUSIC_ASM = include/title_music.asm
+FONT_ASM  = include/font.asm
 
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06pal.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/clr.asm \
+       $(LIB)/gfx/pr.asm \
        $(LIB)/unpack/zx0.asm \
        $(LIB)/kbd/kbdscan.asm \
        include/beep.asm $(MUSIC_ASM) \
-       include/sfx_hate.c main.c
+       include/font.asm include/sfx_hate.c main.c
 
-ZFLAGS = +vector06c --no-crt -I$(LIB) -Iinclude
+# FONT_EXTERNAL: pr.asm берёт font_chars/font8x8 как EXTERN из include/font.asm
+# (шрифт HATE) вместо латинского шрифта lib/gfx/fonts/default_8x8.inc.
+ZFLAGS = +vector06c --no-crt -I$(LIB) -Iinclude -Ca-DFONT_EXTERNAL
 
-.PHONY: all deploy clean full title music preview
+.PHONY: all deploy clean full title music font preview
 
 all: $(TARGET)
 
@@ -46,7 +53,7 @@ full: clean all deploy
 
 # Сгенерированные данные — неотъемлемая часть сборки, поэтому в prereq'ах.
 $(TARGET): main.c include/sfx_hate.c include/sfx_hate.h include/beep.asm \
-           $(TITLE_INC) $(MUSIC_ASM) $(SRCS)
+           $(TITLE_INC) $(MUSIC_ASM) $(FONT_ASM) $(SRCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) -m $(SRCS) -o $@
 	@echo "=== Done: $@ ==="
@@ -58,12 +65,18 @@ $(TITLE_INC): assets/hate.png $(GEN_TITLE)
 $(MUSIC_ASM): assets/title_music.txt $(GEN_MUSIC)
 	python3 $(GEN_MUSIC)
 
+$(FONT_ASM): assets/font_6300.bin $(GEN_FONT)
+	python3 $(GEN_FONT)
+
 title: $(TITLE_INC)
 
 music: $(MUSIC_ASM)
 
-preview: $(TITLE_INC)
+font: $(FONT_ASM)
+
+preview: $(TITLE_INC) $(FONT_ASM)
 	python3 $(GEN_TITLE) --preview
+	python3 $(GEN_FONT) --preview
 
 include $(PROJECT_ROOT)finally.mk
 
