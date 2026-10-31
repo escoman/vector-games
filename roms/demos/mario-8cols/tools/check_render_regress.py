@@ -62,8 +62,25 @@ def main():
     # вход одинаков для baseline и кандидата, поэтому расхождение хэша сразу
     # указывает на ошибку сдвига/клипа. (#1 - маска грязных строк - измерена и
     # откачена, см. docs/OPTIMIZATION.MD «Не прошло»; покрытие оставлено.)
-    for cam_row in (0, 4, 8, 13, 16, 27):
+    #
+    # Два ограничения, чтобы сравнивать рендер, а не мусор:
+    #  * cam держим в контракте cam <= MAX_CAM. За краем карты обе сборки
+    #    индексируют таблицы по мировому столбцу за их концом;
+    #  * смену cam_row сопровождаем gfx_clear + полным редравом, как main.c
+    #    при прыжке камеры. В игре VRAM адресована МИРОВЫМ рядом, поэтому
+    #    cam_row без render_rowband — не игровое состояние: в слоте просто
+    #    остаются чужие байты прошлой полосы.
+    max_cam = lv["COLS"] - VIEW
+    sweep_rows = (0, 4, 8, 13, 16, 27)
+    cam = max_cam - 3 * len(sweep_rows)
+    base = cam & ~(lv["WIN_STEP"] - 1)
+    win = bake_window(lv, base)
+    install_window(cpu, a, win, base, lv)
+    for cam_row in sweep_rows:
         cpu.wb(a["_cam_row"], cam_row)
+        for i in range(0x8000, 0x10000):      # gfx_clear(0)
+            cpu.mem[i] = 0
+        call_asm(cpu, a["_render_window"], [cam, CAM_NO_REF, 0, VIEW])
         for _ in range(3):
             cam += 1
             nb = cam & ~(lv["WIN_STEP"] - 1)
