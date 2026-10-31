@@ -9,13 +9,17 @@ zcc_opt.def
 # Порождаемые данные (перегенерируются make'ом из исходников в assets/):
 #   include/title.inc       — tools/gen_title.py из assets/hate.png;
 #   include/title_music.asm — tools/gen_title_music.py из assets/title_music.txt;
-#   include/font.asm        — tools/gen_font.py из assets/font_6300.bin.
+#   include/font.asm        — tools/gen_font.py из assets/font_6300.bin;
+#   include/terrain.inc     — tools/gen_terrain.py из assets/ring_8000.bin
+#                             и assets/scr_4000.bin.
 include/title.inc
 include/title_music.asm
 include/font.asm
+include/terrain.inc
 # Превью для сверки (make preview)
 assets/title_preview.png
 assets/font_preview.png
+assets/terrain_preview.png
 
 # Python
 __pycache__/
