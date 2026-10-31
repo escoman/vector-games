@@ -1,0 +1,22 @@
+# Артефакты сборки
+hate.rom
+hate.map
+*.o
+*.lis
+zcc_opt.def
+*.c.asm
+
+# Порождаемые данные (перегенерируются make'ом из исходников в assets/):
+#   include/title.inc       — tools/gen_title.py из assets/hate.png;
+#   include/title_music.asm — tools/gen_title_music.py из assets/title_music.txt.
+include/title.inc
+include/title_music.asm
+# Превью картинки для сверки (make preview)
+assets/title_preview.png
+
+# Python
+__pycache__/
+
+# Переходный дамп экрана ZX от прежнего пути экспорта заставки (512x256):
+# картинка теперь берётся напрямую из assets/hate.png, файл не участвует в сборке.
+assets/title.scr
