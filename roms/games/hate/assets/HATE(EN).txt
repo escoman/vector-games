@@ -1,0 +1,140 @@
+﻿H.A.T.E. (HOSTILE ALL TERRAIN ENCOUNTER) 
+========================================
+
+The year is AD 2320 and the Galaxy is in turmoil with the alien threat ever increasing, 
+the lack of experienced assault a personnel is severely undermining the defences of 
+civilised sectors. You are needed to repel the hostile alien forces - but you have to 
+qualify first. Prepare to go to Stripworld - the training ground for all Galactic Fighter 
+Pilots!
+
+
+LOADING INSTRUCTIONS
+
+CBM 64/128 CASSETTE
+Press SHIFT and RUN/STOP keys simultaneously. Press PLAY on the cassette recorder.
+
+CBM 64/128 DISK
+Type LOAD "*",8,1 and press RETURN.
+
+SPECTRUM 48/128K, +2 CASSETTE
+Type LOAD"" and press ENTER. Press PLAY on the cassette recorder.
+
+SPECTRUM +3 DISK
+Turn computer on, insert disk and press RETURN. 
+
+AMSTRAD CPC CASSETTE
+Press CTRL and small ENTER keys. Press PLAY on the cassette recorder.
+
+AMSTRAD CPC DISK
+Type RUN"DISK and press ENTER.
+
+ATARI ST
+Insert disk, turn on computer and game wil load and run automatically.
+
+CBM AMIGA
+Turn on the computer, insert disk.
+
+
+SCENARIO
+
+The year is AD2320 and the Galaxy is in turmoil. With the alien threat ever increasing, 
+the lack of experienced assault personnel is severely undermining the defences of 
+civilised sectors. You are needed to repel the hostile alien forces - but you have to 
+qualify first. Prepare to go to Stripworld - the training ground for all Galactic Fighter 
+Pilots!
+
+Initially controlling a Star Fighter, PLASMA CELLS lining the route must be collected and 
+taken through the barrier. Upon completion of this level you will take the controls of the 
+ground assault vehicle. Manoeuvre the GAV to the next barrier, again collecting Plasma 
+Cells to power the waiting Star Fighter. This will continue until you can advance no 
+further.
+
+To test you to the simulated alien defences line the way and must be overcome. Ground 
+skimming projectiles, intelligent missiles, enemy star fighters, mine barriers and many 
+more obstacles will challenge even the most advanced Fighter Pilot.
+
+
+GAME PLAY
+
+You begin with four lives (one CBM 64/128). Each time your craft is destroyed a life is 
+lost. Extra lives are gained by collecting the PLASMA CELLS (the remains of the nuclear 
+generators). If your craft is hit whilst carrying one or more cells one cell will be 
+destroyed whilst saving you from destruction. The number of Plasma cells carried through 
+determines the number of lives for the next level.
+
+If you loose all of your lives beyond level two CENTRAL COMMAND will send you back one 
+level.
+
+HOSTILE ALL TERRAIN ENCOUNTER has 30 levels, divided into three stages.
+
+Levels 1-10 Trainee 
+Levels 11 - 20 Fighter Pilot 
+Levels 21-30 Commander
+
+Upon completion of levels 11/21 all subsequent games will begin at these levels. To return 
+to level 1 the game must be reloaded.
+
+SMART BOMB (CBM64/128 Version Only)
+Touching the smart bomb causes it to detonate, destroying everything on screen except your 
+ship. This includes any Plasma cells that your ship may be carrying.
+
+
+CONTROLS: STAR FIGHTER
+
+Fire Lasers —>  •
+
+  		      	  Dive
+			    ^
+                            |
+ Bank left <----------------*-------------------> Bank right
+                            |
+			    v
+                          Climb
+
+Alternatively the following keyboard controls can be used:
+
+Q - Climb 
+A - Dive 
+K - Bank Left 
+L - Bank Right
+SPACE BAR or Z to M - Fire lasers.
+
+The take off and landing procedure is controlled by autopilot.
+
+CONTROLS: GROUND ASSAULT VEHICLE
+
+Fire Lasers —>  •
+
+  		         Advance
+			    ^
+                            |
+ Move left <----------------*-------------------> Move right
+                            |
+			    v
+                         Retreat
+
+To launch a bomb press the FIRE BUTTON whilst pushing the joystick forward.
+
+Alternatively the following keyboard controls can be used:
+
+Q - Advance 
+A - Retreat 
+K - Move left 
+L - Move right
+SPACE BAR or Z to M - Fire lasers 
+Q and SPACE BAR - Launch Bomb 
+P - Pause
+ENTER - Return to game 
+G & U - Abort game
+
+N.B. You are unable to move forward whilst launching a bomb.
+
+
+CREDITS
+
+H.A.T.E. written by Costa Panayi (Spectrum, Amstrad). CBM 64/128, Atari ST and CBM Amiga 
+programming and graphics by Sentient Software Limited from an original design by Costa 
+Panayi for Vortex Software. Music and sound effects by Benn Daglish.
+
+© 1989 Vortex Software. Produced under license by Gremlin Graphics Software Limited, 
+Alpha House, 10 Carver Street, Sheffield, SI 4FS. Telephone No. 0742 753423.

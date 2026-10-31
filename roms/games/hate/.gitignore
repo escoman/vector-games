@@ -11,15 +11,19 @@ zcc_opt.def
 #   include/title_music.asm — tools/gen_title_music.py из assets/title_music.txt;
 #   include/font.asm        — tools/gen_font.py из assets/font_6300.bin;
 #   include/terrain.inc     — tools/gen_terrain.py из assets/ring_8000.bin
-#                             и assets/terrain_mask.bin (окно $D5B2).
+#                             и assets/terrain_mask.bin (окно $D5B2);
+#   include/levels.inc      — tools/gen_levels.py из assets/level_data.bin
+#                             (байт-коды карт уровней, этап 4–6).
 include/title.inc
 include/title_music.asm
 include/font.asm
 include/terrain.inc
+include/levels.inc
 # Превью для сверки (make preview)
 assets/title_preview.png
 assets/font_preview.png
 assets/terrain_preview.png
+assets/levels_preview.png
 
 # Python
 __pycache__/
