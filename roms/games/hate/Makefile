@@ -6,7 +6,7 @@
 # make              — собрать hate.rom (+ hate.map);
 # make title        — перегенерировать include/title.inc из assets/hate.png;
 # make music        — перегенерировать include/title_music.asm из лога
-#                     assets/title_music.txt;
+#                     assets/title_music_ay.txt (прогон AY-архива в SkoolKit);
 # make font         — перегенерировать include/font.asm из assets/font_6300.bin;
 # make terrain      — перегенерировать include/terrain.inc (рельеф меню)
 #                     из assets/ring_8000.bin + assets/terrain_mask.bin;
@@ -21,7 +21,10 @@
 #
 # Ассеты — ИСХОДНИКИ, руками не правятся:
 #   assets/hate.png       — картинка заставки 256x192, 8 цветов ZX;
-#   assets/title_music.txt — лог всех переключений бипера ZX (t frame pc value);
+#   assets/HATE_title_theme.ay — AY-архив: Z80-плеер бипера + запись трека
+#                       (SOUND_FIX.MD §2);
+#   assets/title_music_ay.txt — лог всех переключений бипера ZX (t frame pc value),
+#                       снят прогоном AY-архива в SkoolKit (tools/ay_beeper.py);
 #   assets/font_6300.bin  — шрифт 8x8 оригинала (96 слотов по 8 байт, $6300);
 #   assets/ring_8000.bin  — кольцо $8000-$BFFF из снапшота (сцена без оверлеев);
 #   assets/terrain_mask.bin — off(0) и окно $D5B2 (ktop,kbot) по 32 столбцам;
@@ -85,7 +88,7 @@ $(TARGET): main.c include/sfx_hate.c include/sfx_hate.h include/beep.asm \
 $(TITLE_INC): assets/hate.png $(GEN_TITLE)
 	python3 $(GEN_TITLE)
 
-$(MUSIC_ASM): assets/title_music.txt $(GEN_MUSIC)
+$(MUSIC_ASM): assets/title_music_ay.txt $(GEN_MUSIC)
 	python3 $(GEN_MUSIC)
 
 $(FONT_ASM): assets/font_6300.bin $(GEN_FONT)
