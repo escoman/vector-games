@@ -461,8 +461,8 @@ def rom_paths():
 
 def render_syms(rom):
     """Метки горячего пути горизонтального скролла: от умножителя шага окна
-    до _render_rowband (multiplicand/mulshift/mulstride, render_window,
-    rw_block, rw_put_cell, rw_copy8)."""
+    до _render_rowband (multiplicand/mulshift/mulstride, render_window, обход
+    таблицы ранов rwf_*, преамбула клетки и общий цикл _rw_tile16)."""
     return rom.spans(rom.at("_mulstride"), rom.at("_render_rowband") - 1)
 
 
@@ -499,10 +499,14 @@ def sweep(cpu, rom, a, lv, rows):
         res = call_asm(cpu, a["_render_window"], [cam + 1, cam, 0, VIEW])
         c = res.cyc
         agg = region_totals(res.per_pc, rw_syms)
-        scan = agg.get("rw_scan", 0) + agg.get("rw_scan_next", 0) + \
-            agg.get("rw_topset", 0) + agg.get("rw_top0", 0) + agg.get("rw_blk_ret", 0)
-        put = agg.get("_rw_put_cell", 0) + agg.get("rw_p0w", 0) + agg.get("rw_p1", 0)
-        copy = agg.get("_rw_copy8", 0)
+        # скан = обход таблицы ранов и служебка колонок; cell = преамбула
+        # клетки (адрес тайла + низ следующей строки); copy = общий _rw_tile16.
+        scan = sum(v for k, v in agg.items()
+                   if k.startswith("rwf_") and k != "rwf_cell")
+        scan += agg.get("_render_window", 0) + agg.get("rw_dn", 0) + \
+            agg.get("rw_epilog", 0)
+        put = agg.get("rwf_cell", 0)
+        copy = agg.get("_rw_tile16", 0)
         scan_k += scan
         put_k += put
         copy_k += copy
@@ -525,9 +529,10 @@ def sweep(cpu, rom, a, lv, rows):
     print(f"\nИТОГО по уровню: {tot:,} T на {max_cam} шагов, среднее {tot // max_cam:,} T/шаг "
           f"({tot / max_cam / FRAME_T_BUDGET:.2f} кадра на шаг), макс {rows_out[0][1]:,} T "
           f"({rows_out[0][1] / FRAME_T_BUDGET:.2f} кадра)")
-    print(f"разбивка в среднем на шаг: скан/обход {scan_k // max_cam:,} T "
-          f"({100 * scan_k // tot}%), put_cell {put_k // max_cam:,} T ({100 * put_k // tot}%), "
-          f"copy8 {copy_k // max_cam:,} T ({100 * copy_k // tot}%)")
+    print(f"разбивка в среднем на шаг: обход ранов {scan_k // max_cam:,} T "
+          f"({100 * scan_k // tot}%), преамбула клетки {put_k // max_cam:,} T "
+          f"({100 * put_k // tot}%), копирование {copy_k // max_cam:,} T "
+          f"({100 * copy_k // tot}%)")
     print(f"записей VRAM в среднем {wb_tot // max_cam:,} байт/шаг, "
           f"{tot // max(wb_tot, 1)} T на один байт VRAM в среднем")
 

@@ -238,6 +238,37 @@ def _compute_tile_nz(tileset):
     return nz
 
 
+RUN_PAD = 32                   # запас колонок таблицы ранов (ширина экрана)
+
+
+def _diff_runs(tilemap, cols, rows):
+    """(row,count)-раны: где колонка отличается от ЛЕВОЙ (для колонки 0 — от неба).
+
+    Рендер разности ходит по этим ранам вместо построчного сравнения tile_win:
+    430 ранов на 320 колонок против ~1.5 тыс. сравнений за шаг. Терминатор —
+    пара (0,0): count=0 не бывает у настоящего рана. cols здесь — ширина карты
+    ВМЕСТЕ с запасом RUN_PAD (см. build_level_editor).
+    """
+    sky = bytes(rows)
+    data = bytearray()
+    ofs = []
+    for c in range(cols):
+        ofs.append(len(data))
+        cur = tilemap[c * rows:(c + 1) * rows]
+        ref = tilemap[(c - 1) * rows:c * rows] if c else sky
+        r = 0
+        while r < rows:
+            if cur[r] == ref[r]:
+                r += 1
+                continue
+            r0 = r
+            while r < rows and cur[r] != ref[r]:
+                r += 1
+            data += bytes((r0, r - r0))
+        data += b"\x00\x00"            # терминатор колонки
+    return ofs, bytes(data)
+
+
 def _compute_pair_top(cols, rows, tilemap):
     def col_top(cx):
         for cy in range(rows):
@@ -310,6 +341,23 @@ def build_level_editor():
         sys.exit("tiles.json: тайл 0 должен быть пустым (небо = все нули)")
     tile_nz = _compute_tile_nz(tileset)
     pair_top = _compute_pair_top(cols, rows, tilemap)
+    # Раны разности печём по карте, СОВПАДАЮЩЕЙ с окном ROM (bake_groups):
+    # рендер пишет ровно те клетки, где соседние колонки различаются, поэтому
+    # расхождение модели и ROM означало бы неверные пиксели, а не «чуть больше
+    # работы». expand_by_blocks — модель блочной группировки ROM.
+    grid_rom = PL.expand_by_blocks(cols, rows, prefabs, model["instances"])
+    if grid_rom != tilemap:
+        print("ВНИМАНИЕ: expand_by_blocks != expand_instances — раны разности "
+              "и pair_top построены по разным картам")
+    # Таблица ранов шире карты на RUN_PAD колонок: рендер индексирует её как
+    # cam+blk0 и при cam вплоть до LEVEL_COLS уходит за последнюю настоящую
+    # колонку. Там окно пустое (ни один экземпляр не выходит за cols — это
+    # проверяет validate_instances), поэтому «лишние» колонки — небо: свои
+    # раны есть только у первой из них (разность с краем карты), остальные —
+    # пустой список. Без запаса ROM читал бы соседние таблицы как раны.
+    grid_pad = PL.expand_by_blocks(cols + RUN_PAD, rows, prefabs,
+                                   model["instances"])
+    run_ofs, run_data = _diff_runs(grid_pad, cols + RUN_PAD, rows)
     nrect = sum(len(v["rects"]) for v in variants)
     print(f"level(editor): {cols}x{rows}, тайлов в наборе: {len(tileset)}, "
           f"тайл {TILE_BYTES} Б (2 плоскости), экземпляров: "
@@ -319,7 +367,7 @@ def build_level_editor():
           f"({P_INST}×{len(model['instances'])} + {P_VAR}×{len(variants)} + "
           f"{P_RECT}×{nrect}) — словарь экземпляров вместо 5 Б на прямоугольник")
     return (cols, rows, tileset, bytes(tilemap), bytes(tile_nz),
-            bytes(pair_top), model)
+            bytes(pair_top), model, (run_ofs, bytes(run_data)))
 
 
 # ---------------------------------------------------------------------------
@@ -568,8 +616,8 @@ def fmt_array(f, name, data, per_line=16):
 
 
 def fmt_array_u16(f, name, vals, per_line=10):
-    # 16-битная таблица (unsigned int, little-endian на Z80). Читает только C
-    # (bake_window), mario.asm её не трогает.
+    # 16-битная таблица (unsigned int, little-endian). Читает C (bake_window);
+    # rw_run_ofs читает ещё и mario.asm — как пару байт lo,hi.
     f.write(f"const unsigned int {name}[{len(vals)}] = {{\n")
     for i in range(0, len(vals), per_line):
         chunk = vals[i:i + per_line]
@@ -577,7 +625,7 @@ def fmt_array_u16(f, name, vals, per_line=10):
     f.write("};\n\n")
 
 
-def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
+def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs):
     path = os.path.join(INCLUDE, "level.inc")
     inst = model["instances"]
     variants = model["variants"]
@@ -632,6 +680,14 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model):
         fmt_array_u16(f, "pf_start", pf_start)     # старт группы блока экземпляров
         fmt_array(f, "tile_nz", tile_nz)           # 2 бита: непустая плоскость веса 8 / 4
         fmt_array(f, "pair_top", pair_top)         # верх diff'а на пару соседних колонок
+        # Таблица ранов разности (см. _diff_runs): рендер по ней знает, какие
+        # строки колонки отличаются от левой, и не сканирует tile_win построчно.
+        f.write("/* rw_run_ofs[колонка] — смещение в rw_run_data; раны — пары\n"
+                "   (row, count), терминатор (0,0). Читает mario.asm\n"
+                "   (быстрый путь render_window при |old_cam-cam| == 1). */\n")
+        run_ofs, run_data = runs
+        fmt_array_u16(f, "rw_run_ofs", run_ofs)
+        fmt_array(f, "rw_run_data", run_data)
         f.write("\n/* Коллизии (assets/tiles.json): tile_solid[тайл] = маска COLL_*. */\n")
         f.write("#define COLL_WALL   2   /* непроходимо */\n")
         f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
@@ -670,10 +726,11 @@ def write_sprites(sprites):
 
 
 def main():
-    cols, rows, tileset, tilemap, tile_nz, pair_top, model = build_level_editor()
+    cols, rows, tileset, tilemap, tile_nz, pair_top, model, runs = \
+        build_level_editor()
     tile_solid = load_tile_solid(len(tileset))
     sprites = build_sprites()
-    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model)
+    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
     write_sprites(sprites)
 
 

@@ -76,6 +76,8 @@
         PUBLIC  _mario_undraw
 
         EXTERN  _tileset
+        EXTERN  _rw_run_ofs     ; u16: смещение ранов разности на колонку
+        EXTERN  _rw_run_data    ; пары (row,count), терминатор (0,0)
         EXTERN  _tile_win       ; RAM-окно тайлкарты (bake_window в main.c)
         EXTERN  _tile_win_base  ; unsigned int: мировая колонка окна[0]
         EXTERN  _tile_nz
@@ -88,6 +90,7 @@ ROWS EQU 32                 ; экранных тайлов по высоте (2
 CAM_NO_REF EQU 0FFFFh       ; old_cam: в VRAM пусто (первый экран)
 MARIO_RUNS EQU 4            ; прогонов спрайта: 2 плоскости персонажа x 2 колонки
 MARIO_ROWS EQU 16           ; байт VRAM в прогоне
+HALF_TILE EQU 8             ; байт в одной половине _rw_tile16 (плоскость A/B)
 
 ; ---------------------------------------------------------------
 ; BSS — рабочие переменные.
@@ -106,6 +109,14 @@ rw_pairwalk:defw    0           ; &pair_top[min(cam,old)], шаг +1 на бло
 rw_pairstep:defb    0           ; 1 или 0 для CAM_NO_REF
 rw_top:     defb    0           ; первая ЭКРАННАЯ строка сканирования текущего блока
 rw_dsthi:   defb    0,0         ; старшие байты VRAM для 2 фоновых плоскостей блока
+
+; --- render_window, быстрый путь по таблице ранов ---
+rw_w0:      defw    0           ; cam + blk0 (мировая колонка блока 0)
+rwf_adj:    defb    0           ; +1: эталон блока — колонка w0+1 (скролл назад)
+rwf_pnew:   defw    0           ; &tile_win[локальная колонка w0], шаг +stride
+rwf_rp:     defw    0           ; бегущий указатель ранов (rw_run_data)
+rwf_hi0:    defb    0           ; старший байт VRAM плоскости веса 8 текущего блока
+rwf_cnt:    defb    0           ; остаток строк рана (вес 4 держит B)
 
 ; --- render_rowband ---
 rb_blk:     defb    0           ; текущая экранная колонка 0..31
@@ -222,6 +233,38 @@ _render_window:
         add     c               ; end = blk0 + nblk
         sta     rw_end
 
+        ; --- выбор пути ---
+        ; CAM_NO_REF (первый экран) и дальний прыжок камеры требуют сравнения
+        ; tile_win с ПРОИЗВОЛЬНЫМ эталоном — это общий путь ниже. Штатный скролл
+        ; всегда идёт с |old_cam - cam| == 1 (main.c), и тогда разность колонок
+        ; целиком запечена в rw_run_ofs/rw_run_data: построчное сравнение не нужно.
+        lhld    rw_ref
+        mov     a,h
+        ana     l
+        cpi     0FFh
+        jz      rw_slow         ; CAM_NO_REF
+        lhld    rw_cam
+        xchg                    ; DE = cam
+        lhld    rw_ref          ; HL = old_cam
+        mov     a,l
+        sub     e
+        mov     c,a
+        mov     a,h
+        sbb     d               ; A = (old_cam - cam) >> 8
+        ora     a
+        jnz     rw_dn
+        mov     a,c
+        cpi     01h
+        jz      rwf_tbl1        ; old = cam+1 (скролл назад)
+        jmp     rw_slow
+rw_dn:
+        cpi     0FFh
+        jnz     rw_slow
+        mov     a,c
+        cpi     0FFh
+        jz      rwf_tbl0        ; old = cam-1 (скролл вперёд)
+
+rw_slow:
         ; --- начальные указатели колонок ---
         ; окно может начинаться не с нуля: cam и old сдвигаем на blk0, чтобы
         ; rw_newwalk/rw_refwalk = tile_win + (cam+blk0-base)*stride + cam_row, а min()
@@ -421,6 +464,7 @@ rw_block_loop:
         cmp     e
         jnz     rw_block_loop
 
+rw_epilog:
         pop     de              ; адрес возврата
         inx     sp
         inx     sp
@@ -441,6 +485,9 @@ rw_block_loop:
 ; Кольцевой dst_low строки живёт в C (стартует от 255-8*(cam_row+top) и
 ; уменьшается на 8 за строку; 8-битное sui даёт естественное закольцовывание),
 ; счётчик строк — в B, поэтому вызывающий пушит пару BC вокруг грязной клетки.
+; (~=_rw_put_cell упразднён: его тело инлайнено в _rw_block под метками
+;  rw_p0w/rw_p1w, чтобы не платить call/ret на клетку. Семантика та же: A=ref,
+;  HL=&new, C=dst_low, плоскости весов 8 и 4 пишутся по маске _tile_nz.)
 ; ---------------------------------------------------------------
         SECTION code_clib
 _rw_block:
@@ -691,55 +738,277 @@ rw_blk_ret:
         ret
 
 ; ---------------------------------------------------------------
-; (рисовка грязной клетки инлайнена в rw_scan выше — см. _rw_block;
-;  отдельная рутина _rw_put_cell убрана, чтобы не платить call/ret на
-;  каждую клетку. Семантика та же: A=ref, HL=&new, C=dst_low, плоскости
-;  веса 8 и 4 пишутся по маске tile_nz.)
-; ---------------------------------------------------------------
-
-; ---------------------------------------------------------------
-; _rw_copy8: перенести 8 байт тайла (HL, вверх) в VRAM (DE, вниз).
+; БЫСТРЫЙ ПУТЬ render_window: разность колонок по запечённой таблице ранов.
 ;
-; Байт j плоскости (строка тайла сверху вниз) идёт в адрес 255-8*row-j,
-; поэтому VRAM идёт на убывание. Тайл (8 пиксельных строк, кратных 8) НИКОГДА
-; не пересекает шов кольца (256 не кратно 8 со сдвигом <8), поэтому dcx d
-; безопасен: младший байт доходит до 0, но не занимает перенос в старший.
-; 8*24 = 192 T.
+; При |old_cam - cam| == 1 эталон блока — соседняя колонка, поэтому набор
+; «грязных» строк блока запечён в ROM (rw_run_ofs -> rw_run_data, пары
+; (row,count), терминатор (0,0)). Построчное сравнение tile_win (~86 T на
+; каждую из ~500 просмотренных строк за шаг) не нужно вовсе.
+;
+; Направление. Скролл вперёд (old = cam-1): эталон блока i — колонка
+; w0+i-1, т.е. таблица колонки w0+i (rwf_tbl0). Скролл назад (old = cam+1):
+; эталон — w0+i+1, а разность симметрична — берём таблицу колонки w0+i+1
+; (rwf_tbl1, rwf_adj = 1). В обоих случаях таблица идёт на шаг +1 на блок.
+;
+; Клетка пишется БЕЗ tile_nz: обе фоновые плоскости всегда (пустая плоскость
+; — это 8 нулей, для VRAM то же самое, а маска стоила дороже своих 4% байт).
+; Регистры: B = страница плоскости веса 4 (на весь блок), C = кольцевой
+; dst_low (убывает сам вместе с копированием веса 4), D/E = VRAM веса 8,
+; HL = tile_win. Счётчик строк рана живёт в rwf_cnt — именно поэтому B
+; свободен под страницу, а копирование идёт dcr e/dcr c: D не портится,
+; пересчёт низа на строку не нужен. На время клетки HL уезжает в стек.
 ; ---------------------------------------------------------------
+rwf_tbl0:
+        xra     a               ; эталон блока — w0+i-1: таблица колонки w0+i
+        jmp     rwf_prep
+rwf_tbl1:
+        mvi     a,1             ; эталон — w0+i+1: таблица колонки w0+i+1
+rwf_prep:
+        sta     rwf_adj
+        ; w0 = cam + blk0
+        lhld    rw_cam
+        lda     rw_blk
+        mov     e,a
+        mvi     d,0
+        dad     d
+        shld    rw_w0
+        ; pnew = &tile_win[локальная колонка w0] (без cam_row)
+        lda     _tile_win_base
+        mov     c,a
+        lda     _tile_win_base+1
+        mov     b,a
+        mov     a,l
+        sub     c
+        mov     l,a
+        mov     a,h
+        sbb     b
+        mov     h,a             ; HL = w0 - base
+        xchg
+        lda     _tile_stride
+        mov     c,a
+        call    _mulshift
+        lxi     d,_tile_win
+        dad     d
+        shld    rwf_pnew
+        ; rwf_rp = _rw_run_data + rw_run_ofs[w0 + adj]
+        lhld    rw_w0
+        lda     rwf_adj
+        mov     e,a
+        mvi     d,0
+        dad     d               ; HL = w0 + adj
+        dad     h               ; *2: rw_run_ofs — u16
+        lxi     d,_rw_run_ofs
+        dad     d
+        mov     e,m
+        inx     h
+        mov     d,m             ; DE = смещение колонки в rw_run_data
+        lxi     h,_rw_run_data
+        dad     d
+        shld    rwf_rp
+        ; страницы VRAM текущего блока: rwf_hi0 = вес 8, B = вес 4 (+20h).
+        ; B держится на весь блок, в ране не пересчитывается
+        lda     rw_blk
+        adi     080h
+        sta     rwf_hi0
+        adi     020h
+        mov     b,a
+
+rwf_col:
+        lhld    rwf_rp
+rwf_run:
+        mov     a,m             ; row
+        inx     h
+        mov     e,m             ; count
+        inx     h
+        shld    rwf_rp          ; на следующий ран (или на следующую колонку)
+        mov     d,a             ; D = row
+        mov     a,e
+        ora     a
+        jz      rwf_col_done    ; терминатор
+        ; --- клип рана в полосу [cam_row, cam_row+ROWS) ---
+        ; Быстрый путь: ран целиком внутри полосы (row >= lo и
+        ; row-lo+count <= ROWS). Тогда обе обрезки не нужны, а число строк
+        ; рана — это count как есть: на ран выходит ~90 T дешевле полного клипа.
+        lda     _cam_row
+        mov     c,a             ; C = lo
+        mov     a,d
+        sub     c
+        jc      rwf_clip        ; row < lo
+        add     e               ; A = row-lo+count — конец рана в полосе
+        cpi     ROWS+1
+        jnc     rwf_clip        ; хвост рана вылез за полосу
+        mov     a,e             ; полоса не режет — строк ровно count
+rwf_rows:                       ; A = строк в полосе, D = первая мировая строка
+        sta     rwf_cnt         ; остаток строк рана (B занят страницей веса 4)
+        ; C = dst_low = cpl(8*row): VRAM адресована МИРОВЫМ рядом, поэтому
+        ; cam_row в адрес не входит (сдвиг экрана делает регистр скролла).
+        ; Строки рана — мировые: 8*row mod 256 == 8*(row mod 32).
+        mov     a,d
+        add     a
+        add     a
+        add     a
+        cma
+        mov     c,a
+        ; HL = src = pnew + row
+        mov     a,d
+        mov     e,a
+        mvi     d,0
+        lhld    rwf_pnew
+        dad     d               ; HL = pnew + row
+
+        ; --- клетка: обе плоскости тайла, 16 байт ---
+        ; Клетка = один вызов общего цикла копирования _rw_tile16: 8 байт в
+        ; плоскость A (DE, страница D = rwf_hi0) и 8 в плоскость B (BC,
+        ; страница B = вес 8 + 20h, держится на весь блок). Низ — в C:
+        ; _rw_tile16 убывает его сам, это и есть низ следующей строки.
+rwf_cell:
+        push    h               ; src-указатель рана
+        mov     l,m             ; тайл
+        mvi     h,0
+        dad     h
+        dad     h
+        dad     h
+        dad     h               ; HL = тайл*16
+        lxi     d,_tileset
+        dad     d               ; HL = &tileset[тайл] (DE затирается)
+        lda     rwf_hi0
+        mov     d,a             ; D = страница веса 8
+        mov     e,c             ; E = низ
+        call    _rw_tile16
+        pop     h
+        inx     h
+        lda     rwf_cnt
+        dcr     a
+        sta     rwf_cnt
+        jnz     rwf_cell
+        jmp     rwf_col          ; HL = tile_win -> перезагрузить указатель ранов
+
+        ; --- холодный путь клипа: ран пересекает край полосы ---
+        ; B занят страницей веса 4, поэтому считаем по E.
+rwf_clip:
+        mov     a,d
+        add     e
+        mov     e,a             ; E = row + count (<= rows <= 255)
+        mov     a,d
+        sub     c               ; C = lo
+        jnc     rwf_c0
+        mov     d,c             ; row < lo -> row = lo
+rwf_c0:
+        mov     a,c
+        adi     ROWS
+        mov     c,a             ; C = hi
+        mov     a,e
+        sub     c
+        jc      rwf_c1
+        mov     e,c             ; row+count > hi -> обрезать
+rwf_c1:
+        mov     a,e
+        sub     d               ; строк в полосе
+        jz      rwf_run         ; пусто -> следующий ран
+        jc      rwf_run
+        jmp     rwf_rows        ; A = строк
+
+        ; --- колонка кончилась: сдвиг на следующий блок ---
+rwf_col_done:
+        shld    rwf_rp
+        lda     _tile_stride
+        mov     e,a
+        mvi     d,0
+        lhld    rwf_pnew
+        dad     d
+        shld    rwf_pnew          ; pnew += stride
+        lda     rwf_hi0
+        inr     a
+        sta     rwf_hi0
+        adi     020h
+        mov     b,a             ; вес 4 = вес 8 + 20h, страница следующего блока
+        lda     rw_blk
+        inr     a
+        sta     rw_blk
+        mov     e,a
+        lda     rw_end
+        cmp     e
+        jz      rw_epilog
+        jmp     rwf_col
+
+    ; ---------------------------------------------------------------
+    ; _rw_tile16: общий цикл копирования — 16 байт тайла вниз по кольцу.
+    ;   Первые 8 байт идут в плоскость A (DE), вторые 8 — в плоскость B (BC).
+    ;   Низ обеих плоскостей независим, поэтому одна рутина обслуживает все
+    ;   четыре места: клетку render_window (страницы весов 8 и 4, низ общий),
+    ;   колонку render_rowband (то же), прогон mario_draw и mario_undraw (страница
+    ;   персонажа одна, низ B = низ A - 8 — то есть строки 8..15 того же прогона).
+    ;   Ветвлений нет: убывание идёт байтом (dcr e/dcr c), а не парой — на
+    ;   переходе через шов кольца (0 -> 255) dcr страницу не трогает.
+    ;   вход:  HL = src (16 байт), DE = (страница A, низ A), BC = (страница B, низ B)
+    ;   выход: HL = src+16, E = низ A - 8, C = низ B - 8
+    ; ---------------------------------------------------------------
         SECTION code_clib
-_rw_copy8:
+_rw_tile16:
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
         mov     a,m
         stax    d
         inx     h
-        dcx     d
+        dcr     e
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
+        mov     a,m
+        stax    b
+        inx     h
+        dcr     c
         ret
 
 ; ---------------------------------------------------------------
@@ -811,20 +1080,17 @@ rb_loop:
         dad     d               ; HL = &tileset[tile*16] (плоскость веса 8, строка 0)
         lda     rb_blk
         mov     c,a             ; C = blk
-        ; плоскость 0 (вес 8)
+        ; D = страница плоскости A (вес 8), B = плоскость B (вес 4)
         lda     vram_bases
         add     c
         mov     d,a
-        lda     rb_dstlow
-        mov     e,a
-        call    _rw_copy8       ; HL += 8
-        ; плоскость 1 (вес 4)
         lda     vram_bases+1
         add     c
-        mov     d,a
+        mov     b,a
         lda     rb_dstlow
         mov     e,a
-        call    _rw_copy8
+        mov     c,a             ; C = низ плоскости B = низ A
+        call    _rw_tile16       ; HL += 16, E/C -= 8
         ; rb_walk += stride
         lhld    rb_walk
         lda     _tile_stride
@@ -851,7 +1117,10 @@ rb_loop:
 ;
 ; Прямая запись спрайта 16x16 в 2 плоскости персонажа. 4 прогона (плоскость
 ; вес 2, вес 1 x колонка блока 0,1) по 16 байт: байт спрайта -> кольцевой адрес
-; VRAM, адрес идёт на убывание (dcr e — спрайт может пересечь шов кольца).
+; VRAM, адрес идёт на убывание (dcr e/dcr c — спрайт может пересечь шов кольца).
+; Прогон = один вызов общего цикла _rw_tile16: строка в адресе у него — низ
+; страницы (D), поэтому обе половины прогона пишутся в одну плоскость, если
+; низ B = низ A - 8, а страница B = страница A.
 ; Слепка VRAM и маскирования нет: спрайт не трогает фоновые плоскости.
 ; x кратен 8 (левый блок = x/8, правая половина спрайта = блок x/8+1), y —
 ; МИРОВОЙ пиксельный ряд верха спрайта (младший байт = world_y mod 256).
@@ -919,16 +1188,13 @@ md_run_loop:
         mov     d,a
         inx     h               ; следующий прогон: +2 от начала пары
         shld    md_vtab_cur     ; DE = адрес VRAM (пара из md_vtab)
+        mov     b,d             ; плоскость B — та же страница персонажа
+        mov     a,e
+        sui     HALF_TILE       ; низ B = низ A - 8: строки 8..15 прогона
+        mov     c,a
         lhld    md_spr_cur      ; HL = байты спрайта этого прогона
-        mvi     b,MARIO_ROWS
-md_px:
-        mov     a,m             ; байт спрайта (маска пикселей плоскости)
-        stax    d               ; прямая запись в плоскость персонажа
-        inx     h
-        dcr     e               ; вниз по кольцу (столбец = D не трогаем)
-        dcr     b
-        jnz     md_px
-        shld    md_spr_cur
+        call    _rw_tile16      ; строки 0..7 в DE, 8..15 в BC
+        shld    md_spr_cur      ; HL += 16
 
         lda     md_runs
         dcr     a
@@ -953,7 +1219,8 @@ md_draw_done:
 ; Обнулить 2 плоскости персонажа в прямоугольнике прошлого кадра (таблица
 ; md_vtab ещё в силе). Фон под спрайтом НЕ трогаем — он не затирается, поэтому
 ; слепок не нужен. 4 прогона x 16 байт = 64 записи нуля (~0.4 kT против 113 kT
-; на перерисовку двух блоков фоном в прежней схеме).
+; на перерисовку двух блоков фоном в прежней схеме). Источник нулей — тайл 0
+; (`_tileset`, небо: 16 байт нуля), так что цикл тот же — _rw_tile16.
 ; ---------------------------------------------------------------
         SECTION code_clib
 _mario_undraw:
@@ -970,13 +1237,12 @@ md_ud_loop:
         mov     d,a
         inx     h               ; следующий прогон: +2 от начала пары
         shld    md_vtab_cur     ; DE = адрес VRAM
-        mvi     b,MARIO_ROWS
-        xra     a               ; A = 0 — прозрачность спрайта (фон покажет своё)
-md_ud_px:
-        stax    d               ; обнулить плоскость персонажа
-        dcr     e               ; вниз по кольцу (столбец = D не трогаем)
-        dcr     b
-        jnz     md_ud_px
+        mov     b,d             ; плоскость B — та же страница персонажа
+        mov     a,e
+        sui     HALF_TILE       ; низ B = низ A - 8: строки 8..15 прогона
+        mov     c,a
+        lxi     h,_tileset      ; тайл 0 = небо = 16 байт нуля
+        call    _rw_tile16
         lda     md_runs
         dcr     a
         jz      md_ud_done
