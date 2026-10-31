@@ -13,12 +13,15 @@ include ../../../config.mk
 TARGET  = spr-speed.rom
 MAPFILE = spr-speed.map
 
+# spr_push.asm — генерируется gen_push.py из mario_old.inc (спрайт как функция,
+# вывод в VRAM через PUSH). В дереве лежит готовый файл; пересобрать —
+# python3 gen_push.py, дальше обычный make.
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm $(LIB)/gfx/pr.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
        $(LIB)/timer/timer.asm \
-       spr_old.asm spr_smc.asm spr_stub.asm main.c
+       spr_old.asm spr_smc.asm spr_stub.asm spr_push.asm main.c
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
 

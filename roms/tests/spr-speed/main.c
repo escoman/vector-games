@@ -22,11 +22,15 @@
  * Пары движков: SMC с маской (spr_smc.asm) — bm_smc_mask_*; STUB и STUB с
  * маской (spr_stub.asm; маска плоскостей и COLS развёрнуты при сборке) —
  * bm_stub_*, bm_stub_mask_*.
+ * И PUSH-ядро (spr_push.asm, генерируется gen_push.py): каждый спрайт — своя
+ * функция, данные лежат прямо в её коде, а строки выплёвываются в VRAM через
+ * PUSH при SP, уведённом в видеопамять (под di) — bm_push_*.
  *
- * После замера ROM крутит семь сцен по очереди (round-robin — по одной на
+ * После замера ROM крутит восемь сцен по очереди (round-robin — по одной на
  * кадр), по колонкам экрана: слева OLD / NEW / MASK / SMC / SMC+MSK, справа
- * STUB / STUB+MSK — чтобы каждая сцена успевала дорисоваться до прохода луча:
- * стирание + вывод одной сцены — ~180 строк растра, всемером в кадр не лезут.
+ * STUB / STUB+MSK / PUSH — чтобы каждая сцена успевала дорисоваться до
+ * прохода луча: стирание + вывод одной сцены — ~180 строк растра, восьмером
+ * в кадр не лезут.
  */
 
 #include "v06.h"
@@ -81,6 +85,14 @@ extern void draw_sprite_stub_mask(unsigned char x, unsigned int y,
 /* Сборка лесенок в ОЗУ (копирование 0x7000, композиция 0x7100) — один раз. */
 extern void smc_init(void);
 
+/* PUSH-ядро (spr_push.asm): каждый спрайт — самостоятельная функция, данные
+ * спрайта лежат в её коде, вывод в VRAM идёт PUSH'ами при SP в видеопамяти.
+ * Аргументы те же x/y, что у прочих движков; дескриптора нет вообще.
+ * Запись плотная (все 32 строки столбца, включая нули) — erase не нужен. */
+extern void spr_push_mario1(unsigned char x, unsigned int y) __z88dk_callee;
+extern void spr_push_mario2(unsigned char x, unsigned int y) __z88dk_callee;
+extern void spr_push_mario3(unsigned char x, unsigned int y) __z88dk_callee;
+
 /* ------------------------------ ПАЛИТРА -------------------------------- */
 /* Палитра из mario-dbl: 0=голубой(небо), 1=красный, 2=розовый, 3=чёрный.
  * Текст выводится в фоновых плоскостях (цвет 4 = белый, слот палитры 4). */
@@ -114,6 +126,9 @@ volatile unsigned int bm_stub_anim;  /* анимация 3 кадров чере
 volatile unsigned int bm_stub_mask_draw;   /* один draw_sprite_stub_mask */
 volatile unsigned int bm_stub_mask_total;  /* N вызовов STUB с маской    */
 volatile unsigned int bm_stub_mask_anim;   /* анимация 3 кадров STUB+маска */
+volatile unsigned int bm_push_draw;  /* один вызов PUSH-ядра (тики)        */
+volatile unsigned int bm_push_total; /* N вызовов PUSH-ядра (тики)         */
+volatile unsigned int bm_push_anim;  /* анимация 3 кадров PUSH-ядра (тики) */
 volatile unsigned int bm_magic;      /* 0xBEEF = замер выполнен            */
 
 #define R_OLD 3u
@@ -188,6 +203,18 @@ static void draw_sprite_old(unsigned char x, unsigned int y, const unsigned char
     mario_draw_sprite();
 }
 
+/* ----------------- PUSH-ЯДРО (спрайт как функция) --------------------- */
+/* Выбор функции-спрайта по фазе: у PUSH-ядра дескриптора нет — каждая фаза
+ * это отдельная функция со своими данными внутри кода. */
+static void draw_sprite_push(unsigned char x, unsigned char y, unsigned char phase)
+{
+    switch (phase) {
+    case 0:  spr_push_mario1(x, y); break;
+    case 1:  spr_push_mario2(x, y); break;
+    default: spr_push_mario3(x, y); break;
+    }
+}
+
 /* --------------------------- УТИЛИТЫ ----------------------------------- */
 static const char hex_digits[] = "0123456789ABCDEF";
 
@@ -215,6 +242,8 @@ static void measure(void)
     unsigned char stub_x = 128;         /* x начала второй колонки */
     unsigned char stub_y = 8;           /* y верха: уровень STUB ENGINE */
     unsigned char stubm_y = 56;         /* y верха: STUB с маской */
+    unsigned char push_x = 128;         /* x PUSH-ядра: вторая колонка, под STUB+MSK */
+    unsigned char push_y = 104;         /* y верха: PUSH ENGINE */
     unsigned char phase;
     unsigned int e0;
     unsigned char f0;
@@ -372,6 +401,27 @@ static void measure(void)
         draw_sprite_stub_mask(stub_x, stubm_y, mario_frames_new_mask[phase]);
     bm_stub_mask_anim = t_span(e0, f0);
 
+    /* === Замеры PUSH-ядра (данные в коде функции, вывод PUSH'ами) === */
+    /* 23) Одиночный вызов spr_push_mario1. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    draw_sprite_push(push_x, push_y, 0);
+    bm_push_draw = t_span(e0, f0);
+
+    /* 24) Пачка из R_OLD вызовов. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (i = 0; i < R_OLD; ++i)
+        draw_sprite_push(push_x, push_y, i % 3);
+    bm_push_total = t_span(e0, f0);
+
+    /* 25) Анимация 3 кадров. */
+    v06_wait_frame();
+    e0 = t_now(&f0);
+    for (phase = 0; phase < 3; ++phase)
+        draw_sprite_push(push_x, push_y, phase);
+    bm_push_anim = t_span(e0, f0);
+
     bm_magic = 0xBEEFu;
 }
 
@@ -431,6 +481,12 @@ int main(void)
     gfx_print(x, 64, "DRAW:", 4);
     gfx_print(x, 72, "TOTAL:", 4);
     gfx_print(x, 80, "ANIM:", 4);
+
+    /* Под STUB MASK: PUSH-ядро (спрайт-функция, запись через PUSH). */
+    gfx_print(x, 104, "PUSH ENGINE", 4);
+    gfx_print(x, 112, "DRAW:", 4);
+    gfx_print(x, 120, "TOTAL:", 4);
+    gfx_print(x, 128, "ANIM:", 4);
     gfx_active_planes = 0x0F;
 
     measure();
@@ -467,9 +523,13 @@ int main(void)
     print_hex_u16(x, 64, bm_stub_mask_draw);
     print_hex_u16(x, 72, bm_stub_mask_total);
     print_hex_u16(x, 80, bm_stub_mask_anim);
+
+    print_hex_u16(x, 112, bm_push_draw);
+    print_hex_u16(x, 120, bm_push_total);
+    print_hex_u16(x, 128, bm_push_anim);
     gfx_active_planes = 0x0F;
 
-    /* Замер выполнен — крутим семь сцен по очереди (по одной на кадр). */
+    /* Замер выполнен — крутим восемь сцен по очереди (по одной на кадр). */
     fc_lo   = (volatile unsigned char *)&frame_count;
     last_fc = *fc_lo;
 
@@ -522,16 +582,21 @@ int main(void)
             erase_sprite_box(128, 8, 3, SPR_H);
             draw_sprite_stub(128, 8, mario_frames_new[next]);
             break;
-        default:                            /* STUB+MSK: подложка + стаб */
+        case 6:                             /* STUB+MSK: подложка + стаб */
             timer_wait(TIMER_REMAIN(TIMER_LINES(
                 RASTER_BASE + 56 + SPR_H + WAKE_MARGIN)));
             fill_checker(128, 56, 3, SPR_H);
             draw_sprite_stub_mask(128, 56, mario_frames_new_mask[next]);
             break;
+        default:                            /* PUSH: erase не нужен */
+            timer_wait(TIMER_REMAIN(TIMER_LINES(
+                RASTER_BASE + 104 + SPR_H + WAKE_MARGIN)));
+            draw_sprite_push(128, 104, next);
+            break;
         }
 
         /* Очередь и фаза анимации. */
-        phase = (phase + 1) % 7;
+        phase = (phase + 1) % 8;
         if (phase == 0)
             next = (next + 1) % 3;
     }
