@@ -13,6 +13,7 @@
 # make leveldata    — снять assets/level_data.bin (байт-коды карт) из снапшота;
 # make levels       — перегенерировать include/levels.inc (карты уровней)
 #                     из assets/level_data.bin;
+# make unit         — перегенерировать include/unit.inc (спрайты юнита);
 # make preview      — то же + превью PNG в assets/ (сверка глазами);
 # make deploy       — положить ROM в эмулятор;
 # make consist      — разбор состава образа (finally.mk);
@@ -45,6 +46,7 @@ GEN_MUSIC = tools/gen_title_music.py
 GEN_FONT  = tools/gen_font.py
 GEN_TERRAIN = tools/gen_terrain.py
 GEN_LEVELS  = tools/gen_levels.py
+GEN_UNIT    = tools/gen_unit.py
 EXTRACT_LEVELS = tools/extract_level_data.py
 
 TITLE_INC = include/title.inc
@@ -52,6 +54,7 @@ MUSIC_ASM = include/title_music.asm
 FONT_ASM  = include/font.asm
 TERRAIN_INC = include/terrain.inc
 LEVELS_INC = include/levels.inc
+UNIT_INC  = include/unit.inc
 
 # include/render.asm (статичный рельеф меню, terrain.inc) в сборке не участвует:
 # меню отложено, а его данные теперь рисует движок миссии. Файлы на месте —
@@ -64,13 +67,15 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/kbd/kbdscan.asm \
        $(LIB)/mem/heap.c \
        include/beep.asm $(MUSIC_ASM) \
-       include/font.asm include/mission.asm include/sfx_hate.c main.c
+       include/font.asm include/mission.asm include/unit.asm \
+       include/sfx_hate.c main.c
 
 # FONT_EXTERNAL: pr.asm берёт font_chars/font8x8 как EXTERN из include/font.asm
 # (шрифт HATE) вместо латинского шрифта lib/gfx/fonts/default_8x8.inc.
 ZFLAGS = +vector06c --no-crt -I$(LIB) -Iinclude -Ca-DFONT_EXTERNAL
 
-.PHONY: all deploy clean full title music font terrain levels leveldata preview
+.PHONY: all deploy clean full title music font terrain levels leveldata \
+        unit preview
 
 all: $(TARGET)
 
@@ -78,8 +83,9 @@ full: clean all deploy
 
 # Сгенерированные данные — неотъемлемая часть сборки, поэтому в prereq'ах.
 $(TARGET): main.c include/sfx_hate.c include/sfx_hate.h include/beep.asm \
-           include/mission.asm \
-           $(TITLE_INC) $(MUSIC_ASM) $(FONT_ASM) $(LEVELS_INC) $(SRCS)
+           include/mission.asm include/unit.asm \
+           $(TITLE_INC) $(MUSIC_ASM) $(FONT_ASM) $(LEVELS_INC) $(UNIT_INC) \
+           $(SRCS)
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) -m $(SRCS) -o $@
 	@echo "=== Done: $@ ==="
@@ -103,6 +109,9 @@ assets/level_data.bin:
 $(LEVELS_INC): assets/level_data.bin $(GEN_LEVELS)
 	python3 $(GEN_LEVELS)
 
+$(UNIT_INC): $(GEN_UNIT)
+	python3 $(GEN_UNIT)
+
 title: $(TITLE_INC)
 
 music: $(MUSIC_ASM)
@@ -115,11 +124,14 @@ leveldata: assets/level_data.bin
 
 levels: $(LEVELS_INC)
 
+unit: $(UNIT_INC)
+
 preview: $(TITLE_INC) $(FONT_ASM) $(TERRAIN_INC) $(LEVELS_INC)
 	python3 $(GEN_TITLE) --preview
 	python3 $(GEN_FONT) --preview
 	python3 $(GEN_TERRAIN) --preview
 	python3 $(GEN_LEVELS) --preview
+	python3 $(GEN_UNIT) --preview assets/unit_preview.png
 
 include $(PROJECT_ROOT)finally.mk
 
