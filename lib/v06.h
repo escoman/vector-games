@@ -397,6 +397,11 @@ extern void beam_set_cam(unsigned int cam_y) __z88dk_callee;
  * kbd_scan_now в ISR запишет gfx_scroll_row в порт в гашении. */
 extern void beam_flush_scroll(unsigned int cam_y) __z88dk_callee;
 
+/* Начальная отрисовка уровня без синхронизации с лучом.
+ * Вызывается при чёрной палитре (экран погашен), поэтому пейсинг не нужен.
+ * Рисует все клетки окна (BEAM_RING_ROWS × cols) и инстансы. */
+extern void beam_render_initial(void);
+
 /* Кадровый контракт: diff -> план; исполнение плана в такт лучу
  * (возврат = конец кадра). beam_overbudget — счётчик переносов/отказов
  * (диагностика ТФ-5), beam_blank_wait — спин до бланкинга (строка ≥ 288)

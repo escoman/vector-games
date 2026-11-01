@@ -606,6 +606,15 @@ static void beam_render_all(void)
     beam_init_pending = 0;
 }
 
+/* Начальная отрисовка уровня без синхронизации с лучом.
+ * Вызывается при чёрной палитре (экран погашен), поэтому пейсинг не нужен.
+ * Рисует все клетки окна (BEAM_RING_ROWS × cols) и инстансы. */
+void beam_render_initial(void)
+{
+    if (!beam_lvl || !beam_init_pending) return;
+    beam_render_all();
+}
+
 /* Фаза: dirty-инстансы полосы b (strip-отложенные — только фаза B). */
 static void beam_render_band_insts(unsigned char b, unsigned char *mask_drawn,
                                    unsigned char allow_strip)
@@ -645,10 +654,17 @@ void beam_render(void)
 
     if (!beam_lvl) return;
 
-    if (!beam_lvl->beam_sync || beam_init_pending) {
-        if (!beam_lvl->beam_sync) beam_blank_wait();  /* BEAM_OFF: бланкинг */
+    /* Начальная отрисовка делается отдельно через beam_render_initial
+     * при чёрной палитре (без пейсинга). Если она ещё не сделана —
+     * просто ждём VBlank для сохранения темпа 50 Гц. */
+    if (beam_init_pending) {
+        timer_wait(0);
+        return;
+    }
+
+    if (!beam_lvl->beam_sync) {
+        beam_blank_wait();  /* BEAM_OFF: бланкинг */
         beam_render_all();
-        if (beam_lvl->beam_sync) timer_wait(0);       /* init: темп 50 Гц   */
         return;
     }
 

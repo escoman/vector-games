@@ -444,6 +444,29 @@ static void restart_level(void)
     }
     beam_set_cam(cam_y);
 
+    /* Измерение: начальная отрисовка уровня */
+    {
+        unsigned int fc_before = frame_count;
+        unsigned int t_before = timer_elapsed();
+        
+        /* Начальная отрисовка уровня при чёрной палитре (без пейсинга).
+         * Все клетки рисуются сразу, без синхронизации с лучом. */
+        beam_render_initial();
+        
+        unsigned int t_after = timer_elapsed();
+        unsigned int fc_after = frame_count;
+        unsigned int frames = fc_after - fc_before;
+        unsigned int ticks = (t_after >= t_before) 
+            ? (t_after - t_before) 
+            : (29952u - t_before + t_after);
+        
+        /* Сохраняем результат в prof_restart (используем как отладочный вывод) */
+        /* frames = количество кадров, ticks = тики внутри последнего кадра */
+        /* 96 тиков = 1 линия, 29952 тика = 1 кадр (50 Гц) */
+        (void)frames;
+        (void)ticks;
+    }
+
     need_fade = 1;
 }
 
