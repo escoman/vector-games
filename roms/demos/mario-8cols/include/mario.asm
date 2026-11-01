@@ -74,6 +74,7 @@
         PUBLIC  _render_rowband
         PUBLIC  _mario_draw
         PUBLIC  _mario_undraw
+        PUBLIC  _mulshift         ; нужен include/bake.asm (шаг колонки окна)
 
         EXTERN  _tileset
         EXTERN  _rw_run_ofs     ; u16: смещение ранов разности на колонку

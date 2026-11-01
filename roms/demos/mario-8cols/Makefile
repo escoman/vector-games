@@ -16,7 +16,7 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/fade.c \
        $(LIB)/kbd/keyboard.c \
-       include/mario.asm main.c
+       include/mario.asm include/bake.asm main.c
 
 # -Iinclude — чтобы main.c подключал генерируемые .inc без пути.
 ZFLAGS = +vector06c --no-crt -I$(LIB) -Iinclude
@@ -47,7 +47,8 @@ include/level.inc include/mario.inc: assets/tiles.png assets/tiles.json assets/m
                              tools/gen_assets.py tools/prefablib.py
 	python3 tools/gen_assets.py
 
-$(TARGET): include/level.inc include/mario.inc include/mario.asm main.c
+$(TARGET): include/level.inc include/mario.inc include/mario.asm \
+           include/bake.asm main.c
 	ZCCCFG=$(ZCCCFG) PATH="$(Z88DK)/bin:$$PATH" \
 	    $(ZCC) $(ZFLAGS) -m $(SRCS) -o $@
 	@echo "=== Done: $@ ==="

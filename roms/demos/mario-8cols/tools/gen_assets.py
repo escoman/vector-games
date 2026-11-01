@@ -632,6 +632,21 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
     pf_data = pack_instances(inst, model["ids"])
     pf_rects = pack_rects(variants, len(tileset))
     var_ofs, var_n = var_tables(variants)
+    # bbox варианта по dx: {dx_min, dx_max + w_max}. По нему bake.asm
+    # (include/bake.asm) отсекает экземпляры, не достающие до запекаемой полосы:
+    # в окно сдвига реально попадает ~14 экземпляров из 53, и без отсева скан
+    # словаря стоит вдвое дороже всей остальной перепечки.
+    var_bb = []
+    for v in variants:
+        rs = v["rects"]
+        var_bb += [min((int(r["dx"]) for r in rs), default=0),
+                   max((int(r["dx"]) + int(r["w"]) for r in rs), default=0)]
+    # Формат экземпляра держит номер варианта в 7 битах p0 (старший бит байта —
+    # это x>>8), а p3 = v>>7. bake.asm читает только p0, поэтому больше 127
+    # вариантов он не различит — лучше упасть здесь, чем нарисовать мусор.
+    if len(variants) >= 128:
+        sys.exit(f"вариантов {len(variants)} >= 128: номер варианта в экземпляре "
+                 f"держит 7 битов (p3 — только v>>7), bake.asm читает p0")
     pf_start = model["pf_start"]
     # Сколько блоков назад надо начинать скан полосы, чтобы не потерять широкие
     # экземпляры: экземпляр блока b' достаёт до колонки 32b, если 32(b-b') <
@@ -641,7 +656,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
     pf_back = (max_w + PL.OBJ_WIN_STEP - 1) // PL.OBJ_WIN_STEP
     nrect = sum(len(v["rects"]) for v in variants)
     budget = (len(pf_data) + len(pf_rects) + 2 * len(var_ofs) + len(var_n)
-              + 2 * len(pf_start))
+              + len(var_bb) + 2 * len(pf_start))
     with open(path, "w") as f:
         f.write("/* Автоген: tools/gen_assets.py (Mario 8-col, сплит по плоскостям). "
                 "Не править руками. */\n\n")
@@ -667,7 +682,8 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
         f.write("   rect'ов); rect: 5 байт {t, dx, dy, w, h} — смещение внутри экземпляра.\n")
         f.write("   Список отсортирован по (x>>5, z-order), pf_start[блок] — начало группы;\n")
         f.write("   pf_start[OBJ_WIN_BLOCKS] = PF_COUNT (sentinel). Развёртка в окне —\n")
-        f.write("   bake_groups() в main.c. */\n")
+        f.write("   bake_groups() в include/bake.asm. pf_var_bb[v] — bbox варианта\n")
+        f.write("   по dx {dx_min, dx_max + w_max}: по нему отсеиваются экземпляры. */\n")
         # Палитра берётся из assets/palette.json; слот = bg*4 + ch (см. build_palette).
         f.write("/* Палитра ниже — из assets/palette.json (слот = bg*4 + ch). */\n")
         fmt_array(f, "level_palette", bytes(PALETTE))
@@ -677,6 +693,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
         fmt_array(f, "pf_rects", pf_rects)         # словарь прямоугольников вариантов
         fmt_array_u16(f, "pf_var_ofs", var_ofs)    # вариант -> первый rect
         fmt_array(f, "pf_var_n", var_n)            # вариант -> число rect'ов
+        fmt_array(f, "pf_var_bb", var_bb)         # вариант -> bbox по dx
         fmt_array_u16(f, "pf_start", pf_start)     # старт группы блока экземпляров
         fmt_array(f, "tile_nz", tile_nz)           # 2 бита: непустая плоскость веса 8 / 4
         fmt_array(f, "pair_top", pair_top)         # верх diff'а на пару соседних колонок
@@ -694,7 +711,7 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
         fmt_array(f, "tile_solid", tile_solid)
     print(f"  словари уровня: {budget} Б (pf_data {len(pf_data)} + pf_rects "
           f"{len(pf_rects)} + варианты {2 * len(var_ofs) + len(var_n)} + "
-          f"pf_start {2 * len(pf_start)})")
+          f"pf_var_bb {len(var_bb)} + pf_start {2 * len(pf_start)})")
     print(f"wrote {path} ({os.path.getsize(path)} bytes)")
 
 

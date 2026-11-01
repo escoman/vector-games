@@ -145,145 +145,23 @@ static unsigned char drawn_blk;
 static int           drawn_y;    /* мировой y верха спрайта (с учётом потолка) */
 static const unsigned char *drawn_spr;
 
-/* Замечания по запеканию окна [tile_win_base, tile_win_base+OBJ_WIN_COLS):
+/* ЗАПЕКАНИЕ ОКНА — в include/bake.asm. Замечания по алгоритму:
  *   * BSS при --no-crt не зануляется, поэтому печём ВСЕ LEVEL_ROWS строк
  *     колонки — вертикальный скролл тогда не требует перепечки;
- *   * горячие циклы обнуления/копирования/заполнения — на unsigned char
- *     (сравнение с <=64 инлайнится cp), иначе sccz80 на КАЖДУЮ ячейку вставлял
- *     вызов 16-битного сравнения (l_uge/l_ge) -> миллионы вызовов -> секунды
- *     фриза;
  *   * список экземпляров отсортирован по 32-колоночным блокам, скан полосы
  *     начинается с pf_start[блок] и обрывается на конце полосы -> охватываем
  *     только узкую полосу, а не весь список. За назад отступаем на PF_BACK
- *     блоков: широкий экземпляр живёт в группе своего левого края. */
-
-/* Обнуление локальных колонок окна [cstart, cend). */
-static void bake_clear(unsigned char cstart, unsigned char cend)
-{
-    unsigned char  c, r;
-    unsigned char *p = tile_win + (unsigned int)cstart * LEVEL_ROWS;
-    for (c = cstart; c < cend; c++)
-        for (r = 0; r < LEVEL_ROWS; r++)
-            *p++ = 0;
-}
-
-/* Запечь в окно МИРОВЫЕ колонки [wstart, wend) — обе кратны OBJ_WIN_STEP.
- * Клип по [wstart, wend), поэтому пережившую половину можно занести отдельно
- * (memmove в bake_shift), а сюда подавать только новую половину.
- *
- * Список экземпляров отсортирован по (x>>5, z-order), поэтому полоса —
- * непрерывный отрезок [pf_start[b0], pf_start[b1+1]); влево отступаем на
- * PF_BACK блоков, иначе теряется прогон земли, лежащий в группе соседа. Клип
- * каждого прямоугольника по [wstart, wend) делает этот запас безвредным.
- * Прямоугольники пишутся в порядке словаря, экземпляры — в порядке списка, то
- * есть поздние перекрывают ранних (z-order). */
-static void bake_groups(unsigned int wstart, unsigned int wend)
-{
-    unsigned int  base = tile_win_base;
-    unsigned int  b0 = wstart >> 5, b1 = (wend - 1) >> 5;
-    unsigned int  i, end, x, v, vofs, c0, c1;
-    unsigned char y, dy, nn, k, c, r, nrows, ncols, t;
-    const unsigned char *p, *o;
-    unsigned char *q, *col;
-
-    if (b0 > (unsigned int)PF_BACK)
-        b0 -= PF_BACK;
-    else
-        b0 = 0;
-    if (b1 >= (unsigned int)OBJ_WIN_BLOCKS)
-        b1 = (unsigned int)OBJ_WIN_BLOCKS - 1;
-    end = pf_start[b1 + 1];
-    i = pf_start[b0];
-    p = pf_data + i * 4;
-    for (; i < end; i++, p += 4) {
-        x = (unsigned int)p[1] | ((unsigned int)(p[0] & 0x80) << 1);
-        y = p[2];
-        v = (unsigned int)(p[0] & 0x7F) | ((unsigned int)(p[3] & 0x1F) << 7);
-        vofs = pf_var_ofs[v];
-        nn = pf_var_n[v];
-        for (k = 0; k < nn; k++) {
-            o = pf_rects + (vofs + (unsigned int)k) * 5;
-            c0 = x + (unsigned int)o[1];              /* dx */
-            if (c0 < wstart)
-                c0 = wstart;
-            c1 = x + (unsigned int)o[1] + (unsigned int)o[3];   /* dx + w */
-            if (c1 > wend)
-                c1 = wend;
-            if (c0 >= c1)
-                continue;                     /* прямоугольник вне полосы */
-            dy = o[2];
-            nrows = o[4];
-            if ((unsigned int)y + (unsigned int)dy + nrows
-                    > (unsigned int)LEVEL_ROWS)
-                nrows = (unsigned char)(LEVEL_ROWS - y - dy);
-            ncols = (unsigned char)(c1 - c0);         /* <= OBJ_WIN_COLS */
-            t = o[0];
-            col = tile_win + (c0 - base) * LEVEL_ROWS;
-            for (c = 0; c < ncols; c++) {
-                q = col + y + dy;
-                for (r = 0; r < nrows; r++)
-                    *q++ = t;
-                col += LEVEL_ROWS;
-            }
-        }
-    }
-}
-
-/* Полная перепечка окна [base, base+OBJ_WIN_COLS): стартовый bake и редкий
- * прыжок камеры (респаун). На обычных границях окна вызывается bake_shift. */
-static void bake_window(void)
-{
-    unsigned int b = tile_win_base;
-    bake_clear(0, OBJ_WIN_COLS);
-    bake_groups(b, b + OBJ_WIN_COLS);
-}
-
-/* Инкрементальный сдвиг базы на ОДИН шаг окна: сдвигаем выжившую половину
- * окна копированием и запекаем ТОЛЬКО новую половину — вдвое меньше затираний
- * и объектов, чем при полной перепечке. Обновляет tile_win_base сам. Возвращает
- * 1 при инкрементальном сдвиге (±шаг) и 0 при прыжке камеры — тогда caller
- * печет окно целиком (bake_window). */
-static unsigned char bake_shift(unsigned int nb)
-{
-    unsigned int  old = tile_win_base;
-    unsigned char cc, rr;
-    unsigned char *d, *s;
-
-    if (nb == old + OBJ_WIN_STEP) {
-        /* Камера вперёд: мир ушёл влево, выживает старшая половина
-         * local[32..64) -> local[0..32); справа входит новая половина.
-         * Перед сдвигом сохраняем колонку, которая уезжает за левый край:
-         * это МИРОВАЯ колонка nb-1, её diff-рендер следующего кадра использует
-         * как эталон нулевого блока (см. tile_win_prevcol). */
-        d = tile_win + (OBJ_WIN_STEP - 1) * LEVEL_ROWS;
-        s = tile_win_prevcol;
-        for (rr = 0; rr < LEVEL_ROWS; rr++)
-            *s++ = *d++;
-        d = tile_win;
-        s = tile_win + OBJ_WIN_STEP * LEVEL_ROWS;
-        for (cc = 0; cc < OBJ_WIN_STEP; cc++)
-            for (rr = 0; rr < LEVEL_ROWS; rr++)
-                *d++ = *s++;
-        tile_win_base = nb;
-        bake_clear(OBJ_WIN_STEP, OBJ_WIN_COLS);
-        bake_groups(nb + OBJ_WIN_STEP, nb + OBJ_WIN_COLS);
-        return 1;
-    }
-    if (nb + OBJ_WIN_STEP == old) {
-        /* Камера назад: выживает младшая половина local[0..32) -> local[32..64);
-         * слева входит новая половина. */
-        d = tile_win + OBJ_WIN_STEP * LEVEL_ROWS;
-        s = tile_win;
-        for (cc = 0; cc < OBJ_WIN_STEP; cc++)
-            for (rr = 0; rr < LEVEL_ROWS; rr++)
-                *d++ = *s++;
-        tile_win_base = nb;
-        bake_clear(0, OBJ_WIN_STEP);
-        bake_groups(nb, nb + OBJ_WIN_STEP);
-        return 1;
-    }
-    return 0;                               /* прыжок: нужна полная перепечка */
-}
+ *     блоков: широкий экземпляр живёт в группе своего левого края;
+ *   * сдвиг базы окна перепекает окно целиком: на 8080 memmove выжившей
+ *     половины (~37 T/байт) дороже обнуления всего окна заливкой через SP.
+ *     Из-за этого bake_shift не возвращает признак «прыжок» — он обрабатывает
+ *     все случаи сам (см. include/bake.asm).
+ * Кто читает: mario.asm (_tile_win/_tile_win_base), solid_at ниже,
+ * tools/check_bake.py и tools/check_boundary.py (зовут _bake_* напрямую). */
+extern void bake_clear(unsigned char cstart, unsigned char cend) __z88dk_callee;
+extern void bake_groups(unsigned int wstart, unsigned int wend) __z88dk_callee;
+extern void bake_window(void);
+extern void bake_shift(unsigned int nb) __z88dk_callee;
 
 /* Твёрдость ячейки мира (col,row): маска COLL_* свойства тайла (вариант C).
  * COLL_PLAT (1) — one-way опора, COLL_WALL (2) — непроходимо, 3 — и то, и др.
@@ -544,14 +422,13 @@ int main(void)
          * МИРОВЫХ колонок перепечка не меняет (меняется лишь локальный
          * индекс), поэтому обычный покадровый diff-рендер справляется сам —
          * полный редрав здесь НЕ нужен и раньше именно он давал подвисание.
-         * Обычный переход (±шаг) печём инкрементально (bake_shift): только
-         * вошедшая половина окна. Прыжок камеры (респаун — cam меняется
-         * более чем на шаг) даёт nb вдали от текущей базы: тогда полная bake_window. */
+         * Обычный переход границы окна и прыжок камеры (респаун) обслуживает
+         * bake_shift из include/bake.asm: он сам ставит tile_win_base и печёт
+         * окно (на границе — с колонкой-стражем для diff-рендера). */
         {
             unsigned int nb = (unsigned int)cam & (unsigned int)~(OBJ_WIN_STEP - 1);
-            if (nb != tile_win_base && !bake_shift(nb)) {
-                tile_win_base = nb;
-                bake_window();
+            if (nb != tile_win_base) {
+                bake_shift(nb);
             }
         }
 

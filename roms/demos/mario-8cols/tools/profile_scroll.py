@@ -245,27 +245,16 @@ def bake_window(lv, base):
 
 
 def bake_shift(win, base, nb, lv):
-    """Копия bake_shift: 1 — инкрементально, None — нужен полный bake."""
-    rows, step = lv["ROWS"], lv["WIN_STEP"]
-    if nb == base + step:
-        for c in range(step):
-            for r in range(rows):
-                win[c * rows + r] = win[(step + c) * rows + r]
-        for c in range(step, lv["WIN_COLS"]):
-            for r in range(rows):
-                win[c * rows + r] = 0
-        bake_groups(win, nb, nb + step, nb + lv["WIN_COLS"], lv)
-        return nb
-    if nb + step == base:
-        for c in range(step):
-            for r in range(rows):
-                win[(step + c) * rows + r] = win[c * rows + r]
-        for c in range(step):
-            for r in range(rows):
-                win[c * rows + r] = 0
-        bake_groups(win, nb, nb, nb + step, lv)
-        return nb
-    return None
+    """Копия bake_shift (include/bake.asm): база = nb, окно печётся заново.
+
+    Сдвига «пережившей половины» больше нет: memmove 2 КиБ на 8080 (~75k T)
+    дороже полной перепечки окна. Колонку-страж заполняет вызывающий —
+    outgoing_col(); если она нужна, её кладут в tile_win_prevcol.
+    """
+    for i in range(len(win)):
+        win[i] = 0
+    bake_groups(win, nb, nb, nb + lv["WIN_COLS"], lv)
+    return nb
 
 
 def set_stride(cpu, rom, rows):
@@ -591,7 +580,7 @@ def main():
     # не вариант, но это полезно сравнить с полной разностью по 32 блокам)
     show("render_window: ОДНА новая колонка (cam 0->1, blk0=31, nblk=1)",
          call_asm(cpu, a["_render_window"], [1, 0, 31, 1]), regions=rw_syms)
-    show("bake_window() — полная перепечка окна (C, случай прыжка камеры)",
+    show("bake_window() — полная перепечка окна (bake.asm, прыжок камеры)",
          call_cdecl(cpu, a["_bake_window"], []))
 
     # --- модель ходьбы: камера +1 колонку каждые MOVE_DELAY кадров ---
@@ -614,9 +603,8 @@ def main():
                     win = bake_window(lv, nb)
                     bake_t = call_cdecl(cpu, a["_bake_window"], []).cyc
                 else:
-                    # ценим именно _bake_shift: в него входит memmove пережившей
-                    # половины окна, копирование уехавшей колонки в страж и
-                    # запекание новой
+                    # ценим именно _bake_shift: копирование уехавшей колонки в
+                    # страж + полная перепечка окна
                     bake_t = call_cdecl(cpu, a["_bake_shift"], [nb]).cyc
                 base = nb
                 # ROM-версия bake_* уже обновила tile_win и tile_win_prevcol в
@@ -661,18 +649,17 @@ def main():
              call_asm(cpu, a["_render_window"], [c, c - 1, 0, VIEW]),
              regions=rw_syms)
 
-    # --- C-侧 hot path ---
-    # bake_groups/bake_shift — static с негласным контрактом: параметры это
-    # МИРОВЫЕ колонки, а пишут они по (c0 - tile_win_base) [main.c:221]. После
-    # обхода камеры база равна 96, и вызов bake_groups(32,64) уводит указатель
-    # за окно (запись в мусор), а bake_shift(32) вообще выходит по ветке
-    # «прыжок». Поэтому возвращаем окно к базе 0 и меряем консистентный вызов.
+    # --- горячий путь запекания (include/bake.asm) ---
+    # Контракт прежний: wstart/wend — МИРОВЫЕ колонки, а пишем в локальную
+    # колонку (c0 - tile_win_base). После обхода камеры база равна 96, и вызов
+    # bake_groups(32,64) уводит запись за левый край окна (в мусор). Поэтому
+    # возвращаем окно к базе 0 и меряем консистентный вызов.
     win = bake_window(lv, 0)
     install_window(cpu, a, win, 0, lv, outgoing_col(win, 0, 32, lv))
     show("solid_at (одна проверка коллизии)", call_cdecl(cpu, a["_solid_at"], [4, 60]))
-    show("bake_groups(32,64) — запекание половины окна (C)",
+    show("bake_groups(32,64) — запекание половины окна (bake.asm)",
          call_cdecl(cpu, a["_bake_groups"], [32, 64]))
-    show("bake_shift(32) — сдвиг окна на шаг (C, включая bake_groups)",
+    show("bake_shift(32) — сдвиг окна на шаг (bake.asm)",
          call_cdecl(cpu, a["_bake_shift"], [32]))
 
     # --- проход по всему уровню: стоимость каждого шага скролла ---
