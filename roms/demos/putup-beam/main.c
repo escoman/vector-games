@@ -692,8 +692,10 @@ static void enemies_render_commit(void)
         int rel = (int)enemy_y[i] - (int)cam_y;
         unsigned char ph, sh;
 
-        /* окно 256px: вне его — алиас кольца, инстанс скрываем */
-        if (rel < -16 || rel > 256) {
+        /* окно 256px: вне его — алиас кольца, инстанс скрываем.
+         * rel < 0: враг выше камеры (уехал наверх) — скрываем.
+         * rel >= 256: враг ниже камеры (ещё не появился) — скрываем. */
+        if (rel < 0 || rel >= 256) {
             if (enemy_shown[i]) { beam_hide((unsigned char)id); enemy_shown[i] = 0; }
             continue;
         }
