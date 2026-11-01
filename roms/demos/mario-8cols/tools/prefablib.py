@@ -544,6 +544,81 @@ def level_bytes(instances, variants):
     return INST_BYTES * len(instances) + variants_bytes(variants)
 
 
+# ---------------------------------------------------------------------------
+# Спаны колонок — то, что ROM печёт в окно (include/bake.asm, bake_cols)
+# ---------------------------------------------------------------------------
+# Словарь экземпляров нужен был только печке: рендер и коллизии читают готовое
+# окно. Поэтому в ROM лежит не описание, а результат — максимальные вертикальные
+# прогоны одинакового непустого тайла по каждой мировой колонке. Печка тогда =
+# «для каждой колонки скопировать её спаны»: без клипа, без bbox, без умножений.
+#
+# Запись: {tile, 2*row} — одиночная клетка, {tile, 2*row|SPAN_RUN, len} — прогон
+# (len ≥ 2). Бит 0 байта строки — признак прогона: RAR в bake.asm кладёт его в
+# перенос и одновременно даёт обратно row. 0xFF вместо тайла — конец колонки
+# (тайлов 0xFF не бывает: tile < n_tiles ≤ 255, а небо = 0 в спаны не пишется).
+SPAN_END = 0xFF             # конец списка спанов колонки
+SPAN_RUN = 1                # бит 0 «байта строки»: дальше идёт длина прогона
+SPANS_PER_COL = 6           # среднее по уровню (для сметы без развёртки карты)
+
+
+def spans_of(tilemap, cols, rows, pad=0):
+    """col-major карта -> (поток спанов, смещения колонок u16[cols+pad+1]).
+
+    pad — колонок НЕБА за правым краем карты: окно может уехать за конец
+    уровня (cam ≤ LEVEL_COLS-32, база окна — кратна 32, окно — 64 колонки),
+    и bake_cols не должен читать чужие данные.
+    """
+    if rows > 64:
+        sys.exit(f"rows={rows} > 64: строка спана — 6 бит (2*row|run ≤ 127), "
+                 f"и bake.asm знает ROWS=64")
+    data = bytearray()
+    ofs = []
+    for c in range(cols + pad):
+        ofs.append(len(data))
+        base = c * rows
+        r = 0
+        while c < cols and r < rows:
+            t = tilemap[base + r]
+            r2 = r + 1
+            while r2 < rows and tilemap[base + r2] == t:
+                r2 += 1
+            if t:
+                data += bytes((t, 2 * r | (SPAN_RUN if r2 - r > 1 else 0)))
+                if r2 - r > 1:
+                    data.append(r2 - r)
+            r = r2
+        data.append(SPAN_END)
+    ofs.append(len(data))
+    return bytes(data), ofs
+
+
+def spans_bytes(spans, ofs):
+    """ROM на таблицу спанов: поток + смещения колонок (u16, +1 sentinel)."""
+    return len(spans) + 2 * len(ofs)
+
+
+def spans_to_map(spans, ofs, cols, rows):
+    """Обратная развёртка спанов -> col-major карта (парити-сверка).
+
+    Повторяет то, что делает bake.asm: для каждой колонки копирует прогоны
+    тайлов с указанных строк. Зовётся генератором и редактором, чтобы ошибка
+    в кодировании всплывала до ROM, а не пикселями на экране.
+    """
+    grid = bytearray(cols * rows)
+    for c in range(cols):
+        i = ofs[c]
+        while spans[i] != SPAN_END:
+            t, b = spans[i], spans[i + 1]
+            row = b >> 1
+            if b & SPAN_RUN:
+                n = spans[i + 2]
+                i += 3
+            else:
+                n, i = 1, i + 2
+            grid[c * rows + row:c * rows + row + n] = bytes((t,)) * n
+    return grid
+
+
 def validate_instances(cols, rows, prefabs, instances, variants=None):
     """Ограничения компактного формата и карты -> список строк-ошибок (пусто = ок).
 

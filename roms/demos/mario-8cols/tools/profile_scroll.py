@@ -200,60 +200,55 @@ def parse_incs(path: Path):
     return {
         "COLS": num("LEVEL_COLS"), "ROWS": num("LEVEL_ROWS"),
         "WIN_COLS": num("OBJ_WIN_COLS"), "WIN_STEP": num("OBJ_WIN_STEP"),
-        "WIN_BLOCKS": num("OBJ_WIN_BLOCKS"), "PF_BACK": num("PF_BACK"),
-        "tileset": arr("tileset"), "pf_data": arr("pf_data"),
-        "pf_rects": arr("pf_rects"), "pf_var_ofs": arr("pf_var_ofs"),
-        "pf_var_n": arr("pf_var_n"), "pf_start": arr("pf_start"),
+        "WIN_BLOCKS": num("OBJ_WIN_BLOCKS"),
+        "tileset": arr("tileset"), "pf_spans": arr("pf_spans"),
+        "pf_span_ofs": arr("pf_span_ofs"),
         "tile_nz": arr("tile_nz"), "pair_top": arr("pair_top"),
     }
 
 
 # ---------------- Python-копия bake_* (для состояния окна) ----------------
-def bake_groups(win, base, wstart, wend, lv):
-    rows = lv["ROWS"]
-    b0 = wstart >> 5
-    b1 = (wend - 1) >> 5
-    back = lv["PF_BACK"]
-    b0 = b0 - back if b0 > back else 0
-    b1 = min(b1, lv["WIN_BLOCKS"] - 1)
-    end = lv["pf_start"][b1 + 1]
-    pd, pr = lv["pf_data"], lv["pf_rects"]
-    for i in range(lv["pf_start"][b0], end):
-        p = pd[i * 4:i * 4 + 4]
-        x = p[1] | ((p[0] & 0x80) << 1)
-        y = p[2]
-        v = (p[0] & 0x7F) | ((p[3] & 0x1F) << 7)
-        vofs = lv["pf_var_ofs"][v]
-        for rc in range(lv["pf_var_n"][v]):
-            o = pr[(vofs + rc) * 5:(vofs + rc) * 5 + 5]
-            c0 = max(min(x + o[1], wend), wstart)
-            c1 = min(x + o[1] + o[3], wend)
-            if c0 >= c1:
-                continue
-            nrows = min(o[4], rows - y - o[2])
-            t = o[0]
-            q0 = (c0 - base) * rows + y + o[2]        # левый верх прямоугольника
-            for c in range(c1 - c0):                  # col += LEVEL_ROWS
-                for r in range(nrows):
-                    win[q0 + c * rows + r] = t
+SPAN_END = 0xFF             # = SPAN_END в include/bake.asm и prefablib
+
+
+def bake_cols(win, base, wstart, wend, lv):
+    """Копия bake_cols (include/bake.asm): колонки [wstart, wend) из спанов.
+
+    Запись спана: {tile, 2*row} — клетка, {tile, 2*row|1, len} — прогон,
+    0xFF вместо тайла — конец колонки (см. prefablib.spans_of).
+    """
+    rows, sp, ofs = lv["ROWS"], lv["pf_spans"], lv["pf_span_ofs"]
+    for c in range(wstart, wend):
+        dst = (c - base) * rows                  # локальная колонка окна
+        i = ofs[c]
+        while sp[i] != SPAN_END:
+            t, b = sp[i], sp[i + 1]
+            row = b >> 1
+            if b & 1:
+                n = sp[i + 2]
+                i += 3
+            else:
+                n, i = 1, i + 2
+            win[dst + row:dst + row + n] = [t] * n
 
 
 def bake_window(lv, base):
     win = [0] * (lv["WIN_COLS"] * lv["ROWS"])
-    bake_groups(win, base, base, base + lv["WIN_COLS"], lv)
+    bake_cols(win, base, base, base + lv["WIN_COLS"], lv)
     return win
 
 
 def bake_shift(win, base, nb, lv):
     """Копия bake_shift (include/bake.asm): база = nb, окно печётся заново.
 
-    Сдвига «пережившей половины» больше нет: memmove 2 КиБ на 8080 (~75k T)
-    дороже полной перепечки окна. Колонку-страж заполняет вызывающий —
-    outgoing_col(); если она нужна, её кладут в tile_win_prevcol.
+    Сдвига «пережившей половины» нет: memmove 2 КиБ на 8080 (~70k T) плюс
+    печка новых колонок дороже полной перепечки окна из спанов (~105k T).
+    Колонку-страж заполняет вызывающий — outgoing_col(); если она нужна,
+    её кладут в tile_win_prevcol.
     """
     for i in range(len(win)):
         win[i] = 0
-    bake_groups(win, nb, nb, nb + lv["WIN_COLS"], lv)
+    bake_cols(win, nb, nb, nb + lv["WIN_COLS"], lv)
     return nb
 
 
@@ -545,7 +540,7 @@ def main():
 
     a = {k: rom.at(k) for k in ("_render_window", "_render_rowband", "_mario_draw",
                                 "_mario_undraw", "_mario_stand_r", "_mario_walk1_r",
-                                "_bake_groups", "_bake_shift", "_bake_window",
+                                "_bake_cols", "_bake_shift", "_bake_window",
                                 "_solid_at", "_tile_win", "_tile_win_base",
                                 "_cam_row", "_tile_stride", "_tileset", "_pair_top")}
     cpu = new_cpu(rom)
@@ -652,13 +647,13 @@ def main():
     # --- горячий путь запекания (include/bake.asm) ---
     # Контракт прежний: wstart/wend — МИРОВЫЕ колонки, а пишем в локальную
     # колонку (c0 - tile_win_base). После обхода камеры база равна 96, и вызов
-    # bake_groups(32,64) уводит запись за левый край окна (в мусор). Поэтому
+    # bake_cols(32,64) уводит запись за левый край окна (в мусор). Поэтому
     # возвращаем окно к базе 0 и меряем консистентный вызов.
     win = bake_window(lv, 0)
     install_window(cpu, a, win, 0, lv, outgoing_col(win, 0, 32, lv))
     show("solid_at (одна проверка коллизии)", call_cdecl(cpu, a["_solid_at"], [4, 60]))
-    show("bake_groups(32,64) — запекание половины окна (bake.asm)",
-         call_cdecl(cpu, a["_bake_groups"], [32, 64]))
+    show("bake_cols(32,64) — запекание половины окна (bake.asm)",
+         call_cdecl(cpu, a["_bake_cols"], [32, 64]))
     show("bake_shift(32) — сдвиг окна на шаг (bake.asm)",
          call_cdecl(cpu, a["_bake_shift"], [32]))
 

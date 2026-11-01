@@ -113,8 +113,8 @@ unsigned char cam_row;
 unsigned char tile_stride;
 
 /* Кольцевое RAM-окно тайлкарты (Фаза 3). Вместо 20-КиБ tilemap в ROM держим в
- * RAM только OBJ_WIN_COLS колонок, запечённых из словаря вариантов и списка
- * экземпляров (pf_data/pf_rects). Читают и C (pesh,
+ * RAM только OBJ_WIN_COLS колонок, запечённых из по-колоночных спанов
+ * (pf_spans/pf_span_ofs). Читают и C (pesh,
  * solid_at), и mario.asm (EXTERN _tile_win / _tile_win_base) — поэтому глобальные.
  * tile_win_base — МИРОВАЯ колонка окна[0] (кратна OBJ_WIN_STEP).
  *
@@ -148,18 +148,21 @@ static const unsigned char *drawn_spr;
 /* ЗАПЕКАНИЕ ОКНА — в include/bake.asm. Замечания по алгоритму:
  *   * BSS при --no-crt не зануляется, поэтому печём ВСЕ LEVEL_ROWS строк
  *     колонки — вертикальный скролл тогда не требует перепечки;
- *   * список экземпляров отсортирован по 32-колоночным блокам, скан полосы
- *     начинается с pf_start[блок] и обрывается на конце полосы -> охватываем
- *     только узкую полосу, а не весь список. За назад отступаем на PF_BACK
- *     блоков: широкий экземпляр живёт в группе своего левого края;
+ *   * в ROM лежат не экземпляры с прямоугольниками, а ГОТОВЫЕ по-колоночные
+ *     спаны (максимальные прогоны одинакового тайла): словарь читала только
+ *     печка, а рендер и коллизии работают с уже запечённым окном. Печка стала
+ *     копированием спанов — без клипа, без bbox, без умножения на stride;
  *   * сдвиг базы окна перепекает окно целиком: на 8080 memmove выжившей
- *     половины (~37 T/байт) дороже обнуления всего окна заливкой через SP.
- *     Из-за этого bake_shift не возвращает признак «прыжок» — он обрабатывает
- *     все случаи сам (см. include/bake.asm).
+ *     половины (~70k T) плюс печка новых 32 колонок дороже, чем обнуление
+ *     всего окна заливкой через SP (39.5k T) + копирование спанов всех 64
+ *     колонок (~65k T) — половина окна не сдвигается, а меняет локальный
+ *     номер, так что её всё равно пришлось бы переносить. Из-за этого
+ *     bake_shift не возвращает признак «прыжок» — он обрабатывает все
+ *     случаи сам (см. include/bake.asm).
  * Кто читает: mario.asm (_tile_win/_tile_win_base), solid_at ниже,
  * tools/check_bake.py и tools/check_boundary.py (зовут _bake_* напрямую). */
 extern void bake_clear(unsigned char cstart, unsigned char cend) __z88dk_callee;
-extern void bake_groups(unsigned int wstart, unsigned int wend) __z88dk_callee;
+extern void bake_cols(unsigned int wstart, unsigned int wend) __z88dk_callee;
 extern void bake_window(void);
 extern void bake_shift(unsigned int nb) __z88dk_callee;
 

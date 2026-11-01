@@ -48,7 +48,7 @@ z-order и блоки: ROM печёт окно по 32-колоночным бл
 ЛИМИТЫ: размеры карты и экземпляры проверяются формулами сборки (см. MAX_COLS и
 _limits()), а не только рамками спинбоксов, — иначе 512x255 проходит редактор и
 падает на make. Смета образа = база из mario-8c.map + tile_win (64·rows) +
-pf_data (4·экземпляров) + словарь вариантов (3·вариантов + 5·rect'ов) + pf_start.
+таблица спанов уровня (поток спанов + 2 байта смещения на колонку с запасом).
 
 Сохранение пишет assets/objects.json (v2), assets/level.json (cols/rows/grid — для
 совместимости генератора и фолбэка) и assets/tiles.json (твёрдость). assets/prefabs.json
@@ -83,21 +83,21 @@ SRC = os.path.abspath(os.path.join(HERE, "..", "assets"))
 sys.path.insert(0, HERE)
 
 # prefablib — общий с окном префабов и генератором движок: пути, лимиты сборки,
-# загрузка тайлов и библиотеки, экземпляры, растяжение штампа, словарь вариантов.
+# загрузка тайлов и библиотеки, экземпляры, растяжение штампа, словарь вариантов,
+# спаны колонок.
 # Окно уровня обязано сидеть на ТОЙ ЖЕ копии логики карты, что и gen_assets:
 # иначе превью редактора разойдётся с тем, что напечатает ROM.
-import gen_assets as G                                     # noqa: E402
 from prefablib import (                                    # noqa: E402,F401
     ASSETS as PF_SRC, ROM, MAP, LEVEL_INC, PREFAB_FILE, TILES_FILE, LEVEL_FILE,
     OBJECTS_FILE, SKY, COLL_RED, COLL_BLUE, TILE_PX, PF_SECTIONS, MAX_COLS,
     MAX_ROWS, MIN_COLS, MIN_ROWS, TILEMAP_LIMIT, TILE_INDEX_LIMIT, MAX_VARIANTS,
-    WIN_RAM_PER_ROW, OBJ_WIN_STEP, OBJ_BYTES, INST_BYTES, RECT_BYTES,
-    VAR_BYTES, IMAGE_LIMIT, defines, load_level, load_tiles, tile_props,
+    WIN_RAM_PER_ROW, OBJ_WIN_STEP, OBJ_BYTES,
+    IMAGE_LIMIT, defines, load_level, load_tiles, tile_props,
     load_tile_images, frame_color, load_prefabs, save_prefabs, stretch_axis,
     stamp_size, stamp_cells, stamp_objects, stamp_points, match_grid, grow_fit,
     single_tile_prefab, single_tile_stretchable, section_of, instance_size,
     load_instances, save_instances, expand_instances, expand_by_blocks,
-    build_variants, variants_bytes, level_bytes, validate_instances)
+    build_variants, spans_of, spans_bytes, spans_to_map, validate_instances)
 from uiutil import maximize as _maximize                  # noqa: E402
 
 OVERLAY_ALPHA = 0.45          # сила полупрозрачной заливки твёрдости (0..1)
@@ -265,10 +265,9 @@ class LevelEditor:
     def _image_base(self):
         """Байт в образе, НЕ зависящих от размеров уровня: вершина образа из
         map-файла линковщика (__bss_clib_tail) минус то, что размером уровня и
-        задано — tile_win (64·rows), pf_data (4·экземпляров), словари вариантов
-        (3·вариантов + 5·rect'ов) и pf_start (2·(блоки+1)). Нет map — оценка по
-        .rom (он = образ + векторная страница 0x0000..0x00FF); нет и ROM — None:
-        смета не проверяется."""
+        задано — tile_win (64·rows) и таблица спанов (PF_SPAN_BYTES + 2
+        смещения на колонку). Нет map — оценка по .rom (он = образ + векторная
+        страница 0x0000..0x00FF); нет и ROM — None: смета не проверяется."""
         if self._base is not None:
             return self._base
         used = None
@@ -285,30 +284,43 @@ class LevelEditor:
                 used = os.path.getsize(ROM) - 0x0100
             except OSError:
                 return None
-        d = defines(LEVEL_INC, ("LEVEL_ROWS", "PF_COUNT", "PF_VARIANTS",
-                                "PF_RECTS", "OBJ_WIN_BLOCKS"))
-        if len(d) != 5:
+        d = defines(LEVEL_INC, ("LEVEL_ROWS", "PF_SPAN_BYTES", "PF_SPAN_COLS"))
+        if len(d) != 3:
             return None
-        blocks = d["OBJ_WIN_BLOCKS"]
         base = used - (WIN_RAM_PER_ROW * d["LEVEL_ROWS"]
-                       + INST_BYTES * d["PF_COUNT"]
-                       + VAR_BYTES * d["PF_VARIANTS"]
-                       + RECT_BYTES * d["PF_RECTS"]
-                       + 2 * (blocks + 1))
+                       + d["PF_SPAN_BYTES"] + 2 * d["PF_SPAN_COLS"])
         if base < 0:                           # map/rom расходится с level.inc
             return None
         self._base = base
         return base
 
-    def _budget(self, cols, rows, inst, variants):
+    def _span_bytes(self, cols, rows, inst):
+        """Смета ROM-данных уровня: таблица спанов (поток + смещения). Печка
+        читает только их, поэтому размер образа задаёт именно она. Карта
+        разворачивается тем же порядком, что и в ROM (expand_by_blocks = self.grid,
+        когда размеры совпадают с текущей картой)."""
+        if (cols, rows) == (self.cols, self.rows) and getattr(self, "grid", None):
+            tilemap = self.grid
+        else:
+            try:
+                tilemap = expand_by_blocks(cols, rows, self.prefabs, inst)
+            except (KeyError, TypeError, ValueError, SystemExit):
+                return None
+        try:
+            return spans_bytes(*spans_of(tilemap, cols, rows, pad=OBJ_WIN_STEP))
+        except SystemExit:
+            return None
+
+    def _budget(self, cols, rows, inst):
         """Оценка размера образа (0x0100..0x7FFF) для таких карты и списка;
         None — если опереться не на что (нет ни map, ни ROM)."""
         base = self._image_base()
         if base is None:
             return None
-        blocks = (cols + OBJ_WIN_STEP - 1) // OBJ_WIN_STEP
-        return (base + WIN_RAM_PER_ROW * rows + level_bytes(inst, variants)
-                + 2 * (blocks + 1))
+        span = self._span_bytes(cols, rows, inst)
+        if span is None:
+            return None
+        return base + WIN_RAM_PER_ROW * rows + span
 
     def _limits(self, cols=None, rows=None, inst=None):
         """Претензии к уровню — пустой список значит «make пройдёт». Формулы
@@ -337,18 +349,17 @@ class LevelEditor:
             bad.append(errs[0] if len(errs) == 1
                        else "%s (и ещё %d таких)" % (errs[0], len(errs) - 1))
             return bad
-        variants = build_variants(self.prefabs, inst)[0]
-        est = self._budget(cols, rows, inst, variants)
+        est = self._budget(cols, rows, inst)
         if est is not None and est > IMAGE_LIMIT:
             bad.append("образ ≈ %d Б > %d Б (0x0100…0x7FFF): tile_win жрёт %d Б "
-                       "ОЗУ, словарь — %d Б. Меньше строк H или меньше "
-                       "экземпляров." % (est, IMAGE_LIMIT, WIN_RAM_PER_ROW * rows,
-                                         variants_bytes(variants)))
+                       "ОЗУ, спаны — %d Б. Меньше строк H или меньше "
+                       "объектов." % (est, IMAGE_LIMIT, WIN_RAM_PER_ROW * rows,
+                                      self._span_bytes(cols, rows, inst) or 0))
         return bad
 
     def _update_budget(self):
         self._sync_size_lbl()
-        est = self._budget(self.cols, self.rows, self.inst, self._variants())
+        est = self._budget(self.cols, self.rows, self.inst)
         self.budget_lbl.config(
             text=("смета образа ≈ %d / %d Б · %d экз. / %d вариантов"
                   % (est, IMAGE_LIMIT, len(self.inst), len(self._variants())))
@@ -1954,35 +1965,20 @@ class LevelEditor:
         self._refresh_map_panel()
 
     # ---- сохранение -------------------------------------------------------
-    def _rom_order(self):
-        """Порядок, в котором список уйдёт в ROM: (32-колоночный блок, номер в
-        списке). Сортировка стабильна, поэтому внутри блока z-order сохраняется."""
-        return sorted(range(len(self.inst)),
-                      key=lambda i: (int(self.inst[i]["x"]) // OBJ_WIN_STEP, i))
-
     def _rom_parity(self):
-        """Проверка «редактор == генератор» ДО записи: упаковать список тем же
-        pack_instances и прочитать обратно байт в байт (x/y/id варианта)."""
+        """Проверка «редактор == генератор» ДО записи. В ROM больше не уходят
+        ни список экземпляров, ни словарь вариантов (там спаны колонок), поэтому
+        сверяем не упаковку, а результат: карта редактора (expand_by_blocks)
+        обязана совпасть с картой, из которой генерятся спаны, а каждая
+        колонка — развернуться обратно из своих спанов без потерь."""
         errs = []
-        order = self._rom_order()
-        variants, ids = build_variants(self.prefabs, self.inst)
-        seq = [self.inst[i] for i in order]
-        vid = [ids[i] for i in order]
-        try:
-            packed = G.pack_instances(seq, vid)
-        except SystemExit as exc:                  # pack_instances сам выходит
-            return ["gen_assets: %s" % exc]
-        for k, o in enumerate(seq):
-            b = packed[4 * k:4 * k + 4]
-            v = (b[0] & 0x7F) | ((b[3] & 0x1F) << 7)
-            x = ((b[0] >> 7) & 1) << 8 | b[1]
-            if (v, x, b[2]) != (vid[k], int(o["x"]), int(o["y"])):
-                errs.append("#%d: ROM-код %s != экземпляр %s"
-                            % (order[k], (v, x, b[2]), (vid[k], o["x"], o["y"])))
-        starts = G.block_starts(seq, self.cols)
-        if starts[-1] != len(seq):
-            errs.append("pf_start: sentinel %d != %d экземпляров"
-                        % (starts[-1], len(seq)))
+        tilemap = expand_by_blocks(self.cols, self.rows, self.prefabs, self.inst)
+        if tilemap != self.grid:
+            n = sum(1 for a, b in zip(tilemap, self.grid) if a != b)
+            errs.append("карта редактора != развёртка списка: %d клеток" % n)
+        spans, ofs = spans_of(tilemap, self.cols, self.rows, pad=OBJ_WIN_STEP)
+        if spans_to_map(spans, ofs, self.cols, self.rows) != tilemap:
+            errs.append("спаны не разворачиваются обратно в карту")
         return errs
 
     def save(self):
