@@ -458,13 +458,13 @@ static void hero_logic(void)
         if (hero_x < hero_tx) hero_x += HERO_X_STEP;
         else if (hero_x > hero_tx) hero_x -= HERO_X_STEP;
         if (hero_x == hero_tx) mv_x = 0;
-    } else if ((hero_x & 15u) == 0u) {
+    } else if ((hero_x & 7u) == 0u) {
         signed char dir = 0;
 
         if (kbd_is_down(KBD_KEY_LEFT)) dir = -1;
         else if (kbd_is_down(KBD_KEY_RIGHT)) dir = 1;
         if (dir) {
-            int nx = (int)hero_x + (int)dir * 16;
+            int nx = (int)hero_x + (int)dir * 8;
             hero_dir = (unsigned char)(dir > 0);
             /* Swept-area: проверяем столбцы от текущего до целевого И
              * строки от текущего Y до целевого (hero_ty) — герой может
