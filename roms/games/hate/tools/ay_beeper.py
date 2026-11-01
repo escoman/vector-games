@@ -85,10 +85,20 @@ tools/gen_title_music.py проглатывает его без изменени
 хвост свипа упирается в него и усекается); прерывание по любой клавише
 (kbd_any -> pl_skip) остаётся как есть. Подробно — SOUND_FIX.MD.
 
+ГОЛОСА. В архиве ОДИН трек и один плеер; «семь голосов» — это семь
+инструментов, то есть семь точек кода, из которых дёргается бит 4 порта
+$FE. Каждое переключение в логе помечено PC инструкции OUT, поэтому
+делятся они точно и повторяемо (таблица VOICES). У A/B/C фронт и спад
+разнесены по двум адресам, ударные и свипы пускаются целиком из одного.
+
 Запуск:
     python3 tools/ay_beeper.py                 # длина из SongLength
+    python3 tools/ay_beeper.py --frames 2850   # один цикл (см. ниже)
     python3 tools/ay_beeper.py --frames 11300  # с запасом (2 прохода)
     python3 tools/ay_beeper.py --wav           # плюс WAV для прослушивания
+    python3 tools/ay_beeper.py --voice drums   # только ударные (c+n)
+    python3 tools/ay_beeper.py --voice melody --wav
+    python3 tools/ay_beeper.py --split         # WAV на каждый из семи голосов
 """
 import argparse
 import os
@@ -110,6 +120,47 @@ from skoolkit.simutils import from_memory, PC, T   # noqa: E402
 CPU_HZ = 3_500_000
 FRAME_DURATION = 69888          # тактов ZX на кадр (48K)
 SPEAKER_BIT = 0x10
+
+# Голоса партитуры: имя -> адреса инструкций OUT ($FE), которые их дёргают.
+# Нотные голоса — пары «установка/сброс», ударные и свипы — один адрес.
+VOICES = {
+    'a': (0x82D1, 0x82D9),      # мелодия, узкий импульс
+    'b': (0x8333, 0x833B),      # мелодия/бас, узкий импульс
+    'c': (0x836A, 0x8375),      # клик, кадровая сетка 15/20
+    'n': (0x8389,),             # ударные: вспышка шума, 77 переключений
+    's1': (0x83A6,),            # свип вниз, 50 шагов
+    's2': (0x83B9,),            # свип вверх, 19 шагов
+    's3': (0x83D1,),            # свип вниз, 20 шагов
+}
+GROUPS = {
+    'melody': ('a', 'b'),
+    'drums': ('c', 'n'),
+    'sweeps': ('s1', 's2', 's3'),
+}
+
+
+def expand_names(spec):
+    """'drums,s1' -> ['c', 'n', 's1']; неизвестное имя — ошибка."""
+    names = []
+    for part in spec.split(','):
+        part = part.strip().lower()
+        if not part:
+            continue
+        for name in GROUPS.get(part, (part,)):
+            if name not in VOICES:
+                raise SystemExit('неизвестный голос %r (есть: %s; группы: %s)'
+                                 % (part, ' '.join(VOICES), ' '.join(GROUPS)))
+            if name not in names:
+                names.append(name)
+    if not names:
+        raise SystemExit('пустой список голосов')
+    return names
+
+
+def pick(flips, names):
+    """Оставить только переключения перечисленных голосов."""
+    pcs = {pc for n in names for pc in VOICES[n]}
+    return [f for f in flips if f[1] in pcs]
 
 
 # ---------------------------------------------------------------- AY ---------
@@ -202,25 +253,38 @@ def run(ay, frames):
 
 
 def wav(path, flips):
+    """Отдать переключения в SkoolKit: он сам считает интервалы и семпл."""
+    if len(flips) < 2:
+        return False
     sys.path.insert(0, SKOOLKIT)
     from skoolkit.audio import AudioWriter, BeeperOptions
     delays = [b[0] - a[0] for a, b in zip(flips, flips[1:])]
     with open(path, 'wb') as f:
         AudioWriter().write_audio(f, delays,
                                   BeeperOptions(100, False, False, 0, False))
+    return True
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--src', default=os.path.join(ASSETS,
                                                   'HATE_title_theme.ay'))
-    ap.add_argument('--out', default=os.path.join(ASSETS,
-                                                  'title_music_ay.txt'))
+    ap.add_argument('--out', default='',
+                    help='куда писать лог (по умолчанию assets/title_music_ay'
+                         '[_<голоса>].txt)')
     ap.add_argument('--frames', type=int, default=0,
                     help='кадров прогнать (0 = SongLength + 50)')
+    ap.add_argument('--voice', action='append', metavar='LIST',
+                    help='только эти голоса (через запятую, можно повторять): '
+                         '%s; группы: %s' % (' '.join(VOICES),
+                                             ' '.join(GROUPS)))
+    ap.add_argument('--split', action='store_true',
+                    help='ещё WAV-файл на каждый голос')
     ap.add_argument('--wav', action='store_true')
     ap.add_argument('--quiet', action='store_true')
     args = ap.parse_args()
+
+    names = expand_names(','.join(args.voice)) if args.voice else None
 
     ay = parse_ay(args.src)
     frames = args.frames or (ay['song_length'] or 5602) + 50
@@ -246,17 +310,32 @@ def main():
     print('  переключения по кодам: ' +
           ', '.join('$%04X x%d' % (p, n)
                     for p, n in sorted(sites.items()))[:600])
+    print('  голоса (PC инструкции OUT ($FE)):')
+    for name, pcs in VOICES.items():
+        sel = pick(tr.flips, [name])
+        if not sel:
+            continue
+        print('    %-2s %-11s %6d переключений, %6.2f с'
+              % (name, '/'.join('$%04X' % p for p in pcs), len(sel),
+                 (sel[-1][0] - sel[0][0]) / CPU_HZ))
 
-    with open(args.out, 'w') as f:
+    flips = pick(tr.flips, names) if names else tr.flips
+    stem = 'title_music_ay' + ('' if not names else '_' + '_'.join(names))
+    out = args.out or os.path.join(ASSETS, stem + '.txt')
+    with open(out, 'w') as f:
         f.write('# t_state frame pc value  (speaker flips, OUT ($FE),A)\n')
-        for t, pc, v in tr.flips:
+        for t, pc, v in flips:
             f.write('%d %d $%04X %02X\n' % (t, t // FRAME_DURATION, pc, v))
-    print('  -> %s (%d строк)' % (os.path.relpath(args.out, PORT),
-                                  len(tr.flips)))
-    if args.wav:
-        w = os.path.splitext(args.out)[0] + '.wav'
-        wav(w, tr.flips)
-        print('  -> %s' % os.path.relpath(w, PORT))
+    print('  -> %s (%d строк)' % (os.path.relpath(out, PORT), len(flips)))
+    if args.wav or names:
+        w = os.path.splitext(out)[0] + '.wav'
+        if wav(w, flips):
+            print('  -> %s' % os.path.relpath(w, PORT))
+    if args.split:
+        for name in VOICES:
+            w = os.path.join(ASSETS, 'title_music_ay_%s.wav' % name)
+            if wav(w, pick(tr.flips, [name])):
+                print('  -> %s' % os.path.relpath(w, PORT))
 
 
 if __name__ == '__main__':

@@ -25,6 +25,8 @@ assets/title_preview.png
 assets/font_preview.png
 assets/terrain_preview.png
 assets/levels_preview.png
+# Прослушка партитуры: tools/ay_beeper.py --wav / --voice / --split
+assets/title_music_ay*.wav
 
 # Python
 __pycache__/
