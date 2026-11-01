@@ -773,6 +773,7 @@ int main(void)
         prof_mark();                       /* prof[1]: планировщик       */
 
         beam_render();    /* блокирует до конца кадра: темп 50 Гц (Г3) */
+        beam_flush_scroll(cam_y);  /* скролл применится на след. VBlank */
         prof_mark();                       /* prof[2]: исполнение плана   */
         ovb_seen = beam_overbudget();       /* для часов отладчика, не HUD */
 

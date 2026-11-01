@@ -392,6 +392,11 @@ extern void beam_bg_put(unsigned char col, unsigned char row,
  * открытой полосы; flush регистра — на VBlank хуком kbd_scan_now. */
 extern void beam_set_cam(unsigned int cam_y) __z88dk_callee;
 
+/* Записать регистр скролла в порт 03h на следующем VBlank.
+ * Вызывается ПОСЛЕ beam_render, когда все полосы уже нарисованы.
+ * kbd_scan_now в ISR запишет gfx_scroll_row в порт в гашении. */
+extern void beam_flush_scroll(unsigned int cam_y) __z88dk_callee;
+
 /* Кадровый контракт: diff -> план; исполнение плана в такт лучу
  * (возврат = конец кадра). beam_overbudget — счётчик переносов/отказов
  * (диагностика ТФ-5), beam_blank_wait — спин до бланкинга (строка ≥ 288)

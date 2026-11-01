@@ -437,7 +437,6 @@ void beam_set_cam(unsigned int cam_y)
     unsigned int wb;
 
     beam_cam_pending = cam_y;
-    gfx_set_scroll((unsigned char)(0xFFu - (cam_y & 0xFFu)));
 
     if (db >= 32 || db <= -32) {
         for (wb = 0; wb < BEAM_RING_ROWS; wb++) beam_strip_row[wb] = 1;
@@ -451,6 +450,14 @@ void beam_set_cam(unsigned int cam_y)
         for (wb = cam_y >> 3; wb < beam_cam_cur >> 3; wb++)
             beam_strip_row[(wb >> 1) & 15u] = 1;
     }
+}
+
+/* Записать регистр скролла в порт 03h на следующем VBlank.
+ * Вызывается ПОСЛЕ beam_render, когда все полосы уже нарисованы.
+ * kbd_scan_now в ISR запишет gfx_scroll_row в порт в гашении. */
+void beam_flush_scroll(unsigned int cam_y)
+{
+    gfx_set_scroll((unsigned char)(0xFFu - (cam_y & 0xFFu)));
 }
 
 /* ------------------------------------------------------------------ */
