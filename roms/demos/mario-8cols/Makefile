@@ -11,11 +11,14 @@ include ../../../config.mk
 TARGET = mario-8c.rom
 MAPFILE = mario-8c.map
 
+# $(LIB)/timer/timer.asm — «секундомер растра» на КР580ВИ53 канал 2: по его
+# остатку main.c знает положение луча и делает erase+draw спрайта ЗА лучом
+# (racing-the-beam), иначе один живой буфер мерцает на тяжёлых кадрах.
 SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/clr.asm $(LIB)/gfx/nextframe.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/gfx/fade.c \
-       $(LIB)/kbd/keyboard.c \
+       $(LIB)/kbd/keyboard.c $(LIB)/timer/timer.asm \
        include/mario.asm include/bake.asm main.c
 
 # -Iinclude — чтобы main.c подключал генерируемые .inc без пути.
