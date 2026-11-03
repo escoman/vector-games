@@ -367,8 +367,19 @@ def build_level_editor():
           f"{len(model['instances'])}, вариантов: {len(variants)}")
     print(f"  смета уровня: {PL.spans_bytes(spans, span_ofs)} Б (спаны "
           f"{len(spans)} + смещения 2×{len(span_ofs)}) — вместо словаря экземпляров")
+    # ---- локи экранов (screen blocks 32×32) ----
+    raw_blocks = lv.get("blocks", [])
+    col_blks = (cols + 31) // 32
+    row_blks = (rows + 31) // 32
+    n_scr = col_blks * row_blks
+    if len(raw_blocks) == n_scr:
+        scr_blocks = bytes(raw_blocks)
+    else:
+        scr_blocks = bytes(n_scr)
+    print(f"  экранная карта локов: {col_blks}×{row_blks} = {n_scr} байт")
     return (cols, rows, tileset, bytes(tilemap), bytes(tile_nz),
-            bytes(pair_top), model, (run_ofs, bytes(run_data)))
+            bytes(pair_top), model, (run_ofs, bytes(run_data)),
+            scr_blocks, col_blks, row_blks)
 
 
 # ---------------------------------------------------------------------------
@@ -555,7 +566,8 @@ def fmt_array_u16(f, name, vals, per_line=10):
     f.write("};\n\n")
 
 
-def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs):
+def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs,
+                scr_blocks, col_blks, row_blks):
     path = os.path.join(INCLUDE, "level.inc")
     spans, span_ofs = model["spans"]
     nblocks = (cols + PL.OBJ_WIN_STEP - 1) // PL.OBJ_WIN_STEP
@@ -611,6 +623,19 @@ def write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
         f.write("#define COLL_WALL   2   /* непроходимо */\n")
         f.write("#define COLL_PLAT   1   /* one-way опора */\n\n")
         fmt_array(f, "tile_solid", tile_solid)
+        # ---- локи экранов (screen locks) ----
+        f.write("\n/* Локи экранов: битовая маска на ячейку 32×32 тайла.\n"
+                "   Бит 0 (LOCK_R=1): камера не едет правее правого края экрана.\n"
+                "   Бит 1 (LOCK_L=2): камера не едет левее левого края экрана.\n"
+                "   Бит 2 (LOCK_D=4): камера не едет ниже нижнего края экрана.\n"
+                "   Бит 3 (LOCK_U=8): камера не едет выше верхнего края экрана. */\n")
+        f.write(f"#define SCR_COL_BLKS  {col_blks}\n")
+        f.write(f"#define SCR_ROW_BLKS  {row_blks}\n")
+        f.write("#define LOCK_R  1\n")
+        f.write("#define LOCK_L  2\n")
+        f.write("#define LOCK_D  4\n")
+        f.write("#define LOCK_U  8\n\n")
+        fmt_array(f, "scr_blocks", scr_blocks)
     print(f"  таблица спанов: {PL.spans_bytes(spans, span_ofs)} Б (поток "
           f"{len(spans)} + смещения {2 * len(span_ofs)})")
     print(f"wrote {path} ({os.path.getsize(path)} bytes)")
@@ -644,11 +669,12 @@ def write_sprites(sprites):
 
 
 def main():
-    cols, rows, tileset, tilemap, tile_nz, pair_top, model, runs = \
-        build_level_editor()
+    cols, rows, tileset, tilemap, tile_nz, pair_top, model, runs, \
+        scr_blocks, col_blks, row_blks = build_level_editor()
     tile_solid = load_tile_solid(len(tileset))
     sprites = build_sprites()
-    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs)
+    write_level(cols, rows, tileset, tile_nz, pair_top, tile_solid, model, runs,
+                scr_blocks, col_blks, row_blks)
     write_sprites(sprites)
 
 

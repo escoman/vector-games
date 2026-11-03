@@ -477,10 +477,40 @@ int main(void)
                 edge = (d > 0) ? nb + 1 : nb;      /* вводимый столбец */
                 r0 = my / TILE_PX;
                 r1 = (my + SPR_H - 1) / TILE_PX;
-                /* в стену (бит COLL_WALL) не входим; one-way платформа не мешает */
+                /* в стену (бит COLL_WALL) не входим; one-way платформа не мешает.
+                 * Лок-стена: симулируем камеру на позиции nb — если lock не
+                 * пустит камеру, то и Марио туда не пустим. */
                 if (!(solid_at(edge, r0) & COLL_WALL) &&
                     !(solid_at(edge, r1) & COLL_WALL))
-                    wblk = (unsigned int)nb;
+                {
+                    unsigned int sc = cam;
+                    unsigned int sr = (unsigned int)nb - sc;
+                    if (sr > CAM_MAX_BLK && sc < MAX_CAM) {
+                        sc = (unsigned int)nb - CAM_MAX_BLK;
+                        if (sc > MAX_CAM) sc = MAX_CAM;
+                    } else if (sr < CAM_MIN_BLK) {
+                        sc = ((unsigned int)nb > CAM_MIN_BLK)
+                             ? (unsigned int)nb - CAM_MIN_BLK : 0;
+                    }
+                    {
+                        unsigned int sb = (unsigned int)nb / 32u;
+                        unsigned int rb = (unsigned int)(my / TILE_PX) / 32u;
+                        if (sb >= SCR_COL_BLKS) sb = SCR_COL_BLKS - 1;
+                        if (rb >= SCR_ROW_BLKS) rb = SCR_ROW_BLKS - 1;
+                        {
+                            unsigned char lm = scr_blocks[sb * SCR_ROW_BLKS + rb];
+                            if ((lm & LOCK_R) && sc > sb * 32u)
+                                sc = sb * 32u;
+                            if (lm & LOCK_L) {
+                                unsigned int ll = (sb + 1u) * 32u;
+                                if (ll > MAX_CAM) ll = MAX_CAM;
+                                if (sc < ll) sc = ll;
+                            }
+                        }
+                    }
+                    if ((int)nb >= (int)sc && (int)nb <= (int)sc + 31)
+                        wblk = (unsigned int)nb;
+                }
             }
         } else {
             frame = 0;   /* встал — следующий шаг начнёт отсчёт заново        */
@@ -496,6 +526,29 @@ int main(void)
                 /* Не даём cam уйти в минус (wblk < CAM_MIN_BLK на старте). */
                 cam = (wblk > CAM_MIN_BLK) ? (wblk - CAM_MIN_BLK) : 0;
             }
+            /* ---- локи экранов: горизонталь ---- */
+            {
+                unsigned int scb = (unsigned int)wblk / 32u;
+                unsigned int srb = (unsigned int)(my / TILE_PX) / 32u;
+                if (scb >= SCR_COL_BLKS) scb = SCR_COL_BLKS - 1;
+                if (srb >= SCR_ROW_BLKS) srb = SCR_ROW_BLKS - 1;
+                {
+                    unsigned char m = scr_blocks[scb * SCR_ROW_BLKS + srb];
+                    if ((m & LOCK_R) && cam > scb * 32u)
+                        cam = scb * 32u;
+                    if ((m & LOCK_L)) {
+                        unsigned int lim = (scb + 1u) * 32u;
+                        if (lim > MAX_CAM) lim = MAX_CAM;
+                        if (cam < lim) cam = lim;
+                    }
+                }
+            }
+            /* Стена (аварийная): используем ФИНАЛЬНУЮ камеру (после лока).
+             * Спрайт Марио 2 тайла (SPR_W=16px), правый край = wblk+1. */
+            if ((int)wblk < (int)cam)
+                wblk = (unsigned int)cam;
+            if ((int)wblk + 1 > (int)cam + 31)
+                wblk = (unsigned int)((int)cam + 30);
             mblk = (unsigned char)(wblk - cam);
         }
 
@@ -555,6 +608,26 @@ int main(void)
                 }
             } else {
                 cam_rate = 0;    /* в коридоре — фаза не копится, ход начнётся сразу */
+            }
+            /* ---- локи экранов: вертикаль ----
+             * Применяем локи только по экрану Марио. Не трогаем my —
+             * падение в яму у края уровня должно вызывать гибель как раньше. */
+            {
+                unsigned int scb = (unsigned int)wblk / 32u;
+                unsigned int srb = (unsigned int)(my / TILE_PX) / 32u;
+                if (scb >= SCR_COL_BLKS) scb = SCR_COL_BLKS - 1;
+                if (srb >= SCR_ROW_BLKS) srb = SCR_ROW_BLKS - 1;
+                {
+                    unsigned char m = scr_blocks[scb * SCR_ROW_BLKS + srb];
+                    int lo, hi;
+                    lo = (int)(srb * 32u);
+                    if ((m & LOCK_D) && (int)cam_row > lo)
+                        cam_row = (unsigned char)lo;
+                    hi = (int)((srb + 1u) * 32u) - VIEW_ROWS;
+                    if (hi < 0) hi = 0;
+                    if ((m & LOCK_U) && (int)cam_row < hi)
+                        cam_row = (unsigned char)hi;
+                }
             }
             gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
         }

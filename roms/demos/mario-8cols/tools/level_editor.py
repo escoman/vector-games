@@ -110,6 +110,11 @@ OBJ_WARN = (255, 150, 60)     # рамка: у экземпляра есть z-�
 OBJ_BROKEN = (220, 40, 40)    # рамка: экземпляр ссылается на несуществующий префаб
 BROKEN_SECTION = "битые ссылки"   # служебная секция плейсхолдеров: вне PF_SECTIONS,
 #                                   в палитру не попадает
+# ---- локи экранов (screen locks) ----------------------------------------
+LOCK_R = 1   # камера не едет правее правого края этого экрана
+LOCK_L = 2   # камера не едет левее левого края этого экрана
+LOCK_D = 4   # камера не едет ниже нижнего края этого экрана
+LOCK_U = 8   # камера не едет выше верхнего края этого экрана
 PAL_THUMB = 32
 PAL_GAP = 6
 PF_THUMB = 3 * TILE_PX       # превью в палитре: px на тайл (3 => тайл 24 px)
@@ -174,6 +179,8 @@ class LevelEditor:
         self._resize_win = None                     # окно «Размеры карты» (одно)
         self._map_menu = None                       # открытый ПКМ-меню (одно)
         self.pf_added = []                          # одиночные тайлы, заведённые тут
+        self._init_blocks()                         # экранная карта локов (blocks)
+        self._hover_sb = None                       # (cb, rb) экран под курсором
         # твёрдость по умолчанию скрыта: на целой карте она превращается в кашу
         # из красных/синих пятен, а правится она и из ПКМ
         self.show_overlay = tk.BooleanVar(value=False)
@@ -402,6 +409,9 @@ class LevelEditor:
                    command=self._open_resize).pack(side=tk.LEFT)
         self.size_lbl = ttk.Label(bar2, foreground="#777")
         self.size_lbl.pack(side=tk.LEFT, padx=8)
+        self._lock_lbl = ttk.Label(bar2, foreground="#a86")
+        self._lock_lbl.pack(side=tk.LEFT, padx=(16, 0))
+        self._update_lock_count()
         self.budget_lbl = ttk.Label(bar2, foreground="#777")
         self.budget_lbl.pack(side=tk.RIGHT, padx=6)
         self._sync_size_lbl()
@@ -441,6 +451,11 @@ class LevelEditor:
                            "сплошной (wall): красная заливка    "
                            "платформа: синяя заливка    "
                            "рамка: выбранный экземпляр").pack(side=tk.LEFT)
+        ttk.Label(leg, text="    ").pack(side=tk.LEFT)
+        ttk.Label(leg, foreground="#a86",
+                  text="локи экрана: ┃← →┃ влево/вправо  "
+                       "↑↑ ↓↓ вверх/вниз  (R/L/U/D под курсором)").pack(
+                       side=tk.LEFT)
 
         body = ttk.Frame(self.root)
         body.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -498,6 +513,11 @@ class LevelEditor:
             self.root.bind(key, lambda e, s=step: self._move_z(s))
         self.root.bind("<Control-d>", lambda e: self._dup_selected())
         self.root.bind("<Control-a>", lambda e: self._select_all())
+        # локи экранов: R/L/U/D — toggle бита по экрану под курсором
+        for _k, _b in (("<Key-r>", LOCK_R), ("<Key-l>", LOCK_L),
+                       ("<Key-u>", LOCK_U), ("<Key-d>", LOCK_D)):
+            self.root.bind(_k, lambda e, b=_b: self._toggle_lock(b))
+        self.canvas.bind("<Motion>", self._on_canvas_motion)
 
         # справа — только «На карте»: панель свойств тайла убрана вместе с
         # картинкой (твёрдость правится из ПКМ-меню на карте)
@@ -783,6 +803,8 @@ class LevelEditor:
                 OBJ_BROKEN if self.inst[i]["pf"] in self.broken else
                 OBJ_WARN if i in warn else OBJ_LINE)
             d.rectangle(box, outline=color + (255,), width=2)
+        # ---- локи экранов: цветные маркеры на краях 32×32 ----
+        self._draw_locks(d, W, H)
         return Image.alpha_composite(self.screen.convert("RGBA"), ov).convert("RGB")
 
     def _sync_broken(self, warn=False):
@@ -1958,6 +1980,7 @@ class LevelEditor:
         self.level["cols"] = new_cols
         self.level["rows"] = new_rows
         self.inst = keep
+        self._init_blocks()
         self._set_sel(None)
         self._touch()
         self._recompute_grid()
@@ -2013,6 +2036,7 @@ class LevelEditor:
         self.level["cols"] = self.cols
         self.level["rows"] = self.rows
         self.level["grid"] = list(self.grid)
+        self.level["blocks"] = list(self.blocks)
         with open(os.path.join(SRC, "level.json"), "w") as f:
             json.dump(self.level, f)
         with open(os.path.join(SRC, "tiles.json"), "w", encoding="utf-8") as f:
@@ -2023,8 +2047,142 @@ class LevelEditor:
         self._set_status("сохранено ✓ — выполни make"
                          + (" · prefabs.json: +%d" % added if added else ""))
 
+    # ---- локи экранов ---------------------------------------------------
+    def _init_blocks(self):
+        """Загрузить локи из level.json или создать нулевую карту.
+        Размер: ceil(cols/32) × ceil(rows/32) экранов, 1 байт (битмаска) на экран."""
+        self.col_blks = (self.cols + 31) // 32
+        self.row_blks = (self.rows + 31) // 32
+        n = self.col_blks * self.row_blks
+        raw = self.level.get("blocks", [])
+        if len(raw) == n:
+            self.blocks = bytearray(raw)
+        else:
+            self.blocks = bytearray(n)
+
+    def _screen_block_at(self, e):
+        """(cb, rb) — индекс экранной ячейки 32×32 под курсором, или None."""
+        c = self._cell_at(e)
+        if not c:
+            return None
+        col, row = c
+        cb, rb = col // 32, row // 32
+        if 0 <= cb < self.col_blks and 0 <= rb < self.row_blks:
+            return cb, rb
+        return None
+
+    def _toggle_lock(self, bit):
+        """Переключить бит лока в экранной ячейке под курсором.
+        Хоткеи R/L/U/D — основной способ расстановки локов."""
+        # Если фокус в текстовом поле (resize dialog и т.п.) — не трогаем
+        w = self.root.focus_get()
+        if isinstance(w, (tk.Entry, ttk.Entry)):
+            return
+        sb = self._hover_sb
+        if sb is None:
+            return
+        cb, rb = sb
+        idx = cb * self.row_blks + rb
+        self.blocks[idx] ^= bit
+        self.dirty = True
+        self.render_all()
+        self._update_lock_count()
+
+    def _on_canvas_motion(self, e):
+        """Запомнить какой экран 32×32 под курсором — для хоткеев R/L/U/D."""
+        self._hover_sb = self._screen_block_at(e)
+        sb = self._hover_sb
+        if sb is not None:
+            cb, rb = sb
+            idx = cb * self.row_blks + rb
+            mask = self.blocks[idx]
+            parts = []
+            if mask & LOCK_R: parts.append("→lock")
+            if mask & LOCK_L: parts.append("←lock")
+            if mask & LOCK_D: parts.append("↓lock")
+            if mask & LOCK_U: parts.append("↑lock")
+            self._lock_lbl.config(
+                text="экран [%d,%d]  %s" % (cb, rb,
+                    " ".join(parts) if parts else "свободный"))
+        else:
+            self._lock_lbl.config(text="")
+
+    def _lock_count_str(self):
+        """Краткая строка: сколько экранов залочено и какие биты."""
+        n = sum(1 for b in self.blocks if b)
+        if not n:
+            return "—"
+        parts = []
+        if any(b & LOCK_R for b in self.blocks): parts.append("R")
+        if any(b & LOCK_L for b in self.blocks): parts.append("L")
+        if any(b & LOCK_D for b in self.blocks): parts.append("D")
+        if any(b & LOCK_U for b in self.blocks): parts.append("U")
+        return "%d экр. (%s)" % (n, "".join(parts))
+
+    def _update_lock_count(self):
+        self._lock_lbl.config(text="локи: " + self._lock_count_str())
+
+    def _draw_locks(self, d, W, H):
+        """Нарисовать маркеры локов стрелками вдоль всего края 32×32."""
+        cell32 = 32 * self.cell
+        C_LOCK = (160, 160, 160, 180)
+        for cb in range(self.col_blks):
+            for rb in range(self.row_blks):
+                mask = self.blocks[cb * self.row_blks + rb]
+                if not mask:
+                    continue
+                x0 = cb * cell32
+                y0 = rb * cell32
+                x1 = min(x0 + cell32, W)
+                y1 = min(y0 + cell32, H)
+                s = self.cell
+                if mask & LOCK_R:
+                    y = y0 + s // 2
+                    while y < y1:
+                        self._draw_arrow(d, x1, y, 'right', C_LOCK)
+                        y += s
+                if mask & LOCK_L:
+                    y = y0 + s // 2
+                    while y < y1:
+                        self._draw_arrow(d, x0, y, 'left', C_LOCK)
+                        y += s
+                if mask & LOCK_D:
+                    x = x0 + s // 2
+                    while x < x1:
+                        self._draw_arrow(d, x, y1, 'down', C_LOCK)
+                        x += s
+                if mask & LOCK_U:
+                    x = x0 + s // 2
+                    while x < x1:
+                        self._draw_arrow(d, x, y0, 'up', C_LOCK)
+                        x += s
+
+    def _draw_arrow(self, d, ex, ey, direction, color):
+        """Нарисовать стрелку-лок: треугольник + полоса на краю тайла."""
+        s = self.cell
+        m = max(s * 2 // 5, 3)     # половина размапера стрелки
+        w = max(s // 3, 2)         # глубина треугольника
+        bar = max(s // 8, 2)       # толщина полосы-заградителя
+        if direction == 'right':
+            tx = ex - m - w
+            d.polygon([(tx, ey - m), (tx + w, ey), (tx, ey + m)], fill=color)
+            d.rectangle([ex - bar, ey - m, ex, ey + m], fill=color)
+        elif direction == 'left':
+            tx = ex + m + w
+            d.polygon([(tx, ey - m), (tx - w, ey), (tx, ey + m)], fill=color)
+            d.rectangle([ex, ey - m, ex + bar, ey + m], fill=color)
+        elif direction == 'down':
+            ty = ey - m - w
+            d.polygon([(ex - m, ty), (ex, ty + w), (ex + m, ty)], fill=color)
+            d.rectangle([ex - m, ey - bar, ex + m, ey], fill=color)
+        elif direction == 'up':
+            ty = ey + m + w
+            d.polygon([(ex - m, ty), (ex, ty - w), (ex + m, ty)], fill=color)
+            d.rectangle([ex - m, ey, ex + m, ey + bar], fill=color)
+
     def _set_status(self, txt):
         self.status.config(text=txt)
+        self._update_lock_count()
 
 
 def main():
