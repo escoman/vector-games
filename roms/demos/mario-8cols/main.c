@@ -526,7 +526,10 @@ int main(void)
                 /* Не даём cam уйти в минус (wblk < CAM_MIN_BLK на старте). */
                 cam = (wblk > CAM_MIN_BLK) ? (wblk - CAM_MIN_BLK) : 0;
             }
-            /* ---- локи экранов: горизонталь ---- */
+            /* ---- локи экранов: горизонталь ----
+             * Лок пропускается, если он делает Марио невидимым (граница двух
+             * экранов с противоположными локами). Камера следует за Марио,
+             * а лок включается, когда Марио явно внутри экрана. */
             {
                 unsigned int scb = (unsigned int)wblk / 32u;
                 unsigned int srb = (unsigned int)(my / TILE_PX) / 32u;
@@ -534,6 +537,7 @@ int main(void)
                 if (srb >= SCR_ROW_BLKS) srb = SCR_ROW_BLKS - 1;
                 {
                     unsigned char m = scr_blocks[scb * SCR_ROW_BLKS + srb];
+                    unsigned int old_cam = cam;
                     if ((m & LOCK_R) && cam > scb * 32u)
                         cam = scb * 32u;
                     if ((m & LOCK_L)) {
@@ -541,6 +545,10 @@ int main(void)
                         if (lim > MAX_CAM) lim = MAX_CAM;
                         if (cam < lim) cam = lim;
                     }
+                    /* Пропускаем лок, если Марио стал невидим */
+                    if (cam != old_cam &&
+                        ((int)wblk < (int)cam || (int)wblk > (int)cam + 31))
+                        cam = old_cam;
                 }
             }
             /* Стена (аварийная): используем ФИНАЛЬНУЮ камеру (после лока).
@@ -610,8 +618,8 @@ int main(void)
                 cam_rate = 0;    /* в коридоре — фаза не копится, ход начнётся сразу */
             }
             /* ---- локи экранов: вертикаль ----
-             * Применяем локи только по экрану Марио. Не трогаем my —
-             * падение в яму у края уровня должно вызывать гибель как раньше. */
+             * Как и горизонталь: лок пропускается, если делает Марио невидимым.
+             * Не трогаем my — падение в яму у края уровня вызывает гибель. */
             {
                 unsigned int scb = (unsigned int)wblk / 32u;
                 unsigned int srb = (unsigned int)(my / TILE_PX) / 32u;
@@ -619,6 +627,7 @@ int main(void)
                 if (srb >= SCR_ROW_BLKS) srb = SCR_ROW_BLKS - 1;
                 {
                     unsigned char m = scr_blocks[scb * SCR_ROW_BLKS + srb];
+                    unsigned char old_cr = cam_row;
                     int lo, hi;
                     lo = (int)(srb * 32u);
                     if ((m & LOCK_D) && (int)cam_row > lo)
@@ -627,6 +636,13 @@ int main(void)
                     if (hi < 0) hi = 0;
                     if ((m & LOCK_U) && (int)cam_row < hi)
                         cam_row = (unsigned char)hi;
+                    /* Пропускаем лок, если Марио стал невидим по вертикали */
+                    if (cam_row != old_cr) {
+                        int vtop = (int)cam_row * TILE_PX;
+                        int vbot = vtop + (int)(VIEW_ROWS * TILE_PX) - 1;
+                        if (my + SPR_H - 1 < vtop || my > vbot)
+                            cam_row = old_cr;
+                    }
                 }
             }
             gfx_set_scroll(D2SCROLL(cam_row * TILE_PX));
