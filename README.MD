@@ -74,6 +74,11 @@ WAV ──────────────▶ dmc2smp.py ──▶ .smp ─�
 - **Python 3.6+** — скрипты конвертации и эмулятор
 - **Pillow** — для bmp2inc.py (заставки) и GUI-редакторов: `sudo apt install python3-pil`
 - **Tkinter** — GUI-редакторы уровня (например `roms/demos/mario-16cols/tools/level_editor.py`): `sudo apt install python3-tk python3-pil.imagetk` (второй пакет даёт `PIL.ImageTk`; на Windows оба входят в установщик Python)
+- **pydub + ffmpeg** — для rom2mp3.py (конвертер ROM/R0M → MP3):
+  ```bash
+  pip3 install --break-system-packages pydub
+  sudo apt install ffmpeg
+  ```
 - **vector-debugger (MCP)** — эмулятор с отладчиком для реверс-инжиниринга
 
 ### Под Windows

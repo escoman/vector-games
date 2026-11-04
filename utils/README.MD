@@ -227,6 +227,27 @@ make COMPRESS=1          # соберёт foo.rom и рядом foo.r0m (с --ve
 - `lib/unpack/zx0_back.asm` — backward-декодер (то же ядро `dzx0`, ветка
   `BACKWARD`); регрессия потока и ядра — `utils/emulator/test_zx0_back.py`.
 
+## Конвертация ROM в MP3
+
+### rom2mp3.py
+
+Конвертер `.rom` / `.r0m` файлов Вектора-06Ц в MP3 (формат ленты v06c-rom).
+Полезно для загрузки программ в эмулятор через аудиовыход или магнитолу.
+
+```bash
+python3 utils/rom2mp3.py game.rom                  # → game.mp3
+python3 utils/rom2mp3.py bios.r0m                  # → bios.mp3
+python3 utils/rom2mp3.py game.rom -n "SUPER GAME"  # имя ленты в заголовке
+```
+
+- **Вход**: `.rom` (загрузка с `0x0100`) или `.r0m` (загрузка с `0x0000`)
+- **Выход**: MP3 файл с тем же именем (или указанное явно)
+- **Качество**: 320 kbit/s (макс. стандартное), mono, 44100 Hz
+- **Имя ленты** (`-n`): отображается при загрузке в Векторе-06Ц (макс. 25 симв.,
+  по умолчанию = имя файла в верхнем регистре)
+- **Алгоритм**: полная реализация формата v06c-rom (preamble, блоки по 256 байт,
+  подблоки, контрольные суммы) — переписано с `bin2wav.c` (svofski)
+
 ## Анализ сборки
 
 ### romconsist.py
@@ -259,3 +280,8 @@ python3 utils/romconsist.py jackal.map [--top N] [--min BYTES]
 - Python 3.6+
 - Стандартная библиотека (math, os, re, sys, struct, wave, argparse)
 - Для `bmp2inc.py`: Pillow (`pip install Pillow`)
+- Для `rom2mp3.py`: pydub + ffmpeg
+  ```bash
+  pip3 install --break-system-packages pydub
+  sudo apt install ffmpeg
+  ```
