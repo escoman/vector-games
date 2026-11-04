@@ -19,12 +19,9 @@ from pathlib import Path
 
 try:
     from pydub import AudioSegment
+    _HAS_PYDUB = True
 except ImportError:
-    sys.exit(
-        "Ошибка: нужен pydub.\n"
-        "  pip3 install --break-system-packages pydub\n"
-        "  sudo apt install ffmpeg"
-    )
+    _HAS_PYDUB = False
 
 # ─────────────────────────────────────────────────────────────
 #  Параметры формата Vector-06C
@@ -146,7 +143,7 @@ def maketape_v06c_rom(rom_data: bytes, load_addr: int,
 #  Кодирование в PCM и экспорт в MP3
 # ─────────────────────────────────────────────────────────────
 
-def tape_to_pcm(tape: bytes) -> AudioSegment:
+def tape_to_pcm(tape: bytes):  # -> AudioSegment (если pydub доступен)
     """Байты ленты → AudioSegment (8-bit unsigned mono, 22050 Hz)."""
     pcm = bytearray()
     pcm += lead_in_out()
@@ -197,6 +194,12 @@ def convert_rom_to_mp3(input_path: str, output_path: str,
 # ─────────────────────────────────────────────────────────────
 
 def main() -> None:
+    if not _HAS_PYDUB:
+        sys.exit(
+            "Ошибка: нужен pydub.\n"
+            "  pip3 install --break-system-packages pydub\n"
+            "  sudo apt install ffmpeg"
+        )
     p = argparse.ArgumentParser(
         description="Конвертер .rom/.r0m (Vector-06C) → MP3"
     )
