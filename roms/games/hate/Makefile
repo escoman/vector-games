@@ -65,7 +65,6 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/gfx/pr.asm $(LIB)/gfx/dblbuf.asm $(LIB)/gfx/fade.c \
        $(LIB)/unpack/zx0.asm \
        $(LIB)/kbd/kbdscan.asm \
-       $(LIB)/mem/heap.c \
        include/beep.asm $(MUSIC_ASM) \
        include/font.asm include/mission.asm include/unit.asm \
        include/sfx_hate.c main.c
