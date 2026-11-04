@@ -11,34 +11,26 @@
 ;   скрипт уровня -> коды частей -> списки указателей ($C8EA + 2*код) ->
 ;   байт-код клетки: lv_data[q[base + i] + i] -> банк шаблонов по 8 байт.
 ;
-; Кольцо оригинала ($8000, 128-байтные страницы-столбцы) перенесено один в
-; один, только страница здесь 256 байт (столбцу VRAM ровно 256) и заполнена
-; нижняя половина. Страница собирается на ходу: m_assemble берёт очередной
-; указатель очереди, дочитывает код клетки по нему и раскрывает клетку через
-; банк, 16 клеток = 128 байт.
+; Промежуточного кольца в RAM нет. Готовое изображение хранится прямо в
+; двух плоскостях VRAM. При прокрутке 31 столбец копируется из front[x+1]
+; в back[x], а новый правый столбец берётся из банка шаблонов напрямую.
+; Для сохранения фазы первого кадра используется только временный
+; буфер одного столбца (128 байт) в обычной RAM, а не кольцо на 8 КБ.
 ;
-; УКЛОН ЛЕНТЫ. В оригинале off(x+1) = off(x) + $1FC, то есть каждый следующий
-; столбец начинается на 4 байта выше предыдущего — отсюда диагональ ленты.
-; Здесь уклон задан не данными, а стартом блита: lv_geom[x] = (4x, 16).
+; УКЛОН ЛЕНТЫ. Каждый следующий столбец начинается на 4 байта выше
+; предыдущего: экранный адрес столбца x = (plane+x)*256 + 4*x.
 ;
 ; КУДА РИСУЕТ. Только в back-буфер: плоскость веса 1 буфера A (0xE000) либо
 ; веса 4 буфера B (0xA000) — её выбирает gfx_dblbuf_back(). Вторая плоскость
 ; того же буфера (веса 2/8) рельефом не пишется и обязана быть нулевой,
 ; иначе логический цвет 1 перестанет быть единичным битом маски.
 ;
-; ЦЕНА И ЧАНКИНГ (замерено в эмуляторе, TZ §9). Полоса = 4096 байт, тик
-; камеры = полный переблит. Копирование (HL)->(BC) стоит 24 базовых такта на
-; байт, но доступ к ОЗУ/VRAM рядом с лучом даёт wait states: по факту ~42 T на
-; байт. Кадр с M_CHUNK=8 (1024 байта) = 43 196 T = 72 % кадра (кадр 59 904 T
-; при 3 МГц, BEAM_TIMING.MD §1); кадр с тиком (в нём ещё m_assemble +
-; present) = 51 416 T = 86 %. За 4 кадра периода уходит 180 004 T = 75 %, ни
-; один кадр не вылез за VBlank (проверено по лучу: входы в mission_frame идут
-; строго через кадр). Тик раз в 4 кадра => те же 2 пикселя за кадр, что и в
-; оригинале. Больше 8 столбцов брать некуда: 9-й оставляет тиковому кадру
-; 94 % бюджета, а 32 на 9 не делится; 16 уже не влезает (замер — TZ §9.1).
-; Писать в back-буфер можно в любой момент кадра: его биты закрыты маской
-; палитры front-буфера, луч их показывает — окно гашения (§5) нужно только
-; перерисовке front, у нас её нет.
+; ЦЕНА И ЧАНКИНГ. За кадр переносится 8 столбцов по 128 байт (1024 байта).
+; Четыре кадра собирают полосу шириной 32 столбца. При последнем столбце
+; дополнительно переносится scratch-колонка и генерируется следующая.
+; Первый вызов после старта только генерирует scratch и делает исходный
+; present без сдвига — это сохраняет фазу камеры оригинала. Весь вывод идёт
+; в back-плоскость; front остаётся нетронутым до present.
 ;
 ; Только 8080: без LDIR/LDDR/JR/DJNZ/IX/IY и префиксов CB/DD/ED/FD.
 
@@ -50,65 +42,67 @@
         EXTERN  _gfx_dblbuf_back
         EXTERN  _gfx_dblbuf_present
 
-M_COLS  EQU     32              ; столбцов кольца (и экрановых колонок)
+M_COLS  EQU     32              ; экрановых столбцов
 M_CHUNK EQU     8               ; столбцов полосы за кадр (72 % кадра, см. TZ §9)
 REC_LEN EQU     15              ; клеток в столбце кроме дорожной
 WIN     EQU     16              ; ячеек окна указателей (15 нужны, маска 15)
 TERM    EQU     0FFh            ; терминатор скрипта и списка частей
 
 ; ---------------------------------------------------------------------------
-; void mission_start(void *ring) __z88dk_callee;
+; void mission_start(void);
 ;
-; Кольцо — M_COLS*256 байт из кучи (heap_alloc). Собрать первые 32 столбца
-; мира и нарисовать полосу ЦЕЛИКОМ в оба буфера: пока не сделан первый
-; present, на экране висит front, и он обязан быть кадровым, а не «половина
-; полосы». Дальше движок сам выбирает back по gfx_dblbuf_back().
+; Построить исходные 32 столбца в обеих плоскостях VRAM. Первый вызов
+; mission_frame подготовит скрытый следующий столбец и выполнит исходный
+; present без сдвига, сохраняя фазу камеры оригинального движка.
 ; ---------------------------------------------------------------------------
 _mission_start:
-        pop     de              ; DE = return address
-        pop     hl              ; HL = кольцо
-        push    de
-        shld    m_ring
-
-        xra     a               ; старт: камера и счётчик столбцов с нуля
+        xra     a
         sta     m_level
-        sta     m_cam
         sta     m_col
+        sta     m_lcol
         sta     m_draw
         sta     m_changed
 
-        lxi     h, lv_sofs      ; скрипт нулевого уровня
+        lxi     h, lv_sofs
         mov     a, m
         inx     h
         mov     h, m
         mov     l, a
         shld    m_scriptp
-        call    m_prime         ; окно указателей: q[0..14] уровня 0
+        call    m_prime
 
-        mvi     a, M_COLS                   ; кольцо набито заранее, на ходу
-        sta     m_loop                      ; только хвост; счётчик в RAM,
-ms_ring:                                    ; m_assemble живёт регистрами
+        ; Сначала построить исходные 32 столбца в плоскости A.
+        mvi     a, 0E0h
+        sta     m_pbase
+        mvi     a, M_COLS
+        sta     m_loop
+ms_build_a:
         call    m_assemble
         lda     m_loop
         dcr     a
         sta     m_loop
-        jnz     ms_ring
+        jnz     ms_build_a
 
-        mvi     a, 0E0h         ; буфер A: плоскость веса 1
+        ; Скопировать готовую полосу A в плоскость B без сдвига.
+        mvi     a, 0A0h
         sta     m_pbase
-        call    m_full
-        mvi     a, 0A0h         ; буфер B: плоскость веса 4
-        sta     m_pbase
-        call    m_full
-        ret
-
-; Полоса целиком в текущий m_pbase.
-m_full:
+        mvi     a, 0E0h
+        sta     m_fbase
         xra     a
         sta     m_draw
         mvi     a, M_COLS
-        sta     m_left
-        jmp     m_blit
+        sta     m_loop
+ms_copy_b:
+        call    m_copy_initial
+        lda     m_loop
+        dcr     a
+        sta     m_loop
+        jnz     ms_copy_b
+        ; m_draw=32: первый mission_frame генерирует первый scratch-столбец
+        ; и делает исходный (не сдвигающий) present, как оригинал.
+        xra     a
+        sta     m_scroll
+        ret
 
 ; ---------------------------------------------------------------------------
 ; unsigned char mission_frame(void)
@@ -121,44 +115,79 @@ m_full:
 ; правит вызывающая сторона: обе маски палитры + gfx_dblbuf_invalidate).
 ; ---------------------------------------------------------------------------
 _mission_frame:
-        call    _gfx_dblbuf_back            ; A = 0 -> back есть A, 1 -> B
+        call    _gfx_dblbuf_back            ; A=0: back A/front B; A=1: back B/front A
         ora     a
-        jz      mf_a
+        jz      mf_back_a
         mvi     a, 0A0h
-        jmp     mf_base
-mf_a:
-        mvi     a, 0E0h
-mf_base:
         sta     m_pbase
+        mvi     a, 0E0h
+        sta     m_fbase
+        jmp     mf_copy_setup
+mf_back_a:
+        mvi     a, 0E0h
+        sta     m_pbase
+        mvi     a, 0A0h
+        sta     m_fbase
+mf_copy_setup:
+        ; Первый вызов после старта: исходный экран уже готов в обеих
+        ; плоскостях. Как оригинал, только подготовить новый столбец и
+        ; выполнить первый present без сдвига картинки.
+        lda     m_scroll
+        ora     a
+        jnz     mf_normal
+        mvi     a, 1
+        sta     m_destmode
+        call    m_assemble
+        xra     a
+        sta     m_destmode
+        sta     m_draw
+        jmp     mf_present
+mf_normal:
         mvi     a, M_CHUNK
         sta     m_left
-        call    m_blit
+mf_step:
+        lda     m_draw
+        cpi     M_COLS - 1
+        jz      mf_new_column
+        call    m_copy_shifted
+        jmp     mf_step_done
+mf_new_column:
+        ; Перенести временный столбец в правый край, затем подготовить
+        ; следующий в 128-байтном scratch-буфере RAM.
+        call    m_copy_scratch_to_col
+        mvi     a, 1
+        sta     m_destmode
+        call    m_assemble
+        xra     a
+        sta     m_destmode
+mf_step_done:
+        lda     m_left
+        dcr     a
+        sta     m_left
+        jnz     mf_step
 
         lda     m_draw
         cpi     M_COLS
         jnz     mf_idle
-        ; --- тик камеры
         xra     a
         sta     m_draw
-        lda     m_cam                       ; камера на столбец вперёд:
-        inr     a                           ; левый уходит за край, правый
-        sta     m_cam                       ; приходит с нового m_col
-        call    m_assemble                  ; столбец m_col -> slot m_col&31
+mf_present:
         lda     m_changed
         add     a
-        adi     1                           ; бит0: Presented, бит1: уровень
+        adi     1
         push    psw
         call    _gfx_dblbuf_present
+        mvi     a, 1
+        sta     m_scroll
         lda     m_changed
         ora     a
         jz      mf_flags
         xra     a
-        sta     m_changed                   ; флаг живёт один кадр
+        sta     m_changed
 mf_flags:
         pop     psw
         mov     l, a
         ret
-
 mf_idle:
         xra     a
         mov     l, a
@@ -174,124 +203,143 @@ _mission_level:
         mov     l, a
         ret
 
+ ; ---------------------------------------------------------------------------
+; Копирование одного столбца VRAM.
+; m_copy_initial: A -> B, без сдвига (начальная синхронизация).
+; m_copy_shifted: front[x+1] -> back[x], для прокрутки на одну колонку.
+; В обоих случаях копируются 128 байт полезной части страницы.
 ; ---------------------------------------------------------------------------
-; m_blit: нарисовать до m_left столбцов полосы в буфер с базой m_pbase.
-;
-; Состояние — только m_draw (сколько столбцов уже нарисовано), всё остальное
-; вычисляется заново на каждый столбец: адресов страницы кольца, колонки
-; экрана и пары геометрии. Никаких «обновить указатель и проверить перенос» —
-; переход через конец кольца случается в произвольном месте полосы, а здесь
-; он вычитается из m_cam + x маскированием.
-; ---------------------------------------------------------------------------
-m_blit:
+m_copy_initial:
         lda     m_draw
-        cpi     M_COLS
-        rz                                  ; полоса готова
-        mov     c, a
-        lda     m_left
-        mov     b, a                        ; B = m_left
-        mvi     a, M_COLS
-        sub     c                           ; A = сколько осталось в полосе
         mov     e, a
-        mov     a, b
-        sub     e
-        jc      m_bl_few                    ; m_left меньше остатка — занимаемся
-        mov     a, e                        ; иначе дорисовываем полосу
-        jmp     m_bl_todo
-m_bl_few:
-        mov     a, b                        ; заём в A возвращать нельзя
-m_bl_todo:
-        sta     m_todo
-
-m_bloop:
-        ; --- геометрия: пара (старт, клеток) столбца x = m_draw
-        lda     m_draw
-        mov     l, a
-        mvi     h, 0
-        dad     h                           ; слова по 2 байта
-        lxi     d, lv_geom
-        dad     d
-        mov     a, m                        ; старт нижней клетки столбца
-        sta     m_start
-        inx     h
-        mov     a, m                        ; клеток в столбце
-        sta     m_cnt
-
-        ; --- источник: страница кольца столбца мира (m_cam + x)
-        lda     m_cam
-        mov     c, a
-        lda     m_draw
-        add     c
-        ani     M_COLS - 1                  ; по модулю кольца
-        mov     c, a                        ; C = номер страницы
-        lda     m_ring
-        mov     e, a                        ; младший байт не меняется
-        lda     m_ring + 1
-        add     c
+        lda     m_fbase
+        add     e
         mov     h, a
-        mov     l, e                        ; HL = страница источника
-
-        ; --- приёмник: колонка x байтового экрана, старт из геометрии
-        lda     m_pbase
-        mov     d, a
         lda     m_draw
-        add     d
-        mov     b, a                        ; B = старший байт колонки
-        lda     m_start
-        mov     c, a                        ; C = старт в ней
+        add     a
+        add     a
+        mov     l, a
+        lda     m_pbase
+        add     e
+        mov     b, a
+        lda     m_draw
+        add     a
+        add     a
+        mov     c, a
+        jmp     m_copy_bytes
 
-        ; --- 8 клеток за проход (клетка = 8 строк, идёт вверх по экрану).
-        ; Пара mov/stax/inx/inx = 24 базовых такта на байт; клетка обходится
-        ; 192+41 T, весь кадр блита — 43 196 T реальных (72 %), см. TZ §9.
-m_bcell:
-        mov     a, m                        ; 7
-        stax    b                           ; 7
-        inx     b                           ; 5
-        inx     h                           ; 5
+m_copy_shifted:
+        lda     m_draw
+        mov     e, a                    ; E = x
+        inr     a
+        mov     d, a                    ; D = x+1
+        lda     m_fbase
+        add     d
+        mov     h, a                    ; HL = front page x+1
+        mov     a, d
+        add     a
+        add     a
+        mov     l, a                    ; offset 4*(x+1)
+        lda     m_pbase
+        add     e
+        mov     b, a                    ; BC = back page x
+        mov     a, e
+        add     a
+        add     a
+        mov     c, a                    ; offset 4*x
+        jmp     m_copy_bytes
+
+; Перенести 128-байтный scratch из RAM в последний столбец back
+; (page 31, offset 124). m_draw остаётся 31: m_assemble завершит его до 32.
+m_copy_scratch_to_col:
+        lxi     h, m_scratch
+        lda     m_pbase
+        adi     M_COLS - 1
+        mov     b, a
+        mvi     c, 124
+        mvi     d, 16
+m_copy_scol_loop:
         mov     a, m
         stax    b
-        inx     b
         inx     h
+        inx     b
         mov     a, m
         stax    b
-        inx     b
         inx     h
+        inx     b
         mov     a, m
         stax    b
-        inx     b
         inx     h
+        inx     b
         mov     a, m
         stax    b
-        inx     b
         inx     h
+        inx     b
         mov     a, m
         stax    b
-        inx     b
         inx     h
+        inx     b
         mov     a, m
         stax    b
-        inx     b
         inx     h
+        inx     b
         mov     a, m
         stax    b
-        inx     b
         inx     h
-        lda     m_cnt                       ; 13
-        dcr     a                           ; 5
-        sta     m_cnt                       ; 13
-        jnz     m_bcell                     ; 10
-        ; --- следующий столбец
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        dcr     d
+        jnz     m_copy_scol_loop
+        ret
+
+m_copy_bytes:
+        mvi     d, 16
+m_copy_loop:
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        mov     a, m
+        stax    b
+        inx     h
+        inx     b
+        dcr     d
+        jnz     m_copy_loop
         lda     m_draw
         inr     a
         sta     m_draw
-        lda     m_todo
-        dcr     a
-        sta     m_todo
-        jnz     m_bloop
         ret
 
 ; ---------------------------------------------------------------------------
-; m_assemble: собрать столбец мира m_col в его страницу кольца.
+; m_assemble: собрать новый столбец мира непосредственно в back-плоскость
+; VRAM. При m_destmode=1 назначение — 128-байтный временный столбец RAM.
 ;
 ; Столбец = дорожная клетка + 15 клеток, и каждая клетка берётся СВОИМ
 ; указателем очереди ($D51D, LD4E9_4): клетка i = lv_data[q[base + i] + i].
@@ -332,15 +380,24 @@ ma_win:
 ma_cells:
         lxi     d, lv_data                  ; DE — база данных, m_cell её читает
 
-        ; --- BC = страница кольца: кольцо + 256*(m_col & 31)
-        lda     m_col
-        ani     M_COLS - 1
+        ; --- BC = адрес столбца back-плоскости:
+        ;     (m_pbase + m_draw) * 256 + 4*m_draw
+        lda     m_destmode
+        ora     a
+        jnz     ma_scratch
+        lda     m_draw
         mov     c, a
-        lda     m_ring + 1
+        lda     m_pbase
         add     c
         mov     b, a
-        lda     m_ring
+        lda     m_draw
+        add     a
+        add     a
         mov     c, a
+        jmp     ma_dest_ready
+ma_scratch:
+        lxi     b, m_scratch
+ma_dest_ready:
 
         ; --- дорожная клетка
         lda     m_col
@@ -394,6 +451,9 @@ ma_as_cells:
         lda     m_lcol
         inr     a
         sta     m_lcol
+        lda     m_draw
+        inr     a
+        sta     m_draw
         ret
 
 ; ---------------------------------------------------------------------------
@@ -577,25 +637,25 @@ m_ff:
 ; ---------------------------------------------------------------------------
         SECTION bss_clib
 
-m_ring:     defs    2       ; кольцо из кучи, M_COLS*256 байт
 m_scriptp:  defs    2       ; курсор скрипта уровня
 m_partp:    defs    2       ; курсор списка указателей текущей части
 m_tail:     defb    0       ; 1 — очередь дочитывает хвост (lv_tail)
 m_pair:     defs    2       ; указатель очереди, пока считается адрес окна
 m_win:      defs    2*WIN   ; последние указатели очереди (смещения в lv_data)
-m_pbase:    defb    0       ; старший байт плоскости back-буфера (E0/A0)
+m_pbase:    defb    0       ; старший байт back-плоскости (E0/A0)
+m_fbase:    defb    0       ; старший байт front-плоскости (A0/E0)
+m_destmode: defb    0       ; 1 — m_assemble пишет скрытый scratch
+m_scroll:   defb    0       ; 0 — первый кадр без сдвига, 1 — прокрутка
 m_level:    defb    0       ; текущий уровень
-m_cam:      defb    0       ; столбец мира у левого края экрана
 m_col:      defb    0       ; следующий столбец мира для сборки (с начала миссии)
 m_lcol:     defb    0       ; столбец мира внутри уровня (сдвиг окна)
 m_i:        defb    0       ; номер клетки в столбце
 m_draw:     defb    0       ; столбцов полосы нарисовано в этом проходе
-m_left:     defb    0       ; столбцов разрешено нарисовать в этом кадре
-m_todo:     defb    0       ; столбцов осталось нарисовать в этом кадре
-m_start:    defb    0       ; старт блита текущего столбца
+m_left:     defb    0       ; столбцов осталось скопировать в этом кадре
 m_cnt:      defb    0       ; счётчик клеток
-m_loop:     defb    0       ; счётчик начальной набивки кольца
+m_loop:     defb    0       ; счётчик начальной сборки/копирования
 m_changed:  defb    0       ; уровень сменился, цвет не применён
+m_scratch:  defs    128     ; один временный столбец (вместо кольца 8 КБ)
 
 ; Данные уровней — levels.inc открывает SECTION rodata_user сам, и после его
 ; включения по коду уже ничего быть не должно.
