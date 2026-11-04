@@ -26,6 +26,7 @@ SOUNDTRACKS = roms/musics/castlevania \
               roms/musics/supermario
 
 TESTS = roms/tests/512x256 \
+        roms/tests/boot-demo \
         roms/tests/cls \
         roms/tests/clrs \
         roms/tests/dt2 \
@@ -44,7 +45,7 @@ MUSIC_ROM_NAMES = $(foreach p,$(MUSIC_ROMS),$(p)/$(notdir $(p)).rom)
 MUSIC_ROM_AY    = $(foreach p,$(SOUNDTRACKS),$(p)/$(notdir $(p))_ay.rom)
 TEST_NAMES      = $(foreach p,$(TESTS),$(p)/$(notdir $(p)).rom)
 
-.PHONY: all clean full
+.PHONY: all clean full loader2
 
 all:
 	@for p in $(ALL); do $(MAKE) -C $$p || exit 1; done
@@ -65,3 +66,25 @@ clean:
 	@echo "=== All cleaned ==="
 
 full: clean all
+
+# ---------------------------------------------------------------------------
+# loader2 — пересборка второго загрузчика (stage-2) и перегенерация .inc.
+# blob собирается отдельным прогоном ассемблера с ORG 0E000h и -m=8080_strict
+# (метки сразу
+# абсолютные — копир в lib/boot/loader.asm не требует релопации);
+# utils/bin2inc.py проверяет бюджет 512 Б и пишет lib/boot/loader_stage2.inc;
+# utils/disasm8080.py — контроль ТЗ §9.4: бинарь целиком должен декодироваться
+# как i8080 (z80asm собирает Z80-расширения молча, сборка о них не скажет).
+# Спека: docs/LOADER_TZ.MD.
+# ---------------------------------------------------------------------------
+Z80ASM ?= z88dk/bin/z80asm
+PYTHON ?= python3
+
+loader2:
+	@mkdir -p .scratch
+	$(Z80ASM) -b -m=8080_strict -s lib/boot/loader_stage2.asm -o.scratch/loader_stage2.bin
+	@mv lib/boot/loader_stage2.sym .scratch/loader_stage2.sym   # метки нужны тесту раунд-трипа (§9.2)
+	@rm -f lib/boot/loader_stage2.o                             # z80asm пишет их рядом с исходником
+	$(PYTHON) utils/bin2inc.py .scratch/loader_stage2.bin \
+	    lib/boot/loader_stage2.inc --label loader_stage2 --max 512 --origin 0e000h
+	$(PYTHON) utils/disasm8080.py .scratch/loader_stage2.bin --org 0e000h --no-interrupts
