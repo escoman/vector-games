@@ -42,7 +42,8 @@ def tape_to_wav(tape: bytes, output_path: str) -> None:
 
 
 def convert_rom_to_wav(input_path: str, output_path: str,
-                       tape_name: str | None = None) -> None:
+                       tape_name: str | None = None,
+                       double: bool = False) -> None:
     """Главная функция: ROM/R0M → WAV."""
     ext = Path(input_path).suffix.lower()
     load_addr = 0x0000 if ext == ".r0m" else 0x0100
@@ -61,8 +62,10 @@ def convert_rom_to_wav(input_path: str, output_path: str,
     print(f"Адрес загрузки: 0x{load_addr:04X}")
     print(f"Имя ленты:      {tape_name}")
     print(f"Размер данных:  {len(rom_data)} байт")
+    if double:
+        print("Режим:          DOUBLE=1 — каждый блок пишется дважды")
 
-    tape = maketape_v06c_rom(rom_data, load_addr, tape_name)
+    tape = maketape_v06c_rom(rom_data, load_addr, tape_name, double=double)
     tape_to_wav(tape, output_path)
     print(f"WAV создан: {output_path}  ({BITS} bit, {SAMPLE_RATE} Hz, mono)")
 
@@ -76,13 +79,19 @@ def main() -> None:
                    help="Выходной .wav файл (по умолчанию: <input>.wav)")
     p.add_argument("-n", "--name", default=None,
                    help="Имя ленты (макс. 25 симв., по умолчанию = имя файла)")
+    p.add_argument("-D", "--double", action="store_true",
+                   help="Записать каждый блок дважды (второй проход на случай ошибки "
+                        "чтения). Также включается переменной окружения DOUBLE=1.")
     args = p.parse_args()
 
     if not os.path.isfile(args.input):
         sys.exit(f"Файл не найден: {args.input}")
 
+    # DOUBLE=1 — стиль finally.mk (COMPRESS=1); разрешаем и env, и флаг.
+    double = args.double or os.environ.get("DOUBLE", "").strip() == "1"
+
     output = args.output if args.output else str(Path(args.input).with_suffix(".wav"))
-    convert_rom_to_wav(args.input, output, args.name)
+    convert_rom_to_wav(args.input, output, args.name, double=double)
 
 
 if __name__ == "__main__":

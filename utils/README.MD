@@ -238,15 +238,42 @@ make COMPRESS=1          # соберёт foo.rom и рядом foo.r0m (с --ve
 python3 utils/rom2mp3.py game.rom                  # → game.mp3
 python3 utils/rom2mp3.py bios.r0m                  # → bios.mp3
 python3 utils/rom2mp3.py game.rom -n "SUPER GAME"  # имя ленты в заголовке
+python3 utils/rom2mp3.py game.rom --double         # дублировать каждый блок
+DOUBLE=1 python3 utils/rom2mp3.py game.rom          # то же через env
 ```
 
 - **Вход**: `.rom` (загрузка с `0x0100`) или `.r0m` (загрузка с `0x0000`)
 - **Выход**: MP3 файл с тем же именем (или указанное явно)
-- **Качество**: 320 kbit/s (макс. стандартное), mono, 44100 Hz
+- **Качество**: 160 kbit/s (макс. MPEG-2 LSF), mono, 22050 Hz (как в bin2wav)
 - **Имя ленты** (`-n`): отображается при загрузке в Векторе-06Ц (макс. 25 симв.,
   по умолчанию = имя файла в верхнем регистре)
+- **Дублирование блоков** (`--double` / `DOUBLE=1`): после каждого блока
+  записывается его побайтовая копия — если первый проход не сошёлся по
+  контрольной сумме, загрузчик может взять второй. Время звука и размер MP3
+  растут примерно в 2 раза.
 - **Алгоритм**: полная реализация формата v06c-rom (preamble, блоки по 256 байт,
   подблоки, контрольные суммы) — переписано с `bin2wav.c` (svofski)
+
+### rom2wav.py
+
+Тот же алгоритм и те же опции, что у `rom2mp3.py`, но выход — несжатый
+8-bit unsigned PCM WAV. Раздражает lossy-артефакты MP3 (ringing на фронтах)
+или эмулятор умеет читать WAV — это твой путь. Без внешних зависимостей
+(только stdlib `wave`).
+
+```bash
+python3 utils/rom2wav.py game.rom                  # → game.wav
+python3 utils/rom2wav.py game.rom --double         # или DOUBLE=1 …
+python3 utils/rom2wav.py game.rom -n "SUPER GAME"
+```
+
+Уровни сигнала идентичны `rom2mp3.py`: оба зовут одни и те же
+`maketape_v06c_rom` / `byte_to_samples` / `lead_in_out` из `rom2mp3`,
+поэтому `PHASE_H1=32`, `PHASE_L1=223`, тишина `0x80=128`.
+Отличие — `rom2wav` пишет u8-PCM в WAV напрямую (RIFF 8-bit по стандарту
+unsigned, ловить нечего), а `rom2mp3` перед pydub/MP3 дополнительно
+конвертирует `(v−128)·256` в s16, чтобы pydub не интерпретировал байты
+как signed `s8`.
 
 ## Анализ сборки
 

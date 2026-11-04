@@ -11,7 +11,7 @@ rom2mp3.py — конвертер .rom/.r0m файлов Вектор-06Ц в MP
   pip3 install --break-system-packages pydub
   sudo apt install ffmpeg
 
-Качество MP3: 320 kbit/s (макс. стандартное), mono, 44100 Hz.
+Качество MP3: 160 kbit/s (макс. MPEG-2 LSF для 22050 Hz), mono, 22050 Hz.
 """
 
 import sys, os, argparse, struct
@@ -26,9 +26,9 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────
 #  Параметры формата Vector-06C
 # ─────────────────────────────────────────────────────────────
-SPEED       = 10         # длительность одной фазы, сэмплов
-SAMPLE_RATE = 44100      # частота дискретизации (MPEG-1 для 320 kbps)
-MP3_BITRATE = 320        # качество MP3, kbit/s (макс. стандартное)
+SPEED       = 8          # длительность одной фазы, сэмплов (bin2wav default для v06c-rom)
+SAMPLE_RATE = 22050      # частота дискретизации — то, что ожидает эмулятор Вектора
+MP3_BITRATE = 160        # макс. битрейт MPEG-2 LSF при 22050 Hz
 
 PHASE_H1 = 32            # высокий уровень для бита «1»
 PHASE_L1 = 255 - 32      # низкий  уровень для бита «1»
@@ -111,8 +111,14 @@ def make_subblock(sblk_id: int, cs0: int, payload: bytes) -> bytes:
 
 
 def maketape_v06c_rom(rom_data: bytes, load_addr: int,
-                      tape_name: str) -> bytes:
-    """Полный поток байт ленты для формата v06c-rom."""
+                      tape_name: str, double: bool = False) -> bytes:
+    """Полный поток байт ленты для формата v06c-rom.
+
+    double=True — каждый блок записывается дважды подряд (заголовок + 8
+    подблоков). Вторая копия идентична первой побайтово, включая cs0 и
+    суммы подблоков — загрузчик Вектора может сверить контрольные суммы
+    первого чтения и при расхождении взять вторую копию.
+    """
     bin_size = len(rom_data)
     nblocks  = (bin_size + 255) // 256
     sofs     = 0
@@ -128,13 +134,18 @@ def maketape_v06c_rom(rom_data: bytes, load_addr: int,
         cs0 = sum(name_padded) & 0xFF
         cs0 = (cs0 + ((load_addr >> 8) & 0xFF) + nblocks + (nblocks - block)) & 0xFF
 
-        out += make_block_header(tape_name, load_addr, nblocks, block, cs0)
+        block_buf = bytearray()
+        block_buf += make_block_header(tape_name, load_addr, nblocks, block, cs0)
 
         # 8 подблоков по 32 байта
         for sblk in range(0x80, 0x88):
             chunk = rom_data[sofs:sofs + 32]
             sofs += 32
-            out += make_subblock(sblk, cs0, chunk)
+            block_buf += make_subblock(sblk, cs0, chunk)
+
+        out += block_buf
+        if double:
+            out += block_buf
 
     return bytes(out)
 
@@ -144,16 +155,28 @@ def maketape_v06c_rom(rom_data: bytes, load_addr: int,
 # ─────────────────────────────────────────────────────────────
 
 def tape_to_pcm(tape: bytes):  # -> AudioSegment (если pydub доступен)
-    """Байты ленты → AudioSegment (8-bit unsigned mono, 22050 Hz)."""
-    pcm = bytearray()
-    pcm += lead_in_out()
+    """Байты ленты → AudioSegment (mono, 22050 Hz, 16-bit signed).
+
+    `byte_to_samples` выдаёт 8-bit unsigned PCM (0x80 = тишина, как в WAV).
+    Pydub внутри всегда работает с signed-образцами (`sample_width=1` →
+    ffmpeg-формат `s8`), поэтому байты 0x80/0xDF/0x20 были бы прочитаны как
+    −128/−33/+32 — инвертированный DC и 1/4 амплитуды. Эмулятор Вектора
+    такую квадратуру не опознаёт. Переводим каждый u8 → int16: `(v-128)*256`.
+    """
+    pcm_u8 = bytearray()
+    pcm_u8 += lead_in_out()
     for b in tape:
-        pcm += byte_to_samples(b)
-    pcm += lead_in_out()
+        pcm_u8 += byte_to_samples(b)
+    pcm_u8 += lead_in_out()
+
+    pcm_s16 = struct.pack(
+        f'<{len(pcm_u8)}h',
+        *(((v - 128) << 8) for v in pcm_u8),
+    )
 
     seg = AudioSegment(
-        data=bytes(pcm),
-        sample_width=1,        # 8 bit
+        data=pcm_s16,
+        sample_width=2,        # 16-bit signed little-endian
         frame_rate=SAMPLE_RATE,
         channels=1
     )
@@ -161,7 +184,8 @@ def tape_to_pcm(tape: bytes):  # -> AudioSegment (если pydub доступе�
 
 
 def convert_rom_to_mp3(input_path: str, output_path: str,
-                       tape_name: str | None = None) -> None:
+                       tape_name: str | None = None,
+                       double: bool = False) -> None:
     """Главная функция: ROM/R0M → MP3."""
     ext = Path(input_path).suffix.lower()
     load_addr = 0x0000 if ext == ".r0m" else 0x0100
@@ -180,8 +204,10 @@ def convert_rom_to_mp3(input_path: str, output_path: str,
     print(f"Адрес загрузки: 0x{load_addr:04X}")
     print(f"Имя ленты:      {tape_name}")
     print(f"Размер данных:  {len(rom_data)} байт")
+    if double:
+        print("Режим:          DOUBLE=1 — каждый блок пишется дважды")
 
-    tape = maketape_v06c_rom(rom_data, load_addr, tape_name)
+    tape = maketape_v06c_rom(rom_data, load_addr, tape_name, double=double)
     audio = tape_to_pcm(tape)
 
     audio.export(output_path, format="mp3",
@@ -208,13 +234,19 @@ def main() -> None:
                    help="Выходной .mp3 файл (по умолчанию: <input>.mp3)")
     p.add_argument("-n", "--name", default=None,
                    help="Имя ленты (макс. 25 симв., по умолчанию = имя файла)")
+    p.add_argument("-D", "--double", action="store_true",
+                   help="Записать каждый блок дважды (второй проход на случай ошибки "
+                        "чтения). Также включается переменной окружения DOUBLE=1.")
     args = p.parse_args()
 
     if not os.path.isfile(args.input):
         sys.exit(f"Файл не найден: {args.input}")
 
+    # DOUBLE=1 — стиль finally.mk (COMPRESS=1); разрешаем и env, и флаг.
+    double = args.double or os.environ.get("DOUBLE", "").strip() == "1"
+
     output = args.output if args.output else str(Path(args.input).with_suffix(".mp3"))
-    convert_rom_to_mp3(args.input, output, args.name)
+    convert_rom_to_mp3(args.input, output, args.name, double=double)
 
 
 if __name__ == "__main__":
