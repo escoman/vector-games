@@ -29,6 +29,7 @@ TESTS = roms/tests/512x256 \
         roms/tests/boot-demo \
         roms/tests/cls \
         roms/tests/clrs \
+        roms/tests/colors \
         roms/tests/dt2 \
         roms/tests/dt2_512 \
         roms/tests/dt2_lz \
