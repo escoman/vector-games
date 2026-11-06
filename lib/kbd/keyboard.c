@@ -157,3 +157,19 @@ void kbd_wait_key(unsigned char key)
         prev = cur;
     }
 }
+
+/* Ждёт нажатия ЛЮБОЙ клавиши: тот же фронт-детектор, что у kbd_wait_key,
+ * только «какой именно» не спрашивается. Снимок до цикла обязателен — иначе
+ * клавиша, удержанная на входе, «сработает» как фронт на первом же кадре. */
+void kbd_wait_any_key(void)
+{
+    unsigned char prev = kbd_scan();
+    for (;;) {
+        unsigned char key;
+        v06_wait_frame();
+        key = kbd_scan();
+        if (key != 0 && key != prev)
+            return;
+        prev = key;
+    }
+}

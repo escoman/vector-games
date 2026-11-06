@@ -67,18 +67,55 @@ extern void v06_wait_frame(void);
 /*                                 LOADER                                  */
 /* ----------------------------------------------------------------------- */
 
-/* Куда stage-2 копируется и откуда работает (область 0xE000..0xE1FF).
+/* Куда stage-2 копируется и откуда работает (область кода 0xE000..0xE7FF).
  * Реализация — boot/loader.asm, спека docs/LOADER_TZ.MD. */
 #define LOADER_STAGE2_ADDR  0xE000u
+
+/* Высокая RAM загрузчика (docs/LOADER_TZ.MD §2.1): блок конфига и слоты
+ * данных панелей. Стаб копирует сюда конфиг и картинки ДО стирания
+ * 0x0000..0xDFFF, поэтому они доживают до приёма ленты. */
+#define LOADER_CFG_ADDR     0xE840u   /* struct loader_cfg как есть, 14 Б */
+#define LOADER_PANEL1_ADDR  0xE860u   /* слот данных панели 1, 2 КБ */
+#define LOADER_PANEL2_ADDR  0xF060u   /* слот данных панели 2, 2 КБ */
+
+/* Одна панель (картинка в угол экрана 256x256). Данные — плоскость C000:
+ * байт = 8 горизонтальных пикселей (бит 7 = левый), строки сверху вниз;
+ * их генерирует utils/png2panel.py. wb = 0 значит «панели нет». */
+struct loader_panel {
+    unsigned char x;    /* левый верхний угол, пиксель; ОБЯЗАТЕЛЬНО кратно 8 */
+    unsigned char y;    /* верхний край, пиксель */
+    unsigned char wb;   /* байт в строке (ширина, округлённая вверх до 8) */
+    unsigned char h;    /* строк */
+};
+
+/* Конфиг загрузчика: два цвета и до двух панелей. Поле за полем,
+ * 14 байт — ровно столько стаб копирует в LOADER_CFG_ADDR. Указатели
+ * на данные — адреса внутри ROM заставки; стаб перекладывает картинки
+ * по слотам сам, в stage-2 указатели не попадают. */
+struct loader_cfg {
+    unsigned char bg;          /* цвет слотов с битом 1 = 0: фон, он же бордюр */
+    unsigned char line;        /* цвет слотов с битом 1 = 1: линии и арт */
+    struct loader_panel p1;
+    struct loader_panel p2;
+    const unsigned char *p1_data;   /* панель 1, wb*h байт плоскости */
+    const unsigned char *p2_data;   /* панель 2 */
+};
 
 /* LOADER — второй загрузчик (boot/loader.asm).
  * Вызывается ROM-заставкой после нажатия клавиши. НЕ ВОЗВРАЩАЕТСЯ:
  * копирует stage-2 в 0xE000, стирает 0x0000..0xDFFF, рисует карту
  * загрузки и принимает следующий ROM с магнитофона (формат v06c-rom,
- * utils/rom2wav.py), затем JP на адрес загрузки. Прерываний на этом
- * пути нет совсем. Требования к следующему ROM: адрес 0x0100,
- * размер <= 48896 байт. docs/LOADER_TZ.MD. */
+ * utils/rom2wav.py), затем PCHL на addrhi:0000 — переход на фактический
+ * старт образа (§3.8). В 0x0000 остаётся заглушка JMP 0xE000, поэтому
+ * hardware reset снова зовёт загрузчик (для .r0m её затирает сам образ).
+ * Прерываний на этом пути нет совсем. Требования к следующему ROM: адрес
+ * 0x0100 (.rom) или 0x0000 (.r0m), размер <= 48896 байт. docs/LOADER_TZ.MD. */
 extern void loader_boot(void);
+
+/* То же, но цвета и панели берутся из cfg (docs/LOADER_TZ.MD §4.2, §5.2,
+ * §7): дефолтный loader_boot эквивалентен cfg = {0x80, 0x2D, панели пустые}.
+ * Панели рисуются до сетки, линии ложатся поверх них через OR. */
+extern void loader_boot_cfg(const struct loader_cfg *cfg);
 
 
 
@@ -769,6 +806,7 @@ extern unsigned char kbd_scan(void);            /* опрос матрицы    
 extern void kbd_scan_now(void);                 /* снимок в ISR          */
 extern unsigned char kbd_read(void);            /* декод. последний снимок*/
 extern void kbd_wait_key(unsigned char key);    /* ждать нажатия         */
+extern void kbd_wait_any_key(void);             /* любую — фронт         */
 extern unsigned char kbd_is_down(unsigned char code); /* код в посл. снимке матрицы */
 
 /* Снимок матрицы после kbd_scan()/kbd_scan_now(): 8 байт, строки, бит 1 =
