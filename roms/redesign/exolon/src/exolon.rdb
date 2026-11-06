@@ -493,7 +493,7 @@
     },
     {
       "address": "0x0698",
-      "comment": "Обновление объектов таблицы 06F6 (6-байтные записи {flag,X,Y,dx,dy,color}): движение, границы 78h/A9h, отрисовка спрайтом 01A9h. Третий OUT 00h (0x06E1: mov a,e; rrc; ani 01h) = ЗВУК БОЯ: пишет в TapeOut(PC0) RESET для каждой живой частицы. Частицы-осколки сыплет func_update_bullet_trail(4A84) при попаданиях; вместе с SET PC0 в func_frame_sync(0147) это даёт аудиомодуляцию PC0 (проверено io_trace: 57 RESET/с в бою против 0 в idle).",
+      "comment": "Обновление объектов таблицы 06F6 (6-байтные записи {flag,X,Y,dx,dy,color}): движение, границы 78h/A9h, отрисовка спрайтом 01A9h. OUT 00h @0x06E1 (mov a,e; rrc; ani 01h) = RESET PC0 на бит1 координаты X. СТАТУС ПО Stage 9c (уточнение гипотезы 9b): путь ЖИВ (не мёртвый) — флаг 01 ставит label_061F @0x0637 (mvi m,01h), куда идёт func_plot_from_table_067b из func_update_bullet_trail; НО OUT выполняется лишь при flag=01 ∧ X<78h ∧ Y<0A9h, а осколки сыплются только при [478Bh]=19h(25) и цикл доходит сюда только в активном gameplay (после func_wait_key). В измеримых трассах (raster_events) 0x06E3 дал 0 фронтов — воспроизводимый звук взрыва даёт func_beam_delay (хвост [3ED1], B=3Ch), а не эта ветвь.",
       "links": [
         "0x0147"
       ],
@@ -1026,7 +1026,7 @@
     },
     {
       "address": "0x1E2F",
-      "comment": "Выдержка по лучу (beam-racing): IN 09h (счётчик ВИ53) с масштабированием для точной синхронизации отрисовки (B итераций). ПОБОЧНЫЙ ЗВУК: each итерация пишет бит счётчика ВИ53 в TapeOut(PC0) (in 09h; rrc; ani 01h; out 00h), затем xra a; out 00h (RESET). Вызывается из enemy-fire(43A3), alien-обработки(4978) и др. путей отрисовки => участвует в озвучке боя (модуляция PC0 на аудиочастоте).",
+      "comment": "Выдержка по лучу (beam-racing): IN 09h (младший бит счётчика ВИ53) с масштабированием (B итераций). ЭТО ЕДИНСТВЕННЫЙ ВОСПРОИЗВОДИМЫЙ ИСТОЧНИК ЗВУКА БОЯ (Stage 9c, замер WAV): каждая итерация пишет бит ВИ53 в TapeOut(PC0) (in 09h; rrc; ani 01h; out 00h), затем xra a; out 00h (RESET) => псевдослучайный треск. Разные вызовы дают разные тембры: ВЫСТРЕЛ/огонь/HUD — B=28h (медиана импульса 146 мкс, ~38к фронтов/с, shot.wav); ВЗРЫВ — хвост [3ED1]: func_bullet_step(lbl_41c7) грузит 63h, func_handle_player_state(lbl_4854) пока [3ED1]>0 каждый кадр делает mvi b,3Ch; call func_beam_delay (xref 0x485F) => широкие гулкие импульсы до 1.8 мс, ~22к/с (explosion.wav). func_frame_sync(88h/8Ah) — control word, PC0 НЕ трогает (не фронт).",
       "name": "func_beam_delay",
       "properties": {
         "seed_evidence": "call",
@@ -2593,6 +2593,10 @@
     },
     {
       "address": "0x41C7",
+      "comment": "Истечение пуль: mvi a,63h; sta 3ed1h — грузит счётчик ударного хвоста [3ED1]=99 кадров. Пока [3ED1]>0, func_handle_player_state/lbl_4854 каждый кадр крутит func_beam_delay(B=3Ch) => гулкий звук ВЗРЫВА (explosion.wav, Stage 9c). Декремент [3ED1] — в lbl_4854.",
+      "links": [
+        "0x4854"
+      ],
       "name": "lbl_41c7",
       "properties": {
         "seed_evidence": "jcc",
@@ -3362,6 +3366,10 @@
     },
     {
       "address": "0x4854",
+      "comment": "Хвост [3ED1] (звук взрыва): lda 3ed1h; ora a; rz; mvi b,3Ch; call func_beam_delay (0x485F) — широкий гул, пока [3ED1]>0; затем dcr [3ED1]. Stage 9c: это основной воспроизводимый «взрыв» на TapeOut (B=3Ch, медиана 208 мкс, хвосты до 1.8 мс, explosion.wav).",
+      "links": [
+        "0x1E2F"
+      ],
       "name": "lbl_4854",
       "properties": {
         "seed_evidence": "jcc",
