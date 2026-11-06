@@ -12,8 +12,10 @@
 ; панелей нет. loader_boot_cfg — то же плюс настройка из struct loader_cfg:
 ; два цвета и до двух картинок в углы экрана (docs/LOADER_TZ.MD §5.2, §7).
 ; Стаб тащит в high RAM всё, что загрузчику понадобится ПОСЛЕ стирания
-; 0000h..DFFFh: сам blob, 14 байт конфига и данные панелей. Указатели в
-; struct — это адреса внутри этой ROM, после стирания они будут мусор.
+; 0000h..DFFFh: сам blob, 14 байт конфига и РАЗУПАКОВАННЫЕ панели (в ROM они
+; лежат сжатыми ZX0, стаб вызывает zx0_decompress). Указатели в struct —
+; адреса сжатых потоков внутри этой ROM; после стирания они были бы мусор,
+; поэтому распаковка делается здесь, до прыжка в stage-2.
 ;
 ; Blob лежит в коде этой ROM (INCLUDE сгенерированного .inc — тот же
 ; порядок, что у шрифтов в gfx/pr.asm) и копируется побайтово БЕЗ релопации:
@@ -40,10 +42,17 @@
         INCLUDE "loader_stage2.inc"
 
 LOADER_STAGE2_ADR equ 0e000h        ; адрес, под который собран blob
-LOADER_CFG_ADR    equ 0e840h        ; конфиг stage-2 (ТЗ §4.2, §5.2)
+LOADER_CFG_ADR    equ 0fb10h        ; конфиг stage-2 (ТЗ §4.2, §5.2)
 LOADER_CFG_SIZE   equ 14            ; bg, line, 2x(x,y,wb,h), 2x указатель
-LOADER_P1_ADR     equ 0e860h        ; слот данных панели 1, 2 КБ
-LOADER_P2_ADR     equ 0f060h        ; слот данных панели 2, 2 КБ
+; Слоты данных панелей — ФОРМУЛА base + номер·stride (ТЗ §2.1): рост одной
+; панели в пределах stride не сдвигает соседнюю и не требует правки адресов
+; ни здесь, ни в v06.h. Панели в ROM лежат сжатыми ZX0 — распаковывает
+; zx0_decompress (lib/unpack/zx0.asm), отсюда EXTERN.
+LOADER_PANEL_BASE   equ 0e300h      ; слот панели 0 — сразу за кодом blob
+LOADER_PANEL_STRIDE equ 0c00h       ; 3 КБ на панель (= бюджет png2panel --slot)
+LOADER_P1_ADR       equ LOADER_PANEL_BASE                        ; панель 1: +0
+LOADER_P2_ADR       equ LOADER_PANEL_BASE + LOADER_PANEL_STRIDE  ; панель 2: +1
+        extern  _zx0_decompress     ; void zx0_decompress(const uchar*, uchar*)
 
 loader_boot:
 _loader_boot:
@@ -67,7 +76,7 @@ loader_go:
         call cpbl                   ; 12h), но плодит ещё одну пару инкрементов
         pop hl
 
-        ; --- 2) конфиг: 14 байт struct как есть в 0E840h ---
+        ; --- 2) конфиг: 14 байт struct как есть в 0FB10h ---
         ; (первые 10 — цвета и дескрипторы, их читает stage-2; два указателя
         ; на данные панелей — +10/+12, их читает только копир ниже)
         ld e, l                     ; MOV E,L / MOV D,H: struct становится
@@ -76,58 +85,46 @@ loader_go:
         lxi bc, LOADER_CFG_SIZE
         call cpbl
 
-        ; --- 3) данные панелей в слоты; wb = 0 значит «панели нет» ---
-        ; панель 1: wb/h в 0E844h/0E845h, указатель данных в 0E84Ah.., слот 0E860h
-        ld a, (LOADER_CFG_ADR + 5)  ; h — счётчик сложений
-        ld b, a
-        ld a, (LOADER_CFG_ADR + 11) ; старший байт указателя данных
+        ; --- 3) панели: распаковать ZX0-поток из ROM в слот; wb = 0 — нет ---
+        ; src — указатель на сжатый поток в struct (+10 / +12), dst — слот.
+        ; zx0_decompress читает аргументы со стека (1-й src глубже, 2-й dst
+        ; ближе) и не знает длины: поток кончается EOF-маркером Elias(256).
+        ld a, (LOADER_CFG_ADR + 4)  ; wb панели 1
+        or a
+        jp z, unp2                  ; wb = 0: панели нет
+        ld a, (LOADER_CFG_ADR + 11) ; старший байт указателя src
         ld d, a
         ld a, (LOADER_CFG_ADR + 10)
-        ld e, a                     ; DE = источник (ROM заставки)
-        lxi hl, LOADER_P1_ADR       ; HL = слот назначения
-        ld a, (LOADER_CFG_ADR + 4)  ; wb — последним: pncpy ждёт его в A
-        call pncpy
+        ld e, a                     ; DE = src (сжатый поток в ROM)
+        lxi h, LOADER_P1_ADR        ; HL = dst (слот панели 1)
+        call zx_unpack
 
-        ; панель 2: wb/h в 0E848h/0E849h, указатель в 0E84Ch.., слот 0F060h
-        ld a, (LOADER_CFG_ADR + 9)
-        ld b, a
+        ; панель 2: wb в 0FB18h, указатель src в 0FB1Ch.., слот 0EF00h
+unp2:   ld a, (LOADER_CFG_ADR + 8)  ; wb панели 2
+        or a
+        jp z, unp_go                ; панели нет
         ld a, (LOADER_CFG_ADR + 13)
         ld d, a
         ld a, (LOADER_CFG_ADR + 12)
         ld e, a
-        lxi hl, LOADER_P2_ADR
-        ld a, (LOADER_CFG_ADR + 8)
-        call pncpy
+        lxi h, LOADER_P2_ADR
+        call zx_unpack
 
-        jp LOADER_STAGE2_ADR        ; управление уходит stage-2 навсегда
+unp_go: jp LOADER_STAGE2_ADR        ; управление уходит stage-2 навсегда
 
 ; ---------------------------------------------------------------
-; pncpy: данные панели в слот high RAM. Вход: A = wb, B = h,
-; DE = источник (указатель из struct), HL = слот назначения.
-; Длина = wb*h считается сложением: таблицы и самомодификации тут дороже,
-; а 16-битного умножения в 8080 нет.
+; zx_unpack: распаковать ZX0-поток панели в слот. Вход: DE = src (сжатый
+; поток в ROM), HL = dst (слот high RAM). Обёртка под соглашение вызова
+; z88dk classic C-функции zx0_decompress(src, dst): первый аргумент лежит
+; глубже всех, поэтому src пушим ПЕРВЫМ; стек чистит вызывающий.
 ; ---------------------------------------------------------------
-pncpy:  ld c, a                   ; MOV C,A — wb переживёт проверку в A
-        or a
-        ret z                     ; wb = 0: панели нет (дефолтный конфиг)
-        ld a, b
-        or a
-        ret z                     ; h = 0: на BC = 0 копир вылил бы 64 КБ
-        push de                   ; источник
-        push hl                   ; слот назначения
-        ld a, c
-        ld d, 0
-        ld e, a                   ; DE = wb (множимое)
-        ld h, d
-        ld l, d                   ; HL = 0 (сумма)
-pn1:    add hl, de                ; DAD D — 8080; флаги, кроме C, не трогает
-        dec b                     ; DCR B
-        jp nz, pn1
-        ld b, h                   ; MOV B,H
-        ld c, l                   ; MOV C,L — BC = wb*h
-        pop hl                    ; слот назначения
-        pop de                    ; источник
-        jp cpbl                   ; хвостовой вызов: ret из cpbl вернёт сюда
+zx_unpack:
+        push de                     ; src  — первый аргумент (глубже)
+        push hl                     ; dst  — второй (ближе к SP, sp+2)
+        call _zx0_decompress
+        pop de                      ; caller cleans: снять оба аргумента
+        pop de
+        ret
 
 ; ---------------------------------------------------------------
 ; cpbl: побайтовый копир. Вход: DE = источник, HL = назначение,

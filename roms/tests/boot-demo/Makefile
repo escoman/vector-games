@@ -27,6 +27,7 @@ SRCS = $(LIB)/sys/startup.asm \
        $(LIB)/sys/v06io.asm $(LIB)/sys/v06pal.asm $(LIB)/kbd/kbdscan.asm \
        $(LIB)/gfx/pr.asm $(LIB)/gfx/clr.asm \
        $(LIB)/gfx/mode.c $(LIB)/gfx/gfx.c $(LIB)/kbd/keyboard.c \
+       $(LIB)/unpack/zx0.asm \
        $(LIB)/boot/loader.asm \
        main.c
 
@@ -35,18 +36,18 @@ SRCS = $(LIB)/sys/startup.asm \
 GEN_INC = $(LIB)/boot/loader_stage2.inc
 
 # Данные панелей: include/panel_*.h генерируются из assets/panel_*.png
-# (utils/png2panel.py — 2-цветный PNG в плоскость C000). Сырые PNG —
-# источники, headers — артефакты сборки (в .gitignore).
+# (utils/png2panel.py — 2-цветный PNG в плоскость C000, сжатую ZX0: --zx0).
+# Сырые PNG — источники, headers — артефакты сборки (в .gitignore).
 PNG2PANEL = $(PROJECT_ROOT)utils/png2panel.py
 PANELS = include/panel_top.h include/panel_bottom.h
 
 include/panel_top.h: assets/panel_top.png
 	@mkdir -p include
-	python3 $(PNG2PANEL) $< --name panel_top --emit h --corner top-left -o $@
+	python3 $(PNG2PANEL) $< --name panel_top --emit h --zx0 --corner top-left -o $@
 
 include/panel_bottom.h: assets/panel_bottom.png
 	@mkdir -p include
-	python3 $(PNG2PANEL) $< --name panel_bottom --emit h --corner bottom-right -o $@
+	python3 $(PNG2PANEL) $< --name panel_bottom --emit h --zx0 --corner bottom-right -o $@
 
 ZFLAGS = +vector06c --no-crt -I$(LIB)
 

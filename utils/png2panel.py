@@ -4,11 +4,12 @@ png2panel.py — конвертация 2-цветного PNG в данные �
 
 Панель — это картинка, которую stage-2 второго загрузчика рисует в угол
 экрана 256x256 ПЕРЕД сеткой карты загрузки (docs/LOADER_TZ.MD §5.2). Данные
-лежат в слоте high RAM (0xE860 / 0xF060), куда их кладёт копир из ROM
-заставки, поэтому формат — плоскость Вектора «как есть»: байт = 8
-ГОРИЗОНТАЛЬНЫХ пикселя, бит 7 = левый пиксель, строки сверху вниз. Тогда
-рисование = копирование байтов в 0xC000 + (x/8)·100h + (255 − y) без
-сдвигов и маскирования.
+лежат в слоте high RAM (base + номер·stride), куда их РАЗПАКОВЫВАЕТ копир из
+ROM заставки (стаб `boot/loader.asm` вызывает zx0_decompress), поэтому в ROM
+панель лежит сжатой ZX0 (флаг --zx0), а в слоте — плоскость Вектора «как
+есть»: байт = 8 ГОРИЗОНТАЛЬНЫХ пикселя, бит 7 = левый пиксель, строки сверху
+вниз. Тогда рисование = копирование байтов в 0xC000 + (x/8)·100h + (255 − y)
+без сдвигов и маскирования.
 
 Использование:
     python3 utils/png2panel.py INPUT.png --name panel_top [опции]
@@ -20,7 +21,9 @@ png2panel.py — конвертация 2-цветного PNG в данные �
     --corner M      куда ставить панель: top-left (0,0),
                     bottom-right (256-w, 256-h) или none (только --x/--y)
     --x N --y N     явная позиция левого верхнего угла (N-й пиксель экрана)
-    --slot N        бюджет данных, по умолчанию 2048 (размер слота)
+    --slot N        бюджет РАЗУПАКОВАННЫХ данных, по умолчанию 3072 (слот)
+    --zx0           cжать поток ZX0 (utils/zx0.py) — в ROM лежат сжатые
+                    байты, стаб распаковывает их в слот перед stage-2
 
 Позиция по X обязана быть кратна 8: байт плоскости накрывает ровно 8
 пикселей по горизонтали, сдвиг потребовал бы побитовой сборки на каждом
@@ -39,8 +42,11 @@ from collections import Counter
 
 from PIL import Image
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import zx0                                                    # noqa: E402
+
 SCREEN = 256
-SLOT = 2048
+SLOT = 3072
 
 
 def analyze(png_path):
@@ -96,40 +102,48 @@ def place(args, w, h):
     return x, y
 
 
-def emit_inc(name, data, wb, h, x, y):
+def emit_inc(name, blob, wb, h, x, y, raw_len, comp):
     up = name.upper()
     out = [';',
            '; %s — сгенерировано из PNG (utils/png2panel.py), НЕ ПРАВИТЬ.' % name,
            '; Панель загрузчика: байт = 8 горизонтальных пикселей (бит 7 =',
-           '; левый), строки сверху вниз. docs/LOADER_TZ.MD §5.2.',
+           '; левый), строки сверху вниз.%s' % (
+               ' ПОТОК СЖАТ ZX0 — стаб распаковывает в слот.' if comp else ''),
+           '; docs/LOADER_TZ.MD §5.2.',
            ';']
     out.append('%s:' % name)
-    for i in range(0, len(data), 16):
+    for i in range(0, len(blob), 16):
         out.append('        db      ' + ', '.join('0%02Xh' % b
-                                                  for b in data[i:i + 16]))
-    for label, value in ((up + '_WB', wb), (up + '_H', h),
-                         (up + '_X', x), (up + '_Y', y),
-                         (up + '_SIZE', len(data))):
+                                                  for b in blob[i:i + 16]))
+    defs = ((up + '_WB', wb), (up + '_H', h),
+            (up + '_X', x), (up + '_Y', y),
+            (up + '_SIZE', raw_len))
+    if comp:
+        defs = defs + ((up + '_CSIZE', len(blob)), (up + '_ZX0', 1))
+    for label, value in defs:
         out.append('%-14s equ     %d' % (label, value))
     out.append('')
     return '\n'.join(out)
 
 
-def emit_h(name, data, wb, h, x, y):
+def emit_h(name, blob, wb, h, x, y, raw_len, comp):
     up = name.upper()
     lines = ['/*',
              ' * %s — сгенерировано из PNG (utils/png2panel.py), НЕ ПРАВИТЬ.'
              % name,
              ' * Панель загрузчика: байт = 8 горизонтальных пикселя (бит 7 =',
-             ' * левый), строки сверху вниз; позиция — левый верхний угол.',
+             ' * левый), строки сверху вниз; позиция — левый верхний угол.%s'
+             % ('\n * ПОТОК СЖАТ ZX0 (lib/unpack/zx0.asm) — стаб loader.asm'
+                '\n * распаковывает его в слот high RAM перед stage-2.'
+                if comp else ''),
              ' * docs/LOADER_TZ.MD §5.2.',
              ' */',
              '#ifndef PANELS_%s_H' % up,
              '#define PANELS_%s_H' % up,
              '',
              'static const unsigned char %s[] = {' % name]
-    for i in range(0, len(data), 12):
-        lines.append('    ' + ', '.join('0x%02X' % b for b in data[i:i + 12])
+    for i in range(0, len(blob), 12):
+        lines.append('    ' + ', '.join('0x%02X' % b for b in blob[i:i + 12])
                      + ',')
     lines += ['};', '',
               '#define %s_WB %d   /* байт в строке */' % (up, wb),
@@ -137,9 +151,15 @@ def emit_h(name, data, wb, h, x, y):
               '#define %s_X  %d   /* x левого верхнего угла, кратно 8 */'
               % (up, x),
               '#define %s_Y  %d   /* y левого верхнего угла */' % (up, y),
-              '#define %s_SIZE %d' % (up, len(data)),
-              '',
-              '#endif', '']
+              '#define %s_SIZE %d   /* размер РАЗУПАКОВАННЫХ данных */'
+              % (up, raw_len)]
+    if comp:
+        lines += ['/* %s[] — это сжатый поток, распаковать zx0_decompress. */'
+                  % name,
+                  '#define %s_CSIZE %d   /* байт сжатого потока в ROM */'
+                  % (up, len(blob)),
+                  '#define %s_ZX0  1' % up]
+    lines += ['', '#endif', '']
     return '\n'.join(lines)
 
 
@@ -154,22 +174,28 @@ def main():
     ap.add_argument('--x', type=int, default=0)
     ap.add_argument('--y', type=int, default=0)
     ap.add_argument('--slot', type=int, default=SLOT,
-                    help='бюджет данных панели, байт')
+                    help='бюджет РАЗУПАКОВАННЫХ данных панели, байт')
+    ap.add_argument('--zx0', action='store_true',
+                    help='сжать поток ZX0 (в ROM лежат сжатые байты, '
+                         'стаб loader.asm распаковывает в слот)')
     a = ap.parse_args()
 
     data, wb, h, w = pack_panel(a.src)
     x, y = place(a, w, h)
     if len(data) > a.slot:
-        raise SystemExit('%s: %d байт, слот панели %d — не помещается'
+        raise SystemExit('%s: %d байт (разупаковано), слот панели %d — не помещается'
                          % (os.path.basename(a.src), len(data), a.slot))
-    text = (emit_inc(a.name, data, wb, h, x, y) if a.emit == 'inc'
-            else emit_h(a.name, data, wb, h, x, y))
+    blob = zx0.compress(data) if a.zx0 else data
+    text = (emit_inc(a.name, blob, wb, h, x, y, len(data), a.zx0)
+            if a.emit == 'inc'
+            else emit_h(a.name, blob, wb, h, x, y, len(data), a.zx0))
     dst = a.out or os.path.join(
         os.path.dirname(a.src) or '.',
         '%s%s' % (a.name, '.inc' if a.emit == 'inc' else '_png.h'))
     open(dst, 'w', encoding='utf-8').write(text)
-    print('%s: %dx%d -> %s: %d байт, %d байт/строку, позиция (%d,%d)'
-          % (os.path.basename(a.src), w, h, dst, len(data), wb, x, y))
+    print('%s: %dx%d -> %s: %d байт%s, %d байт/строку, позиция (%d,%d)'
+          % (os.path.basename(a.src), w, h, dst, len(data),
+             (' -> ZX0 %d' % len(blob)) if a.zx0 else '', wb, x, y))
     return 0
 
 

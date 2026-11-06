@@ -67,16 +67,22 @@ extern void v06_wait_frame(void);
 /*                                 LOADER                                  */
 /* ----------------------------------------------------------------------- */
 
-/* Куда stage-2 копируется и откуда работает (область кода 0xE000..0xE7FF).
+/* Куда stage-2 копируется и откуда работает (область кода 0xE000..0xE2FF,
+ * сразу за ней — слоты панелей 0xE300/0xEF00).
  * Реализация — boot/loader.asm, спека docs/LOADER_TZ.MD. */
 #define LOADER_STAGE2_ADDR  0xE000u
 
 /* Высокая RAM загрузчика (docs/LOADER_TZ.MD §2.1): блок конфига и слоты
- * данных панелей. Стаб копирует сюда конфиг и картинки ДО стирания
- * 0x0000..0xDFFF, поэтому они доживают до приёма ленты. */
-#define LOADER_CFG_ADDR     0xE840u   /* struct loader_cfg как есть, 14 Б */
-#define LOADER_PANEL1_ADDR  0xE860u   /* слот данных панели 1, 2 КБ */
-#define LOADER_PANEL2_ADDR  0xF060u   /* слот данных панели 2, 2 КБ */
+ * данных панелей. Стаб копирует сюда конфиг и РАСПАКОВЫВАЕТ панели (в ROM
+ * они лежат сжатыми ZX0) ДО стирания 0x0000..0xDFFF, поэтому они доживают
+ * до приёма ленты. Слот панели — ФОРМУЛА base + номер·stride: рост панели в
+ * пределах stride не сдвигает соседнюю и не требует правки этого заголовка. */
+#define LOADER_CFG_ADDR     0xFB10u   /* struct loader_cfg как есть, 14 Б */
+#define LOADER_PANEL_BASE   0xE300u   /* слот панели 0 — сразу за кодом blob */
+#define LOADER_PANEL_STRIDE 0xC00u    /* 3 КБ на панель (бюджет png2panel --slot) */
+#define LOADER_PANEL_ADDR(i) (LOADER_PANEL_BASE + (i) * LOADER_PANEL_STRIDE)
+#define LOADER_PANEL1_ADDR  LOADER_PANEL_ADDR(0)   /* слот данных панели 1 */
+#define LOADER_PANEL2_ADDR  LOADER_PANEL_ADDR(1)   /* слот данных панели 2 */
 
 /* Одна панель (картинка в угол экрана 256x256). Данные — плоскость C000:
  * байт = 8 горизонтальных пикселей (бит 7 = левый), строки сверху вниз;

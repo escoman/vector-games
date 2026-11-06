@@ -10,7 +10,7 @@ Architecture:
 - `snd/` — KR580VI53 timer, AY-3-8910 PSG, step sequencer (`sound.c`), bytecode synthesizer (`music.c`), 3-voice SFX mixer (`sfx.c`), noise drum engine (`drums.asm`), precomputed note tables (`notes.c`);
 - `kbd/` — matrix keyboard polling via PIA ports (no interrupts);
 - `timer/` — raster stopwatch on KR580VI53 channel 2 (racing-the-beam sync);
-- `unpack/` — RLE and LZ bitmap decompression into VRAM;
+- `unpack/` — RLE and LZ bitmap decompression into VRAM, plus the generic ZX0 stream decoder (`zx0.asm`);
 - `boot/` — stage-2 cassette loader (`loader.asm` + generated `loader_stage2.inc`);
 - `mem/` — bump allocator over the RAM left above the ROM image (`heap.c`);
 - `comps/` — UI components (controller, edit, textarea) — own header `comps/comps.h`.
@@ -573,7 +573,12 @@ being pre-zeroed); stale garbage there XORs every received byte and the sync
 byte never accumulates.
 `loader_boot_cfg(&cfg)` additionally customizes the background/line colors and
 up to two corner panel images (`utils/png2panel.py`); the stub copies the config
-and panel bytes into high RAM before jumping.
+into high RAM and DECOMPRESSES the panels there — in the ROM they are stored as
+ZX0 streams, decoded by `unpack/zx0.asm` before the jump, because the stage-2
+blob has no room for a decoder (768-byte code budget, 56 free). Panel slots are
+addressed by a formula, `LOADER_PANEL_BASE + i*LOADER_PANEL_STRIDE` = `0xE300 +
+i*0xC00`, so one panel growing within its stride shifts neither its neighbour
+nor any address in `v06.h`.
 
 Reception progress is drawn into the C000 plane via the ported `AKART` (see
 `docs/etalon/newrom2.asm` 277..297 and LOADER_TZ §5.3): after each 32-byte
@@ -590,12 +595,14 @@ safe in the listing.
 
 | File | Role |
 |------|------|
-| `boot/loader.asm` | the `_loader_boot` stub: `DI` + byte copy + `JP 0E000h` |
+| `boot/loader.asm` | the `_loader_boot` stub: `DI` + byte copy + ZX0 panel decompression + `JP 0E000h` |
+| `unpack/zx0.asm` | forward ZX0 decoder `zx0_decompress(src, dst)`, pure 8080 — linked by the stub, not part of the blob |
 | `boot/loader_stage2.asm` | blob source, assembled separately with `ORG 0E000h` (absolute labels, no relocation) |
 | `boot/loader_stage2.inc` | **generated** blob as `DB` rows + `LOADER_STAGE2_SIZE`; committed, regenerate with `make loader2` |
 
-Link only `$(LIB)/boot/loader.asm` into `SRCS` — the `.inc` is pulled by `INCLUDE` from
-inside it, exactly like the fonts in `gfx/pr.asm`.
+Link `$(LIB)/boot/loader.asm` and `$(LIB)/unpack/zx0.asm` into `SRCS` — the `.inc`
+is pulled by `INCLUDE` from inside the first one, exactly like the fonts in
+`gfx/pr.asm`.
 
 ```c
 kbd_wait_any_key();      /* lib/kbd — front-edge detector, one frame per tick */
@@ -607,9 +614,9 @@ at `0x0100..0xBFFF`, up to 48896 bytes, or an `.r0m` from `0x0000`); the tape
 format is `v06c-rom` (`utils/rom2wav.py`, `utils/rom2mp3.py`). The i8080-only
 encoding rule, the verification procedure and the loading-card geometry are in
 `docs/LOADER_TZ.MD`; the demo ROM is `roms/tests/boot-demo`. `make loader2`
-rebuilds the blob and runs both gates (`bin2inc.py` 2 KB budget +
+rebuilds the blob and runs both gates (`bin2inc.py` 768-byte code budget +
 `disasm8080.py`: pure i8080 decode, no `EI`/`HLT`/`RST`, every 16-bit operand
-inside `0E000h..0E7FFh` plus the whitelisted reset stub / C000 plane / high-RAM
+inside `0E000h..0E2FFh` plus the whitelisted reset stub / C000 plane / high-RAM
 vars+config).
 
 ---
