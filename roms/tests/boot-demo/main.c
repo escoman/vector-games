@@ -63,6 +63,7 @@ int main(void)
     kbd_wait_any_key();
 
     gfx_clear(0);
+    gfx_set_black_palette();
 
     /* Управление уходит в 0xE000 навсегда, return ниже недостижим
      * (он только для линковки: sccz80 не переваривает пустой for(;;)). */

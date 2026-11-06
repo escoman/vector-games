@@ -92,4 +92,4 @@ loader2:
 	@rm -f lib/boot/loader_stage2.o                             # z80asm пишет их рядом с исходником
 	$(PYTHON) utils/bin2inc.py .scratch/loader_stage2.bin \
 	    lib/boot/loader_stage2.inc --label loader_stage2 --max 2048 --origin 0e000h
-	$(PYTHON) utils/disasm8080.py .scratch/loader_stage2.bin --org 0e000h --no-interrupts --refs 0e000-0e7ff --ref-allow 0000-0002,0c000-0dfff,0e800-0e83f,0e840-0e84f
+	$(PYTHON) utils/disasm8080.py .scratch/loader_stage2.bin --org 0e000h --no-interrupts --refs 0e000-0e7ff --ref-allow 0000-0002,0c000-0dfff,0e830-0e83f,0e840-0e84f
