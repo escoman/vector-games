@@ -1,0 +1,14 @@
+# Build artifacts
+*.rom
+*.map
+*.o
+zcc_opt.def
+*.c.asm
+
+# Генерируемые данные панелей: ИСТОЧНИКИ — assets/panel_top.png,
+# assets/panel_bottom.png. include/panel_*.h перегенерируются на сборке
+# правилом panels (utils/png2panel.py).
+include/panel_top.h
+include/panel_bottom.h
+
+__pycache__/

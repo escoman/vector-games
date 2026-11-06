@@ -73,9 +73,13 @@ full: clean all
 # blob собирается отдельным прогоном ассемблера с ORG 0E000h и -m=8080_strict
 # (метки сразу
 # абсолютные — копир в lib/boot/loader.asm не требует релопации);
-# utils/bin2inc.py проверяет бюджет 512 Б и пишет lib/boot/loader_stage2.inc;
-# utils/disasm8080.py — контроль ТЗ §9.4: бинарь целиком должен декодироваться
-# как i8080 (z80asm собирает Z80-расширения молча, сборка о них не скажет).
+# utils/bin2inc.py проверяет бюджет 2 КБ (область кода 0E000h..0E7FFh) и пишет
+# lib/boot/loader_stage2.inc;
+# utils/disasm8080.py — контроль ТЗ §9.4 и §9.3: бинарь целиком должен
+# декодироваться как i8080 (z80asm собирает Z80-расширения молча, сборка о них
+# не скажет), а все 16-битные адресные операнды — попадать в 0E000..0E7FF
+# (плюс заглушка reset 0000h..0002h, выходной PCHL на 0000h, плоскость C000
+# и high RAM переменных/конфига); LXI исключён сознательно — это не обращение.
 # Спека: docs/LOADER_TZ.MD.
 # ---------------------------------------------------------------------------
 Z80ASM ?= z88dk/bin/z80asm
@@ -87,5 +91,5 @@ loader2:
 	@mv lib/boot/loader_stage2.sym .scratch/loader_stage2.sym   # метки нужны тесту раунд-трипа (§9.2)
 	@rm -f lib/boot/loader_stage2.o                             # z80asm пишет их рядом с исходником
 	$(PYTHON) utils/bin2inc.py .scratch/loader_stage2.bin \
-	    lib/boot/loader_stage2.inc --label loader_stage2 --max 512 --origin 0e000h
-	$(PYTHON) utils/disasm8080.py .scratch/loader_stage2.bin --org 0e000h --no-interrupts
+	    lib/boot/loader_stage2.inc --label loader_stage2 --max 2048 --origin 0e000h
+	$(PYTHON) utils/disasm8080.py .scratch/loader_stage2.bin --org 0e000h --no-interrupts --refs 0e000-0e7ff --ref-allow 0000-0002,0c000-0dfff,0e800-0e83f,0e840-0e84f

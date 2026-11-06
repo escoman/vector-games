@@ -10,9 +10,16 @@ Z80, на 8080 исполнялся бы другими командами). В�
 
 Использование:
     disasm8080.py FILE [--org 0xe000] [--text] [--no-interrupts]
+                       [--refs ДИАПАЗОН[,ДИАПАЗОН]] [--ref-allow АДРЕС]
 Код возврата 0 — поток декодируется целиком и префиксов нет;
 --no-interrupts (его и ставит `make loader2`) дополнительно считает
 запрещённые EI/HLT/RST — ТЗ §3.1: stage-2 живёт без прерываний.
+--refs включает проверку ТЗ §9.3: все 16-битные адресные операнды (LDA/STA/
+SHLD/LHLD — память, JMP/CALL/Jcc/Ccc — код) должны попадать в разрешённые
+диапазоны вида `0e000-0e22f`; `--ref-allow` добавляет отдельные разрешённые
+адресы (финальный `JP 0000h`). `LXI` сюда не входит сознательно: это
+непосредственное значение в регистровой паре, а не обращение, и оно легально
+указывает и в стираемую область (стек, цикл очистки, аккумулятор TSBIT).
 """
 import sys
 
@@ -108,15 +115,47 @@ def ok(data, pc, size):
 
 
 def parse_addr(s):
-    """Адрес из командной строки: 0e000h / 0xE000 / 57344 — как удобно."""
+    """Адрес из командной строки: 0e000h / 0xE000 / 57344 — как удобно.
+    Вид «0e000» (hex с ведущей цифрой, как в исходниках z80asm) тоже
+    принимается: int(s, 0) на нём падает, тогда читаем как 16-ричное."""
     s = s.strip()
     if s.lower().endswith('h'):
         return int(s[:-1], 16)
-    return int(s, 0)
+    try:
+        return int(s, 0)
+    except ValueError:
+        return int(s, 16)
 
 
 def rd16(data, pc):
     return data[pc + 1] | (data[pc + 2] << 8)
+
+
+REF16 = {0x22: 'SHLD', 0x2A: 'LHLD', 0x32: 'STA', 0x3A: 'LDA',
+         0xC3: 'JMP', 0xCD: 'CALL'}
+
+
+def is_ref(op):
+    """Опкод с 16-битным адресным операндом (память или цель перехода)."""
+    if op in REF16:
+        return True
+    return (op & 0xC0) == 0xC0 and (op & 7) in (2, 4)   # Jcc / Ccc
+
+
+def ranges(spec):
+    """'0e000-0e22f,0000' -> [(lo, hi), ...]"""
+    out = []
+    for part in spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        lo, _, hi = part.partition('-')
+        out.append((parse_addr(lo), parse_addr(hi or lo)))
+    return out
+
+
+def in_ranges(v, rs):
+    return any(lo <= v <= hi for lo, hi in rs)
 
 
 def main():
@@ -128,11 +167,16 @@ def main():
         if '--org' in sys.argv else 0
     text = '--text' in sys.argv
     no_int = '--no-interrupts' in sys.argv
+    rs = ranges(sys.argv[sys.argv.index('--refs') + 1]) if '--refs' in sys.argv \
+        else []
+    allowed = ranges(sys.argv[sys.argv.index('--ref-allow') + 1]) \
+        if '--ref-allow' in sys.argv else []
     data = open(path, 'rb').read()
 
     bad, pc, maxpc = [], 0, len(data)
     opcodes = []                        # байты на позициях опкодов (обход)
     ints = []                           # EI / HLT / RST — их быть не должно
+    refs = []                           # адресные операнды вне диапазона (§9.3)
     while pc < maxpc:
         size, res = decode(data, pc)
         if size is None:
@@ -143,6 +187,10 @@ def main():
             continue
         if res.split()[0] in ('EI', 'HLT') or res.startswith('RST'):
             ints.append((pc, res))
+        if rs and is_ref(data[pc]):
+            target = rd16(data, pc)
+            if not in_ranges(target, rs) and not in_ranges(target, allowed):
+                refs.append((pc, res, target))
         if text:
             print('%04X: %-12s %s' % (org + pc,
                                       ' '.join('%02X' % b for b in
@@ -154,13 +202,16 @@ def main():
     # МОЖЕТ — это значения immediate/адресов, они не команды.
     raw = sum(1 for b in data if b in (0xDD, 0xFD, 0xED, 0xCB))
     print('size=%d  illegal=%d  z80_prefix_at_opcode=%d  ei_hlt_rst=%d  '
-          '(raw prefix bytes=%d)'
-          % (maxpc, len(bad), len(opcodes), len(ints), raw))
+          'refs_out_of_range=%d  (raw prefix bytes=%d)'
+          % (maxpc, len(bad), len(opcodes), len(ints), len(refs), raw))
     for pc, why in bad[:20]:
         print('  %04X: %s' % (org + pc, why))
     for pc, what in ints[:20]:
         print('  %04X: %s — прерывания запрещены ТЗ §3.1' % (org + pc, what))
-    return 1 if bad or (no_int and ints) else 0
+    for pc, what, target in refs[:20]:
+        print('  %04X: %s -> %04Xh — вне разрешённых областей (ТЗ §9.3)'
+              % (org + pc, what, target))
+    return 1 if bad or (no_int and ints) or refs else 0
 
 
 if __name__ == '__main__':
